@@ -1,4 +1,4 @@
-pariksha
+ambry
 ========
 
-Tool to stress test different distributed storage systems 
+An immutable object store
