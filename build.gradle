@@ -1,0 +1,116 @@
+buildscript {
+  repositories {
+    mavenCentral()
+  }
+
+  apply from: file('gradle/buildscript.gradle'), to: buildscript 
+}
+
+apply from: file('gradle/license.gradle')
+apply from: file('gradle/maven.gradle')
+apply from: file("gradle/dependency-versions.gradle")
+
+allprojects {
+  group = "com.github.ambry"
+
+  apply plugin: 'eclipse'
+  apply plugin: 'idea'
+  apply plugin: 'project-report'
+}
+
+project(':ambry-utils') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-api') {
+  apply plugin: 'java'
+}
+
+project(':ambry-shared') {
+  apply plugin: 'java'
+  
+  dependencies {
+    compile project(':ambry-utils')
+    compile project(':ambry-api')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-network') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    compile project(':ambry-shared')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-server') {
+  apply plugin: 'java'
+
+  dependencies {
+   compile project(':ambry-network')
+   compile project(':ambry-utils')
+   compile project(':ambry-shared')
+   compile project(':ambry-store')
+  }
+}
+
+project(':ambry-store') {
+  apply plugin: 'java'
+
+  dependencies {
+   compile project(':ambry-api')
+   compile project(':ambry-utils')
+   compile project(':ambry-shared')
+  }
+}
+
+project(':ambry-messageformat') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    compile project(':ambry-shared')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-replication') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-coordinator') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
+project(':ambry-clustermap') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+

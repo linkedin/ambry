@@ -1,0 +1,6 @@
+ext {
+  scalaVersion = "2.8.1"
+  grizzledVersion = "0.6.10"
+  scalatraVersion = "2.0.4"
+  jettyVersion = "7.0.0.v20091005"
+}

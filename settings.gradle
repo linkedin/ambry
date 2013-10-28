@@ -1,0 +1,1 @@
+include 'ambry-api', 'ambry-server', 'ambry-network', 'ambry-utils', 'ambry-store', 'ambry-shared', 'ambry-messageformat', 'ambry-replication', 'ambry-coordinator', 'ambry-clustermap'
