@@ -8,12 +8,10 @@ package com.github.ambry;
  * To change this template use File | Settings | File Templates.
  */
 
-import com.sun.javaws.exceptions.InvalidArgumentException;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
