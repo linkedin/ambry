@@ -52,6 +52,7 @@ public class ChannelWriter {
   public void writeStream(InputStream stream, long streamSize) throws IOException {
     buffer.clear();
     writeLong(streamSize);
+    buffer.clear();
     for (int i = 0; i < streamSize; i++) {
       buffer.put((byte) stream.read());
       if (i % size == 0) {

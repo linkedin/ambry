@@ -18,6 +18,14 @@ allprojects {
   apply plugin: 'project-report'
 }
 
+allprojects {
+  repositories {
+    mavenCentral()
+    mavenLocal()
+  }
+}
+
+
 project(':ambry-utils') {
   apply plugin: 'java'
 
@@ -70,6 +78,7 @@ project(':ambry-store') {
    compile project(':ambry-api')
    compile project(':ambry-utils')
    compile project(':ambry-shared')
+   testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -90,7 +99,6 @@ project(':ambry-replication') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
-    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -100,7 +108,6 @@ project(':ambry-coordinator') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
-    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -110,7 +117,6 @@ project(':ambry-clustermap') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
-    testCompile "junit:junit:$junitVersion"
   }
 }
 

@@ -34,7 +34,7 @@ public class LogTest {
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file
     randomFile.setLength(5000);
-    Log logTest = new Log(tempFile.getParent(), 0);
+    Log logTest = new Log(tempFile.getParent());
     byte[] testbuf = new byte[1000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer

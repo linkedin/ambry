@@ -33,7 +33,8 @@ public class BlobIndexTest {
       indexFile.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      BlobIndex index = new BlobIndex(logFile, scheduler);
+      Log log = new Log(logFile);
+      BlobIndex index = new BlobIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
@@ -67,7 +68,8 @@ public class BlobIndexTest {
       indexFile.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      BlobIndex index = new BlobIndex(logFile, scheduler);
+      Log log = new Log(logFile);
+      BlobIndex index = new BlobIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
@@ -83,7 +85,7 @@ public class BlobIndexTest {
       index.close();
 
       // create a new index and ensure the index is restored
-      BlobIndex indexNew = new BlobIndex(logFile, scheduler);
+      BlobIndex indexNew = new BlobIndex(logFile, scheduler, log);
 
       BlobIndexValue value1 = indexNew.getValue(factory.getKey(blobId1));
       BlobIndexValue value2 = indexNew.getValue(factory.getKey(blobId2));
@@ -107,7 +109,8 @@ public class BlobIndexTest {
       indexFile.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      BlobIndex index = new BlobIndex(logFile, scheduler);
+      Log log = new Log(logFile);
+      BlobIndex index = new BlobIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
