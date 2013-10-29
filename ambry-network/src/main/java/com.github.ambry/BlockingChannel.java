@@ -55,10 +55,11 @@ public class BlockingChannel {
         writeChannel = channel;
         readChannel = channel.socket().getInputStream();
         connected = true;
-        logger.debug("Created socket with SO_TIMEOUT = " + channel.socket().getSoTimeout() +
-                " (requested " + readTimeoutMs + "), SO_RCVBUF = " + channel.socket().getReceiveBufferSize() +
-                " (requested " + readBufferSize + "), SO_SNDBUF = " + channel.socket().getSendBufferSize() +
-                "(requested " + writeBufferSize + ").");
+        logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), " +
+                "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})",
+                channel.socket().getSoTimeout(), readTimeoutMs,
+                channel.socket().getReceiveBufferSize(),
+                readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
       }
     }
   }
@@ -80,7 +81,7 @@ public class BlockingChannel {
         }
       }
       catch (Exception e) {
-        // log
+        logger.error("error while disconnecting {}", e);
       }
     }
   }

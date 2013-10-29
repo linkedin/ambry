@@ -4,6 +4,7 @@ package com.github.ambry;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Properties;
 
 /**
  * Created with IntelliJ IDEA.
@@ -149,5 +150,16 @@ public class Utils {
     Crc32 crc = new Crc32();
     crc.update(bytes, offset, size);
     return crc.getValue();
+  }
+
+  /**
+   * Read a properties file from the given path
+   * @param filename The path of the file to read
+   */
+  Properties loadProps(String filename) throws FileNotFoundException, IOException {
+    InputStream propStream = new FileInputStream(filename);
+    Properties props = new Properties();
+    props.load(propStream);
+    return props;
   }
 }

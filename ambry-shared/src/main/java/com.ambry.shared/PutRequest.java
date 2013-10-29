@@ -108,7 +108,7 @@ public class PutRequest extends RequestOrResponse {
           break;
         }
       }
-      logger.trace("sent Bytes from Put Request " + sentBytes);
+      logger.trace("sent Bytes from Put Request {}", sentBytes);
       bufferToSend.clear();
       int dataRead = data.read(bufferToSend.array(), 0, (int)Math.min(bufferToSend.capacity(), dataSize));
       bufferToSend.limit(dataRead);

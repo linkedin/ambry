@@ -27,11 +27,11 @@ public class RequestHandler implements Runnable {
       try {
         Request req = requestChannel.receiveRequest();
         if(req.equals(EmptyRequest.getInstance())) {
-          logger.debug("Request handler " + id + " received shut down command");
+          logger.debug("Request handler {} received shut down command", id);
           return;
         }
         requests.handleRequests(req);
-        logger.trace("Request handler " + id + " handling request " + req);
+        logger.trace("Request handler {} handling request {}", id, req);
       } catch (Exception e) {
         logger.error("Exception when handling request", e);
       }
@@ -68,7 +68,7 @@ class RequestHandlerPool {
         thread.join();
       logger.info("shut down completely");
     } catch (Exception e) {
-      logger.error("error when shutting down" + e);
+      logger.error("error when shutting down request handler pool {}", e);
     }
   }
 }

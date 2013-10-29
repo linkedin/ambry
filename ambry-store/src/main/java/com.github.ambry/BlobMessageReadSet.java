@@ -58,7 +58,7 @@ public class BlobMessageReadSet implements MessageReadSet {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
       size.addAndGet(readOption.getSize());
-      logger.trace("MessageReadSet entry offset: " + readOption.getOffset() + " size: " + readOption.getSize());
+      logger.trace("MessageReadSet entry offset: {} size: ", readOption.getOffset(), readOption.getSize());
     }
     this.readOptions = readOptions;
     this.fileChannel = fileChannel;
@@ -71,7 +71,7 @@ public class BlobMessageReadSet implements MessageReadSet {
     }
     long startOffset = readOptions[index].getOffset() + relativeOffset;
     long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions[index].getSize() - relativeOffset), channel);
-    logger.trace("written " + written + "bytes to the write channel from the file channel");
+    logger.trace("Written {} bytes to the write channel from the file channel", written);
     return written;
   }
 

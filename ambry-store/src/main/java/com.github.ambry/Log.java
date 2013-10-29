@@ -43,7 +43,7 @@ public class Log implements Write, Read {
       throw new IllegalArgumentException("fileEndPosition outside the file size");
     }
     fileChannel.position(endOffset);
-    logger.trace("Setting log end offset " + endOffset);
+    logger.trace("Setting log end offset {}", endOffset);
     this.currentWriteOffset.set(endOffset);
   }
 
@@ -51,7 +51,8 @@ public class Log implements Write, Read {
   public int appendFrom(ByteBuffer buffer) throws IOException {
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
-    logger.trace("bytes appended to the log from bytebuffer" + file.getPath() + " " + bytesWritten);
+    logger.trace("Bytes appended to the log from bytebuffer for logfile {} byteswritten: {}",
+            file.getPath(), bytesWritten);
     return bytesWritten;
   }
 
@@ -59,7 +60,8 @@ public class Log implements Write, Read {
   public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
     currentWriteOffset.addAndGet(bytesWritten);
-    logger.trace("bytes appended to the log from read channel" + file.getPath() + " " + bytesWritten);
+    logger.trace("Bytes appended to the log from read channel for logfile {} byteswritten: {}",
+            file.getPath(), bytesWritten);
     return bytesWritten;
   }
 

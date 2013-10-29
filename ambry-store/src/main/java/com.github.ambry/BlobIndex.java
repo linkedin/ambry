@@ -86,7 +86,7 @@ public class BlobIndex {
       indexFile = new File(datadir, indexFileName);
       persistor = new IndexPersistor(indexFile);
       persistor.read();
-      logger.info("read index from file " + datadir);
+      logger.info("read index from file {}", datadir);
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
@@ -169,7 +169,7 @@ public class BlobIndex {
     }
 
     public void write() throws IOException {
-      logger.info("writing index to disk for " + indexFile.getPath());
+      logger.info("writing index to disk for {}", indexFile.getPath());
       synchronized(lock) {
         // write to temp file and then swap with the existing file
         File temp = new File(file.getAbsolutePath() + ".tmp");
@@ -202,7 +202,7 @@ public class BlobIndex {
           writer.close();
         }
       }
-      logger.info("completed writing index to file");
+      logger.info("Completed writing index to file");
     }
 
     public void execute() {
@@ -210,12 +210,12 @@ public class BlobIndex {
         write();
       }
       catch (Exception e) {
-        logger.info("Error while persisting the index to disk " + e);
+        logger.info("Error while persisting the index to disk {}", e);
       }
     }
 
     public void read() throws IOException, IndexCreationException {
-      logger.info("reading index from file " + indexFile.getPath());
+      logger.info("Reading index from file {}", indexFile.getPath());
       synchronized(lock) {
         index.clear();
         BufferedReader reader = new BufferedReader(new FileReader(file));
@@ -243,7 +243,8 @@ public class BlobIndex {
                    byte flags = Byte.parseByte(fields[3]);
                    long timeToLive = Long.parseLong(fields[4]);
                    index.put(key, new BlobIndexValue(size, offset, flags, timeToLive));
-                   logger.trace("index entry " + key + " -> " + size + " " + offset + " " + flags + " " + timeToLive);
+                   logger.trace("Index entry key : {} -> size: {} offset: {} flags: {} timeToLive: {}",
+                           key, size, offset, flags, timeToLive);
                  }
                  else
                    throw new IOException("Malformed line in index file: '%s'.".format(line));

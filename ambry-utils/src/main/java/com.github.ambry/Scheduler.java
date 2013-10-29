@@ -8,6 +8,9 @@ package com.github.ambry;
  * To change this template use File | Settings | File Templates.
  */
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +32,7 @@ public class Scheduler {
   private final boolean isDaemon;
   private volatile ScheduledThreadPoolExecutor executor = null;
   private AtomicInteger schedulerThreadId = new AtomicInteger(0);
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Scheduler(int noOfThreads, String threadNamePrefix, boolean isDaemon) {
     this.noOfThreads = noOfThreads;
@@ -63,20 +67,20 @@ public class Scheduler {
       this.executor = null;
     }
     catch (Exception e) {
-      // log here
+      logger.error("error while shutting down scheduler {}", e);
     }
   }
 
-  public void schedule(String name, final IFunc func, long delay, long period, TimeUnit unit) {
+  public void schedule(final String name, final IFunc func, long delay, long period, TimeUnit unit) {
     ensureStarted();
     Runnable runnable = new Runnable() {
       public void run() {
         try {
           func.execute();
         } catch (Exception e) {
-          // log
+          logger.error("The scheduled job {} failed with the following error {}", name, e);
         } finally {
-          // log completed
+          logger.info("Completed execution of the task {}", name);
         }
       }
     };

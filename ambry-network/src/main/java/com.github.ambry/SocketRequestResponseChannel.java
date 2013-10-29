@@ -21,7 +21,7 @@ class SocketServerRequest implements Request {
     this.processor = processor;
     this.requestKey = requestKey;
     this.input = input;
-    logger.trace("Processor"+ processor + " received request : " + requestKey);
+    logger.trace("Processor {} received request : {}", processor, requestKey);
   }
 
   public InputStream getInputStream() {

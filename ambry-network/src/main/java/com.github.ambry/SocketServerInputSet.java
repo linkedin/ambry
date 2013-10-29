@@ -57,6 +57,6 @@ public class SocketServerInputSet extends InputStream implements Receive {
         buffer.flip();
       }
     }
-    logger.trace("size read from channel " + sizeRead);
+    logger.trace("size read from channel {}", sizeRead);
   }
 }
