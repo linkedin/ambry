@@ -1,6 +1,8 @@
 package com.ambry.shared;
 
 import com.github.ambry.Send;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
@@ -24,6 +26,7 @@ public abstract class RequestOrResponse implements Send {
   protected final int correlationId;
   protected short versionId;
   protected ByteBuffer bufferToSend;
+  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public RequestOrResponse(RequestResponseType type, short versionId, int correlationId) {
     this.type = type;

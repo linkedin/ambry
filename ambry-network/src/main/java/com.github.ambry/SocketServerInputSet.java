@@ -1,5 +1,8 @@
 package com.github.ambry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.*;
@@ -17,6 +20,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
   private ByteBuffer buffer = null;
   private int sizeToRead;        // need to change to long
   private int sizeRead;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServerInputSet() {
     sizeToRead = 0;
@@ -53,5 +57,6 @@ public class SocketServerInputSet extends InputStream implements Receive {
         buffer.flip();
       }
     }
+    logger.trace("size read from channel " + sizeRead);
   }
 }

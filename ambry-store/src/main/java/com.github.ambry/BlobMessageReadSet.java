@@ -9,6 +9,9 @@ package com.github.ambry;
  */
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -39,11 +42,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   }
 }
 
-public class BlobMessageReadSet implements MessageReadSet{
+public class BlobMessageReadSet implements MessageReadSet {
 
   private AtomicLong size;
   private final BlobReadOptions[] readOptions;
   private final FileChannel fileChannel;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public BlobMessageReadSet(File file, FileChannel fileChannel, BlobReadOptions[] readOptions, long fileEndPosition) throws IOException {
 
@@ -54,6 +58,7 @@ public class BlobMessageReadSet implements MessageReadSet{
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
       size.addAndGet(readOption.getSize());
+      logger.trace("MessageReadSet entry offset: " + readOption.getOffset() + " size: " + readOption.getSize());
     }
     this.readOptions = readOptions;
     this.fileChannel = fileChannel;
@@ -65,7 +70,9 @@ public class BlobMessageReadSet implements MessageReadSet{
       throw new IndexOutOfBoundsException("index out of the messageset");
     }
     long startOffset = readOptions[index].getOffset() + relativeOffset;
-    return fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions[index].getSize() - relativeOffset), channel);
+    long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions[index].getSize() - relativeOffset), channel);
+    logger.trace("written " + written + "bytes to the write channel from the file channel");
+    return written;
   }
 
   @Override

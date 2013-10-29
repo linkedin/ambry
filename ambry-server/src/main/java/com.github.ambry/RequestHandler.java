@@ -1,5 +1,8 @@
 package com.github.ambry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Created with IntelliJ IDEA.
  * User: srsubram
@@ -11,6 +14,7 @@ public class RequestHandler implements Runnable {
   private final int id;
   private final RequestResponseChannel requestChannel;
   private final AmbryRequests requests;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public RequestHandler(int id, RequestResponseChannel requestChannel, AmbryRequests requests) {
     this.id = id;
@@ -23,12 +27,13 @@ public class RequestHandler implements Runnable {
       try {
         Request req = requestChannel.receiveRequest();
         if(req.equals(EmptyRequest.getInstance())) {
-          // log
+          logger.debug("Request handler " + id + " received shut down command");
           return;
         }
         requests.handleRequests(req);
+        logger.trace("Request handler " + id + " handling request " + req);
       } catch (Exception e) {
-        // log
+        logger.error("Exception when handling request", e);
       }
     }
   }
@@ -42,6 +47,7 @@ class RequestHandlerPool {
 
   private Thread[] threads = null;
   private RequestHandler[] handlers = null;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, AmbryRequests requests) {
     threads = new Thread[numThreads];
@@ -55,12 +61,14 @@ class RequestHandlerPool {
 
   public void shutdown() {
     try {
+      logger.info("shutting down");
       for(RequestHandler handler: handlers)
         handler.shutdown();
       for(Thread thread : threads)
         thread.join();
+      logger.info("shut down completely");
     } catch (Exception e) {
-    // log
+      logger.error("error when shutting down" + e);
     }
   }
 }

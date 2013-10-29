@@ -1,10 +1,10 @@
 package com.github.ambry;
 
 
-import java.io.DataInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -15,11 +15,13 @@ class SocketServerRequest implements Request {
   private final int processor;
   private final Object requestKey;
   private final InputStream input;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServerRequest(int processor, Object requestKey, InputStream input) throws IOException {
     this.processor = processor;
     this.requestKey = requestKey;
     this.input = input;
+    logger.trace("Processor"+ processor + " received request : " + requestKey);
   }
 
   public InputStream getInputStream() {

@@ -1,6 +1,9 @@
 package com.github.ambry;
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -32,6 +35,7 @@ public class MessageFormatSend implements Send {
   private long sizeWritten;
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   class SendInfo {
     private long relativeOffset;
@@ -71,6 +75,7 @@ public class MessageFormatSend implements Send {
         // just copy over the total size and use relative offset to be 0
         infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
         totalSizeToWrite += readSet.sizeInBytes(i);
+
       }
       else {
         // read header version
@@ -88,20 +93,28 @@ public class MessageFormatSend implements Send {
             int systemMetadataSize = headerFormat.getUserMetadataOffset() - headerFormat.getSystemMetadataOffset() - 6;
             infoList.add(i, new SendInfo(headerFormat.getSystemMetadataOffset() + 6, systemMetadataSize));
             totalSizeToWrite += systemMetadataSize;
+            logger.trace("Sending all data for message relativeOffset : " + infoList.get(i).relativeOffset() +
+                    " size : " + infoList.get(i).sizetoSend());
           }
           else if (flag == MessageFormatFlags.UserMetadata) {
             int userMetadataSize = headerFormat.getDataOffset() - headerFormat.getUserMetadataOffset() - 6;
             infoList.add(i, new SendInfo(headerFormat.getUserMetadataOffset() + 6, userMetadataSize));
             totalSizeToWrite += userMetadataSize;
+            logger.trace("Sending user metadata for message relativeOffset : " + infoList.get(i).relativeOffset() +
+                    "size : " + infoList.get(i).sizetoSend());
           }
           else  if (flag == MessageFormatFlags.Data) {
             long dataSize = headerFormat.getSize() - headerFormat.getDataOffset() - 10;
             infoList.add(i, new SendInfo(headerFormat.getDataOffset() + 10, dataSize));
             totalSizeToWrite += dataSize;
+            logger.trace("Sending data for message relativeOffset : " + infoList.get(i).relativeOffset() +
+                    " size : " + infoList.get(i).sizetoSend());
           }
           else if (flag == MessageFormatFlags.MessageHeader) {
             infoList.add(i, new SendInfo(2, MessageFormat.MessageHeader_V1.Message_Header_Size_V1));
             totalSizeToWrite += MessageFormat.MessageHeader_V1.Message_Header_Size_V1;
+            logger.trace("Sending message header relativeOffset : " + infoList.get(i).relativeOffset() +
+                    " size : " + infoList.get(i).sizetoSend());
           }
         }
       }
@@ -116,6 +129,7 @@ public class MessageFormatSend implements Send {
               infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
       sizeWritten += written;
       sizeWrittenFromCurrentIndex += written;
+      logger.trace("size written in this loop : " + written + " size written till now : " + sizeWritten);
       if (sizeWrittenFromCurrentIndex == infoList.get(currentWriteIndex).sizetoSend()) {
         currentWriteIndex++;
         sizeWrittenFromCurrentIndex = 0;

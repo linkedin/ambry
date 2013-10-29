@@ -1,6 +1,9 @@
 package com.github.ambry;
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -24,6 +27,7 @@ public class BlockingChannel {
   private InputStream readChannel = null;
   private GatheringByteChannel writeChannel = null;
   private Object lock = new Object();
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs) {
     this.host = host;
@@ -51,7 +55,10 @@ public class BlockingChannel {
         writeChannel = channel;
         readChannel = channel.socket().getInputStream();
         connected = true;
-        // need logging
+        logger.debug("Created socket with SO_TIMEOUT = " + channel.socket().getSoTimeout() +
+                " (requested " + readTimeoutMs + "), SO_RCVBUF = " + channel.socket().getReceiveBufferSize() +
+                " (requested " + readBufferSize + "), SO_SNDBUF = " + channel.socket().getSendBufferSize() +
+                "(requested " + writeBufferSize + ").");
       }
     }
   }

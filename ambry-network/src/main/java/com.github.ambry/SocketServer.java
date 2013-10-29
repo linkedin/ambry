@@ -1,7 +1,11 @@
 package com.github.ambry;
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.nio.channels.*;
@@ -30,6 +34,7 @@ public class SocketServer implements NetworkServer {
   private final ArrayList<Processor> processors;
   private volatile Acceptor acceptor;
   private final SocketRequestResponseChannel requestResponseChannel;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServer(String host, int port, int numProcessorThreads, int maxQueuedRequests,
                       int sendBufferSize, int recvBufferSize, int maxRequestSize) {
@@ -78,24 +83,29 @@ public class SocketServer implements NetworkServer {
   }
 
   public void start() throws IOException, InterruptedException {
+    logger.info("Starting " + numProcessorThreads + " processor threads");
     for(int i = 0; i < numProcessorThreads; i++) {
       processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
-    // register the processor threads for notification of responses
+    // TODO register the processor threads for notification of responses
 
     // start accepting connections
+    logger.info("Starting acceptor thread");
     this.acceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
     Utils.newThread("ambry-acceptor", acceptor, false).start();
     acceptor.awaitStartup();
+    logger.info("Started server");
   }
 
   public void shutdown() {
     try {
+      logger.info("Shutting down server");
       if(acceptor != null)
         acceptor.shutdown();
       for (Processor processor : processors)
         processor.shutdown();
+      logger.info("Shutdown completed");
     } catch (Exception e) {
       // log here
     }
@@ -112,6 +122,7 @@ abstract class AbstractServerThread implements Runnable {
   private final CountDownLatch startupLatch;
   private final CountDownLatch shutdownLatch;
   private final AtomicBoolean alive;
+  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public AbstractServerThread() throws IOException {
     selector = Selector.open();
@@ -176,6 +187,8 @@ class Acceptor extends AbstractServerThread {
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final ServerSocketChannel serverChannel;
+  protected Logger logger = LoggerFactory.getLogger(getClass());
+
 
   public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize) throws IOException {
     this.host = host;
@@ -217,6 +230,7 @@ class Acceptor extends AbstractServerThread {
           }
         }
       }
+      logger.debug("Closing server socket and selector.");
       serverChannel.close();
       selector.close();
       shutdownComplete();
@@ -236,12 +250,8 @@ class Acceptor extends AbstractServerThread {
         address = new InetSocketAddress(host, port);
       ServerSocketChannel serverChannel = ServerSocketChannel.open();
       serverChannel.configureBlocking(false);
-      try {
-        serverChannel.socket().bind(address);
-      }
-      catch (SocketException e) {
-        // need to throw here
-      }
+      serverChannel.socket().bind(address);
+      logger.info("Awaiting socket connections on %s:%d.".format(address.getHostName(), port));
       return serverChannel;
    }
 
@@ -255,7 +265,11 @@ class Acceptor extends AbstractServerThread {
      socketChannel.configureBlocking(false);
      socketChannel.socket().setTcpNoDelay(true);
      socketChannel.socket().setSendBufferSize(sendBufferSize);
-     // log new connection
+     logger.debug("Accepted connection from " + socketChannel.socket().getInetAddress() +
+                   " on " + socketChannel.socket().getLocalSocketAddress() +
+                   ". sendBufferSize [actual|requested]: ["+ socketChannel.socket().getSendBufferSize() +
+                   "|" + sendBufferSize + "] " + "recvBufferSize [actual|requested]: [" +
+                   socketChannel.socket().getReceiveBufferSize() + "|"+ recvBufferSize + "]");
      processor.accept(socketChannel);
    }
 }
@@ -284,7 +298,9 @@ class Processor extends AbstractServerThread {
         configureNewConnections();
         // register any new responses for writing
         processNewResponses();
+        long startSelectTime = SystemTime.getInstance().milliseconds();
         int ready = selector.select(300);
+        logger.trace("Processor id " + id + " selection time = " + (SystemTime.getInstance().milliseconds() - startSelectTime) + " ms");
 
         if(ready > 0) {
           Set<SelectionKey> keys = selector.selectedKeys();
@@ -314,10 +330,11 @@ class Processor extends AbstractServerThread {
           }
         }
       }
+      logger.debug("Closing server socket and selector.");
       selector.close();
       shutdownComplete();
     } catch (Exception e) {
-      // log here
+      logger.error("Error while shutting down server " + e);
     }
   }
 
@@ -332,17 +349,19 @@ class Processor extends AbstractServerThread {
           // a null response send object indicates that there is no response to send to the client.
           // In this case, we just want to turn the interest ops to READ to be able to read more pipelined requests
           // that are sitting in the server's socket buffer
-
+          logger.trace("Socket server received response and there is nothing to send to the client ");
           // to trace
           key.interestOps(SelectionKey.OP_READ);
           key.attach(null);
         }
         else {
+          logger.trace("Socket server received response to send, registering for write: " + curr);
           key.interestOps(SelectionKey.OP_WRITE);
           key.attach(curr);
         }
       }
       catch (CancelledKeyException e) {
+        logger.debug("Ignoring response for closed socket.");
         close(key);
       }
       finally {
@@ -362,6 +381,7 @@ class Processor extends AbstractServerThread {
 
   private void close(SelectionKey key) throws IOException {
     SocketChannel channel = (SocketChannel)key.channel();
+    logger.debug("Closing connection from " + channel.socket().getRemoteSocketAddress());
     channel.socket().close();
     channel.close();
     key.attach(null);
@@ -374,6 +394,7 @@ class Processor extends AbstractServerThread {
   private void configureNewConnections() throws ClosedChannelException {
     while(newConnections.size() > 0) {
       SocketChannel channel = newConnections.poll();
+      logger.debug("Processor " + id + " listening to new connection from " + channel.socket().getRemoteSocketAddress());
       channel.register(selector, SelectionKey.OP_READ);
     }
   }
@@ -393,6 +414,9 @@ class Processor extends AbstractServerThread {
     }
     input.readFrom(socketChannel);
 
+    SocketAddress address = socketChannel.socket().getRemoteSocketAddress();
+    logger.trace("bytes read from " + address);
+
     if(input.readComplete()) {
       SocketServerRequest req =
               new SocketServerRequest(id, key, input);
@@ -403,7 +427,8 @@ class Processor extends AbstractServerThread {
     }
     else {
       // more reading to be done
-      // log
+      logger.trace("Did not finish reading, registering for read again on connection " +
+              socketChannel.socket().getRemoteSocketAddress());
       key.interestOps(SelectionKey.OP_READ);
       wakeup();
     }
@@ -420,14 +445,18 @@ class Processor extends AbstractServerThread {
     if(responseSend == null)
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     responseSend.writeTo(socketChannel);
+    logger.trace("Bytes written to " + socketChannel.socket().getRemoteSocketAddress() + " using key " + key);
 
     if(responseSend.isComplete()) {
+      logger.trace("Finished writing, registering for read on connection " + socketChannel.socket().getRemoteSocketAddress());
       // update metrics
       key.attach(null);
       // log trace
       key.interestOps(SelectionKey.OP_READ);
     }
     else {
+      logger.trace("Did not finish writing, registering for write again on connection " +
+              socketChannel.socket().getRemoteSocketAddress());
       key.interestOps(SelectionKey.OP_WRITE);
       wakeup();
     }
