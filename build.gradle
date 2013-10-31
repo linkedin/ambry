@@ -85,11 +85,11 @@ project(':ambry-store') {
   apply plugin: 'java'
 
   dependencies {
-   compile project(':ambry-api')
-   compile project(':ambry-utils')
-   compile project(':ambry-shared')
-   compile "org.slf4j:slf4j-api:$slf4jVersion"   
-   testCompile "junit:junit:$junitVersion"
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    compile project(':ambry-shared')
+    compile "org.slf4j:slf4j-api:$slf4jVersion"   
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -110,6 +110,7 @@ project(':ambry-replication') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -121,6 +122,7 @@ project(':ambry-coordinator') {
     compile project(':ambry-utils')
     compile project(':ambry-shared')
     compile project(':ambry-messageformat')
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -131,6 +133,7 @@ project(':ambry-clustermap') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile "org.json:json:20090211"
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
