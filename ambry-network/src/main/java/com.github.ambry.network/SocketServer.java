@@ -19,7 +19,7 @@ import java.io.EOFException;
 import java.util.*;
 
 /**
- * An NIO socket server. The threading model is
+ * A NIO socket server. The threading model is
  *   1 Acceptor thread that handles new connections
  *   N Processor threads that each have their own selector and read requests from sockets
  *   M Handler threads that handle requests and produce responses back to the processor threads for writing.

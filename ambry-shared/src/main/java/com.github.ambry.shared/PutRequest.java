@@ -7,11 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 10:57 AM
- * To change this template use File | Settings | File Templates.
+ * A Put Request used to put a blob
  */
 public class PutRequest extends RequestOrResponse {
 
@@ -22,6 +18,14 @@ public class PutRequest extends RequestOrResponse {
   private String blobId;
   private Long dataSize;
   private long sentBytes = 0;
+
+
+  private static final int Logical_Volume_Id_Size = 8;
+  private static final int ClientId_Size = 2;
+  private static final int BlobId_Size = 2;
+  private static final int Metadata_Size = 4;
+  private static final int Data_Size = 8;
+
 
   public PutRequest(short versionId, long logicalVolumeId, int correlationId, String clientId,
                     String blobId, ByteBuffer metadata, InputStream data, long dataSize) {
@@ -80,8 +84,8 @@ public class PutRequest extends RequestOrResponse {
   private int sizeExcludingData() {
     // header + logicalVolumeId + clientId size + clientId +
     // blobId size + blobId + metadata size + metadata + data size
-    return  (int)super.sizeInBytes() + 8 + 2 + clientId.length() +
-            2 + blobId.length() + 4 + metadata.capacity() + 8;
+    return  (int)super.sizeInBytes() + Logical_Volume_Id_Size + ClientId_Size + clientId.length() +
+            BlobId_Size + blobId.length() + Metadata_Size + metadata.capacity() + Data_Size;
   }
 
   @Override

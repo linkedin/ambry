@@ -6,7 +6,6 @@ import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -14,11 +13,8 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/27/13
- * Time: 9:48 AM
- * To change this template use File | Settings | File Templates.
+ * A send object for the message format to send data from the underlying store
+ * to the network channel
  */
 
 enum MessageFormatFlags {
@@ -68,6 +64,8 @@ public class MessageFormatSend implements Send {
     sizeWrittenFromCurrentIndex = 0;
   }
 
+  // calculates the offsets from the MessageReadSet that needs to be sent over the network
+  // based on the type of data requested (system metadata or user metadata or data or all)
   private void calculateOffsets() throws IOException {
     // get size
     int messageCount = readSet.count();

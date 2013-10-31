@@ -1,17 +1,8 @@
 package com.github.ambry.store;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/11/13
- * Time: 4:11 PM
- * To change this template use File | Settings | File Templates.
- */
-
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -19,6 +10,9 @@ import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * A read option class that maintains the offset and size
+ */
 class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long offset;
   private final Long size;
@@ -42,6 +36,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   }
 }
 
+/**
+ * An implementation of MessageReadSet that maintains a list of
+ * offsets from the underlying file channel
+ */
 public class BlobMessageReadSet implements MessageReadSet {
 
   private AtomicLong size;

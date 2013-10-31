@@ -1,15 +1,16 @@
 package com.github.ambry.store;
 
-import com.github.ambry.store.IndexKey;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/26/13
- * Time: 2:00 PM
- * To change this template use File | Settings | File Templates.
+ * Factory to create an index key
  */
 public interface IndexKeyFactory {
+
+  /**
+   * The index key created using the value provided
+   * @param value The value the key needs to store  in string format
+   * @return The index key containing the value provided
+   */
   IndexKey getKey(String value);
 }
 

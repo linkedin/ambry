@@ -9,13 +9,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/24/13
- * Time: 6:43 PM
- * To change this template use File | Settings | File Templates.
- */
 public class BlobIndexTest {
 
   /**

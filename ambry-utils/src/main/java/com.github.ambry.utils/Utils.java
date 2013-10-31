@@ -7,14 +7,8 @@ import java.nio.channels.FileChannel;
 import java.util.Properties;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 9:23 AM
- * To change this template use File | Settings | File Templates.
+ * A set of utility methods
  */
-
-
 public class Utils {
 
   public static String readShortString(DataInputStream input) throws IOException {

@@ -12,13 +12,6 @@ import java.util.ArrayList;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/27/13
- * Time: 1:37 PM
- * To change this template use File | Settings | File Templates.
- */
 public class MessageFormatSendTest {
 
   class MockMessageReadSet implements MessageReadSet {

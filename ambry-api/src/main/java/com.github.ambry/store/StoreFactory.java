@@ -5,9 +5,14 @@ import java.util.Properties;
 
 
 /**
- * An object provided by the storage engine implementation to create instances
- * of the given storage engine type.
+ * The storage engine factory that is used to create a given type of a store
  */
 public interface StoreFactory {
-    public Store getStore(Properties config);
+
+  /**
+   *  Returns the store after creating the store instance with the given properties
+   * @param config The properties config that is used by the store
+   * @return The store represented by this factory
+   */
+  public Store getStore(Properties config);
 }

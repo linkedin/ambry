@@ -8,11 +8,8 @@ import com.github.ambry.network.RequestResponseChannel;
 import java.io.IOException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/15/13
- * Time: 1:22 AM
- * To change this template use File | Settings | File Templates.
+ * The main request implementation class. All requests to the server are
+ * handled by this class
  */
 
 public class AmbryRequests {

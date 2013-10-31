@@ -1,19 +1,12 @@
 package com.github.ambry.utils;
 
 import java.io.ByteArrayInputStream;
-import java.io.DataOutputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.io.IOException;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/15/13
- * Time: 4:50 PM
- * To change this template use File | Settings | File Templates.
- */
+
 public class ChannelWriter {
   private final WritableByteChannel channel;
   private static final int size = 1024;

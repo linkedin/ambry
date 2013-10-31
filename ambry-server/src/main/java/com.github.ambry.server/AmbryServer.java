@@ -8,7 +8,6 @@ import com.github.ambry.utils.Scheduler;
 import com.github.ambry.store.IndexCreationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
 import java.util.Properties;

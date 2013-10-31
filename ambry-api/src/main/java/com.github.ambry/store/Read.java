@@ -4,15 +4,15 @@ import java.nio.ByteBuffer;
 import java.io.IOException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/24/13
- * Time: 5:16 PM
- * To change this template use File | Settings | File Templates.
+ * Provides a read interface into the underlying storage layer
  */
 public interface Read {
+
   /**
-   * Read from the underlying file into the buffer starting at the given position
+   * Read from the underlying store(file) into the buffer starting at the given position
+   * @param buffer The buffer into which the read needs to write to
+   * @param position The position to start the read from
+   * @throws IOException
    */
   void readInto(ByteBuffer buffer , int position) throws IOException;
 }

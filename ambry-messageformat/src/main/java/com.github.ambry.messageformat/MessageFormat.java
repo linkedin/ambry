@@ -1,15 +1,10 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.shared.BlobId;
-
 import java.nio.ByteBuffer;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/27/13
- * Time: 11:20 AM
- * To change this template use File | Settings | File Templates.
+ * Represents the message format of the data that gets written to the store
  */
 public class MessageFormat {
   public static class MessageHeader_V1 {

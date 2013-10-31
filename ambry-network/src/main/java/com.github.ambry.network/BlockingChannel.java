@@ -3,18 +3,13 @@ package com.github.ambry.network;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.channels.*;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 8:06 AM
- * To change this template use File | Settings | File Templates.
+ * A blocking channel that is used to communicate with a server
  */
 public class BlockingChannel {
   private final String host;

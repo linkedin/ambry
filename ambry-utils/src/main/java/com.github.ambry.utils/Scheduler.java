@@ -1,16 +1,7 @@
 package com.github.ambry.utils;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/25/13
- * Time: 3:22 PM
- * To change this template use File | Settings | File Templates.
- */
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;

@@ -14,11 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/12/13
- * Time: 11:24 AM
- * To change this template use File | Settings | File Templates.
+ * The set of data stored in the index
  */
 
 class BlobIndexValue {
@@ -51,6 +47,9 @@ class BlobIndexValue {
   }
 }
 
+/**
+ * A key and value that represents an index entry
+ */
 class BlobIndexEntry {
   private IndexKey key;
   private BlobIndexValue value;
@@ -69,6 +68,10 @@ class BlobIndexEntry {
   }
 }
 
+/**
+ * The index implementation that is responsible for adding and modifying index entries,
+ * recovering an index from the log and commit and recover index to disk
+ */
 public class BlobIndex {
   private ConcurrentHashMap<IndexKey, BlobIndexValue> index = new ConcurrentHashMap<IndexKey, BlobIndexValue>();
   private AtomicLong logEndOffset;
