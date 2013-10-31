@@ -2,7 +2,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.IFunc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,7 +158,7 @@ public class BlobIndex {
     return logEndOffset.get();
   }
 
-  class IndexPersistor implements IFunc {
+  class IndexPersistor implements Runnable {
 
     private Object lock = new Object();
     private final File file;
@@ -211,7 +210,7 @@ public class BlobIndex {
       logger.info("Completed writing index to file");
     }
 
-    public void execute() {
+    public void run() {
       try {
         write();
       }

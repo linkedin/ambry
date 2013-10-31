@@ -67,6 +67,7 @@ public class NetworkConfig {
   public final int socketRequestMaxBytes;
 
   public NetworkConfig(VerifiableProperties properties) {
+
     this.props = properties;
     numNetworkThreads = props.getIntInRange("num.network.threads", 3, 1, Integer.MAX_VALUE);
     numIoThreads = props.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);

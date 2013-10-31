@@ -35,6 +35,18 @@ public class Utils {
     return buffer;
   }
 
+  public static ByteBuffer readShortBuffer(DataInputStream input) throws IOException {
+    short size = input.readShort();
+    if (size < 0)
+        return null;
+    ByteBuffer buffer = ByteBuffer.allocate(size);
+    int read = input.read(buffer.array());
+    if (read != size) {
+        throw new IllegalArgumentException("the size of the input does not match the actual data size");
+    }
+    return buffer;
+  }
+
   /**
    * Create a new thread
    * @param runnable The work for the thread to do

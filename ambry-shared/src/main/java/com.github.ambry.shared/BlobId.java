@@ -17,6 +17,14 @@ public class BlobId implements IndexKey, Comparable<BlobId>{
     this.id = id;
   }
 
+  public BlobId(ByteBuffer buf) {
+    this.id = new String(buf.array());
+  }
+
+  public int sizeInBytes() {
+    return id.length();
+  }
+
   @Override
   public ByteBuffer toBytes() {
     return ByteBuffer.wrap(id.getBytes());

@@ -17,14 +17,6 @@ import java.util.ArrayList;
  * to the network channel
  */
 
-enum MessageFormatFlags {
-  SystemMetadata,
-  UserMetadata,
-  MessageHeader,
-  Data,
-  All
-}
-
 public class MessageFormatSend implements Send {
 
   private MessageReadSet readSet;
