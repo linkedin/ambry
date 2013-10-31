@@ -18,7 +18,7 @@ public class Utils {
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
     if (read != size) {
-      throw new IllegalArgumentException("the size inputstream does not match the actual data size");
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
     }
     return new String(bytes, "UTF-8");
   }
@@ -30,7 +30,7 @@ public class Utils {
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
-      throw new IllegalArgumentException("the size inputstream does not match the actual data size");
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
     }
     return buffer;
   }

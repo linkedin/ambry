@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -38,15 +39,14 @@ public class SocketServer implements NetworkServer {
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServer(String host, int port, int numProcessorThreads, int maxQueuedRequests,
-                      int sendBufferSize, int recvBufferSize, int maxRequestSize) {
-    this.host = host;
-    this.port = port;
-    this.numProcessorThreads = numProcessorThreads;
-    this.maxQueuedRequests = maxQueuedRequests;
-    this.sendBufferSize = sendBufferSize;
-    this.recvBufferSize = recvBufferSize;
-    this.maxRequestSize = maxRequestSize;
+  public SocketServer(NetworkConfig config) {
+    this.host = config.hostName;
+    this.port = config.port;
+    this.numProcessorThreads = config.numIoThreads;
+    this.maxQueuedRequests = config.queuedMaxRequests;
+    this.sendBufferSize = config.socketSendBufferBytes;
+    this.recvBufferSize = config.socketReceiveBufferBytes;
+    this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
   }

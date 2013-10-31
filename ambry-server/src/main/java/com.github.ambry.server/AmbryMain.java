@@ -2,6 +2,8 @@ package com.github.ambry.server;
 
 
 import java.util.Properties;
+
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 
 /**
@@ -17,7 +19,8 @@ public class AmbryMain {
     try {
       // need to create config
       Properties props = Utils.loadProps(args[0]);
-      final AmbryServer server = new AmbryServer(props);
+      VerifiableProperties vprops = new VerifiableProperties(props);
+      final AmbryServer server = new AmbryServer(vprops);
 
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {

@@ -1,5 +1,7 @@
 package com.github.ambry.server;
 
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.store.Store;
 import com.github.ambry.network.SocketServer;
@@ -10,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
-import java.util.Properties;
 
 /**
  * Ambry server
@@ -24,15 +25,20 @@ public class AmbryServer {
   private Scheduler scheduler = new Scheduler(4, false);
   private Store store = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final Properties properties;
+  private final VerifiableProperties properties;
 
-  public AmbryServer(Properties properties) {
+  public AmbryServer(VerifiableProperties properties) {
     this.properties = properties;
   }
 
   public void startup() throws InterruptedException, IOException, IndexCreationException {
     logger.info("starting");
-    networkServer = new SocketServer("localhost", 8990, 7, 16, 1000, 1000, 1000);
+    // create the configs
+    NetworkConfig config = new NetworkConfig(properties);
+
+    // verify the configs
+    properties.verify();
+    networkServer = new SocketServer(config);
     networkServer.start();
     requests = new AmbryRequests(networkServer.getRequestResponseChannel());
     requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
