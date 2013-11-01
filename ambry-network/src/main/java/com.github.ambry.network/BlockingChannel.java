@@ -85,7 +85,7 @@ public class BlockingChannel {
     return connected;
   }
 
-  void send(Send request) throws ClosedChannelException, IOException {
+  public void send(Send request) throws ClosedChannelException, IOException {
     if(!connected)
       throw new ClosedChannelException();
     while (!request.isSendComplete()) {
@@ -93,7 +93,7 @@ public class BlockingChannel {
     }
   }
 
-  InputStream receive() throws ClosedChannelException, IOException {
+  public InputStream receive() throws ClosedChannelException, IOException {
     if(!connected)
       throw new ClosedChannelException();
 
