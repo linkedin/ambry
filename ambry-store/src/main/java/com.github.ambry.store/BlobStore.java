@@ -7,11 +7,7 @@ import java.util.ArrayList;
 import java.io.IOException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/10/13
- * Time: 5:43 PM
- * To change this template use File | Settings | File Templates.
+ * The blob store that controls the log and index
  */
 public class BlobStore implements Store {
 

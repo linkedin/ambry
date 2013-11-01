@@ -4,13 +4,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/15/13
- * Time: 6:49 PM
- * To change this template use File | Settings | File Templates.
- */
 public class ByteBufferOutputStream extends OutputStream {
   private ByteBuffer buffer;
 

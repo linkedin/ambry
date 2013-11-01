@@ -8,11 +8,7 @@ import java.nio.ByteBuffer;
 
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 10:53 AM
- * To change this template use File | Settings | File Templates.
+ * Request Response for serialization and de-serialization
  */
 enum RequestResponseType {
   PutRequest,
@@ -27,6 +23,10 @@ public abstract class RequestOrResponse implements Send {
   protected short versionId;
   protected ByteBuffer bufferToSend;
   protected Logger logger = LoggerFactory.getLogger(getClass());
+  private static final int Request_Response_Size = 8;
+  private static final int Request_Response_Type_Size = 2;
+  private static final int Request_Response_Version_Size = 2;
+  private static final int Correlation_Id_Size = 4;
 
   public RequestOrResponse(RequestResponseType type, short versionId, int correlationId) {
     this.type = type;
@@ -58,7 +58,8 @@ public abstract class RequestOrResponse implements Send {
 
   public long sizeInBytes() {
     // size + type + versionId + correlationId
-    return 8 + 2 + 2 + 4;
+    return Request_Response_Size + Request_Response_Type_Size +
+            Request_Response_Version_Size + Correlation_Id_Size;
   }
 }
 

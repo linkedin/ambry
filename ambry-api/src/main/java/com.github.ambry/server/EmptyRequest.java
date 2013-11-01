@@ -5,11 +5,7 @@ import com.github.ambry.network.Request;
 import java.io.InputStream;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/28/13
- * Time: 2:41 AM
- * To change this template use File | Settings | File Templates.
+ * The request class used to identify the end of the network communication
  */
 public class EmptyRequest implements Request {
   private static EmptyRequest ourInstance = new EmptyRequest();

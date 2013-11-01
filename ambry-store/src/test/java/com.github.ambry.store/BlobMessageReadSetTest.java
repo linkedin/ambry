@@ -11,13 +11,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Random;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/24/13
- * Time: 1:48 PM
- * To change this template use File | Settings | File Templates.
- */
 public class BlobMessageReadSetTest {
 
   /**

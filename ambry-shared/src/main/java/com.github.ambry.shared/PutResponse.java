@@ -7,15 +7,12 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.*;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 10:57 AM
- * To change this template use File | Settings | File Templates.
+ * A Response to the Put Request
  */
 public class PutResponse extends RequestOrResponse {
 
   private short error;
+  private static final int Error_Size_InBytes = 2;
 
   public PutResponse(short versionId, int correlationId, short error) {
     super(RequestResponseType.PutReponse, versionId, correlationId);
@@ -51,13 +48,13 @@ public class PutResponse extends RequestOrResponse {
   }
 
   @Override
-  public boolean isComplete() {
+  public boolean isSendComplete() {
     return bufferToSend.remaining() == 0;
   }
 
   @Override
   public long sizeInBytes() {
     // header + error
-    return super.sizeInBytes() + 2;
+    return super.sizeInBytes() + Error_Size_InBytes;
   }
 }

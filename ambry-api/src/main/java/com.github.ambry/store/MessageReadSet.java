@@ -4,27 +4,33 @@ import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/11/13
- * Time: 5:21 PM
- * To change this template use File | Settings | File Templates.
+ * This represents a list of messages from a given store.
  */
 public interface MessageReadSet {
+
   /**
    * Write the message referred by the index in this set to the given channel from the given relative offset
    * up to maxSize. Less than the complete amount may be written, but no more than maxSize can be. The number
    * of bytes written is returned
+   * @param index the index of the message in the set that needs to be written
+   * @param channel the channel into which the data needs to be written to
+   * @param relativeOffset The relative offset into the message from which the write needs to start
+   * @param maxSize The max size that needs to be written from the given message
+   * @return The total bytes that was written into the channel
+   * @throws IOException
    */
   long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException;
 
   /**
-   * returns the total number of messages in this set
+   * Returns the total number of messages in this set
+   * @return The total number of messages in this set
    */
   int count();
 
   /**
-   * returns the size of the ith message
+   * Returns the size of the ith message
+   * @param index The index into the message set
+   * @return The size in bytes of the message represented by the index
    */
   long sizeInBytes(int index);
 }

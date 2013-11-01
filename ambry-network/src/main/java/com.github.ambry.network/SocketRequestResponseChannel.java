@@ -3,7 +3,6 @@ package com.github.ambry.network;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -11,6 +10,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.io.IOException;
 
+// The request at the network layer
 class SocketServerRequest implements Request {
   private final int processor;
   private final Object requestKey;
@@ -37,6 +37,7 @@ class SocketServerRequest implements Request {
   }
 }
 
+// The response at the network layer
 class SocketServerResponse implements Response {
 
   private final int processor;
@@ -49,7 +50,7 @@ class SocketServerResponse implements Response {
     this.processor = ((SocketServerRequest)request).getProcessor();
   }
 
-  public Send getOutput() {
+  public Send getPayload() {
     return output;
   }
 

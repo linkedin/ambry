@@ -2,15 +2,10 @@ package com.github.ambry.shared;
 
 import com.github.ambry.store.IndexKey;
 import com.github.ambry.utils.Utils;
-
 import java.nio.ByteBuffer;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/26/13
- * Time: 3:43 PM
- * To change this template use File | Settings | File Templates.
+ * The Id used to represent a blob uniquely
  */
 public class BlobId implements IndexKey, Comparable<BlobId>{
 
@@ -20,6 +15,14 @@ public class BlobId implements IndexKey, Comparable<BlobId>{
 
   public BlobId(String id) {
     this.id = id;
+  }
+
+  public BlobId(ByteBuffer buf) {
+    this.id = new String(buf.array());
+  }
+
+  public int sizeInBytes() {
+    return id.length();
   }
 
   @Override

@@ -7,11 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 10:57 AM
- * To change this template use File | Settings | File Templates.
+ * A Put Request used to put a blob
  */
 public class PutRequest extends RequestOrResponse {
 
@@ -22,6 +18,14 @@ public class PutRequest extends RequestOrResponse {
   private String blobId;
   private Long dataSize;
   private long sentBytes = 0;
+
+
+  private static final int Logical_Volume_Id_Size_InBytes = 8;
+  private static final int ClientId_Size_InBytes = 2;
+  private static final int BlobId_Size_InBytes = 2;
+  private static final int Metadata_Size_InBytes = 4;
+  private static final int Data_Size_InBytes = 8;
+
 
   public PutRequest(short versionId, long logicalVolumeId, int correlationId, String clientId,
                     String blobId, ByteBuffer metadata, InputStream data, long dataSize) {
@@ -80,8 +84,8 @@ public class PutRequest extends RequestOrResponse {
   private int sizeExcludingData() {
     // header + logicalVolumeId + clientId size + clientId +
     // blobId size + blobId + metadata size + metadata + data size
-    return  (int)super.sizeInBytes() + 8 + 2 + clientId.length() +
-            2 + blobId.length() + 4 + metadata.capacity() + 8;
+    return  (int)super.sizeInBytes() + Logical_Volume_Id_Size_InBytes + ClientId_Size_InBytes + clientId.length() +
+            BlobId_Size_InBytes + blobId.length() + Metadata_Size_InBytes + metadata.capacity() + Data_Size_InBytes;
   }
 
   @Override
@@ -116,7 +120,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   @Override
-  public boolean isComplete() {
+  public boolean isSendComplete() {
     return sizeInBytes() == sentBytes;
   }
 }

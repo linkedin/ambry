@@ -2,17 +2,17 @@ package com.github.ambry.server;
 
 import java.io.DataInputStream;
 import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PutResponse;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 
 import java.io.IOException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/15/13
- * Time: 1:22 AM
- * To change this template use File | Settings | File Templates.
+ * The main request implementation class. All requests to the server are
+ * handled by this class
  */
 
 public class AmbryRequests {
@@ -47,5 +47,9 @@ public class AmbryRequests {
     // create put response
 
     // send to request channel
+  }
+
+  private void handleGetRequest(Request request) throws IOException {
+    GetRequest getRequest = GetRequest.readFrom((DataInputStream)request.getInputStream());
   }
 }

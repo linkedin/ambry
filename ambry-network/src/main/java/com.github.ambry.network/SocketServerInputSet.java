@@ -9,11 +9,9 @@ import java.nio.channels.*;
 import java.nio.ByteBuffer;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/7/13
- * Time: 7:01 PM
- * To change this template use File | Settings | File Templates.
+ * This represents data received from the channel and provides an input stream
+ * interface to read from it. This class is responsible for deciding when to buffer
+ * the input data or stream content directly from the channel
  */
 public class SocketServerInputSet extends InputStream implements Receive {
 
@@ -33,7 +31,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
   }
 
   @Override
-  public boolean readComplete() {
+  public boolean isReadComplete() {
     return !(sizeRead < sizeToRead);
   }
 

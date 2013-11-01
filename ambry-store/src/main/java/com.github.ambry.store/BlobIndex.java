@@ -2,7 +2,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.IFunc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,11 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/12/13
- * Time: 11:24 AM
- * To change this template use File | Settings | File Templates.
+ * The set of data stored in the index
  */
 
 class BlobIndexValue {
@@ -51,6 +46,9 @@ class BlobIndexValue {
   }
 }
 
+/**
+ * A key and value that represents an index entry
+ */
 class BlobIndexEntry {
   private IndexKey key;
   private BlobIndexValue value;
@@ -69,6 +67,10 @@ class BlobIndexEntry {
   }
 }
 
+/**
+ * The index implementation that is responsible for adding and modifying index entries,
+ * recovering an index from the log and commit and recover index to disk
+ */
 public class BlobIndex {
   private ConcurrentHashMap<IndexKey, BlobIndexValue> index = new ConcurrentHashMap<IndexKey, BlobIndexValue>();
   private AtomicLong logEndOffset;
@@ -156,7 +158,7 @@ public class BlobIndex {
     return logEndOffset.get();
   }
 
-  class IndexPersistor implements IFunc {
+  class IndexPersistor implements Runnable {
 
     private Object lock = new Object();
     private final File file;
@@ -208,7 +210,7 @@ public class BlobIndex {
       logger.info("Completed writing index to file");
     }
 
-    public void execute() {
+    public void run() {
       try {
         write();
       }

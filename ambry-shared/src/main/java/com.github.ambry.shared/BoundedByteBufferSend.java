@@ -1,22 +1,17 @@
 package com.github.ambry.shared;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/22/13
- * Time: 11:25 AM
- * To change this template use File | Settings | File Templates.
- */
-
-
 import com.github.ambry.network.Send;
 import com.github.ambry.utils.ByteBufferOutputStream;
-
 import java.io.IOException;
 import java.nio.*;
 import java.nio.channels.*;
 
 
+/**
+ * A byte buffer version of Send to buffer the outgoing responses before sending.
+ * This is mainly used to optimize serialization of response objects on the request handler
+ * threads rather than the network threads.
+ */
 public class BoundedByteBufferSend implements Send {
 
   private final ByteBuffer buffer;
@@ -36,12 +31,12 @@ public class BoundedByteBufferSend implements Send {
   }
 
   public void writeTo(WritableByteChannel channel) throws IOException {
-    if (!isComplete()) {
+    if (!isSendComplete()) {
       channel.write(buffer);
     }
   }
 
-  public boolean isComplete() {
+  public boolean isSendComplete() {
    return buffer.remaining() == 0;
   }
 

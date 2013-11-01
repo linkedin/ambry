@@ -7,14 +7,8 @@ import java.nio.channels.FileChannel;
 import java.util.Properties;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/14/13
- * Time: 9:23 AM
- * To change this template use File | Settings | File Templates.
+ * A set of utility methods
  */
-
-
 public class Utils {
 
   public static String readShortString(DataInputStream input) throws IOException {
@@ -24,7 +18,7 @@ public class Utils {
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
     if (read != size) {
-      throw new IllegalArgumentException("the size inputstream does not match the actual data size");
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
     }
     return new String(bytes, "UTF-8");
   }
@@ -36,7 +30,19 @@ public class Utils {
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
-      throw new IllegalArgumentException("the size inputstream does not match the actual data size");
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+    }
+    return buffer;
+  }
+
+  public static ByteBuffer readShortBuffer(DataInputStream input) throws IOException {
+    short size = input.readShort();
+    if (size < 0)
+        return null;
+    ByteBuffer buffer = ByteBuffer.allocate(size);
+    int read = input.read(buffer.array());
+    if (read != size) {
+        throw new IllegalArgumentException("the size of the input does not match the actual data size");
     }
     return buffer;
   }

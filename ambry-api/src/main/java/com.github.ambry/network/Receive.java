@@ -4,13 +4,20 @@ import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/16/13
- * Time: 5:52 PM
- * To change this template use File | Settings | File Templates.
+ * Used to receive data from the network channel. Any implementation of this interface
+ * can be used to read data from the network
  */
 public interface Receive {
-  boolean readComplete();
+  /**
+   * Indicates if the read has been completed
+   * @return  true if read is complete, else false
+   */
+  boolean isReadComplete();
+
+  /**
+   * Reads some bytes from the provided channel
+   * @param channel The channel to read from
+   * @throws IOException
+   */
   void readFrom(ReadableByteChannel channel) throws IOException;
 }

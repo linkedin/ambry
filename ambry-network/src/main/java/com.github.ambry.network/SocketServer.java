@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -19,7 +20,7 @@ import java.io.EOFException;
 import java.util.*;
 
 /**
- * An NIO socket server. The threading model is
+ * A NIO socket server. The threading model is
  *   1 Acceptor thread that handles new connections
  *   N Processor threads that each have their own selector and read requests from sockets
  *   M Handler threads that handle requests and produce responses back to the processor threads for writing.
@@ -38,15 +39,14 @@ public class SocketServer implements NetworkServer {
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServer(String host, int port, int numProcessorThreads, int maxQueuedRequests,
-                      int sendBufferSize, int recvBufferSize, int maxRequestSize) {
-    this.host = host;
-    this.port = port;
-    this.numProcessorThreads = numProcessorThreads;
-    this.maxQueuedRequests = maxQueuedRequests;
-    this.sendBufferSize = sendBufferSize;
-    this.recvBufferSize = recvBufferSize;
-    this.maxRequestSize = maxRequestSize;
+  public SocketServer(NetworkConfig config) {
+    this.host = config.hostName;
+    this.port = config.port;
+    this.numProcessorThreads = config.numIoThreads;
+    this.maxQueuedRequests = config.queuedMaxRequests;
+    this.sendBufferSize = config.socketSendBufferBytes;
+    this.recvBufferSize = config.socketReceiveBufferBytes;
+    this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
   }
@@ -350,7 +350,7 @@ class Processor extends AbstractServerThread {
       SocketServerRequest request = (SocketServerRequest)curr.getRequest();
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {
-        if(curr.getOutput() == null) {
+        if(curr.getPayload() == null) {
           // a null response send object indicates that there is no response to send to the client.
           // In this case, we just want to turn the interest ops to READ to be able to read more pipelined requests
           // that are sitting in the server's socket buffer
@@ -422,7 +422,7 @@ class Processor extends AbstractServerThread {
     SocketAddress address = socketChannel.socket().getRemoteSocketAddress();
     logger.trace("bytes read from {}", address);
 
-    if(input.readComplete()) {
+    if(input.isReadComplete()) {
       SocketServerRequest req =
               new SocketServerRequest(id, key, input);
       channel.sendRequest(req);
@@ -446,13 +446,13 @@ class Processor extends AbstractServerThread {
     SocketChannel socketChannel = (SocketChannel)key.channel();
     SocketServerResponse response =
             (SocketServerResponse)key.attachment();
-    Send responseSend = response.getOutput();
+    Send responseSend = response.getPayload();
     if(responseSend == null)
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     responseSend.writeTo(socketChannel);
     logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
 
-    if(responseSend.isComplete()) {
+    if(responseSend.isSendComplete()) {
       logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
       // update metrics
       key.attach(null);

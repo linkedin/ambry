@@ -1,5 +1,7 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -11,6 +13,7 @@ import org.junit.Assert;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Properties;
 import java.util.Random;
 import java.net.*;
 import java.io.*;
@@ -20,7 +23,10 @@ public class SocketServerTest {
   private SocketServer server = null;
 
   public SocketServerTest() throws InterruptedException, IOException {
-    server = new SocketServer(null, choosePort(), 1, 50, 300000, 300000, 50);
+    Properties props = new Properties();
+    VerifiableProperties propverify = new VerifiableProperties(props);
+    NetworkConfig config = new NetworkConfig(propverify);
+    server = new SocketServer(config);
     server.start();
   }
 

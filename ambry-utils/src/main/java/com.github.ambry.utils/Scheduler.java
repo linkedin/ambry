@@ -1,16 +1,7 @@
 package com.github.ambry.utils;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/25/13
- * Time: 3:22 PM
- * To change this template use File | Settings | File Templates.
- */
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -67,12 +58,12 @@ public class Scheduler {
     }
   }
 
-  public void schedule(final String name, final IFunc func, long delay, long period, TimeUnit unit) {
+  public void schedule(final String name, final Runnable func, long delay, long period, TimeUnit unit) {
     ensureStarted();
     Runnable runnable = new Runnable() {
       public void run() {
         try {
-          func.execute();
+          func.run();
         } catch (Exception e) {
           logger.error("The scheduled job {} failed with the following error {}", name, e);
         } finally {

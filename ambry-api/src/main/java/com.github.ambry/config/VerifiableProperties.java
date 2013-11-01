@@ -1,18 +1,13 @@
-package com.github.ambry.utils;
+package com.github.ambry.config;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/30/13
- * Time: 10:34 AM
- * To change this template use File | Settings | File Templates.
- */
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.util.*;
 
+/**
+ * Verifiable properties for configs
+ */
 public class VerifiableProperties {
 
   private final HashSet<String> referenceSet = new HashSet<String>();

@@ -38,6 +38,10 @@ project(':ambry-utils') {
 
 project(':ambry-api') {
   apply plugin: 'java'
+
+  dependencies {
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+  }
 }
 
 project(':ambry-shared') {
@@ -123,6 +127,7 @@ project(':ambry-clustermap') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
+    compile "org.json:json:20090211"
   }
 }
 

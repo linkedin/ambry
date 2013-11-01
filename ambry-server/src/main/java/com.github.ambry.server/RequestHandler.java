@@ -7,11 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 10/15/13
- * Time: 12:45 AM
- * To change this template use File | Settings | File Templates.
+ * Request handler class
  */
 public class RequestHandler implements Runnable {
   private final int id;
@@ -46,6 +42,7 @@ public class RequestHandler implements Runnable {
   }
 }
 
+// Request handler pool. A pool of threads that handle requests
 class RequestHandlerPool {
 
   private Thread[] threads = null;
