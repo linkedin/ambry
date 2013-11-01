@@ -30,10 +30,6 @@ public class SocketServerTest {
     server.start();
   }
 
-  private Socket connect() throws UnknownHostException, IOException {
-    return new Socket("localhost", server.getPort());
-  }
-
   @After
   public void cleanup() {
     server.shutdown();

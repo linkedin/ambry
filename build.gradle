@@ -76,6 +76,7 @@ project(':ambry-server') {
    compile project(':ambry-shared')
    compile project(':ambry-store')
    compile "org.slf4j:slf4j-api:$slf4jVersion"
+   testCompile "junit:junit:$junitVersion"
   }
 }
 
