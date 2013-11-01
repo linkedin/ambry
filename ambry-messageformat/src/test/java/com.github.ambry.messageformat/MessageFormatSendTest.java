@@ -93,7 +93,7 @@ public class MessageFormatSendTest {
     Assert.assertEquals(send.sizeInBytes(), 1000);
     ByteBuffer bufresult = ByteBuffer.allocate(1000);
     WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
-    while (!send.isComplete()) {
+    while (!send.isSendComplete()) {
       send.writeTo(channel1);
     }
     Assert.assertArrayEquals(buf1.array(), bufresult.array());
@@ -104,7 +104,7 @@ public class MessageFormatSendTest {
     Assert.assertEquals(send1.sizeInBytes(), 809);
     bufresult.clear();
     WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
-    while (!send1.isComplete()) {
+    while (!send1.isSendComplete()) {
       send1.writeTo(channel2);
     }
 
@@ -118,7 +118,7 @@ public class MessageFormatSendTest {
     Assert.assertEquals(send2.sizeInBytes(), 104);
     bufresult.clear();
     WritableByteChannel channel3 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
-    while (!send2.isComplete()) {
+    while (!send2.isSendComplete()) {
       send2.writeTo(channel2);
     }
 

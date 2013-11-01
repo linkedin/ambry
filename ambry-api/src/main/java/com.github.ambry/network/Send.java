@@ -19,7 +19,7 @@ public interface Send {
    * Returns true if the all data has been written
    * @return True if all the data has been written else false
    */
-  boolean isComplete();
+  boolean isSendComplete();
 
   /**
    * The total size in bytes that needs to be written to the channel

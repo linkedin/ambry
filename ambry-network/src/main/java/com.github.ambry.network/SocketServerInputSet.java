@@ -31,7 +31,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
   }
 
   @Override
-  public boolean readComplete() {
+  public boolean isReadComplete() {
     return !(sizeRead < sizeToRead);
   }
 

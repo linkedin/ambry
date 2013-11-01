@@ -6,8 +6,6 @@ package com.github.ambry.config;
  */
 public class NetworkConfig {
 
-  private final VerifiableProperties props;
-
 
   /**
    * The number of network threads that the server uses for handling network requests
@@ -66,20 +64,15 @@ public class NetworkConfig {
   @Default("104857600")
   public final int socketRequestMaxBytes;
 
-  public NetworkConfig(VerifiableProperties properties) {
+  public NetworkConfig(VerifiableProperties verifiableProperties) {
 
-    this.props = properties;
-    numNetworkThreads = props.getIntInRange("num.network.threads", 3, 1, Integer.MAX_VALUE);
-    numIoThreads = props.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
-    port = props.getInt("port", 6667);
-    hostName = props.getString("host.name", null);
-    socketSendBufferBytes = props.getInt("socket.send.buffer.bytes", 100*1024);
-    socketReceiveBufferBytes = props.getInt("socket.receive.buffer.bytes", 100*1024);
-    socketRequestMaxBytes = props.getIntInRange("socket.request.max.bytes", 100*1024*1024, 1, Integer.MAX_VALUE);
-    queuedMaxRequests = props.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);
+    numNetworkThreads = verifiableProperties.getIntInRange("num.network.threads", 3, 1, Integer.MAX_VALUE);
+    numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
+    port = verifiableProperties.getInt("port", 6667);
+    hostName = verifiableProperties.getString("host.name", null);
+    socketSendBufferBytes = verifiableProperties.getInt("socket.send.buffer.bytes", 100*1024);
+    socketReceiveBufferBytes = verifiableProperties.getInt("socket.receive.buffer.bytes", 100*1024);
+    socketRequestMaxBytes = verifiableProperties.getIntInRange("socket.request.max.bytes", 100*1024*1024, 1, Integer.MAX_VALUE);
+    queuedMaxRequests = verifiableProperties.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);
   }
-
-
-
-
 }

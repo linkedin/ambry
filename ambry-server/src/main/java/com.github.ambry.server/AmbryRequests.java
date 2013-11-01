@@ -2,6 +2,9 @@ package com.github.ambry.server;
 
 import java.io.DataInputStream;
 import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PutResponse;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 
@@ -44,5 +47,9 @@ public class AmbryRequests {
     // create put response
 
     // send to request channel
+  }
+
+  private void handleGetRequest(Request request) throws IOException {
+    GetRequest getRequest = GetRequest.readFrom((DataInputStream)request.getInputStream());
   }
 }

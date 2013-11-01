@@ -116,7 +116,7 @@ public class MessageFormatSend implements Send {
 
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
-    if (!isComplete()) {
+    if (!isSendComplete()) {
       long written = readSet.writeTo(currentWriteIndex, channel,
               infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
               infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
@@ -131,7 +131,7 @@ public class MessageFormatSend implements Send {
   }
 
   @Override
-  public boolean isComplete() {
+  public boolean isSendComplete() {
     return totalSizeToWrite == sizeWritten;
   }
 

@@ -31,12 +31,12 @@ public class BoundedByteBufferSend implements Send {
   }
 
   public void writeTo(WritableByteChannel channel) throws IOException {
-    if (!isComplete()) {
+    if (!isSendComplete()) {
       channel.write(buffer);
     }
   }
 
-  public boolean isComplete() {
+  public boolean isSendComplete() {
    return buffer.remaining() == 0;
   }
 

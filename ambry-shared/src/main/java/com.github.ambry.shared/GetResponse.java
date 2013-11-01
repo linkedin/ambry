@@ -33,14 +33,14 @@ public class GetResponse extends RequestOrResponse {
     if (bufferToSend.remaining() > 0) {
       channel.write(bufferToSend);
     }
-    if (bufferToSend.remaining() == 0 && !toSend.isComplete()) {
+    if (bufferToSend.remaining() == 0 && !toSend.isSendComplete()) {
       toSend.writeTo(channel);
     }
   }
 
   @Override
-  public boolean isComplete() {
-    return !(bufferToSend.remaining() > 0 || toSend.isComplete());
+  public boolean isSendComplete() {
+    return !(bufferToSend.remaining() > 0 || toSend.isSendComplete());
   }
 
   @Override

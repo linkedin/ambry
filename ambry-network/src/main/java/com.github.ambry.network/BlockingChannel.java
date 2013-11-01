@@ -88,7 +88,7 @@ public class BlockingChannel {
   void send(Send request) throws ClosedChannelException, IOException {
     if(!connected)
       throw new ClosedChannelException();
-    while (!request.isComplete()) {
+    while (!request.isSendComplete()) {
       request.writeTo(writeChannel);
     }
   }

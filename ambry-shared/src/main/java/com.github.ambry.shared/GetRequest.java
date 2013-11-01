@@ -16,8 +16,8 @@ public class GetRequest extends RequestOrResponse {
   private MessageFormatFlags flags;
   private BlobId id;
 
-  private static final int MessageFormat_Size = 2;
-  private static final int Blob_Id_Size = 2;
+  private static final int MessageFormat_Size_InBytes = 2;
+  private static final int Blob_Id_Size_InBytes = 2;
 
   public GetRequest(short versionId, int correlationId, MessageFormatFlags flags, BlobId id) {
     super(RequestResponseType.GetRequest, versionId, correlationId);
@@ -64,13 +64,13 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
-  public boolean isComplete() {
+  public boolean isSendComplete() {
     return bufferToSend.remaining() == 0;
   }
 
   @Override
   public long sizeInBytes() {
     // header + error
-    return super.sizeInBytes() + MessageFormat_Size + Blob_Id_Size + id.sizeInBytes();
+    return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Size_InBytes + id.sizeInBytes();
   }
 }

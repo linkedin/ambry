@@ -50,7 +50,7 @@ class SocketServerResponse implements Response {
     this.processor = ((SocketServerRequest)request).getProcessor();
   }
 
-  public Send getOutput() {
+  public Send getPayload() {
     return output;
   }
 

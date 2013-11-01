@@ -12,7 +12,7 @@ public interface Receive {
    * Indicates if the read has been completed
    * @return  true if read is complete, else false
    */
-  boolean readComplete();
+  boolean isReadComplete();
 
   /**
    * Reads some bytes from the provided channel

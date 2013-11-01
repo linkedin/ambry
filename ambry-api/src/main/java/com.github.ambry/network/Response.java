@@ -9,7 +9,7 @@ public interface Response {
    * Provides the send object that can be sent over the network
    * @return The send object that is part of this response
    */
-  Send getOutput();
+  Send getPayload();
 
   /**
    * The original request object that this response maps to

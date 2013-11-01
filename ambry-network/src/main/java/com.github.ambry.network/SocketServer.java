@@ -350,7 +350,7 @@ class Processor extends AbstractServerThread {
       SocketServerRequest request = (SocketServerRequest)curr.getRequest();
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {
-        if(curr.getOutput() == null) {
+        if(curr.getPayload() == null) {
           // a null response send object indicates that there is no response to send to the client.
           // In this case, we just want to turn the interest ops to READ to be able to read more pipelined requests
           // that are sitting in the server's socket buffer
@@ -422,7 +422,7 @@ class Processor extends AbstractServerThread {
     SocketAddress address = socketChannel.socket().getRemoteSocketAddress();
     logger.trace("bytes read from {}", address);
 
-    if(input.readComplete()) {
+    if(input.isReadComplete()) {
       SocketServerRequest req =
               new SocketServerRequest(id, key, input);
       channel.sendRequest(req);
@@ -446,13 +446,13 @@ class Processor extends AbstractServerThread {
     SocketChannel socketChannel = (SocketChannel)key.channel();
     SocketServerResponse response =
             (SocketServerResponse)key.attachment();
-    Send responseSend = response.getOutput();
+    Send responseSend = response.getPayload();
     if(responseSend == null)
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     responseSend.writeTo(socketChannel);
     logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
 
-    if(responseSend.isComplete()) {
+    if(responseSend.isSendComplete()) {
       logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
       // update metrics
       key.attach(null);

@@ -20,11 +20,11 @@ public class PutRequest extends RequestOrResponse {
   private long sentBytes = 0;
 
 
-  private static final int Logical_Volume_Id_Size = 8;
-  private static final int ClientId_Size = 2;
-  private static final int BlobId_Size = 2;
-  private static final int Metadata_Size = 4;
-  private static final int Data_Size = 8;
+  private static final int Logical_Volume_Id_Size_InBytes = 8;
+  private static final int ClientId_Size_InBytes = 2;
+  private static final int BlobId_Size_InBytes = 2;
+  private static final int Metadata_Size_InBytes = 4;
+  private static final int Data_Size_InBytes = 8;
 
 
   public PutRequest(short versionId, long logicalVolumeId, int correlationId, String clientId,
@@ -84,8 +84,8 @@ public class PutRequest extends RequestOrResponse {
   private int sizeExcludingData() {
     // header + logicalVolumeId + clientId size + clientId +
     // blobId size + blobId + metadata size + metadata + data size
-    return  (int)super.sizeInBytes() + Logical_Volume_Id_Size + ClientId_Size + clientId.length() +
-            BlobId_Size + blobId.length() + Metadata_Size + metadata.capacity() + Data_Size;
+    return  (int)super.sizeInBytes() + Logical_Volume_Id_Size_InBytes + ClientId_Size_InBytes + clientId.length() +
+            BlobId_Size_InBytes + blobId.length() + Metadata_Size_InBytes + metadata.capacity() + Data_Size_InBytes;
   }
 
   @Override
@@ -120,7 +120,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   @Override
-  public boolean isComplete() {
+  public boolean isSendComplete() {
     return sizeInBytes() == sentBytes;
   }
 }
