@@ -66,7 +66,7 @@ public class MessageFormat {
   }
 
   public static void serializeCurrentVersionUserMetadata(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
-    UserMetadata_Format_V1.serializeData(outputBuffer, userMetadata);
+    UserMetadata_Format_V1.serializeUserMetadata(outputBuffer, userMetadata);
   }
 
   public static void  serializeCurrentVersionPartialData(ByteBuffer outputBuffer, long dataSize) {
@@ -221,7 +221,7 @@ public class MessageFormat {
              Crc_Size;
     }
 
-    public static void serializeData(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
+    public static void serializeUserMetadata(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort((short)1);
       outputBuffer.putInt(userMetadata.limit());
