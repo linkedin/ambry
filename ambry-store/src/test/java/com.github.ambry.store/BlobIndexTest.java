@@ -33,7 +33,7 @@ public class BlobIndexTest {
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
-      IndexKeyFactory factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(factory.getKey(blobId1), new BlobIndexValue(100, 1000, flags, 12345));
@@ -68,7 +68,7 @@ public class BlobIndexTest {
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
-      IndexKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(factory.getKey(blobId1), new BlobIndexValue(100, 1000, flags, 12345));
@@ -109,7 +109,7 @@ public class BlobIndexTest {
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
-      IndexKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(factory.getKey(blobId1), new BlobIndexValue(100, 1000, flags, 12345));

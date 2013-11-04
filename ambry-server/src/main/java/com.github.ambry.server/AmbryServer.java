@@ -35,14 +35,15 @@ public class AmbryServer {
     logger.info("starting");
     // create the configs
     NetworkConfig config = new NetworkConfig(properties);
+    scheduler.startup();
 
     // verify the configs
     properties.verify();
     networkServer = new SocketServer(config);
     networkServer.start();
-    requests = new AmbryRequests(networkServer.getRequestResponseChannel());
+    store = new BlobStore("/Users/srsubram/testdir", scheduler);
+    requests = new AmbryRequests(store, networkServer.getRequestResponseChannel());
     requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
-    store = new BlobStore("/home/srsubram/testdir", scheduler);
     logger.info("started");
   }
 

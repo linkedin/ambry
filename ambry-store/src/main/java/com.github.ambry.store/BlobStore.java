@@ -3,7 +3,7 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Scheduler;
 
 import java.io.InputStream;
-import java.util.ArrayList;
+import java.util.List;
 import java.io.IOException;
 
 /**
@@ -27,17 +27,17 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public MessageReadSet get(ArrayList<String> handles) throws StoreException {
+  public MessageReadSet get(List<? extends StoreKey> handles) throws StoreException {
     return null;
   }
 
   @Override
-  public void put(String handle, InputStream value) throws StoreException {
+  public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     //To change body of implemented methods use File | Settings | File Templates.
   }
 
   @Override
-  public void delete(ArrayList<String> handles) throws StoreException {
+  public void delete(List<? extends StoreKey> ids) throws StoreException {
     // add a new delete record
     // mark the delete flag for all the handles in the index
   }

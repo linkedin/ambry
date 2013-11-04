@@ -25,12 +25,10 @@ allprojects {
   }
 }
 
-
 project(':ambry-utils') {
   apply plugin: 'java'
 
   dependencies {
-    compile project(':ambry-api')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
@@ -40,6 +38,7 @@ project(':ambry-api') {
   apply plugin: 'java'
 
   dependencies {
+    compile project(':ambry-utils')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
   }
 }
@@ -50,6 +49,7 @@ project(':ambry-shared') {
   dependencies {
     compile project(':ambry-utils')
     compile project(':ambry-api')
+    compile project(':ambry-messageformat')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
@@ -75,6 +75,7 @@ project(':ambry-server') {
    compile project(':ambry-utils')
    compile project(':ambry-shared')
    compile project(':ambry-store')
+   compile project(':ambry-messageformat')
    compile "org.slf4j:slf4j-api:$slf4jVersion"
    testCompile "junit:junit:$junitVersion"
   }
@@ -98,7 +99,6 @@ project(':ambry-messageformat') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
-    compile project(':ambry-shared')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }

@@ -50,15 +50,15 @@ class BlobIndexValue {
  * A key and value that represents an index entry
  */
 class BlobIndexEntry {
-  private IndexKey key;
+  private StoreKey key;
   private BlobIndexValue value;
 
-  public BlobIndexEntry(IndexKey key, BlobIndexValue value) {
+  public BlobIndexEntry(StoreKey key, BlobIndexValue value) {
     this.key = key;
     this.value = value;
   }
 
-  public IndexKey getKey() {
+  public StoreKey getKey() {
     return this.key;
   }
 
@@ -72,7 +72,7 @@ class BlobIndexEntry {
  * recovering an index from the log and commit and recover index to disk
  */
 public class BlobIndex {
-  private ConcurrentHashMap<IndexKey, BlobIndexValue> index = new ConcurrentHashMap<IndexKey, BlobIndexValue>();
+  private ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
   private AtomicLong logEndOffset;
   private BlobJournal indexJournal;
   private File indexFile;
@@ -126,20 +126,20 @@ public class BlobIndex {
     this.logEndOffset.set(fileEndOffset);
   }
 
-  public boolean exist(IndexKey key) {
+  public boolean exist(StoreKey key) {
     return index.containsKey(key);
   }
 
-  public ArrayList<IndexKey> findMissingEntries(ArrayList<IndexKey> keys) {
-    ArrayList<IndexKey> missingEntries = new ArrayList<IndexKey>();
-    for (IndexKey key : keys) {
+  public ArrayList<StoreKey> findMissingEntries(ArrayList<StoreKey> keys) {
+    ArrayList<StoreKey> missingEntries = new ArrayList<StoreKey>();
+    for (StoreKey key : keys) {
       if (!exist(key))
         missingEntries.add(key);
     }
     return missingEntries;
   }
 
-  public BlobIndexValue getValue(IndexKey key) {
+  public BlobIndexValue getValue(StoreKey key) {
     return index.get(key);
   }
 
@@ -163,7 +163,7 @@ public class BlobIndex {
     private Object lock = new Object();
     private final File file;
     private Short version = 0;
-    private IndexKeyFactory factory;
+    private StoreKeyFactory factory;
 
     public IndexPersistor(File file)
             throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException {
@@ -191,7 +191,7 @@ public class BlobIndex {
           log.flush();
 
           // write the entries
-          for (Map.Entry<IndexKey, BlobIndexValue> entry : index.entrySet()) {
+          for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
             writer.write(entry.getKey().toString() + " " + entry.getValue().getOffset() + " " +
                     entry.getValue().getSize() + " " + entry.getValue().getFlags() + " " +
                     entry.getValue().getTimeToLive());
@@ -242,7 +242,7 @@ public class BlobIndex {
                  }
                  else if(fields.length == 5) {
                    // get key
-                   IndexKey key = factory.getKey(fields[0]);
+                   StoreKey key = factory.getKey(fields[0]);
                    long offset = Long.parseLong(fields[1]);
                    long size = Long.parseLong(fields[2]);
                    byte flags = Byte.parseByte(fields[3]);

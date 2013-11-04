@@ -1,10 +1,15 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.Send;
+import com.github.ambry.utils.Utils;
+
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 
 /**
  * Response to GetRequest to fetch data
@@ -19,8 +24,24 @@ public class GetResponse extends RequestOrResponse {
     this.toSend = send;
   }
 
+  public GetResponse(short versionId, int correlationId, InputStream stream) {
+    super(RequestResponseType.GetResponse, versionId, correlationId);
+    this.stream = stream;
+  }
+
   public InputStream getInputStream() {
     return stream;
+  }
+
+  public static GetResponse readFrom(DataInputStream stream) throws IOException {
+    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
+    if (type != RequestResponseType.GetResponse) {
+      throw new IllegalArgumentException("The type of request response is not compatible");
+    }
+    Short versionId  = stream.readShort();
+    int correlationId = stream.readInt();
+
+    return new GetResponse(versionId, correlationId, stream);
   }
 
   @Override

@@ -10,12 +10,6 @@ import java.nio.ByteBuffer;
 /**
  * Request Response for serialization and de-serialization
  */
-enum RequestResponseType {
-  PutRequest,
-  GetRequest,
-  PutReponse,
-  GetResponse
-}
 
 public abstract class RequestOrResponse implements Send {
   protected final RequestResponseType type;

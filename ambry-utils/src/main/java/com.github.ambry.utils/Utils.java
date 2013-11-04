@@ -13,7 +13,19 @@ public class Utils {
 
   public static String readShortString(DataInputStream input) throws IOException {
     Short size = input.readShort();
-    if(size < 0)
+    if(size <= 0)
+      return null;
+    byte[] bytes = new byte[size];
+    int read = input.read(bytes);
+    if (read != size) {
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+    }
+    return new String(bytes, "UTF-8");
+  }
+
+  public static String readIntString(DataInputStream input) throws IOException {
+    int size = input.readInt();
+    if(size <= 0)
       return null;
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
