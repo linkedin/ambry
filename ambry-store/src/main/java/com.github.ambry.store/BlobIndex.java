@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +18,10 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 
 class BlobIndexValue {
+  public enum Flags {
+    Delete_Index
+  }
+
   private final long size;
   private final long offset;
   private byte flags;
@@ -41,8 +46,20 @@ class BlobIndexValue {
     return flags;
   }
 
+  public boolean isFlagSet(Flags flag) {
+    return ((flags & (1 << flag.ordinal())) != 0);
+  }
+
   public long getTimeToLive() {
     return timeToLive;
+  }
+
+  public void setTimeToLive(long ttl) {
+    timeToLive = ttl;
+  }
+
+  public void setFlag(Flags flag) {
+    flags = (byte)(flags | (1 << flag.ordinal()));
   }
 }
 
@@ -72,7 +89,7 @@ class BlobIndexEntry {
  * recovering an index from the log and commit and recover index to disk
  */
 public class BlobIndex {
-  private ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
+  protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
   private AtomicLong logEndOffset;
   private BlobJournal indexJournal;
   private File indexFile;
@@ -116,31 +133,58 @@ public class BlobIndex {
     this.logEndOffset.set(fileEndOffset);
   }
 
-  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
-    if (this.logEndOffset.get() >fileEndOffset) {
+  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long logEndOffset) {
+    if (this.logEndOffset.get() > logEndOffset) {
       throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset");
     }
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
     }
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(logEndOffset);
   }
 
   public boolean exist(StoreKey key) {
     return index.containsKey(key);
   }
 
-  public ArrayList<StoreKey> findMissingEntries(ArrayList<StoreKey> keys) {
-    ArrayList<StoreKey> missingEntries = new ArrayList<StoreKey>();
+  public void markAsDeleted(StoreKey id, long logEndOffset) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null) {
+      logger.error("id {} not present in index. marking id as deleted failed", id);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    value.setFlag(BlobIndexValue.Flags.Delete_Index);
+    index.put(id, value);
+    this.logEndOffset.set(logEndOffset);
+  }
+
+  public void updateTTL(StoreKey id, long ttl, long logEnfOffset) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null) {
+      logger.error("id {} not present in index. updating ttl failed", id);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    value.setTimeToLive(ttl);
+    index.put(id, value);
+    this.logEndOffset.set(logEnfOffset);
+  }
+
+  public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null || value.isFlagSet(BlobIndexValue.Flags.Delete_Index)) {
+      logger.error("id {} not present in index. cannot find blob");
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    return new BlobReadOptions(value.getOffset(), value.getOffset());
+  }
+
+  public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
+    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
     for (StoreKey key : keys) {
       if (!exist(key))
         missingEntries.add(key);
     }
     return missingEntries;
-  }
-
-  public BlobIndexValue getValue(StoreKey key) {
-    return index.get(key);
   }
 
   // TODO need to fix this

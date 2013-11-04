@@ -20,6 +20,16 @@ public class BlobIndexTest {
     return f;
   }
 
+  class MockIndex extends BlobIndex {
+    public MockIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException {
+      super(datadir, scheduler, log);
+    }
+
+    BlobIndexValue getValue(StoreKey key) {
+      return index.get(key);
+    }
+  }
+
   @Test
   public void testIndexBasic() throws IOException {
     try {
@@ -29,7 +39,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       Log log = new Log(logFile);
-      BlobIndex index = new BlobIndex(logFile, scheduler, log);
+      MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
@@ -64,7 +74,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       Log log = new Log(logFile);
-      BlobIndex index = new BlobIndex(logFile, scheduler, log);
+      MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";
@@ -80,7 +90,7 @@ public class BlobIndexTest {
       index.close();
 
       // create a new index and ensure the index is restored
-      BlobIndex indexNew = new BlobIndex(logFile, scheduler, log);
+      MockIndex indexNew = new MockIndex(logFile, scheduler, log);
 
       BlobIndexValue value1 = indexNew.getValue(factory.getKey(blobId1));
       BlobIndexValue value2 = indexNew.getValue(factory.getKey(blobId2));
@@ -105,7 +115,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       Log log = new Log(logFile);
-      BlobIndex index = new BlobIndex(logFile, scheduler, log);
+      MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
       String blobId2 = "id2";
       String blobId3 = "id3";

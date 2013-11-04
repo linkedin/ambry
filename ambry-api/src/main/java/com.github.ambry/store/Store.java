@@ -31,11 +31,11 @@ public interface Store {
   void put (MessageWriteSet messageSetToWrite) throws StoreException;
 
   /**
-   * Deletes all the messages that are specified by the list of ids
-   * @param ids The list of message ids that need to be deleted
+   * Deletes all the messages that are part of the message set
+   * @param messageSetToDelete The list of messages that need to be deleted
    * @throws StoreException
    */
-  void delete(List<? extends StoreKey> ids) throws StoreException;
+  void delete(MessageWriteSet messageSetToDelete) throws StoreException;
 
   /**
    * Shutsdown the store

@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.util.ArrayList;
 import java.util.Random;
+import java.util.List;
 
 public class BlobMessageReadSetTest {
 
@@ -27,10 +29,10 @@ public class BlobMessageReadSetTest {
     BlobReadOptions readOptions1 = new BlobReadOptions(500, 30);
     BlobReadOptions readOptions2 = new BlobReadOptions(100, 15);
     BlobReadOptions readOptions3 = new BlobReadOptions(200, 100);
-    BlobReadOptions[] options = new BlobReadOptions[3];
-    options[0] = readOptions1;
-    options[1] = readOptions2;
-    options[2] = readOptions3;
+    List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
+    options.add(0, readOptions1);
+    options.add(1, readOptions2);
+    options.add(2, readOptions3);
     File tempFile = tempFile();
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file

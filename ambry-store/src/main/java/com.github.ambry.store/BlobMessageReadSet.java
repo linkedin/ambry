@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -43,14 +46,14 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 public class BlobMessageReadSet implements MessageReadSet {
 
   private AtomicLong size;
-  private final BlobReadOptions[] readOptions;
+  private final List<BlobReadOptions> readOptions;
   private final FileChannel fileChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BlobMessageReadSet(File file, FileChannel fileChannel, BlobReadOptions[] readOptions, long fileEndPosition) throws IOException {
+  public BlobMessageReadSet(File file, FileChannel fileChannel, List<BlobReadOptions> readOptions, long fileEndPosition) throws IOException {
 
     size = new AtomicLong(0);
-    Arrays.sort(readOptions);
+    Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
       if (readOption.getOffset() + readOption.getSize() >= fileEndPosition) {
         throw new IllegalArgumentException("Invalid offset size pairs");
@@ -64,25 +67,25 @@ public class BlobMessageReadSet implements MessageReadSet {
 
   @Override
   public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
-    if (index >= readOptions.length) {
+    if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index out of the messageset");
     }
-    long startOffset = readOptions[index].getOffset() + relativeOffset;
-    long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions[index].getSize() - relativeOffset), channel);
+    long startOffset = readOptions.get(index).getOffset() + relativeOffset;
+    long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
     logger.trace("Written {} bytes to the write channel from the file channel", written);
     return written;
   }
 
   @Override
   public int count() {
-    return readOptions.length;
+    return readOptions.size();
   }
 
   @Override
   public long sizeInBytes(int index) {
-    if (index >= readOptions.length) {
+    if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index out of the messageset");
     }
-    return readOptions[index].getSize();
+    return readOptions.get(index).getSize();
   }
 }
