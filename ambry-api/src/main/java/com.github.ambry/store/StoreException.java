@@ -23,4 +23,8 @@ public class StoreException extends Exception
     super(e);
     this.error = error;
   }
+
+  public StoreErrorCodes getErrorCode() {
+    return this.error;
+  }
 }

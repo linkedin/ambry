@@ -55,7 +55,7 @@ public class BlobMessageReadSet implements MessageReadSet {
     size = new AtomicLong(0);
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
-      if (readOption.getOffset() + readOption.getSize() >= fileEndPosition) {
+      if (readOption.getOffset() + readOption.getSize() > fileEndPosition) {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
       size.addAndGet(readOption.getSize());

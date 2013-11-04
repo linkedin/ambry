@@ -6,5 +6,6 @@ package com.github.ambry.store;
 public enum  StoreErrorCodes {
   Key_Not_Found,
   IOError,
-  Initialization_Error
+  Initialization_Error,
+  Already_Exist
 }

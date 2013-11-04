@@ -60,6 +60,12 @@ public class BlobStore implements Store {
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     synchronized (lock) {
       try {
+        // if any of the keys alreadys exist in the store, we fail
+        for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+          if (index.exist(info.getKey())) {
+            throw new StoreException("key {} already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+          }
+        }
         long writeStartOffset = log.getLogEndOffset();
         messageSetToWrite.writeTo(log);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();

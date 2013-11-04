@@ -175,7 +175,7 @@ public class BlobIndex {
       logger.error("id {} not present in index. cannot find blob");
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
     }
-    return new BlobReadOptions(value.getOffset(), value.getOffset());
+    return new BlobReadOptions(value.getOffset(), value.getSize());
   }
 
   public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
