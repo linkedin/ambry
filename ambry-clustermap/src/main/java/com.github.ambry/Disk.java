@@ -1,81 +1,128 @@
 package com.github.ambry;
 
-import org.codehaus.jackson.annotate.JsonIgnore;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONStringer;
 
 /**
  * Disk represents a disk in Ambry. Each Disk is uniquely identifiable by its diskId.
  */
 public class Disk {
-    public static final long INVALID_DISK_ID = -1;
+  public enum State {
+    AVAILABLE,
+    UNAVAILABLE
+  }
 
-    public enum State {
-        INVALID,
-        AVAILABLE,
-        UNAVAILABLE
+  private DataNode dataNode;
+  private DiskId diskId;
+  private long capacityGB;
+  private State state;
+
+  public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
+    this.dataNode = dataNode;
+    this.diskId = new DiskId(new JSONObject(jsonObject.getString("diskId")));
+    this.capacityGB = jsonObject.getLong("capacityGB");
+    this.state = State.valueOf(jsonObject.getString("state"));
+    validate();
+  }
+
+  public Disk(DataNode dataNode, DiskId diskId, long capacityGB) {
+    this.dataNode = dataNode;
+    this.diskId = diskId;
+    this.capacityGB = capacityGB;
+    this.state = State.AVAILABLE;
+    validate();
+  }
+
+  public DataNode getDataNode() {
+    return dataNode;
+  }
+
+  public DiskId getDiskId() {
+    return diskId;
+  }
+
+  public long getCapacityGB() {
+    return capacityGB;
+  }
+
+  public State getState() {
+    return state;
+  }
+
+  protected void validateDataNode() {
+    if(dataNode == null) {
+      throw new IllegalStateException("DataNode cannot be null");
     }
+  }
 
-    private long diskId;
-    private String dataNodeName;
-    // TODO: Is there anything like TimeUnit for capacity?
-    private long capacityGB;
-    private State state;
-
-    // "simple" constructor needed for JSON SerDe.
-    private Disk() {
-        this.diskId = Disk.INVALID_DISK_ID;
-        this.dataNodeName = null;
-        this.capacityGB = 0;
-        this.state = State.INVALID;
+  protected void validateCapacity() {
+    if (capacityGB <=0) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityGB);
     }
+  }
 
-    public Disk(long diskId, String dataNodeName, long capacityGB) {
-        this.diskId = diskId;
-        this.dataNodeName = dataNodeName;
-        this.capacityGB = capacityGB;
-        this.state = State.AVAILABLE;
+  protected boolean isStateValid() {
+    for (State validState : State.values()) {
+      if (state == validState) {
+        return true;
+      }
     }
+    return false;
+  }
 
-    public long getDiskId() {
-        return diskId;
+  protected void validateState() {
+    if (!isStateValid()) {
+      throw new IllegalStateException("Invalid disk state: " + state);
     }
+  }
 
-    public String getDataNodeName() {
-        return dataNodeName;
-    }
+  public void validate() {
+    validateDataNode();
+    diskId.validate();
+    validateCapacity();
+    validateState();
+  }
 
-    public long getCapacityGB() {
-        return capacityGB;
+  // Returns JSON representation
+  @Override
+  public String toString() {
+    try {
+      return new JSONStringer()
+              .object()
+                .key("diskId")
+                .value(diskId)
+                .key("capacityGB")
+                .value(capacityGB)
+                .key("state")
+                .value(state)
+              .endObject()
+              .toString();
+    } catch (JSONException e) {
+      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
     }
+    return null;
+  }
 
-    public State getState() {
-        return state;
-    }
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
 
-    public void setUnavailable() {
-        state = State.UNAVAILABLE;
-    }
+    Disk disk = (Disk) o;
 
-    public void setAvailable() {
-        state = State.AVAILABLE;
-    }
+    if (capacityGB != disk.capacityGB) return false;
+    if (!diskId.equals(disk.diskId)) return false;
+    if (state != disk.state) return false;
 
-    protected boolean isStateValid() {
-        if (state == State.INVALID) {
-            return false;
-        }
-        for (State validState : State.values()) {
-            if (state == validState) {
-                return true;
-            }
-        }
-        return false;
-    }
+    return true;
+  }
 
-    @JsonIgnore
-    public boolean isValid() {
-        if (diskId >= 0 && dataNodeName != null && capacityGB > 0 && isStateValid()) {
-            return true;
-        }
-        return false;
-    }
+  @Override
+  public int hashCode() {
+    int result = diskId.hashCode();
+    result = 31 * result + (int) (capacityGB ^ (capacityGB >>> 32));
+    result = 31 * result + state.hashCode();
+    return result;
+  }
 }

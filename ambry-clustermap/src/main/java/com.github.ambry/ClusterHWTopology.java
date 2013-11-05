@@ -41,17 +41,17 @@ public class ClusterHWTopology {
 
             disksInDataNodeMap.put(dataNode, new HashSet<Disk>());
 
-            Datacenter dc = datacenterMap.get(dataNode.getDatacenterName());
+            Datacenter dc = datacenterMap.get(dataNode.getDatacenter());
             nodesInDatacenterMap.get(dc).add(dataNode);
         }
 
         for (Disk disk : clusterHW.getDisks()) {
-            diskIdMap.put(disk.getDiskId(), disk);
+            // diskIdMap.put(disk.getDiskId(), disk);
 
-            DataNode dataNode = dataNodeMap.get(disk.getDataNodeName());
+            DataNode dataNode = dataNodeMap.get(disk.getDataNode());
             disksInDataNodeMap.get(dataNode).add(disk);
 
-            Datacenter dc = datacenterMap.get(dataNode.getDatacenterName());
+            Datacenter dc = datacenterMap.get(dataNode.getDatacenter());
             disksInDatacenterMap.get(dc).add(disk);
         }
     }
@@ -93,11 +93,11 @@ public class ClusterHWTopology {
     }
 
     public DataNode getDataNode(Disk disk) {
-        return dataNodeMap.get(disk.getDataNodeName());
+        return disk.getDataNode();
     }
 
     public Datacenter getDatacenter(DataNode dataNode) {
-        return datacenterMap.get(dataNode.getDatacenterName());
+        return dataNode.getDatacenter();
     }
 
 }

@@ -1,76 +1,146 @@
 package com.github.ambry;
 
-import org.codehaus.jackson.annotate.JsonIgnore;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONStringer;
 
-// TODO: Consider moving all methods that mutate/set this object into a sub-class so that the core type is "read only".
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * DataNode represents data nodes in Ambry. Each DataNode is uniquely identifiable by its hostname.
  */
 public class DataNode {
-   public enum State {
-       INVALID,
-       AVAILABLE,
-       UNAVAILABLE
-    }
+  public enum State {
+    AVAILABLE,
+    UNAVAILABLE
+  }
 
-    private String hostname; // E.g., ela4-app001.prod
-    private String datacenterName;
-    // TODO: ? ip address? No?
-    // TODO: Port? No?
-    private State state;
+  private Datacenter datacenter;
+  private String hostname; // E.g., ela4-app001.prod
+  private State state;
+  private ArrayList<Disk> disks;
 
-    // "simple" constructor needed for JSON SerDe.
-    private DataNode() {
-        this.hostname = null;
-        this.datacenterName = null;
-        this.state = State.INVALID;
-    }
+  public DataNode(Datacenter datacenter, String hostname) {
+    this.datacenter = datacenter;
+    this.hostname = hostname;
+    this.state = State.AVAILABLE;
+    this.disks = new ArrayList<Disk>();
+    validate();
+  }
 
-    public DataNode(String datacenterName, String hostname) {
-        this.hostname = hostname;
-        this.datacenterName = datacenterName;
-        this.state = State.AVAILABLE;
+  public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
+    this.datacenter = datacenter;
+    this.hostname = jsonObject.getString("hostname");
+    this.state = State.valueOf(jsonObject.getString("state"));
+    this.disks = new ArrayList<Disk>();
+    JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
+    for (int i = 0; i < diskJSONArray.length(); ++i) {
+      this.disks.add(new Disk(this, new JSONObject(diskJSONArray.getString(i))));
     }
+    validate();
+  }
 
-    public String getHostname() {
-        return hostname;
-    }
+  public String getHostname() {
+    return hostname;
+  }
 
-    public String getDatacenterName() {
-        return datacenterName;
-    }
+  public Datacenter getDatacenter() {
+    return datacenter;
+  }
 
-    public State getState() {
-        return state;
-    }
+  public State getState() {
+    return state;
+  }
 
-    public void setUnavailable() {
-        state = State.UNAVAILABLE;
-    }
+  public void addDisk(Disk disk) {
+    disks.add(disk);
+  }
 
-    public void setAvailable() {
-        state = State.AVAILABLE;
-    }
+  public List<Disk> getDisks() {
+    return Collections.unmodifiableList(disks);
+  }
 
-    protected boolean isStateValid() {
-        if (state == State.INVALID) {
-            return false;
-        }
-        for (State validState : State.values()) {
-            if (state == validState) {
-                return true;
-            }
-        }
-        return false;
+  protected void validateDatacenter() {
+    if(datacenter == null) {
+      throw new IllegalStateException("Datacenter cannot be null");
     }
+  }
 
-    @JsonIgnore
-    public boolean isValid() {
-        if (hostname != null & datacenterName != null && isStateValid()) {
-            return true;
-        }
-        return false;
+  protected void validateHostname() {
+    // Convert to fully qualified hostname?
+    if(hostname == null) {
+      throw new IllegalStateException("Hostname cannot be null");
     }
+  }
+
+  protected boolean isStateValid() {
+    for (State validState : State.values()) {
+      if (state == validState) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  protected void validateState() {
+    if (!isStateValid()) {
+      throw new IllegalStateException("Invalid DataNode state: " + state);
+    }
+  }
+
+  public void validate() {
+    validateDatacenter();
+    validateHostname();
+    validateState();
+    for(Disk disk : disks) {
+      disk.validate();
+    }
+  }
+
+  // Returns JSON representation
+  @Override
+  public String toString() {
+    try {
+      return new JSONStringer()
+              .object()
+              .key("hostname")
+              .value(hostname)
+              .key("state")
+              .value(state)
+              .key("disks")
+              .value(disks)
+              .endObject()
+              .toString();
+    } catch (JSONException e) {
+      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+    }
+    return null;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    DataNode dataNode = (DataNode) o;
+
+    if (!disks.equals(dataNode.disks)) return false;
+    if (!hostname.equals(dataNode.hostname)) return false;
+    if (state != dataNode.state) return false;
+
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = hostname.hashCode();
+    result = 31 * result + state.hashCode();
+    result = 31 * result + disks.hashCode();
+    return result;
+  }
+
 
 }

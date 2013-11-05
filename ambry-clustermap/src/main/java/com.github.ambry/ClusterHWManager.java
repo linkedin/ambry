@@ -51,36 +51,33 @@ public class ClusterHWManager {
             if (dataNodeNames.contains(dataNode.getHostname())) {
                 throw new IllegalArgumentException("DataNode name is not unique: " + dataNode.getHostname());
             }
-            if (dataNode.getState() == DataNode.State.INVALID) {
-                throw new IllegalArgumentException("DataNode state is invalid.");
-            }
-            if (!datacenterNames.contains(dataNode.getDatacenterName())) {
-                throw new IllegalArgumentException("Datacenter does not exist: " + dataNode.getDatacenterName());
+            if (!datacenterNames.contains(dataNode.getDatacenter())) {
+                throw new IllegalArgumentException("Datacenter does not exist: " + dataNode.getDatacenter());
             }
             dataNodeNames.add(dataNode.getHostname());
         }
 
-        long maxDiskId = Disk.INVALID_DISK_ID;
+      /*
+        long maxDiskId = -1;
         for (Disk disk : clusterHW.getDisks()) {
             if (diskIds.contains(disk.getDiskId())) {
                 throw new IllegalArgumentException("Disk id is not unique: " + disk.getDiskId());
             }
-            if (!disk.isValid()) {
-                throw new IllegalArgumentException("Disk state is invalid.");
-            }
-            if (!dataNodeNames.contains(disk.getDataNodeName())) {
-                throw new IllegalArgumentException("DataNode hostname does not exists: " + disk.getDataNodeName());
+            disk.validate();
+            if (!dataNodeNames.contains(disk.getDataNode())) {
+                throw new IllegalArgumentException("DataNode hostname does not exists: " + disk.getDataNode());
             }
             diskIds.add(disk.getDiskId());
             if(disk.getDiskId() > maxDiskId) {
                 maxDiskId = disk.getDiskId();
             }
         }
-        if (maxDiskId == Disk.INVALID_DISK_ID) {
+        if (maxDiskId == -1) {
             this.nextDiskId = 0;
         } else {
             this.nextDiskId = maxDiskId + 1;
         }
+        */
     }
 
     // TODO: Do these (toJson && makeFromJson) belong in ClusterHW rather than ClusterHWManager?
@@ -132,7 +129,7 @@ public class ClusterHWManager {
             throw new IllegalArgumentException("Datacenter name " + datacenterName + " already exists.");
         }
 
-        Datacenter dc = new Datacenter(datacenterName);
+        Datacenter dc = new Datacenter(null, datacenterName);
         clusterHW.addDatacenter(dc);
         datacenterNames.add(datacenterName);
     }
@@ -145,7 +142,8 @@ public class ClusterHWManager {
             throw new IllegalArgumentException("Hostname " + nodeHostname + " already exists.");
         }
 
-        DataNode dataNode = new DataNode(datacenterName, nodeHostname);
+        // TODO: fix this
+        DataNode dataNode = new DataNode(null, nodeHostname);
         clusterHW.addDataNode(dataNode);
         dataNodeNames.add(nodeHostname);
     }
@@ -159,7 +157,7 @@ public class ClusterHWManager {
         diskIds.add(diskId);
         nextDiskId++;
 
-        Disk disk = new Disk(diskId, nodeHostname, capacityGB);
+        Disk disk = new Disk(null, new DiskId(diskId), capacityGB);
         clusterHW.addDisk(disk);
     }
 

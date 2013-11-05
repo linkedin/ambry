@@ -21,7 +21,7 @@ public class ReplicatedStore {
 
     public ReplicatedStore() {
         this.logicalVolumeId = LogicalVolume.INVALID_LOGICAL_VOLUME_ID;
-        this.diskId = Disk.INVALID_DISK_ID;
+        this.diskId = -1;
     }
 
     public ReplicatedStore(long logicalVolumeId, long diskId) {
