@@ -22,15 +22,14 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * ClusterMap allows components in Ambry to query the topology. This covers both cluster hardware and data layout.
+ * ClusterMapManager allows components in Ambry to query the topology. This covers both cluster hardware and data layout.
  */
-// TODO: Rename this ClusterMapManager
-public class ClusterMap {
+public class ClusterMapManager {
   protected Cluster cluster;
   protected Layout layout;
 
 
-  public ClusterMap(Cluster cluster, Layout layout) {
+  public ClusterMapManager(Cluster cluster, Layout layout) {
     this.cluster = cluster;
     this.layout = layout;
   }
