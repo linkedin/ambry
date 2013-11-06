@@ -38,6 +38,13 @@ public interface Store {
   void delete(MessageWriteSet messageSetToDelete) throws StoreException;
 
   /**
+   * Updates TTL for all the messages that are part of the message set
+   * @param messageSetToUpdateTTL The list of messages whose ttl needs to be updated
+   * @throws StoreException
+   */
+  void updateTTL(MessageWriteSet messageSetToUpdateTTL) throws StoreException;
+
+  /**
    * Shutsdown the store
    */
   void shutdown();

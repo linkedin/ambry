@@ -1,23 +1,22 @@
 package com.github.ambry.shared;
 
-
 import com.github.ambry.utils.Utils;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.nio.*;
 
 /**
- * A Response to the Put Request
+ * Response of TTL request
  */
-public class PutResponse extends RequestOrResponse {
+public class TTLResponse extends RequestOrResponse {
 
   private short error;
   private static final int Error_Size_InBytes = 2;
 
-  public PutResponse(int correlationId, String clientId, short error) {
-    super(RequestResponseType.PutReponse, (short)1, correlationId, clientId);
+  public TTLResponse(int correlationId, String clientId, short error) {
+    super(RequestResponseType.TTLResponse, (short)1, correlationId, clientId);
     this.error = error;
   }
 
@@ -25,9 +24,9 @@ public class PutResponse extends RequestOrResponse {
     return error;
   }
 
-  public static PutResponse readFrom(DataInputStream stream) throws IOException {
+  public static TTLResponse readFrom(DataInputStream stream) throws IOException {
     RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutReponse) {
+    if (type != RequestResponseType.TTLResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId  = stream.readShort();
@@ -35,13 +34,13 @@ public class PutResponse extends RequestOrResponse {
     String clientId = Utils.readIntString(stream);
     Short error = stream.readShort();
     // ignore version for now
-    return new PutResponse(correlationId, clientId, error);
+    return new TTLResponse(correlationId, clientId, error);
   }
 
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putShort(error);
       bufferToSend.flip();

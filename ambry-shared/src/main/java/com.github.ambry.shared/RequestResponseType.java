@@ -7,5 +7,9 @@ public enum RequestResponseType {
   PutRequest,
   GetRequest,
   PutReponse,
-  GetResponse
+  GetResponse,
+  DeleteRequest,
+  DeleteResponse,
+  TTLRequest,
+  TTLResponse
 }

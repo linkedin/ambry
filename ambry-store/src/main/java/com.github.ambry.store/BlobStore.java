@@ -99,7 +99,23 @@ public class BlobStore implements Store {
         }
       }
       catch (IOException e) {
-        throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);
+        throw new StoreException("io error while trying to delete blobs : " + e, StoreErrorCodes.IOError);
+      }
+    }
+  }
+
+  @Override
+  public void updateTTL(MessageWriteSet messageSetToUpdateTTL) throws StoreException {
+    synchronized (lock) {
+      try {
+        messageSetToUpdateTTL.writeTo(log);
+        List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
+        for (MessageInfo info : infoList) {
+          index.updateTTL(info.getKey(), info.getTTL(), log.getLogEndOffset());
+        }
+      }
+      catch (IOException e) {
+        throw new StoreException("io error while trying to update ttl for blobs : " + e, StoreErrorCodes.IOError);
       }
     }
   }

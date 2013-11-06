@@ -40,6 +40,13 @@ public class AmbryRequests {
           break;
         case GetRequest:
           handleGetRequest(request);
+          break;
+        case DeleteRequest:
+          handleDeleteRequest(request);
+          break;
+        case TTLRequest:
+          handleTTLRequest(request);
+          break;
         default: // throw exception
       }
     } catch (Exception e) {
@@ -62,7 +69,7 @@ public class AmbryRequests {
       infoList.add(info);
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
       blobStore.put(writeset);
-      PutResponse response = new PutResponse((short)1, putRequest.getCorrelationId(), (short)0);
+      PutResponse response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), (short)0);
       requestResponseChannel.sendResponse(response, request);
     }
     catch (StoreException e) {
@@ -78,13 +85,46 @@ public class AmbryRequests {
       GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()));
       StoreInfo info = blobStore.get(getRequest.getBlobIds());
       Send blobsToSend = new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag());
-      GetResponse response = new GetResponse((short)0, getRequest.getCorrelationId(), info.getMessageReadSetInfo(), blobsToSend);
+      GetResponse response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+              info.getMessageReadSetInfo(), blobsToSend);
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
       // send error response
     }
+  }
 
+  private void handleDeleteRequest(Request request) {
+    try {
+      DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()));
+      MessageFormatInputStream stream = new MessageFormatInputStream(new BlobId(deleteRequest.getBlobId()), true);
+      MessageInfo info = new MessageInfo(new BlobId(deleteRequest.getBlobId()), stream.getSize(), 0); // ignore ttl
+      ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
+      infoList.add(info);
+      MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
+      blobStore.delete(writeset);
+      DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), (short)0);
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (Exception e) {
 
+    }
+  }
+
+  private void handleTTLRequest(Request request) {
+    try {
+      TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()));
+      MessageFormatInputStream stream = new MessageFormatInputStream(new BlobId(ttlRequest.getBlobId()), ttlRequest.getNewTTL());
+      MessageInfo info = new MessageInfo(new BlobId(ttlRequest.getBlobId()), stream.getSize(), ttlRequest.getNewTTL()); // ignore ttl
+      ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
+      infoList.add(info);
+      MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
+      blobStore.updateTTL(writeset);
+      TTLResponse response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), (short)0);
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (Exception e) {
+
+    }
   }
 }

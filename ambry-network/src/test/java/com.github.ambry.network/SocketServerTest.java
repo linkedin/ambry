@@ -48,7 +48,7 @@ public class SocketServerTest {
     new Random().nextBytes(bufmetadata);
 
     PutRequest emptyRequest =
-            new PutRequest((short)1,0, correlationId, "test", "1234", ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
+            new PutRequest(0, correlationId, "test", "1234", ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
     channel.send(emptyRequest);
@@ -79,12 +79,12 @@ public class SocketServerTest {
     }
 
     // send response back and ensure response is received
-    PutResponse response = new PutResponse((short)0, 1, (short)2);
+    PutResponse response = new PutResponse(1, "clientid1", (short)2);
     requestResponseChannel.sendResponse(response, request);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);
-    Assert.assertEquals(responseReplay.getVersionId(), 0);
+    Assert.assertEquals(responseReplay.getVersionId(), 1);
     Assert.assertEquals(responseReplay.getError(), 2);
   }
 

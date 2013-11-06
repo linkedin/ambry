@@ -18,7 +18,7 @@ public class AmbryCoordinator implements Coordinator {
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) {
     try {
       // put blob
-      PutRequest putRequest = new PutRequest((short)1, 1, 1, "client1", "id1", userMetadata, blob, blobProperties);
+      PutRequest putRequest = new PutRequest(1, 1, "client1", "id1", userMetadata, blob, blobProperties);
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.connect();
       channel.send(putRequest);
@@ -34,7 +34,34 @@ public class AmbryCoordinator implements Coordinator {
 
   @Override
   public void deleteBlob(String id) throws BlobNotFoundException {
-    //To change body of implemented methods use File | Settings | File Templates.
+    try {
+      // delete blob
+      DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", "id1");
+      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      channel.connect();
+      channel.send(deleteRequest);
+      InputStream deleteResponseStream = channel.receive();
+      DeleteResponse response = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
+    }
+    catch (Exception e) {
+      // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
+    }
+  }
+
+  @Override
+  public void updateTTL(String id, long newTTL) throws BlobNotFoundException {
+    try {
+      // update ttl of the blob
+      TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", "id1", newTTL);
+      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      channel.connect();
+      channel.send(ttlRequest);
+      InputStream ttlResponseStream = channel.receive();
+      TTLResponse response = TTLResponse.readFrom(new DataInputStream(ttlResponseStream));
+    }
+    catch (Exception e) {
+      // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
+    }
   }
 
   @Override
@@ -81,7 +108,7 @@ public class AmbryCoordinator implements Coordinator {
     try {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       ids.add(new BlobId(blobId));
-      GetRequest getRequest = new GetRequest((short)0, 1, MessageFormatFlags.BlobProperties, ids);
+      GetRequest getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, 1, ids);
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.send(getRequest);
       InputStream stream = channel.receive();

@@ -28,6 +28,14 @@ public interface Coordinator {
   void deleteBlob(String id) throws BlobNotFoundException;
 
   /**
+   * Updates the ttl of the blob specified
+   * @param id The id of the blob that needs its TTL updated
+   * @param newTTL The new ttl value to update to
+   * @throws BlobNotFoundException
+   */
+  void updateTTL(String id, long newTTL) throws BlobNotFoundException;
+
+  /**
    * Gets the blob that corresponds to the given blob id.
    * @param blobId The id of the blob whose content needs to be retrieved.
    * @return The inputstream that represents the blob.

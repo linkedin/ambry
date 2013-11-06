@@ -59,15 +59,15 @@ public class GetResponse extends RequestOrResponse {
     return messageListInfo;
   }
 
-  public GetResponse(short versionId, int correlationId, List<MessageInfo> messageInfoList, Send send) {
-    super(RequestResponseType.GetResponse, versionId, correlationId);
+  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send) {
+    super(RequestResponseType.GetResponse, (short)1, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.toSend = send;
   }
 
-  public GetResponse(short versionId, int correlationId, List<MessageInfo> messageInfoList, InputStream stream) {
-    super(RequestResponseType.GetResponse, versionId, correlationId);
+  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream) {
+    super(RequestResponseType.GetResponse, (short)1, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.stream = stream;
@@ -88,8 +88,10 @@ public class GetResponse extends RequestOrResponse {
     }
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
+    String clientId = Utils.readIntString(stream);
     List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream);
-    return new GetResponse(versionId, correlationId, messageInfoList, stream);
+    // ignoring version for now
+    return new GetResponse(correlationId, clientId, messageInfoList, stream);
   }
 
   @Override
