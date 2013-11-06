@@ -18,10 +18,10 @@ public interface Store {
   /**
    * Returns the message set for the given ids
    * @param ids The list of ids whose messages need to be retrieved
-   * @return The message set that pertains to the given set of ids
+   * @return The store info for the given ids
    * @throws StoreException
    */
-  MessageReadSet get(List<? extends StoreKey> ids) throws StoreException;
+  StoreInfo get(List<? extends StoreKey> ids) throws StoreException;
 
   /**
    * Puts a set of messages into the store

@@ -89,7 +89,7 @@ public class MessageFormatSend implements Send {
             header.flip();
             MessageFormat.MessageHeader_Format_V1 headerFormat = new MessageFormat.MessageHeader_Format_V1(header);
 
-            if (flag == MessageFormatFlags.SystemMetadata) {
+            if (flag == MessageFormatFlags.BlobProperties) {
               int systemMetadataSize = headerFormat.getUserMetadataRelativeOffset() - headerFormat.getSystemMetadataRelativeOffset();
               infoList.add(i, new SendInfo(headerFormat.getSystemMetadataRelativeOffset(), systemMetadataSize));
               totalSizeToWrite += systemMetadataSize;
@@ -104,13 +104,14 @@ public class MessageFormatSend implements Send {
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
             else  if (flag == MessageFormatFlags.Data) {
-              long dataSize = headerFormat.getMessageSize() - headerFormat.getDataRelativeOffset();
+              long dataSize = headerFormat.getMessageSize() -
+                      (headerFormat.getDataRelativeOffset() - headerFormat.getSystemMetadataRelativeOffset());
               infoList.add(i, new SendInfo(headerFormat.getDataRelativeOffset(), dataSize));
               totalSizeToWrite += dataSize;
               logger.trace("Sending data for message relativeOffset : {} size : {}",
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
-            else if (flag == MessageFormatFlags.MessageHeader) {
+            else { //just return the header
               int messageHeaderSize = MessageFormat.MessageHeader_Format_V1.getHeaderSize() +
                                       MessageFormat.Version_Field_Size_In_Bytes;
               infoList.add(i, new SendInfo(0, messageHeaderSize));

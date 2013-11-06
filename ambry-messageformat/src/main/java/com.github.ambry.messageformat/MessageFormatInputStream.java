@@ -2,11 +2,11 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.Crc32;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import com.github.ambry.utils.Crc32;
 
 /**
  * Converts a set of message inputs into the right message format

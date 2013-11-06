@@ -33,7 +33,7 @@ public class GetRequest extends RequestOrResponse {
     this.sizeSent = 0;
     totalIdSize = 0;
     for (BlobId id : ids) {
-      totalIdSize += id.sizeInBytes();
+      totalIdSize += Blob_Id_Size_InBytes + id.sizeInBytes();
     }
   }
 
@@ -46,10 +46,7 @@ public class GetRequest extends RequestOrResponse {
   }
 
   public static GetRequest readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.GetRequest) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
-    }
+    RequestResponseType type = RequestResponseType.GetRequest;
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     MessageFormatFlags messageType = MessageFormatFlags.values()[stream.readShort()];
@@ -92,7 +89,7 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + error
-    return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Size_InBytes +
+    return super.sizeInBytes() + MessageFormat_Size_InBytes +
             Blob_Id_Count_Size_InBytes + totalIdSize;
   }
 }

@@ -1,7 +1,15 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.CrcInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.DataInputStream;
 import java.nio.ByteBuffer;
+import java.io.InputStream;
+import java.io.IOException;
 
 /**
  * Represents the message format of the data that gets written to the store
@@ -72,6 +80,76 @@ public class MessageFormat {
   public static void  serializeCurrentVersionPartialData(ByteBuffer outputBuffer, long dataSize) {
     Data_Format_V1.serializePartialData(outputBuffer, dataSize);
   }
+
+
+  // Deserialization methods for all data types
+
+  public static BlobProperties deserializeBlobProperties(InputStream stream) throws IOException, DataCorruptException {
+    // read version
+    CrcInputStream crcStream = new CrcInputStream(stream);
+    DataInputStream inputStream = new DataInputStream(crcStream);
+    short version = inputStream.readShort();
+    switch (version) {
+      case 1:
+        return SystemMetadata_Format_V1.deserializeBlobProperties(crcStream);
+      default:
+        throw new DataCorruptException("blob property version not supported");
+    }
+  }
+
+  public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, DataCorruptException {
+    // read version
+    CrcInputStream crcStream = new CrcInputStream(stream);
+    DataInputStream inputStream = new DataInputStream(crcStream);
+    short version = inputStream.readShort();
+    switch (version) {
+      case 1:
+        return SystemMetadata_Format_V1.deserializeDeleteRecord(crcStream);
+      default:
+        throw new DataCorruptException("delete record version not supported");
+    }
+  }
+
+  public static long deserializeTTLRecord(InputStream stream) throws IOException, DataCorruptException {
+    // read version
+    CrcInputStream crcStream = new CrcInputStream(stream);
+    DataInputStream inputStream = new DataInputStream(crcStream);
+    short version = inputStream.readShort();
+    switch (version) {
+      case 1:
+        return SystemMetadata_Format_V1.deserializeTTLRecord(crcStream);
+      default:
+        throw new DataCorruptException("ttl record version not supported");
+    }
+  }
+
+  public static ByteBuffer deserializeMetadata(InputStream stream) throws IOException, DataCorruptException {
+    // read version
+    CrcInputStream crcStream = new CrcInputStream(stream);
+    DataInputStream inputStream = new DataInputStream(crcStream);
+    short version = inputStream.readShort();
+    switch (version) {
+      case 1:
+        return UserMetadata_Format_V1.deserializeUserMetadata(crcStream);
+      default:
+        throw new DataCorruptException("ttl record version not supported");
+    }
+  }
+
+  public static ByteBufferInputStream deserializeData(InputStream stream) throws IOException, DataCorruptException {
+    // read version
+    CrcInputStream crcStream = new CrcInputStream(stream);
+    DataInputStream inputStream = new DataInputStream(crcStream);
+    short version = inputStream.readShort();
+    switch (version) {
+      case 1:
+        return Data_Format_V1.deserializeData(crcStream);
+      default:
+        throw new DataCorruptException("ttl record version not supported");
+    }
+  }
+
+
 
 
   public static class MessageHeader_Format_V1 {
@@ -158,6 +236,7 @@ public class MessageFormat {
 
     public static final int Delete_Field_Size_In_Bytes = 1;
     public static final short SystemMetadata_Type_Field_Size_In_Bytes = 2;
+    private static Logger logger = LoggerFactory.getLogger(SystemMetadata_Format_V1.class);
 
     public static int getBlobPropertyRecordSize(BlobProperties properties) {
       return Version_Field_Size_In_Bytes +
@@ -209,10 +288,65 @@ public class MessageFormat {
       crc.update(outputBuffer.array(), startOffset, getTTLRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
+
+    public static BlobProperties deserializeBlobProperties(CrcInputStream crcStream) throws IOException, DataCorruptException {
+      try {
+        DataInputStream dataStream = new DataInputStream(crcStream);
+        SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+
+        // ensure the type fields match
+        if (type != SystemMetadataType.BlobPropertyRecord)
+          throw new IllegalArgumentException("Invalid system metadata type");
+        BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(dataStream);
+        long crc = crcStream.getValue();
+        if (crc != dataStream.readLong()) {
+          logger.error("corrupt data while parsing blob properties");
+          throw new DataCorruptException("Blob property data is corrupt");
+        }
+        return properties;
+      }
+      catch (Exception e) {
+        logger.error("Blob property failed to be parsed. Data may be corrupt with exception {}", e);
+        throw new DataCorruptException("Blob property failed to be parsed. Data may be corrupt");
+      }
+    }
+
+    public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, DataCorruptException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+
+      // ensure the type fields match
+      if (type != SystemMetadataType.DeleteRecord)
+        throw new IllegalArgumentException("Invalid system metadata type");
+      boolean isDeleted = dataStream.readByte() == 1 ? true : false;
+      long crc = crcStream.getValue();
+      if (crc != dataStream.readLong()) {
+        logger.error("corrupt data while parsing blob properties");
+        throw new DataCorruptException("Blob property data is corrupt");
+      }
+      return isDeleted;
+    }
+
+    public static long deserializeTTLRecord(CrcInputStream crcStream) throws IOException, DataCorruptException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+
+      // ensure the type fields match
+      if (type != SystemMetadataType.TTLRecord)
+        throw new IllegalArgumentException("Invalid system metadata type");
+      long ttl = dataStream.readLong();
+      long crc = crcStream.getValue();
+      if (crc != dataStream.readLong()) {
+        logger.error("corrupt data while parsing blob properties");
+        throw new DataCorruptException("Blob property data is corrupt");
+      }
+      return ttl;
+    }
   }
 
   public static class UserMetadata_Format_V1 {
     public static final int UserMetadata_Size_Field_In_Bytes = 4;
+    private static Logger logger = LoggerFactory.getLogger(UserMetadata_Format_V1.class);
 
     public static int getUserMetadataSize(ByteBuffer userMetadata) {
       return Version_Field_Size_In_Bytes +
@@ -230,10 +364,24 @@ public class MessageFormat {
       crc.update(outputBuffer.array(), startOffset, getUserMetadataSize(userMetadata) - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
+
+    public static ByteBuffer deserializeUserMetadata(CrcInputStream crcStream) throws IOException, DataCorruptException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      int usermetadataSize = dataStream.readInt();
+      byte[] userMetadaBuffer = new byte[usermetadataSize];
+      dataStream.read(userMetadaBuffer);
+      long crc = crcStream.getValue();
+      if (crc != dataStream.readLong()) {
+        logger.error("corrupt data while parsing user metadata");
+        throw new DataCorruptException("User metadata is corrupt");
+      }
+      return ByteBuffer.wrap(userMetadaBuffer);
+    }
   }
 
   public static class Data_Format_V1 {
     public static final int Data_Size_Field_In_Bytes = 8;
+    private static Logger logger = LoggerFactory.getLogger(Data_Format_V1.class);
 
     public static long getDataSize(long dataSize) {
       return Version_Field_Size_In_Bytes +
@@ -245,6 +393,19 @@ public class MessageFormat {
     public static void serializePartialData(ByteBuffer outputBuffer, long dataSize) {
       outputBuffer.putShort((short)1);
       outputBuffer.putLong(dataSize);
+    }
+
+    public static ByteBufferInputStream deserializeData(CrcInputStream crcStream) throws IOException, DataCorruptException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      long dataSize = dataStream.readLong();
+      // we only support data of max size = MAX_INT for now
+      ByteBufferInputStream output = new ByteBufferInputStream(dataStream, (int)dataSize);
+      long crc = crcStream.getValue();
+      if (crc != dataStream.readLong()) {
+        logger.error("corrupt data while parsing user metadata");
+        throw new DataCorruptException("User metadata is corrupt");
+      }
+      return output;
     }
   }
 }

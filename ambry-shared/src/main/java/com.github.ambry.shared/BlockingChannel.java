@@ -1,6 +1,7 @@
-package com.github.ambry.network;
+package com.github.ambry.shared;
 
 
+import com.github.ambry.network.Send;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.*;

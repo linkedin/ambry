@@ -47,16 +47,17 @@ public class MessageFormatSendTest {
     // create three list of buffers each of size 1000 bytes
 
     // add header,system metadata, user metadata and data to the buffers
-    ByteBuffer buf1 = ByteBuffer.allocate(1000);
+    ByteBuffer buf1 = ByteBuffer.allocate(1004);
     // fill header
     buf1.putShort((short)1);                    // version
-    buf1.putLong(1000);                          // total size
+    buf1.putLong(950);                          // total size
     // put relative offsets
-    buf1.putInt(50);                           // system metadata relative offset
-    buf1.putInt(71);                           // user metadata relative offset
-    buf1.putInt(181);                          // data relative offset
+    buf1.putInt(54);                           // system metadata relative offset
+    buf1.putInt(75);                           // user metadata relative offset
+    buf1.putInt(185);                          // data relative offset
     buf1.putInt(123);                          // crc
     String id = new String("012345678910123456789012");     // blob id
+    buf1.putInt(id.length());
     buf1.put(id.getBytes());
 
     buf1.putShort((short)0); // system metadata version
@@ -90,8 +91,8 @@ public class MessageFormatSendTest {
 
     // get all
     MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All);
-    Assert.assertEquals(send.sizeInBytes(), 1000);
-    ByteBuffer bufresult = ByteBuffer.allocate(1000);
+    Assert.assertEquals(send.sizeInBytes(), 1004);
+    ByteBuffer bufresult = ByteBuffer.allocate(1004);
     WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
     while (!send.isSendComplete()) {
       send.writeTo(channel1);

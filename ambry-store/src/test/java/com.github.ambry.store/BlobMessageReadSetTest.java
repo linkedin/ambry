@@ -26,9 +26,9 @@ public class BlobMessageReadSetTest {
 
   @Test
   public void testMessageRead() throws IOException {
-    BlobReadOptions readOptions1 = new BlobReadOptions(500, 30);
-    BlobReadOptions readOptions2 = new BlobReadOptions(100, 15);
-    BlobReadOptions readOptions3 = new BlobReadOptions(200, 100);
+    BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1);
+    BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1);
+    BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1);
     List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
     options.add(0, readOptions1);
     options.add(1, readOptions2);

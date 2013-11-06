@@ -1,11 +1,13 @@
 package com.github.ambry.server;
 
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.store.Store;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.store.BlobStore;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.store.IndexCreationException;
 import org.slf4j.Logger;
@@ -31,17 +33,19 @@ public class AmbryServer {
     this.properties = properties;
   }
 
-  public void startup() throws InterruptedException, IOException, IndexCreationException {
+  public void startup() throws IOException, InterruptedException, StoreException {
     logger.info("starting");
     // create the configs
-    NetworkConfig config = new NetworkConfig(properties);
-    scheduler.startup();
-
+    NetworkConfig networkConfig = new NetworkConfig(properties);
+    StoreConfig storeConfig = new StoreConfig(properties);
     // verify the configs
     properties.verify();
-    networkServer = new SocketServer(config);
+
+    scheduler.startup();
+    networkServer = new SocketServer(networkConfig);
     networkServer.start();
-    store = new BlobStore("/Users/srsubram/testdir", scheduler);
+    store = new BlobStore(storeConfig, scheduler);
+    store.start();
     requests = new AmbryRequests(store, networkServer.getRequestResponseChannel());
     requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
     logger.info("started");

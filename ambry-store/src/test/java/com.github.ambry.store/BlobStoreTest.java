@@ -1,6 +1,8 @@
 package com.github.ambry.store;
 
 
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -15,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 
 public class BlobStoreTest {
@@ -59,7 +62,12 @@ public class BlobStoreTest {
       randomFile.setLength(5000);
       File indexFile = new File(tempFile.getParent(), "index_current");
       indexFile.delete();
-      Store store = new BlobStore(tempFile.getParent(), scheduler);
+      Properties props = new Properties();
+      props.setProperty("store.data.dir", tempFile.getParent());
+      VerifiableProperties verifyProperty = new VerifiableProperties(props);
+      verifyProperty.verify();
+      StoreConfig config = new StoreConfig(verifyProperty);
+      Store store = new BlobStore(config, scheduler);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -76,7 +84,8 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(new BlobId("id1"));
       keys.add(new BlobId("id2"));
-      MessageReadSet readSet = store.get(keys);
+      StoreInfo info = store.get(keys);
+      MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
       Assert.assertEquals(readSet.sizeInBytes(1), 1000);
@@ -89,9 +98,6 @@ public class BlobStoreTest {
       for (int i = 1000; i < 2000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 1000]);
       }
-    }
-    catch (IndexCreationException e) {
-      Assert.assertEquals(false, true);
     }
     catch (StoreException e) {
       Assert.assertEquals(false, true);
@@ -108,7 +114,12 @@ public class BlobStoreTest {
       randomFile.setLength(5000);
       File indexFile = new File(tempFile.getParent(), "index_current");
       indexFile.delete();
-      Store store = new BlobStore(tempFile.getParent(), scheduler);
+      Properties props = new Properties();
+      props.setProperty("store.data.dir", tempFile.getParent());
+      VerifiableProperties verifyProperty = new VerifiableProperties(props);
+      verifyProperty.verify();
+      StoreConfig config = new StoreConfig(verifyProperty);
+      Store store = new BlobStore(config, scheduler);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -125,7 +136,8 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(new BlobId("id1"));
       keys.add(new BlobId("id2"));
-      MessageReadSet readSet = store.get(keys);
+      StoreInfo info = store.get(keys);
+      MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
       Assert.assertEquals(readSet.sizeInBytes(1), 1000);
@@ -138,9 +150,6 @@ public class BlobStoreTest {
       for (int i = 1000; i < 2000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 1000]);
       }
-    }
-    catch (IndexCreationException e) {
-      Assert.assertEquals(false, true);
     }
     catch (StoreException e) {
       Assert.assertEquals(false, true);
@@ -158,7 +167,12 @@ public class BlobStoreTest {
       randomFile.setLength(5000);
       File indexFile = new File(tempFile.getParent(), "index_current");
       indexFile.delete();
-      Store store = new BlobStore(tempFile.getParent(), scheduler);
+      Properties props = new Properties();
+      props.setProperty("store.data.dir", tempFile.getParent());
+      VerifiableProperties verifyProperty = new VerifiableProperties(props);
+      verifyProperty.verify();
+      StoreConfig config = new StoreConfig(verifyProperty);
+      Store store = new BlobStore(config, scheduler);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -175,7 +189,8 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(new BlobId("id1"));
       keys.add(new BlobId("id2"));
-      MessageReadSet readSet = store.get(keys);
+      StoreInfo info = store.get(keys);
+      MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
       Assert.assertEquals(readSet.sizeInBytes(1), 1000);
@@ -211,9 +226,6 @@ public class BlobStoreTest {
       keysDeleted.add(new BlobId("id2"));
       store.get(keysDeleted);
       Assert.assertEquals(true, true);
-    }
-    catch (IndexCreationException e) {
-      Assert.assertEquals(false, true);
     }
     catch (StoreException e) {
       Assert.assertEquals(false, true);

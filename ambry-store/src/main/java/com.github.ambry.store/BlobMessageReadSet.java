@@ -19,10 +19,12 @@ import java.util.concurrent.atomic.AtomicLong;
 class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long offset;
   private final Long size;
+  private final Long ttl;
 
-  BlobReadOptions(long offset, long size) {
+  BlobReadOptions(long offset, long size, long ttl) {
     this.offset = offset;
     this.size = size;
+    this.ttl = ttl;
   }
 
   public long getOffset() {
@@ -31,6 +33,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 
   public long getSize() {
     return this.size;
+  }
+
+  public long getTTL() {
+    return ttl;
   }
 
   @Override

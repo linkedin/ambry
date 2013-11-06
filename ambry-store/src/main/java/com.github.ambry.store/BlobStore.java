@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,8 +23,8 @@ public class BlobStore implements Store {
   /* A lock that prevents concurrent writes to the log */
   private Object lock = new Object();
 
-  public BlobStore(String dataDir, Scheduler scheduler) throws IOException, IndexCreationException {
-    this.dataDir = dataDir;
+  public BlobStore(StoreConfig config, Scheduler scheduler) {
+    this.dataDir = config.storeDataDir;
     this.scheduler = scheduler;
   }
 
@@ -36,20 +37,23 @@ public class BlobStore implements Store {
       log.setLogEndOffset(index.getCurrentEndOffset());
     }
     catch (Exception e) {
-      logger.error("Error while starting store for directory {}",dataDir);
+      logger.error("Error while starting store for directory {} with exception {}",dataDir, e);
       throw new StoreException("Error while starting store for dir " + dataDir, StoreErrorCodes.Initialization_Error);
     }
   }
 
   @Override
-  public MessageReadSet get(List<? extends StoreKey> ids) throws StoreException {
+  public StoreInfo get(List<? extends StoreKey> ids) throws StoreException {
     try {
-      List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>();
+      List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
+      List<MessageInfo> messageInfo = new ArrayList<MessageInfo>(ids.size());
       for (StoreKey key : ids) {
         BlobReadOptions readInfo = index.getBlobReadInfo(key);
         readOptions.add(readInfo);
+        messageInfo.add(new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
       }
-      return log.getView(readOptions);
+      MessageReadSet readSet = log.getView(readOptions);
+      return new StoreInfo(readSet, messageInfo);
     }
     catch (IOException e) {
       throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);

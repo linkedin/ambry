@@ -119,6 +119,8 @@ project(':ambry-coordinator') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
+    compile project(':ambry-shared')
+    compile project(':ambry-messageformat')
   }
 }
 

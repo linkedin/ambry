@@ -110,7 +110,7 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(streamData.readShort(), 1);
     Assert.assertEquals(streamData.readLong(), 2000);
     for (int i = 0; i < 2000; i++) {
-      Assert.assertEquals(streamData.read(), data[i]);
+      Assert.assertEquals((byte)streamData.read(), data[i]);
     }
     long crcVal = crcstream.getValue();
     Assert.assertEquals(crcVal, streamData.readLong());

@@ -9,10 +9,7 @@ import com.github.ambry.network.Request;
 import com.github.ambry.network.Send;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageReadSet;
-import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
+import com.github.ambry.store.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -59,7 +56,7 @@ public class AmbryRequests {
                                                                      putRequest.getData(),
                                                                      putRequest.getBlobProperties().getBlobSize());
       MessageInfo info = new MessageInfo(new BlobId(putRequest.getBlobId()),
-                                         putRequest.getBlobProperties().getBlobSize(),
+                                         stream.getSize(),
                                          putRequest.getBlobProperties().getTimeToLive());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
       infoList.add(info);
@@ -79,9 +76,9 @@ public class AmbryRequests {
   private void handleGetRequest(Request request) {
     try {
       GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()));
-      MessageReadSet blobset = blobStore.get(getRequest.getBlobIds());
-      Send blobsToSend = new MessageFormatSend(blobset, getRequest.getMessageFormatFlag());
-      GetResponse response = new GetResponse((short)0, getRequest.getCorrelationId(), blobsToSend);
+      StoreInfo info = blobStore.get(getRequest.getBlobIds());
+      Send blobsToSend = new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag());
+      GetResponse response = new GetResponse((short)0, getRequest.getCorrelationId(), info.getMessageReadSetInfo(), blobsToSend);
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {

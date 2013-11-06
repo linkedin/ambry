@@ -41,7 +41,7 @@ public class Log implements Write, Read {
   }
 
   public void setLogEndOffset(long endOffset) throws IOException {
-    if (endOffset >= fileChannel.size()) {
+    if (endOffset > fileChannel.size()) {
       throw new IllegalArgumentException("fileEndPosition outside the file size");
     }
     fileChannel.position(endOffset);

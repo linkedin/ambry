@@ -42,19 +42,16 @@ public class PutRequest extends RequestOrResponse {
   }
 
   public static PutRequest readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutRequest) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
-    }
+    RequestResponseType type = RequestResponseType.PutRequest;
     short versionId  = stream.readShort();
     int correlationId = stream.readInt();
-    long logicalVolumeId = stream.readLong();
+    long partitionId = stream.readLong();
     String clientId = Utils.readShortString(stream);
     String blobId = Utils.readShortString(stream);
     BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
     InputStream data = stream;
-    return new PutRequest(versionId, logicalVolumeId, correlationId, clientId, blobId, metadata, data, properties);
+    return new PutRequest(versionId, partitionId, correlationId, clientId, blobId, metadata, data, properties);
   }
 
   public long getPartition() {
@@ -125,7 +122,7 @@ public class PutRequest extends RequestOrResponse {
       }
       logger.trace("sent Bytes from Put Request {}", sentBytes);
       bufferToSend.clear();
-      int dataRead = data.read(bufferToSend.array(), 0, (int)Math.min(bufferToSend.capacity(), properties.getBlobSize()));
+      int dataRead = data.read(bufferToSend.array(), 0, (int)Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
       bufferToSend.limit(dataRead);
     }
   }
