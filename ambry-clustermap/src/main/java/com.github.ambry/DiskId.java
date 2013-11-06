@@ -8,30 +8,35 @@ import org.json.JSONStringer;
  *
  */
 public class DiskId {
-  private long id;
+  private DataNodeId dataNodeId;
+  private String mountPath;
 
   public DiskId(JSONObject jsonObject) throws JSONException {
-    this.id = jsonObject.getLong("id");
+    this.dataNodeId = new DataNodeId(new JSONObject(jsonObject.getString("dataNodeId")));
+    this.mountPath = jsonObject.getString("mountPath");
+
     validate();
   }
 
-  public DiskId(long id) {
-    this.id = id;
+  public DiskId(DataNodeId dataNodeId, String mountPath) {
+    this.dataNodeId = dataNodeId;
+    this.mountPath = mountPath;
+
     validate();
+  }
+
+  protected void validateMountPath() {
+    if (mountPath == null) {
+      throw new IllegalStateException("Mount path cannot be a null string.");
+    }
+
+    // TODO: Verify that mount path actually exists on specified host? Or should that be done by Disk? Or, more likely,
+    // is that a separate verification method explicitly invoked via admin code path?
   }
 
   protected void validate() {
-    if (id<0) {
-      throw new IllegalStateException("Invalid DiskId with id:" + id);
-    }
-  }
-
-  public static DiskId getFirstDiskId() {
-    return new DiskId(0);
-  }
-
-  public static DiskId getNewDiskId(DiskId lastDiskId) {
-    return new DiskId(lastDiskId.id+1);
+    dataNodeId.validate();
+    validateMountPath();
   }
 
   // Returns JSON representation
@@ -40,8 +45,10 @@ public class DiskId {
     try {
       return new JSONStringer()
               .object()
-              .key("id")
-              .value(id)
+              .key("dataNodeId")
+              .value(dataNodeId)
+              .key("mountPath")
+              .value(mountPath)
               .endObject()
               .toString();
     } catch (JSONException e) {
@@ -58,13 +65,16 @@ public class DiskId {
 
     DiskId diskId = (DiskId) o;
 
-    if (id != diskId.id) return false;
+    if (!dataNodeId.equals(diskId.dataNodeId)) return false;
+    if (!mountPath.equals(diskId.mountPath)) return false;
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    return (int) (id ^ (id >>> 32));
+    int result = dataNodeId.hashCode();
+    result = 31 * result + mountPath.hashCode();
+    return result;
   }
 }

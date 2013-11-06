@@ -4,7 +4,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONStringer;
 
-// TODO: Make an ID class and then extend DiskID and PartitionID from it?
 /**
  *
  */

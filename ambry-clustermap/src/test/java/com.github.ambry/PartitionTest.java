@@ -15,13 +15,13 @@ public class PartitionTest {
   @Test
   public void jsonSerDeTest() {
 
-    Partition partitionSer = new TestPartition(new PartitionId(7), 100);
+    Partition partitionSer = TestUtils.getNewTestPartition();
     // System.out.println(partitionSer.toString());
 
     try {
       JSONObject jsonObject = new JSONObject(partitionSer.toString());
 
-      Partition partitionDe = new TestPartition(jsonObject);
+      Partition partitionDe = new TestUtils.TestPartition(jsonObject);
 
       assertEquals(partitionSer, partitionDe);
     } catch (JSONException e) {

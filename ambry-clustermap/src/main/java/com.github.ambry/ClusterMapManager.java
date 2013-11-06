@@ -1,21 +1,17 @@
 package com.github.ambry;
 
-/**
- * TODOs for ambry-clustermap
- * - Names of all base types in this package need to be reviewed carefully now. Changing names later is a pain,
- *   and names matter!
- * - Should we avoid using bare base types for key types. For example, String for DataNode hostname and for Datacenter
- *   name If we use bare base types, some interfaces are not really typesafe.
- * - Add logging
- * - Need more unit tests
- * - Add interface to api & javadoc
- */
-
 // TODO:
-// - DiskId is Node.hostname:/mnt
-// - File SerDe
-// - ClusterMapAPI
-// - convert hostname to fully qualfied hostname
+// - File SerDe and use tmp test file in unit test
+// ...
+// - ClusterMapAPI with javadoc
+// - Add logging
+// ...
+// - Cleaner/simpler JSON SerDe. Currently overly verbose & ugly.
+// - Add TODO file to this module for all v1 goodness.
+// - AddNode && AddDisk actually working with node & disk in way SRE is OK with
+// - More unit tests
+// - Document JSON format
+
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,20 +76,68 @@ public class ClusterMapManager {
     return layout.getCapacityGB();
   }
 
+  public long getAllocatedCapacityGB(Datacenter datacenter) {
+    long allocatedCapacityGB = 0;
+    for(Partition partition : layout.getPartitions()) {
+      for (Replica replica : partition.getReplicas()) {
+        if (replica.getDisk().getDataNode().getDatacenter().equals(datacenter)) {
+          allocatedCapacityGB += replica.getCapacityGB();
+        }
+      }
+    }
+    return allocatedCapacityGB;
+  }
+
+  public long getAllocatedCapacityGB(DataNode dataNode) {
+    long allocatedCapacityGB = 0;
+    for(Partition partition : layout.getPartitions()) {
+      for (Replica replica : partition.getReplicas()) {
+        if (replica.getDisk().getDataNode().equals(dataNode)) {
+          allocatedCapacityGB += replica.getCapacityGB();
+        }
+      }
+    }
+    return allocatedCapacityGB;
+  }
+
+  public long getAllocatedCapacityGB(Disk disk) {
+    long allocatedCapacityGB = 0;
+    for(Partition partition : layout.getPartitions()) {
+      for (Replica replica : partition.getReplicas()) {
+        if (replica.getDisk().equals(disk)) {
+          allocatedCapacityGB += replica.getCapacityGB();
+        }
+      }
+    }
+    return allocatedCapacityGB;
+  }
+
   public long getFreeCapacityGB() {
     return getRawCapacityGB() - getAllocatedCapacityGB();
+  }
+
+  public long getFreeCapacityGB(Datacenter datacenter) {
+    return datacenter.getCapacityGB() - getAllocatedCapacityGB(datacenter);
+  }
+
+  public long getFreeCapacityGB(DataNode dataNode) {
+    return dataNode.getCapacityGB() - getAllocatedCapacityGB(dataNode);
+  }
+
+  public long getFreeCapacityGB(Disk disk) {
+    return disk.getCapacityGB() - getAllocatedCapacityGB(disk);
   }
 
   public Datacenter addNewDataCenter(String datacenterName) {
     return cluster.addNewDataCenter(datacenterName);
   }
 
-  public DataNode addNewDataNode(String datacenterName, String hostname) {
-    return cluster.addNewDataNode(datacenterName, hostname);
+  public DataNode addNewDataNode(String datacenterName, String hostname, int port) {
+    return cluster.addNewDataNode(datacenterName, hostname, port);
   }
 
-  public Disk addNewDisk(String hostname, long capacityGB) {
-    return cluster.addNewDisk(hostname, capacityGB);
+  public Disk addNewDisk(String hostname, int port, String mountPath, long capacityGB) {
+    return cluster.addNewDisk(hostname, port, mountPath, capacityGB);
   }
 
   public Partition addNewPartition(List<Disk> disks, long replicaCapacityGB) {
@@ -107,9 +151,9 @@ public class ClusterMapManager {
 
 
   // Determine if there is enough capacity to allocate a Partition
-  private boolean enoughRawCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
+  private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
     for(Datacenter datacenter : cluster.getDatacenters()) {
-      if (datacenter.getCapacityGB() < replicaCountPerDatacenter * replicaCapacityGB) {
+      if (getFreeCapacityGB(datacenter) < replicaCountPerDatacenter * replicaCapacityGB) {
         // Log
         return false;
       }
@@ -117,7 +161,7 @@ public class ClusterMapManager {
       int rcpd = replicaCountPerDatacenter;
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-          if (disk.getCapacityGB() > replicaCapacityGB) {
+          if (getFreeCapacityGB(disk) >= replicaCapacityGB) {
             rcpd--;
             break; // Only one replica per DataNode.
           }
@@ -163,15 +207,15 @@ public class ClusterMapManager {
   }
 
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
-  // Hackish 1st attempt at allocation policy to confirm Administrative API is sufficient
+  // Hackish 1st attempt at Partition allocation policy to confirm Administrative API is sufficient.
   public List<Partition> allocatePartitions(int numPartitions, long replicaCapacityGB) {
     ArrayList<Partition> partitions = new ArrayList<Partition>();
     final int replicaCountPerDatacenter = 2;
 
 
-    while (enoughRawCapacity(replicaCountPerDatacenter, replicaCapacityGB) && numPartitions > 0) {
+    while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityGB) && numPartitions > 0) {
       List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityGB);
-      layout.addNewPartition(disks, replicaCapacityGB);
+      partitions.add(layout.addNewPartition(disks, replicaCapacityGB));
       numPartitions--;
     }
 

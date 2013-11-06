@@ -15,23 +15,23 @@ public class Replica {
   ReplicaId replicaId;
 
   Partition partition;
-  Disk disk;
 
-
-  public Replica(Partition partition, Disk disk) {
-    this.replicaId = new ReplicaId(partition.getPartitionId(), disk.getDiskId());
+  public Replica(Partition partition, DiskId diskId) {
+    this.replicaId = new ReplicaId(partition.getPartitionId(), diskId);
 
     this.partition = partition;
-    this.disk = disk;
 
     validate();
+  }
+
+  public Replica(Partition partition, Disk disk) {
+    this(partition, disk.getDiskId());
   }
 
   public Replica(Partition partition, JSONObject jsonObject) throws JSONException {
     this.replicaId = new ReplicaId(new JSONObject(jsonObject.getString("replicaId")));
 
     this.partition = partition;
-    this.disk = partition.getLayout().getCluster().getDisk(replicaId.getDiskId());
 
     validate();
   }
@@ -41,9 +41,8 @@ public class Replica {
   }
 
   public Disk getDisk() {
-    return disk;
+    return partition.getLayout().getCluster().getDisk(replicaId.getDiskId());
   }
-
 
   public ReplicaId getReplicaId() {
     return replicaId;

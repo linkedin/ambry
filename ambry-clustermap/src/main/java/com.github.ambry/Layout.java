@@ -90,7 +90,7 @@ public class Layout {
   public long getCapacityGB() {
     long capacityGB = 0;
     for(Partition partition : partitions) {
-      capacityGB += partition.getReplicaCapacityGB();
+      capacityGB += partition.getCapacityGB();
     }
     return capacityGB;
   }

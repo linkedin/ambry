@@ -27,9 +27,19 @@ public class Disk {
     validate();
   }
 
-  public Disk(DataNode dataNode, DiskId diskId, long capacityGB) {
+  public Disk(DataNode dataNode, String mountPath, long capacityGB) {
     this.dataNode = dataNode;
-    this.diskId = diskId;
+    this.diskId = new DiskId(dataNode.getDataNodeId(), mountPath);
+    this.state = State.AVAILABLE;
+    this.capacityGB = capacityGB;
+
+    validate();
+  }
+
+  // Useful constructor for unit tests
+  protected Disk(DataNode dataNode, DiskId diskID, long capacityGB) {
+    this.dataNode = dataNode;
+    this.diskId = diskID;
     this.state = State.AVAILABLE;
     this.capacityGB = capacityGB;
 

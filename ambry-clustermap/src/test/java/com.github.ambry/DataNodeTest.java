@@ -4,9 +4,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -15,46 +12,16 @@ import static org.junit.Assert.fail;
  */
 public class DataNodeTest {
 
-  // Permit DataNode to be constructed with a null Datacenter
-  public class TestDataNode extends DataNode {
-
-    public TestDataNode(JSONObject jsonObject) throws JSONException {
-      super(null, jsonObject);
-    }
-
-    public TestDataNode(String hostname) {
-      super(null, hostname);
-    }
-
-    @Override
-    public void validateDatacenter() {
-      return;
-    }
-  }
-
-  // TODO: Hack test to  to get fully qualified name of host. Should we force all hostnames to be fully qualified?
-  @Test
-  public void jsonFullyQualifiedNameTest() {
-    try {
-      System.out.println(InetAddress.getByName("ela4-app1970.prod").getCanonicalHostName());
-    } catch (UnknownHostException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-    }
-  }
-
   @Test
   public void jsonSerDeTest() {
-    DataNode dataNodeSer = new TestDataNode("ela4-app999.prod");
-    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(0), 1000));
-    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(1), 1000));
+    DataNode dataNodeSer = TestUtils.getNewTestDataNode();
 
     dataNodeSer.validate();
     // System.out.println(dataNode1.toString());
 
-
     try {
       JSONObject jsonObject = new JSONObject(dataNodeSer.toString());
-      DataNode dataNodeDe = new TestDataNode(jsonObject);
+      DataNode dataNodeDe = new TestUtils.TestDataNode(jsonObject);
 
       assertEquals(dataNodeSer, dataNodeDe);
       assertEquals(2, dataNodeDe.getDisks().size());

@@ -12,35 +12,19 @@ import static org.junit.Assert.fail;
  */
 public class ReplicaTest {
 
-  public class TestReplica extends Replica {
-
-    public TestReplica(TestPartition partition, Disk disk) {
-      super(partition, disk);
-    }
-
-    // Not ideal sinced not testing the Replica(Partitoin, JSONObject) constructor. PartitionTest will end up testing
-    // that constructor.
-    public TestReplica(TestPartition partition, JSONObject jsonObject) throws JSONException {
-      super(partition, new TestDisk(new ReplicaId(new JSONObject(jsonObject.getString("replicaId"))).getDiskId(), 100));
-    }
-
-    @Override
-    protected void validatePartitionId() {
-      return;
-    }
-  }
 
   @Test
   public void jsonSerDeTest() {
-    TestPartition testPartition = new TestPartition(new PartitionId(7), 100);
+    Partition testPartition = TestUtils.getNewTestPartition();
+    Disk testDisk = TestUtils.getNewTestDisk();
 
-    Replica replicaSer = new TestReplica(testPartition, new TestDisk(new DiskId(8), 100));
+    Replica replicaSer = new Replica(testPartition, testDisk);
     // System.out.println(replicaSer.toString());
 
     try {
       JSONObject jsonObject = new JSONObject(replicaSer.toString());
 
-      Replica replicaDe = new TestReplica(testPartition, jsonObject);
+      Replica replicaDe = new Replica(testPartition, jsonObject);
 
       assertEquals(replicaSer, replicaDe);
     } catch (JSONException e) {

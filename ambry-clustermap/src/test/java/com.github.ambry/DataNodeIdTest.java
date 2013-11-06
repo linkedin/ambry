@@ -10,24 +10,25 @@ import static org.junit.Assert.fail;
 /**
  *
  */
-public class ReplicaIdTest {
+public class DataNodeIdTest {
 
   @Test
   public void jsonSerDeTest() {
-    ReplicaId replicaIdSer = TestUtils.getNewReplicaId();
-    // System.out.println(replicaIdSer.toString());
+    DataNodeId dataNodeIdSer = new DataNodeId("localhost", 6666);
+    // System.out.println(dataNodeIdSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(replicaIdSer.toString());
+      JSONObject jsonObject = new JSONObject(dataNodeIdSer.toString());
 
-      ReplicaId replicaIdDe = new ReplicaId(jsonObject);
+      DataNodeId dataNodeIdDe = new DataNodeId(jsonObject);
 
-      assertEquals(replicaIdSer, replicaIdDe);
+      assertEquals(dataNodeIdSer, dataNodeIdDe);
     } catch (JSONException e) {
       e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
       fail();
     }
 
   }
+
 
 }

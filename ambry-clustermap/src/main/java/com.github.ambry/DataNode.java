@@ -19,13 +19,13 @@ public class DataNode {
   }
 
   private Datacenter datacenter;
-  private String hostname; // E.g., ela4-app001.prod
+  private DataNodeId dataNodeId;
   private State state;
   private ArrayList<Disk> disks;
 
-  public DataNode(Datacenter datacenter, String hostname) {
+  public DataNode(Datacenter datacenter, String hostname, int port) {
     this.datacenter = datacenter;
-    this.hostname = hostname;
+    this.dataNodeId = new DataNodeId(hostname, port);
     this.state = State.AVAILABLE;
     this.disks = new ArrayList<Disk>();
     validate();
@@ -33,7 +33,7 @@ public class DataNode {
 
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
     this.datacenter = datacenter;
-    this.hostname = jsonObject.getString("hostname");
+    this.dataNodeId = new DataNodeId(new JSONObject(jsonObject.getString("dataNodeId")));
     this.state = State.valueOf(jsonObject.getString("state"));
     this.disks = new ArrayList<Disk>();
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
@@ -43,8 +43,16 @@ public class DataNode {
     validate();
   }
 
+  public DataNodeId getDataNodeId() {
+    return dataNodeId;
+  }
+
   public String getHostname() {
-    return hostname;
+    return dataNodeId.getHostname();
+  }
+
+  public int getPort() {
+    return dataNodeId.getPort();
   }
 
   public Datacenter getDatacenter() {
@@ -77,13 +85,6 @@ public class DataNode {
     }
   }
 
-  protected void validateHostname() {
-    // Convert to fully qualified hostname?
-    if(hostname == null) {
-      throw new IllegalStateException("Hostname cannot be null");
-    }
-  }
-
   protected boolean isStateValid() {
     for (State validState : State.values()) {
       if (state == validState) {
@@ -101,7 +102,7 @@ public class DataNode {
 
   public void validate() {
     validateDatacenter();
-    validateHostname();
+    dataNodeId.validate();
     validateState();
     for(Disk disk : disks) {
       disk.validate();
@@ -114,8 +115,8 @@ public class DataNode {
     try {
       return new JSONStringer()
               .object()
-              .key("hostname")
-              .value(hostname)
+              .key("dataNodeId")
+              .value(dataNodeId)
               .key("state")
               .value(state)
               .key("disks")
@@ -135,8 +136,8 @@ public class DataNode {
 
     DataNode dataNode = (DataNode) o;
 
+    if (!dataNodeId.equals(dataNode.dataNodeId)) return false;
     if (!disks.equals(dataNode.disks)) return false;
-    if (!hostname.equals(dataNode.hostname)) return false;
     if (state != dataNode.state) return false;
 
     return true;
@@ -144,11 +145,9 @@ public class DataNode {
 
   @Override
   public int hashCode() {
-    int result = hostname.hashCode();
+    int result = dataNodeId.hashCode();
     result = 31 * result + state.hashCode();
     result = 31 * result + disks.hashCode();
     return result;
   }
-
-
 }

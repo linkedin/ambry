@@ -15,7 +15,7 @@ public class DiskIdTest {
 
   @Test
   public void jsonSerDeTest() {
-    DiskId diskIdSer = new DiskId(7);
+    DiskId diskIdSer = TestUtils.getNewDiskId();
     System.out.println(diskIdSer.toString());
 
     try {

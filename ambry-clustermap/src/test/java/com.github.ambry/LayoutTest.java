@@ -4,8 +4,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import java.util.ArrayList;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -14,31 +12,10 @@ import static org.junit.Assert.fail;
  */
 public class LayoutTest {
 
-  public static Layout getTestLayout(Cluster cluster) {
-    Layout layout = new Layout(cluster);
-    final long replicaCapacityGB = 100;
-
-    ArrayList<Disk> disks = new ArrayList<Disk>();
-    disks.add(layout.getCluster().getDisk(new DiskId(1)));
-    disks.add(layout.getCluster().getDisk(new DiskId(3)));
-    disks.add(layout.getCluster().getDisk(new DiskId(5)));
-    disks.add(layout.getCluster().getDisk(new DiskId(7)));
-    layout.addNewPartition(disks, replicaCapacityGB);
-
-    disks.clear();
-    disks.add(layout.getCluster().getDisk(new DiskId(0)));
-    disks.add(layout.getCluster().getDisk(new DiskId(2)));
-    disks.add(layout.getCluster().getDisk(new DiskId(4)));
-    disks.add(layout.getCluster().getDisk(new DiskId(6)));
-    layout.addNewPartition(disks, replicaCapacityGB);
-
-    return layout;
-  }
-
   @Test
   public void jsonSerDeTest() {
-    Cluster cluster = ClusterTest.getTestCluster();
-    Layout layoutSer = getTestLayout(cluster);
+    Cluster cluster = TestUtils.buildCluster("Alpha");
+    Layout layoutSer = TestUtils.buildLayout(cluster);
 
     layoutSer.validate();
     // System.out.println(layoutSer.toString());
@@ -48,6 +25,8 @@ public class LayoutTest {
       Layout layoutDe = new Layout(cluster, jsonObject);
 
       assertEquals(layoutSer, layoutDe);
+
+      // "2" and "4" are based on hard-coded constants in buildCluster
       assertEquals(2, layoutDe.getPartitions().size());
       for (Partition partitionDe : layoutDe.getPartitions()) {
         assertEquals(4, partitionDe.getReplicas().size());
@@ -57,4 +36,6 @@ public class LayoutTest {
       fail();
     }
   }
+
+
 }
