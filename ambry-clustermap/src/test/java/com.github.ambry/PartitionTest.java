@@ -15,7 +15,7 @@ public class PartitionTest {
   @Test
   public void jsonSerDeTest() {
 
-    Partition partitionSer = new TestPartition(new PartitionId(7));
+    Partition partitionSer = new TestPartition(new PartitionId(7), 100);
     // System.out.println(partitionSer.toString());
 
     try {

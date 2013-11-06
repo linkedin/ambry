@@ -32,7 +32,7 @@ public class ReplicaTest {
 
   @Test
   public void jsonSerDeTest() {
-    TestPartition testPartition = new TestPartition(new PartitionId(7));
+    TestPartition testPartition = new TestPartition(new PartitionId(7), 100);
 
     Replica replicaSer = new TestReplica(testPartition, new TestDisk(new DiskId(8), 100));
     // System.out.println(replicaSer.toString());

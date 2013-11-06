@@ -14,22 +14,23 @@ import static org.junit.Assert.fail;
  */
 public class LayoutTest {
 
-  public Layout getTestLayout(Cluster cluster) {
+  public static Layout getTestLayout(Cluster cluster) {
     Layout layout = new Layout(cluster);
+    final long replicaCapacityGB = 100;
 
     ArrayList<Disk> disks = new ArrayList<Disk>();
     disks.add(layout.getCluster().getDisk(new DiskId(1)));
     disks.add(layout.getCluster().getDisk(new DiskId(3)));
     disks.add(layout.getCluster().getDisk(new DiskId(5)));
     disks.add(layout.getCluster().getDisk(new DiskId(7)));
-    layout.addNewPartition(disks);
+    layout.addNewPartition(disks, replicaCapacityGB);
 
     disks.clear();
     disks.add(layout.getCluster().getDisk(new DiskId(0)));
     disks.add(layout.getCluster().getDisk(new DiskId(2)));
     disks.add(layout.getCluster().getDisk(new DiskId(4)));
     disks.add(layout.getCluster().getDisk(new DiskId(6)));
-    layout.addNewPartition(disks);
+    layout.addNewPartition(disks, replicaCapacityGB);
 
     return layout;
   }

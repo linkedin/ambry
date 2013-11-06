@@ -15,22 +15,24 @@ public class Disk {
 
   private DataNode dataNode;
   private DiskId diskId;
-  private long capacityGB;
   private State state;
+  private long capacityGB;
 
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
     this.dataNode = dataNode;
     this.diskId = new DiskId(new JSONObject(jsonObject.getString("diskId")));
-    this.capacityGB = jsonObject.getLong("capacityGB");
     this.state = State.valueOf(jsonObject.getString("state"));
+    this.capacityGB = jsonObject.getLong("replicaCapacityGB");
+
     validate();
   }
 
   public Disk(DataNode dataNode, DiskId diskId, long capacityGB) {
     this.dataNode = dataNode;
     this.diskId = diskId;
-    this.capacityGB = capacityGB;
     this.state = State.AVAILABLE;
+    this.capacityGB = capacityGB;
+
     validate();
   }
 
@@ -42,12 +44,12 @@ public class Disk {
     return diskId;
   }
 
-  public long getCapacityGB() {
-    return capacityGB;
-  }
-
   public State getState() {
     return state;
+  }
+
+  public long getCapacityGB() {
+    return capacityGB;
   }
 
   protected void validateDataNode() {
@@ -92,10 +94,10 @@ public class Disk {
               .object()
                 .key("diskId")
                 .value(diskId)
-                .key("capacityGB")
-                .value(capacityGB)
                 .key("state")
                 .value(state)
+              .key("replicaCapacityGB")
+              .value(capacityGB)
               .endObject()
               .toString();
     } catch (JSONException e) {

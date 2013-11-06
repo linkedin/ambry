@@ -12,6 +12,7 @@ import java.util.*;
  */
 public class Layout {
   Cluster cluster;
+  // TODO: Add version number and/or timestamp and/or username of last writer for cluster
 
   private PartitionId prevPartitionId;
   private ArrayList<Partition> partitions;
@@ -86,6 +87,15 @@ public class Layout {
     return replicaMap.get(replicaId);
   }
 
+  public long getCapacityGB() {
+    long capacityGB = 0;
+    for(Partition partition : partitions) {
+      capacityGB += partition.getReplicaCapacityGB();
+    }
+    return capacityGB;
+  }
+
+
   public void validate() {
     if (prevPartitionId != null) {
       this.prevPartitionId.validate();
@@ -110,26 +120,26 @@ public class Layout {
   }
 
   // Creates a Partition and corresponding Replicas for each specified disk id
-  public Partition addNewPartition(List<Disk> disks) {
+  public Partition addNewPartition(List<Disk> disks, long replicaCapacityGB) {
     PartitionId partitionId = getNewPartitionId();
 
     if (partitionMap.containsKey(partitionId)) {
       throw new IllegalArgumentException("Partition Id already in use. Must be unique. " + partitionId);
     }
-    Partition partition = new Partition(this, partitionId);
+    Partition partition = new Partition(this, partitionId, replicaCapacityGB);
     addPartition(partition);
     partitionMap.put(partitionId, partition);
 
     if(disks != null) {
       for(Disk disk : disks) {
-        addNewReplica(partition, disk);
+        addNewReplicaToPartition(partition, disk);
       }
     }
 
     return partition;
   }
 
-  public Replica addNewReplica(Partition partition, Disk disk) {
+  public Replica addNewReplicaToPartition(Partition partition, Disk disk) {
     if (cluster.getDisk(disk.getDiskId()) == null) {
       throw new IllegalArgumentException("Specified Disk is not part of cluster: " + disk);
     }

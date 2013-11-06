@@ -49,6 +49,10 @@ public class Replica {
     return replicaId;
   }
 
+  public long getCapacityGB() {
+    return partition.getReplicaCapacityGB();
+  }
+
   protected void validatePartitionId() {
     // Do not call partition.validate(). Could introduce infinite call cycle.
     if (!replicaId.getPartitionId().equals(partition.getPartitionId())) {
@@ -61,6 +65,7 @@ public class Replica {
     replicaId.validate();
     validatePartitionId();
     // Do not call disk.validate(). Could introduce infinite call cycle.
+    // TODO: Add validation that only one replica per DataNode?
     // No need to validate disk id since it is looked up from cluster.
   }
 

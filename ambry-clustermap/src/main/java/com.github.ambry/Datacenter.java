@@ -44,6 +44,15 @@ public class Datacenter {
     return name;
   }
 
+  public long getCapacityGB() {
+    long capacityGB = 0;
+    for(DataNode dataNode : dataNodes) {
+      capacityGB += dataNode.getCapacityGB();
+    }
+    return capacityGB;
+  }
+
+
   protected void validateCluster() {
     if(cluster == null) {
       throw new IllegalStateException("Cluster cannot be null");

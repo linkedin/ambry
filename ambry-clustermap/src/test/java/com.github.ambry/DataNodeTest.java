@@ -32,8 +32,7 @@ public class DataNodeTest {
     }
   }
 
-
-  // TODO: Hacky test to figure out how to get fully qualified name of host.
+  // TODO: Hack test to  to get fully qualified name of host. Should we force all hostnames to be fully qualified?
   @Test
   public void jsonFullyQualifiedNameTest() {
     try {
@@ -46,8 +45,8 @@ public class DataNodeTest {
   @Test
   public void jsonSerDeTest() {
     DataNode dataNodeSer = new TestDataNode("ela4-app999.prod");
-    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(0), 100));
-    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(1), 100));
+    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(0), 1000));
+    dataNodeSer.addDisk(new Disk(dataNodeSer, new DiskId(1), 1000));
 
     dataNodeSer.validate();
     // System.out.println(dataNode1.toString());

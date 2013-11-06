@@ -13,6 +13,8 @@ import java.util.*;
  */
 public class Cluster {
   private String name; // E.g., "Alpha"
+  // TODO: Add version number and/or timestamp and/or username of last writer for cluster
+
   // TODO: Cleaner way of using factory for DiskIds in a cluster?
   private DiskId prevDiskId;
 
@@ -77,6 +79,15 @@ public class Cluster {
   public String getName() {
     return name;
   }
+
+  public long getCapacityGB() {
+    long capacityGB = 0;
+    for(Datacenter datacenter : datacenters) {
+      capacityGB += datacenter.getCapacityGB();
+    }
+    return capacityGB;
+  }
+
 
   protected void validateName() {
     if (name == null) {

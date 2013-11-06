@@ -55,6 +55,14 @@ public class DataNode {
     return state;
   }
 
+  public long getCapacityGB() {
+    long capacityGB = 0;
+    for(Disk disk : disks) {
+      capacityGB += disk.getCapacityGB();
+    }
+    return capacityGB;
+  }
+
   public void addDisk(Disk disk) {
     disks.add(disk);
   }

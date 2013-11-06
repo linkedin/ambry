@@ -19,7 +19,7 @@ public class DiskTest {
 
   @Test
   public void jsonSerDeTest() {
-    Disk diskSer = new TestDisk(new DiskId(2), 100);
+    Disk diskSer = new TestDisk(new DiskId(2), 1000);
     // System.out.println(diskSer.toString());
 
     try {

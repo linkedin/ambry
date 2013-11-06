@@ -8,8 +8,8 @@ import org.json.JSONObject;
  */
 public class TestPartition extends Partition {
 
-  TestPartition(PartitionId partitionId) {
-    super(null, partitionId);
+  TestPartition(PartitionId partitionId, long replicaCapacityGB) {
+    super(null, partitionId, replicaCapacityGB);
   }
 
   TestPartition(JSONObject jsonObject) throws JSONException {
