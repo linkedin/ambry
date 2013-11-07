@@ -133,6 +133,7 @@ project(':ambry-clustermap') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile "org.json:json:20090211"
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
