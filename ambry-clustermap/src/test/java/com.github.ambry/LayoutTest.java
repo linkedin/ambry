@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -21,8 +20,7 @@ public class LayoutTest {
     // System.out.println(layoutSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(layoutSer.toString());
-      Layout layoutDe = new Layout(cluster, jsonObject);
+      Layout layoutDe = new Layout(cluster, layoutSer.toJSONObject());
 
       assertEquals(layoutSer, layoutDe);
 

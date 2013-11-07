@@ -3,7 +3,8 @@ package com.github.ambry;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -12,8 +13,7 @@ import java.util.*;
  * Cluster represents a set of datacenters in Ambry. An Ambry instance consists of exactly one Cluster.
  */
 public class Cluster {
-  private String name; // E.g., "Alpha"
-  // TODO: Add version number and/or timestamp and/or username of last writer for cluster
+  private String name;
   private ArrayList<Datacenter> datacenters;
 
   // Maps used to lookup Datacenter/DataNode/Disk by identifier; Maps also used to ensure uniqueness of identifiers.
@@ -21,12 +21,13 @@ public class Cluster {
   private Map<DataNodeId, DataNode> dataNodeMap;
   private Map<DiskId, Disk> diskMap;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   public Cluster(JSONObject jsonObject) throws JSONException {
     this.name = jsonObject.getString("name");
     this.datacenters = new ArrayList<Datacenter>();
-    JSONArray datacenterJSONArray = jsonObject.getJSONArray("datacenters");
-    for (int i = 0; i < datacenterJSONArray.length(); ++i) {
-      this.datacenters.add(new Datacenter(this, new JSONObject(datacenterJSONArray.getString(i))));
+    for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
+      this.datacenters.add(new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i)));
     }
 
     buildMaps();
@@ -43,12 +44,12 @@ public class Cluster {
 
   // Allocate, populate, and validate maps.
   private void buildMaps() {
-    this.datacenterMap = new HashMap<String , Datacenter>();
+    this.datacenterMap = new HashMap<String, Datacenter>();
     this.dataNodeMap = new HashMap<DataNodeId, DataNode>();
     this.diskMap = new HashMap<DiskId, Disk>();
 
     for (Datacenter datacenter : datacenters) {
-      if(datacenterMap.put(datacenter.getName(), datacenter) != null) {
+      if (datacenterMap.put(datacenter.getName(), datacenter) != null) {
         throw new IllegalStateException("Datacenter name must be unique: " + datacenter.getName());
       }
 
@@ -72,7 +73,7 @@ public class Cluster {
 
   public long getCapacityGB() {
     long capacityGB = 0;
-    for(Datacenter datacenter : datacenters) {
+    for (Datacenter datacenter : datacenters) {
       capacityGB += datacenter.getCapacityGB();
     }
     return capacityGB;
@@ -87,7 +88,7 @@ public class Cluster {
 
   public void validate() {
     validateName();
-    for (Datacenter datacenter: datacenters) {
+    for (Datacenter datacenter : datacenters) {
       datacenter.validate();
     }
   }
@@ -134,7 +135,7 @@ public class Cluster {
     if (!dataNodeMap.containsKey(dataNodeId)) {
       throw new IllegalArgumentException("DataNode hostname  name does not exist for new Disk: " + hostname);
     }
-    DataNode dataNode =  dataNodeMap.get(dataNodeId);
+    DataNode dataNode = dataNodeMap.get(dataNodeId);
 
     Disk disk = new Disk(dataNode, mountPath, capacityGB);
     if (diskMap.containsKey(disk.getDiskId())) {
@@ -159,20 +160,22 @@ public class Cluster {
   }
 
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject()
+            .put("name", name)
+            .put("datacenters", new JSONArray());
+    for (Datacenter datacenter : datacenters) {
+      jsonObject.accumulate("datacenters", datacenter.toJSONObject());
+    }
+    return jsonObject;
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("name")
-              .value(name)
-              .key("datacenters")
-              .value(datacenters)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

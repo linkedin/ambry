@@ -3,7 +3,8 @@ package com.github.ambry;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +24,8 @@ public class DataNode {
   private State state;
   private ArrayList<Disk> disks;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   public DataNode(Datacenter datacenter, String hostname, int port) {
     this.datacenter = datacenter;
     this.dataNodeId = new DataNodeId(hostname, port);
@@ -33,12 +36,12 @@ public class DataNode {
 
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
     this.datacenter = datacenter;
-    this.dataNodeId = new DataNodeId(new JSONObject(jsonObject.getString("dataNodeId")));
+    this.dataNodeId = new DataNodeId(jsonObject.getJSONObject("dataNodeId"));
     this.state = State.valueOf(jsonObject.getString("state"));
     this.disks = new ArrayList<Disk>();
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     for (int i = 0; i < diskJSONArray.length(); ++i) {
-      this.disks.add(new Disk(this, new JSONObject(diskJSONArray.getString(i))));
+      this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i)));
     }
     validate();
   }
@@ -65,7 +68,7 @@ public class DataNode {
 
   public long getCapacityGB() {
     long capacityGB = 0;
-    for(Disk disk : disks) {
+    for (Disk disk : disks) {
       capacityGB += disk.getCapacityGB();
     }
     return capacityGB;
@@ -80,7 +83,7 @@ public class DataNode {
   }
 
   protected void validateDatacenter() {
-    if(datacenter == null) {
+    if (datacenter == null) {
       throw new IllegalStateException("Datacenter cannot be null");
     }
   }
@@ -104,27 +107,28 @@ public class DataNode {
     validateDatacenter();
     dataNodeId.validate();
     validateState();
-    for(Disk disk : disks) {
+    for (Disk disk : disks) {
       disk.validate();
     }
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject()
+            .put("dataNodeId", dataNodeId.toJSONObject())
+            .put("state", state)
+            .put("disks", new JSONArray());
+    for (Disk disk : disks) {
+      jsonObject.accumulate("disks", disk.toJSONObject());
+    }
+    return jsonObject;
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("dataNodeId")
-              .value(dataNodeId)
-              .key("state")
-              .value(state)
-              .key("disks")
-              .value(disks)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

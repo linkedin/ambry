@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -18,16 +17,12 @@ public class ReplicaIdTest {
     // System.out.println(replicaIdSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(replicaIdSer.toString());
-
-      ReplicaId replicaIdDe = new ReplicaId(jsonObject);
+      ReplicaId replicaIdDe = new ReplicaId(replicaIdSer.toJSONObject());
 
       assertEquals(replicaIdSer, replicaIdDe);
     } catch (JSONException e) {
       e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
       fail();
     }
-
   }
-
 }

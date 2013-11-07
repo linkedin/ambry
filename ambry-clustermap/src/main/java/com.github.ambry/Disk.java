@@ -2,7 +2,8 @@ package com.github.ambry;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Disk represents a disk in Ambry. Each Disk is uniquely identifiable by its diskId.
@@ -18,11 +19,13 @@ public class Disk {
   private State state;
   private long capacityGB;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
     this.dataNode = dataNode;
-    this.diskId = new DiskId(new JSONObject(jsonObject.getString("diskId")));
+    this.diskId = new DiskId(jsonObject.getJSONObject("diskId"));
     this.state = State.valueOf(jsonObject.getString("state"));
-    this.capacityGB = jsonObject.getLong("replicaCapacityGB");
+    this.capacityGB = jsonObject.getLong("capacityGB");
 
     validate();
   }
@@ -63,13 +66,13 @@ public class Disk {
   }
 
   protected void validateDataNode() {
-    if(dataNode == null) {
+    if (dataNode == null) {
       throw new IllegalStateException("DataNode cannot be null");
     }
   }
 
   protected void validateCapacity() {
-    if (capacityGB <=0) {
+    if (capacityGB <= 0) {
       throw new IllegalStateException("Invalid disk capacity: " + capacityGB);
     }
   }
@@ -96,25 +99,23 @@ public class Disk {
     validateState();
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject()
+            .put("diskId", diskId.toJSONObject())
+            .put("state", state)
+            .put("capacityGB", capacityGB);
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-                .key("diskId")
-                .value(diskId)
-                .key("state")
-                .value(state)
-              .key("replicaCapacityGB")
-              .value(capacityGB)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }
+
 
   @Override
   public boolean equals(Object o) {

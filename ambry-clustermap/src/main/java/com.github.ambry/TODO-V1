@@ -1,0 +1,12 @@
+For V0.1 Initial complete commit after which switch to working on coordinator
+?
+
+For V0.2 Next chunk of work to harden ClusterMap
+TODO: AddNode && AddDisk actually working with node & disk in way SRE is OK with (i.e. file pre-allocation & verification of pre-allocated file's existence)
+TODO: Add simple "ReplicationPolicy" object which dictates fault tolerance of Partition.
+TODO: More unit tests
+TODO: Add version number and/or timestamp and/or username of last writer for cluster and for layout.
+TODO: More logging
+
+For V1
+TODO: Document JSON format once V1 is mostly stable.

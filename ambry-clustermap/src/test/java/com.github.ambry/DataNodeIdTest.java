@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -14,13 +13,11 @@ public class DataNodeIdTest {
 
   @Test
   public void jsonSerDeTest() {
-    DataNodeId dataNodeIdSer = new DataNodeId("localhost", 6666);
+    DataNodeId dataNodeIdSer = new DataNodeId("localhost", TestUtils.getNewPort());
     // System.out.println(dataNodeIdSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(dataNodeIdSer.toString());
-
-      DataNodeId dataNodeIdDe = new DataNodeId(jsonObject);
+      DataNodeId dataNodeIdDe = new DataNodeId(dataNodeIdSer.toJSONObject());
 
       assertEquals(dataNodeIdSer, dataNodeIdDe);
     } catch (JSONException e) {

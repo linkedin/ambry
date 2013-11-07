@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -14,13 +13,11 @@ public class PartitionIdTest {
 
   @Test
   public void jsonSerDeTest() {
-    PartitionId partitionIdSer = new PartitionId(7);
+    PartitionId partitionIdSer = TestUtils.getNewPartitionId();
     // System.out.println(partitionIdSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(partitionIdSer.toString());
-
-      PartitionId partitionIdDe = new PartitionId(jsonObject);
+      PartitionId partitionIdDe = new PartitionId(partitionIdSer.toJSONObject());
 
       assertEquals(partitionIdSer, partitionIdDe);
     } catch (JSONException e) {
@@ -29,5 +26,5 @@ public class PartitionIdTest {
     }
 
   }
-  
+
 }

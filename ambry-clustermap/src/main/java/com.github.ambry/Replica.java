@@ -2,7 +2,8 @@ package com.github.ambry;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Replica represents one replica of a partition in Ambry. Each Replica is uniquely identifiable by a ReplicaId
@@ -12,9 +13,12 @@ import org.json.JSONStringer;
  * The state of a replica is a function of its partition state and disk state.
  */
 public class Replica {
-  ReplicaId replicaId;
+  private ReplicaId replicaId;
 
-  Partition partition;
+  private Partition partition;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
 
   public Replica(Partition partition, DiskId diskId) {
     this.replicaId = new ReplicaId(partition.getPartitionId(), diskId);
@@ -29,7 +33,7 @@ public class Replica {
   }
 
   public Replica(Partition partition, JSONObject jsonObject) throws JSONException {
-    this.replicaId = new ReplicaId(new JSONObject(jsonObject.getString("replicaId")));
+    this.replicaId = new ReplicaId(jsonObject.getJSONObject("replicaId"));
 
     this.partition = partition;
 
@@ -64,27 +68,24 @@ public class Replica {
     replicaId.validate();
     validatePartitionId();
     // Do not call disk.validate(). Could introduce infinite call cycle.
-    // TODO: Add validation that only one replica per DataNode?
+    // TODO: Add validation that only one replica per DataNode? Per Disk? Should probably do this at Layout validation.
     // No need to validate disk id since it is looked up from cluster.
   }
 
-  // Returns JSON representation
-  // Serialize PartitionId and DiskId not Partition and Disk.
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject()
+            .put("replicaId", replicaId.toJSONObject());
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("replicaId")
-              .value(replicaId)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }
-
 
   @Override
   public boolean equals(Object o) {

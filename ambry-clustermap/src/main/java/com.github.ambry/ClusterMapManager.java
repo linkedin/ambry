@@ -1,43 +1,79 @@
 package com.github.ambry;
 
-// TODO:
-// - File SerDe and use tmp test file in unit test
-// ...
-// - ClusterMapAPI with javadoc
-// - Add logging
-// ...
-// - Cleaner/simpler JSON SerDe. Currently overly verbose & ugly.
-// - Add TODO file to this module for all v1 goodness.
-// - AddNode && AddDisk actually working with node & disk in way SRE is OK with
-// - More unit tests
-// - Document JSON format
+// TODO: ClusterMapAPI with javadoc
 
+import org.json.JSONException;
+import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * ClusterMapManager allows components in Ambry to query the topology. This covers both cluster hardware and data layout.
+ * ClusterMapManager allows components in Ambry to query the topology. This covers both cluster hardware and data
+ * layout.
  */
 public class ClusterMapManager {
   protected Cluster cluster;
   protected Layout layout;
 
+  public ClusterMapManager(String clusterName) {
+    this.cluster = new Cluster(clusterName);
+    this.layout = new Layout(cluster);
+  }
 
   public ClusterMapManager(Cluster cluster, Layout layout) {
     this.cluster = cluster;
     this.layout = layout;
   }
 
-  // TODO: File-based SerDe
+  // TODO: Ram, any preferences on file IO utility libraries? E.g., http://commons.apache.org/proper/commons-io/.
+  // Or, should we add file writer/reader helpers to ambry-utils.
+  private static void writeStringToFile(String string, String path) throws IOException {
+    FileWriter fileWriter = null;
+    try {
+      File clusterFile = new File(path);
+      fileWriter = new FileWriter(clusterFile);
+      fileWriter.write(string);
+    } finally {
+      if (fileWriter != null) {
+        fileWriter.close();
+      }
+    }
+  }
+
+  private static String readStringFromFile(String path) throws IOException {
+    // Code cribbed from StackOverflow and is similar to IO Commons and Guava
+    // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
+    byte[] encoded = Files.readAllBytes(Paths.get(path));
+    return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
+  }
+
+  public void persist(String clusterPath, String layoutPath) throws IOException {
+    writeStringToFile(cluster.toString(), clusterPath);
+    writeStringToFile(layout.toString(), layoutPath);
+  }
+
+  public static ClusterMapManager buildFromFiles(String clusterPath, String layoutPath) throws IOException, JSONException {
+    Cluster cluster = new Cluster(new JSONObject(readStringFromFile(clusterPath)));
+    Layout layout = new Layout(cluster, new JSONObject(readStringFromFile(layoutPath)));
+
+    return new ClusterMapManager(cluster, layout);
+  }
 
   // API for the Coordinator
   // -----------------------
 
   public ArrayList<Partition> getReadWritePartitions() {
-    ArrayList<Partition> rwPartitions= new ArrayList<Partition>();
-    for(Partition partition : layout.getPartitions()) {
+    ArrayList<Partition> rwPartitions = new ArrayList<Partition>();
+    for (Partition partition : layout.getPartitions()) {
       if (partition.getState() == Partition.State.READ_WRITE) {
         rwPartitions.add(partition);
       }
@@ -57,7 +93,7 @@ public class ClusterMapManager {
     ArrayList<Replica> peerReplicas = new ArrayList<Replica>();
 
     for (Replica peerReplica : replica.getPartition().getReplicas()) {
-      if(!replica.equals(peerReplica)) {
+      if (!replica.equals(peerReplica)) {
         peerReplicas.add(peerReplica);
       }
     }
@@ -78,7 +114,7 @@ public class ClusterMapManager {
 
   public long getAllocatedCapacityGB(Datacenter datacenter) {
     long allocatedCapacityGB = 0;
-    for(Partition partition : layout.getPartitions()) {
+    for (Partition partition : layout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().getDataNode().getDatacenter().equals(datacenter)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -90,7 +126,7 @@ public class ClusterMapManager {
 
   public long getAllocatedCapacityGB(DataNode dataNode) {
     long allocatedCapacityGB = 0;
-    for(Partition partition : layout.getPartitions()) {
+    for (Partition partition : layout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().getDataNode().equals(dataNode)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -102,7 +138,7 @@ public class ClusterMapManager {
 
   public long getAllocatedCapacityGB(Disk disk) {
     long allocatedCapacityGB = 0;
-    for(Partition partition : layout.getPartitions()) {
+    for (Partition partition : layout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().equals(disk)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -128,6 +164,10 @@ public class ClusterMapManager {
     return disk.getCapacityGB() - getAllocatedCapacityGB(disk);
   }
 
+  public Cluster getCluster() {
+    return cluster;
+  }
+
   public Datacenter addNewDataCenter(String datacenterName) {
     return cluster.addNewDataCenter(datacenterName);
   }
@@ -144,15 +184,9 @@ public class ClusterMapManager {
     return layout.addNewPartition(disks, replicaCapacityGB);
   }
 
-  // TODO: Is this API needed (at this time) (at this level)?
-  public Replica addNewReplicaToPartition(Partition partition, Disk disk) {
-    return layout.addNewReplicaToPartition(partition, disk);
-  }
-
-
   // Determine if there is enough capacity to allocate a Partition
   private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
-    for(Datacenter datacenter : cluster.getDatacenters()) {
+    for (Datacenter datacenter : cluster.getDatacenters()) {
       if (getFreeCapacityGB(datacenter) < replicaCountPerDatacenter * replicaCapacityGB) {
         // Log
         return false;
@@ -180,7 +214,7 @@ public class ClusterMapManager {
   private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityGB) {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
-    for(Datacenter datacenter : cluster.getDatacenters()) {
+    for (Datacenter datacenter : cluster.getDatacenters()) {
       List<DataNode> suffledDataNodes = new ArrayList<DataNode>(datacenter.getDataNodes());
       Collections.shuffle(suffledDataNodes);
 
@@ -197,7 +231,7 @@ public class ClusterMapManager {
           }
         }
 
-        if(rcpd == 0) {
+        if (rcpd == 0) {
           break;
         }
       }
@@ -220,5 +254,25 @@ public class ClusterMapManager {
     }
 
     return partitions;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    ClusterMapManager that = (ClusterMapManager) o;
+
+    if (!cluster.equals(that.cluster)) return false;
+    if (!layout.equals(that.layout)) return false;
+
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = cluster.hashCode();
+    result = 31 * result + layout.hashCode();
+    return result;
   }
 }

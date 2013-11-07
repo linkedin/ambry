@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -17,8 +16,7 @@ public class ClusterTest {
     // System.out.println(clusterSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(clusterSer.toString());
-      Cluster clusterDe = new Cluster(jsonObject);
+      Cluster clusterDe = new Cluster(clusterSer.toJSONObject());
 
       assertEquals(clusterSer, clusterDe);
       assertEquals(2, clusterDe.getDatacenters().size());

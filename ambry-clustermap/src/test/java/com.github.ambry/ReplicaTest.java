@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -12,7 +11,6 @@ import static org.junit.Assert.fail;
  */
 public class ReplicaTest {
 
-
   @Test
   public void jsonSerDeTest() {
     Partition testPartition = TestUtils.getNewTestPartition();
@@ -22,16 +20,12 @@ public class ReplicaTest {
     // System.out.println(replicaSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(replicaSer.toString());
-
-      Replica replicaDe = new Replica(testPartition, jsonObject);
+      Replica replicaDe = new Replica(testPartition, replicaSer.toJSONObject());
 
       assertEquals(replicaSer, replicaDe);
     } catch (JSONException e) {
       e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
       fail();
     }
-
   }
-
 }

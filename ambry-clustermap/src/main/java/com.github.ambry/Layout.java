@@ -3,7 +3,8 @@ package com.github.ambry;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -12,13 +13,14 @@ import java.util.*;
  */
 public class Layout {
   Cluster cluster;
-  // TODO: Add version number and/or timestamp and/or username of last writer for cluster
 
   private PartitionId prevPartitionId;
   private ArrayList<Partition> partitions;
 
   private Map<PartitionId, Partition> partitionMap;
   private Map<ReplicaId, Replica> replicaMap;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Layout(Cluster cluster, JSONObject jsonObject) throws JSONException {
     this.cluster = cluster;
@@ -31,13 +33,12 @@ public class Layout {
 
     this.prevPartitionId = null;
     if (!jsonObject.isNull("prevPartitionId")) {
-      this.prevPartitionId = new PartitionId(new JSONObject(jsonObject.getString("prevPartitionId")));
+      this.prevPartitionId = new PartitionId(jsonObject.getJSONObject("prevPartitionId"));
     }
 
     this.partitions = new ArrayList<Partition>();
-    JSONArray partitionJSONArray = jsonObject.getJSONArray("partitions");
-    for (int i = 0; i < partitionJSONArray.length(); ++i) {
-      this.partitions.add(new Partition(this, new JSONObject(partitionJSONArray.getString(i))));
+    for (int i = 0; i < jsonObject.getJSONArray("partitions").length(); ++i) {
+      this.partitions.add(new Partition(this, jsonObject.getJSONArray("partitions").getJSONObject(i)));
     }
 
     buildMaps();
@@ -63,8 +64,8 @@ public class Layout {
         throw new IllegalStateException("PartitionId must be unique: " + partition.getPartitionId());
       }
 
-      for(Replica replica : partition.getReplicas()) {
-        if(replicaMap.put(replica.getReplicaId(), replica) != null) {
+      for (Replica replica : partition.getReplicas()) {
+        if (replicaMap.put(replica.getReplicaId(), replica) != null) {
           throw new IllegalStateException("ReplicaId must be unique: " + replica.getReplicaId());
         }
       }
@@ -89,7 +90,7 @@ public class Layout {
 
   public long getCapacityGB() {
     long capacityGB = 0;
-    for(Partition partition : partitions) {
+    for (Partition partition : partitions) {
       capacityGB += partition.getCapacityGB();
     }
     return capacityGB;
@@ -106,12 +107,12 @@ public class Layout {
   }
 
   protected PartitionId getNewPartitionId() {
-    if(prevPartitionId == null) {
+    if (prevPartitionId == null) {
       prevPartitionId = PartitionId.getFirstPartitionId();
-      return prevPartitionId ;
+      return prevPartitionId;
     } else {
-      prevPartitionId  = PartitionId.getNewPartitionId(prevPartitionId);
-      return prevPartitionId ;
+      prevPartitionId = PartitionId.getNewPartitionId(prevPartitionId);
+      return prevPartitionId;
     }
   }
 
@@ -130,8 +131,8 @@ public class Layout {
     addPartition(partition);
     partitionMap.put(partitionId, partition);
 
-    if(disks != null) {
-      for(Disk disk : disks) {
+    if (disks != null) {
+      for (Disk disk : disks) {
         addNewReplicaToPartition(partition, disk);
       }
     }
@@ -145,7 +146,7 @@ public class Layout {
     }
 
     Replica replica = new Replica(partition, disk);
-    if(replicaMap.put(replica.getReplicaId(), replica) != null) {
+    if (replicaMap.put(replica.getReplicaId(), replica) != null) {
       throw new IllegalArgumentException("Replica Id already in use. Must be unique: " + replica.getReplicaId());
     }
     partition.addReplica(replica);
@@ -153,22 +154,23 @@ public class Layout {
     return replica;
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject()
+            .put("clusterName", cluster.getName())
+            .put("prevPartitionId", prevPartitionId.toJSONObject())
+            .put("partitions", new JSONArray());
+    for (Partition partition : partitions) {
+      jsonObject.accumulate("partitions", partition.toJSONObject());
+    }
+    return jsonObject;
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("clusterName")
-              .value(cluster.getName())
-              .key("prevPartitionId")
-              .value(prevPartitionId)
-              .key("partitions")
-              .value(partitions)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

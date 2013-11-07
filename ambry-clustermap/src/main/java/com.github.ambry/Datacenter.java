@@ -3,7 +3,8 @@ package com.github.ambry;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,14 +18,15 @@ public class Datacenter {
   private String name; // E.g., "ELA4"
   private ArrayList<DataNode> dataNodes;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   public Datacenter(Cluster cluster, JSONObject jsonObject) throws JSONException {
     this.cluster = cluster;
     this.name = jsonObject.getString("name");
 
     this.dataNodes = new ArrayList<DataNode>();
-    JSONArray dataNodeJSONArray = jsonObject.getJSONArray("dataNodes");
-    for (int i = 0; i < dataNodeJSONArray.length(); ++i) {
-      this.dataNodes.add(new DataNode(this, new JSONObject(dataNodeJSONArray.getString(i))));
+    for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
+      this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i)));
     }
     validate();
   }
@@ -46,7 +48,7 @@ public class Datacenter {
 
   public long getCapacityGB() {
     long capacityGB = 0;
-    for(DataNode dataNode : dataNodes) {
+    for (DataNode dataNode : dataNodes) {
       capacityGB += dataNode.getCapacityGB();
     }
     return capacityGB;
@@ -54,7 +56,7 @@ public class Datacenter {
 
 
   protected void validateCluster() {
-    if(cluster == null) {
+    if (cluster == null) {
       throw new IllegalStateException("Cluster cannot be null");
     }
   }
@@ -81,20 +83,22 @@ public class Datacenter {
     return Collections.unmodifiableList(dataNodes);
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject()
+            .put("name", name)
+            .put("dataNodes", new JSONArray());
+    for (DataNode dataNode : dataNodes) {
+      jsonObject.accumulate("dataNodes", dataNode.toJSONObject());
+    }
+    return jsonObject;
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("name")
-              .value(name)
-              .key("dataNodes")
-              .value(dataNodes)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

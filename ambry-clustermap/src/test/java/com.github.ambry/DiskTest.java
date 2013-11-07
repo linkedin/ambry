@@ -1,12 +1,10 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-
 
 
 /**
@@ -20,9 +18,7 @@ public class DiskTest {
     // System.out.println(diskSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(diskSer.toString());
-
-      Disk diskDe = new TestUtils.TestDisk(jsonObject);
+      Disk diskDe = new TestUtils.TestDisk(diskSer.toJSONObject());
 
       assertEquals(diskSer, diskDe);
     } catch (JSONException e) {

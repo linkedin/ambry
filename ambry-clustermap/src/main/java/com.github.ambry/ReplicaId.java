@@ -2,7 +2,8 @@ package com.github.ambry;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -10,6 +11,8 @@ import org.json.JSONStringer;
 public class ReplicaId {
   PartitionId partitionId;
   DiskId diskId;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ReplicaId(PartitionId partitionId, DiskId diskId) {
     this.partitionId = partitionId;
@@ -19,8 +22,8 @@ public class ReplicaId {
   }
 
   public ReplicaId(JSONObject jsonObject) throws JSONException {
-    this.partitionId = new PartitionId(new JSONObject(jsonObject.getString("partitionId")));
-    this.diskId = new DiskId(new JSONObject(jsonObject.getString("diskId")));
+    this.partitionId = new PartitionId(jsonObject.getJSONObject("partitionId"));
+    this.diskId = new DiskId(jsonObject.getJSONObject("diskId"));
 
     validate();
   }
@@ -38,20 +41,18 @@ public class ReplicaId {
     diskId.validate();
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject()
+            .put("partitionId", partitionId.toJSONObject())
+            .put("diskId", diskId.toJSONObject());
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("partitionId")
-              .value(partitionId)
-              .key("diskId")
-              .value(diskId)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

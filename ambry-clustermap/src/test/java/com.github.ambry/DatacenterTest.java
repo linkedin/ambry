@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -12,18 +11,15 @@ import static org.junit.Assert.fail;
  */
 public class DatacenterTest {
 
-
-
   @Test
   public void jsonSerDeTest() {
     Datacenter datacenterSer = TestUtils.getNewTestDatacenter("ELA4");
 
     datacenterSer.validate();
-    // System.out.println(datacenter1.toString());
+    // System.out.println(datacenterSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(datacenterSer.toString());
-      Datacenter datacenterDe = new TestUtils.TestDatacenter(jsonObject);
+      Datacenter datacenterDe = new TestUtils.TestDatacenter(datacenterSer.toJSONObject());
 
       assertEquals(datacenterSer, datacenterDe);
       // "2" comes from test helpers that popoulate datacenters with two nodes each having two disks.

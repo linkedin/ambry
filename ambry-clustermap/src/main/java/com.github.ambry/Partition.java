@@ -3,7 +3,8 @@ package com.github.ambry;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,9 +24,12 @@ public class Partition {
 
   PartitionId partitionId;
   State state;
-  // TODO: policy object to represent number of replicas and constraints on replicas
+  // TODO: add replication policy object.
   long replicaCapacityGB;
   ArrayList<Replica> replicas;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
 
   public Partition(Layout layout, PartitionId partitionId, long replicaCapacityGB) {
     this.layout = layout;
@@ -38,16 +42,15 @@ public class Partition {
     validate();
   }
 
-  public Partition(Layout layout, JSONObject jsonObject)  throws JSONException {
+  public Partition(Layout layout, JSONObject jsonObject) throws JSONException {
     this.layout = layout;
 
     this.partitionId = new PartitionId(new JSONObject(jsonObject.getString("partitionId")));
     this.state = State.valueOf(jsonObject.getString("state"));
     this.replicaCapacityGB = jsonObject.getLong("replicaCapacityGB");
     this.replicas = new ArrayList<Replica>();
-    JSONArray diskJSONArray = jsonObject.getJSONArray("replicas");
-    for (int i = 0; i < diskJSONArray.length(); ++i) {
-      this.replicas.add(new Replica(this, new JSONObject(diskJSONArray.getString(i))));
+    for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
+      this.replicas.add(new Replica(this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
     }
 
     validate();
@@ -82,7 +85,7 @@ public class Partition {
   }
 
   protected void validateLayout() {
-    if(layout == null) {
+    if (layout == null) {
       throw new IllegalStateException("Layout of a Partition cannot be null");
     }
   }
@@ -103,7 +106,7 @@ public class Partition {
   }
 
   protected void validateCapacity() {
-    if (replicaCapacityGB <=0) {
+    if (replicaCapacityGB <= 0) {
       throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB);
     }
   }
@@ -115,31 +118,29 @@ public class Partition {
     partitionId.validate();
     validateState();
     validateCapacity();
-    // TODO: validate replication policy? I.e., are there enough replicas?
-    for(Replica replica  : replicas) {
+    for (Replica replica : replicas) {
       replica.validate();
     }
   }
 
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject()
+            .put("partitionId", partitionId.toJSONObject())
+            .put("state", state)
+            .put("replicaCapacityGB", replicaCapacityGB)
+            .put("replicas", new JSONArray());
+    for (Replica replica : replicas) {
+      jsonObject.accumulate("replicas", replica.toJSONObject());
+    }
+    return jsonObject;
+  }
 
-  // Returns JSON representation
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("partitionId")
-              .value(partitionId)
-              .key("state")
-              .value(state)
-              .key("replicaCapacityGB")
-              .value(replicaCapacityGB)
-              .key("replicas")
-              .value(replicas)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

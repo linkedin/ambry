@@ -12,8 +12,7 @@ public class TestUtils {
   static private int basePort = 6666;
   static private int baseMountPathOffset = 0;
 
-  // TODO: Switch to getFirstPartitionId / getNewPartitionID foo?
-  static private long basePartitionId = 0;
+  static private PartitionId prevPartitionId = PartitionId.getFirstPartitionId();
   static public final long replicaCapacityGB = 100;
   static public final long diskCapacityGB = 1000;
 
@@ -32,7 +31,7 @@ public class TestUtils {
 
     @Override
     public void validateDataNode() {
-      return;
+      // Null DataNode OK for test.
     }
   }
 
@@ -49,7 +48,7 @@ public class TestUtils {
 
     @Override
     public void validateDatacenter() {
-      return;
+      // Null datacenter OK for test.
     }
   }
 
@@ -66,11 +65,11 @@ public class TestUtils {
 
     @Override
     public void validateCluster() {
-      return;
+      // Null cluster OK for test.
     }
   }
 
-  // Premit Partition to be constructed with a null Layout
+  // Permit Partition to be constructed with a null Layout
   public static class TestPartition extends Partition {
 
     TestPartition(PartitionId partitionId, long replicaCapacityGB) {
@@ -83,8 +82,7 @@ public class TestUtils {
 
     @Override
     protected void validateLayout() {
-      // Make null OK
-      return;
+      // Null layout OK for test.
     }
   }
 
@@ -205,9 +203,14 @@ public class TestUtils {
 
   // Return fully constructed PartitionId
   static public PartitionId getNewPartitionId() {
-    return new PartitionId(basePartitionId++);
+    if (prevPartitionId == null) {
+      prevPartitionId = PartitionId.getFirstPartitionId();
+    } else {
+      prevPartitionId = PartitionId.getNewPartitionId(prevPartitionId);
+    }
+    return prevPartitionId;
   }
-  
+
   static public Partition getNewTestPartition() {
     return new TestPartition(getNewPartitionId(), replicaCapacityGB);
   }
@@ -218,15 +221,15 @@ public class TestUtils {
   }
 
   // Populate disksA and disksB for use in Partition construction. Hacky and ugly interface.
-  private static void populateDiskSetsForPartitions(Cluster cluster, ArrayList<Disk>disksA, ArrayList<Disk> disksB) {
-    for(Datacenter datacenter : cluster.getDatacenters()) {
+  private static void populateDiskSetsForPartitions(Cluster cluster, ArrayList<Disk> disksA, ArrayList<Disk> disksB) {
+    for (Datacenter datacenter : cluster.getDatacenters()) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         int count = 0;
         for (Disk disk : dataNode.getDisks()) {
           if (count == 0) {
             disksA.add(disk);
             count++;
-          } else if (count ==1) {
+          } else if (count == 1) {
             disksB.add(disk);
             count++;
           } else {
@@ -250,7 +253,7 @@ public class TestUtils {
     return layout;
   }
 
-  public static ClusterMapManager buildClusterMapManager(String name) {
+  public static ClusterMapManager buildClusterMapManagerIndirectly(String name) {
     Cluster cluster = buildCluster(name);
     Layout layout = new Layout(cluster);
 
@@ -272,6 +275,43 @@ public class TestUtils {
     Layout layout = new Layout(cluster);
 
     return new ClusterMapManager(cluster, layout);
+  }
+
+  public static ClusterMapManager buildClusterMapManagerDirectly(String clusterName) {
+    ClusterMapManager clusterMapManager = new ClusterMapManager(clusterName);
+
+    clusterMapManager.addNewDataCenter("ELA4");
+
+    int port = getNewPort();
+    clusterMapManager.addNewDataNode("ELA4", "localhost", port);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+
+    port = getNewPort();
+    clusterMapManager.addNewDataNode("ELA4", "localhost", port);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+
+    clusterMapManager.addNewDataCenter("LVA1");
+
+    port = getNewPort();
+    clusterMapManager.addNewDataNode("LVA1", "localhost", port);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+
+    port = getNewPort();
+    clusterMapManager.addNewDataNode("LVA1", "localhost", port);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
+
+    ArrayList<Disk> disksA = new ArrayList<Disk>();
+    ArrayList<Disk> disksB = new ArrayList<Disk>();
+    populateDiskSetsForPartitions(clusterMapManager.getCluster(), disksA, disksB);
+
+    clusterMapManager.addNewPartition(disksA, replicaCapacityGB);
+    clusterMapManager.addNewPartition(disksB, replicaCapacityGB);
+
+    return clusterMapManager;
   }
 
 

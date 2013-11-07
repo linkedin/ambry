@@ -2,7 +2,8 @@ package com.github.ambry;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -11,8 +12,10 @@ public class DiskId {
   private DataNodeId dataNodeId;
   private String mountPath;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   public DiskId(JSONObject jsonObject) throws JSONException {
-    this.dataNodeId = new DataNodeId(new JSONObject(jsonObject.getString("dataNodeId")));
+    this.dataNodeId = new DataNodeId(jsonObject.getJSONObject("dataNodeId"));
     this.mountPath = jsonObject.getString("mountPath");
 
     validate();
@@ -39,20 +42,18 @@ public class DiskId {
     validateMountPath();
   }
 
-  // Returns JSON representation
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject()
+            .put("dataNodeId", dataNodeId.toJSONObject())
+            .put("mountPath", mountPath);
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("dataNodeId")
-              .value(dataNodeId)
-              .key("mountPath")
-              .value(mountPath)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

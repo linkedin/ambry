@@ -2,7 +2,8 @@ package com.github.ambry;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -13,6 +14,8 @@ import java.net.UnknownHostException;
 public class DataNodeId {
   private String hostname;
   private int port;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public DataNodeId(String hostname, int port) {
     try {
@@ -43,8 +46,8 @@ public class DataNodeId {
     }
 
     if (!fqdn.equals(hostname)) {
-      throw new IllegalStateException("Hostname for DataNodeId does not match its lookup for fully qualified domain "+
-              "name: " + this.hostname + " != "  + fqdn);
+      throw new IllegalStateException("Hostname for DataNodeId does not match its lookup for fully qualified domain " +
+              "name: " + this.hostname + " != " + fqdn);
     }
   }
 
@@ -62,19 +65,18 @@ public class DataNodeId {
     return port;
   }
 
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject()
+            .put("hostname", hostname)
+            .put("port", port);
+  }
+
   @Override
   public String toString() {
     try {
-      return new JSONStringer()
-              .object()
-              .key("hostname")
-              .value(hostname)
-              .key("port")
-              .value(port)
-              .endObject()
-              .toString();
+      return toJSONObject().toString();
     } catch (JSONException e) {
-      e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+      logger.warn("JSONException caught in toString:" + e.getCause());
     }
     return null;
   }

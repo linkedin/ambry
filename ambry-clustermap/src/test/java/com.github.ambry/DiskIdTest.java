@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -12,16 +11,13 @@ import static org.junit.Assert.fail;
  */
 public class DiskIdTest {
 
-
   @Test
   public void jsonSerDeTest() {
     DiskId diskIdSer = TestUtils.getNewDiskId();
-    System.out.println(diskIdSer.toString());
+    // System.out.println(diskIdSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(diskIdSer.toString());
-
-      DiskId diskIdDe = new DiskId(jsonObject);
+      DiskId diskIdDe = new DiskId(diskIdSer.toJSONObject());
 
       assertEquals(diskIdSer, diskIdDe);
     } catch (JSONException e) {

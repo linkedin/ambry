@@ -1,7 +1,6 @@
 package com.github.ambry;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -17,11 +16,10 @@ public class DataNodeTest {
     DataNode dataNodeSer = TestUtils.getNewTestDataNode();
 
     dataNodeSer.validate();
-    // System.out.println(dataNode1.toString());
+    // System.out.println(dataNodeSer.toString());
 
     try {
-      JSONObject jsonObject = new JSONObject(dataNodeSer.toString());
-      DataNode dataNodeDe = new TestUtils.TestDataNode(jsonObject);
+      DataNode dataNodeDe = new TestUtils.TestDataNode(dataNodeSer.toJSONObject());
 
       assertEquals(dataNodeSer, dataNodeDe);
       assertEquals(2, dataNodeDe.getDisks().size());
