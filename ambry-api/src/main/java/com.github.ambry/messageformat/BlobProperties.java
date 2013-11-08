@@ -5,7 +5,7 @@ import com.github.ambry.utils.SystemTime;
 /**
  * The set of properties that the client can set
  */
-public class BlobProperties {
+public class  BlobProperties {
   private long timeToLive;
   private boolean isPrivate;
   private String contentType;

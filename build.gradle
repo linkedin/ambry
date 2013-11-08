@@ -134,3 +134,13 @@ project(':ambry-clustermap') {
   }
 }
 
+project(':ambry-tools') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-store')
+    compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+  }
+}
+

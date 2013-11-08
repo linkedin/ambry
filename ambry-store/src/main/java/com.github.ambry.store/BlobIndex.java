@@ -14,77 +14,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * The set of data stored in the index
- */
-
-class BlobIndexValue {
-  public enum Flags {
-    Delete_Index
-  }
-
-  private final long size;
-  private final long offset;
-  private byte flags;
-  private long timeToLive;
-
-  BlobIndexValue(long size, long offset, byte flags, long timeToLive) {
-    this.size = size;
-    this.offset = offset;
-    this.flags = flags;
-    this.timeToLive = timeToLive;
-  }
-
-  public long getSize() {
-    return size;
-  }
-
-  public long getOffset() {
-    return offset;
-  }
-
-  public byte getFlags() {
-    return flags;
-  }
-
-  public boolean isFlagSet(Flags flag) {
-    return ((flags & (1 << flag.ordinal())) != 0);
-  }
-
-  public long getTimeToLive() {
-    return timeToLive;
-  }
-
-  public void setTimeToLive(long ttl) {
-    timeToLive = ttl;
-  }
-
-  public void setFlag(Flags flag) {
-    flags = (byte)(flags | (1 << flag.ordinal()));
-  }
-}
-
-/**
- * A key and value that represents an index entry
- */
-class BlobIndexEntry {
-  private StoreKey key;
-  private BlobIndexValue value;
-
-  public BlobIndexEntry(StoreKey key, BlobIndexValue value) {
-    this.key = key;
-    this.value = value;
-  }
-
-  public StoreKey getKey() {
-    return this.key;
-  }
-
-  public BlobIndexValue getValue() {
-    return this.value;
-  }
-}
-
-/**
  * The index implementation that is responsible for adding and modifying index entries,
  * recovering an index from the log and commit and recover index to disk
  */
@@ -99,7 +28,78 @@ public class BlobIndex {
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  BlobIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException  {
+  /**
+   * A key and value that represents an index entry
+   */
+  public static class BlobIndexEntry {
+    private StoreKey key;
+    private BlobIndexValue value;
+
+    public BlobIndexEntry(StoreKey key, BlobIndexValue value) {
+      this.key = key;
+      this.value = value;
+    }
+
+    public StoreKey getKey() {
+      return this.key;
+    }
+
+    public BlobIndexValue getValue() {
+      return this.value;
+    }
+  }
+
+  /**
+   * The set of data stored in the index
+   */
+
+  public static class BlobIndexValue {
+    public enum Flags {
+      Delete_Index
+    }
+
+    private final long size;
+    private final long offset;
+    private byte flags;
+    private long timeToLive;
+
+    public BlobIndexValue(long size, long offset, byte flags, long timeToLive) {
+      this.size = size;
+      this.offset = offset;
+      this.flags = flags;
+      this.timeToLive = timeToLive;
+    }
+
+    public long getSize() {
+      return size;
+    }
+
+    public long getOffset() {
+      return offset;
+    }
+
+    public byte getFlags() {
+      return flags;
+    }
+
+    public boolean isFlagSet(Flags flag) {
+      return ((flags & (1 << flag.ordinal())) != 0);
+    }
+
+    public long getTimeToLive() {
+      return timeToLive;
+    }
+
+    public void setTimeToLive(long ttl) {
+      timeToLive = ttl;
+    }
+
+    public void setFlag(Flags flag) {
+      flags = (byte)(flags | (1 << flag.ordinal()));
+    }
+  }
+
+  public BlobIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException  {
     try {
       logEndOffset = new AtomicLong(0);
       indexJournal = new BlobJournal();

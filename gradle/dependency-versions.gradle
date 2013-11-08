@@ -1,4 +1,5 @@
 ext {
   junitVersion = "4.8.1"
   slf4jVersion  = "1.7.5"
+  joptSimpleVersion = "4.3"
 }
