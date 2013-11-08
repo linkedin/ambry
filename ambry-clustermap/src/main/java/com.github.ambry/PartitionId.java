@@ -1,14 +1,17 @@
 package com.github.ambry;
 
+import com.github.ambry.clustermap.PartitionIdentifier;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
+
 /**
  *
  */
-public class PartitionId {
+public class PartitionId implements PartitionIdentifier {
   private long id;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -40,6 +43,17 @@ public class PartitionId {
   public JSONObject toJSONObject() throws JSONException {
     return new JSONObject()
             .put("id", id);
+  }
+
+  public static PartitionId make(byte[] bytes) {
+    return new PartitionId(ByteBuffer.wrap(bytes).getLong());
+  }
+
+  @Override
+  public byte[] getBytes() {
+    ByteBuffer buffer = ByteBuffer.allocate(8);
+    buffer.putLong(id);
+    return buffer.array();
   }
 
   @Override

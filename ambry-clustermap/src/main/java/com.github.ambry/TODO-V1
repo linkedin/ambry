@@ -1,5 +1,6 @@
 For V0.1 Initial complete commit after which switch to working on coordinator
-?
+TODO: Fix './gradlew build' which is broken by MessageFormat currently.
+TODO: Fix SLF4J issue ("Failed to load class "org.slf4j.impl.StaticLoggerBinder") upon build.
 
 For V0.2 Next chunk of work to harden ClusterMap
 TODO: AddNode && AddDisk actually working with node & disk in way SRE is OK with (i.e. file pre-allocation & verification of pre-allocated file's existence)

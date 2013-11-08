@@ -21,7 +21,7 @@ public class ClusterMapManagerTest {
   public void basicTests(ClusterMapManager clusterMapManager) {
 
     // Coordinator API
-    List<Partition> partitions = clusterMapManager.getReadWritePartitions();
+    List<Partition> partitions = clusterMapManager.getWritablePartitions();
     for (Partition partition : partitions) {
       assertTrue(partition.getReplicaCapacityGB() > 0);
       assertTrue(partition.getCapacityGB() > 0);
@@ -79,22 +79,22 @@ public class ClusterMapManagerTest {
     // "5" is number partitions above, "4" is replication factor hard coded into helper test method.
     assertEquals(clusterMapManager.getAllocatedCapacityGB(), 5 * 4 * TestUtils.replicaCapacityGB);
     assertEquals(allocatedPartitions.size(), 5);
-    assertEquals(clusterMapManager.getReadWritePartitions().size(), 5);
+    assertEquals(clusterMapManager.getWritablePartitions().size(), 5);
 
     allocatedPartitions = clusterMapManager.allocatePartitions(10, TestUtils.replicaCapacityGB);
     assertEquals(clusterMapManager.getAllocatedCapacityGB(), 15 * 4 * TestUtils.replicaCapacityGB);
     assertEquals(allocatedPartitions.size(), 10);
-    assertEquals(clusterMapManager.getReadWritePartitions().size(), 15);
+    assertEquals(clusterMapManager.getWritablePartitions().size(), 15);
 
     allocatedPartitions = clusterMapManager.allocatePartitions(6, TestUtils.replicaCapacityGB);
     assertEquals(clusterMapManager.getAllocatedCapacityGB(), 20 * 4 * TestUtils.replicaCapacityGB);
     assertEquals(allocatedPartitions.size(), 5);
-    assertEquals(clusterMapManager.getReadWritePartitions().size(), 20);
+    assertEquals(clusterMapManager.getWritablePartitions().size(), 20);
 
     allocatedPartitions = clusterMapManager.allocatePartitions(1, TestUtils.replicaCapacityGB);
     assertEquals(clusterMapManager.getAllocatedCapacityGB(), 20 * 4 * TestUtils.replicaCapacityGB);
     assertEquals(allocatedPartitions.size(), 0);
-    assertEquals(clusterMapManager.getReadWritePartitions().size(), 20);
+    assertEquals(clusterMapManager.getWritablePartitions().size(), 20);
   }
 
 

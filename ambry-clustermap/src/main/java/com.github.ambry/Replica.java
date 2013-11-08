@@ -1,5 +1,6 @@
 package com.github.ambry;
 
+import com.github.ambry.clustermap.ReplicaContext;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -54,6 +55,12 @@ public class Replica {
 
   public long getCapacityGB() {
     return partition.getReplicaCapacityGB();
+  }
+
+  public ReplicaContext getReplicaContext() {
+    return new ReplicaContext(replicaId.getDiskId().getDataNodeId().getHostname(),
+            replicaId.getDiskId().getDataNodeId().getPort(),
+            replicaId.getDiskId().getMountPath());
   }
 
   protected void validatePartitionId() {

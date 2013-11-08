@@ -48,6 +48,14 @@ public class DiskId {
             .put("mountPath", mountPath);
   }
 
+  public DataNodeId getDataNodeId() {
+    return dataNodeId;
+  }
+
+  public String getMountPath() {
+    return mountPath;
+  }
+
   @Override
   public String toString() {
     try {

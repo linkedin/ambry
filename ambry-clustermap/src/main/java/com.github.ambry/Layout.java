@@ -1,5 +1,6 @@
 package com.github.ambry;
 
+import com.github.ambry.clustermap.PartitionIdentifier;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -17,8 +18,9 @@ public class Layout {
   private PartitionId prevPartitionId;
   private ArrayList<Partition> partitions;
 
-  private Map<PartitionId, Partition> partitionMap;
+  private Map<PartitionIdentifier, Partition> partitionMap;
   private Map<ReplicaId, Replica> replicaMap;
+  private ArrayList<Partition> writablePartitions;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -56,8 +58,9 @@ public class Layout {
   }
 
   private void buildMaps() {
-    this.partitionMap = new HashMap<PartitionId, Partition>();
+    this.partitionMap = new HashMap<PartitionIdentifier, Partition>();
     this.replicaMap = new HashMap<ReplicaId, Replica>();
+    this.writablePartitions = new ArrayList<Partition>();
 
     for (Partition partition : partitions) {
       if (partitionMap.put(partition.getPartitionId(), partition) != null) {
@@ -68,6 +71,10 @@ public class Layout {
         if (replicaMap.put(replica.getReplicaId(), replica) != null) {
           throw new IllegalStateException("ReplicaId must be unique: " + replica.getReplicaId());
         }
+      }
+
+      if (partition.getState() == Partition.State.READ_WRITE) {
+        writablePartitions.add(partition);
       }
     }
   }
@@ -80,8 +87,12 @@ public class Layout {
     return Collections.unmodifiableList(partitions);
   }
 
-  public Partition getPartition(PartitionId partitionId) {
-    return partitionMap.get(partitionId);
+  public List<Partition> getWritablePartitions() {
+    return Collections.unmodifiableList(writablePartitions);
+  }
+
+  public Partition getPartition(PartitionIdentifier partitionIdentifier) {
+    return partitionMap.get(partitionIdentifier);
   }
 
   public Replica getReplica(ReplicaId replicaId) {
@@ -130,6 +141,9 @@ public class Layout {
     Partition partition = new Partition(this, partitionId, replicaCapacityGB);
     addPartition(partition);
     partitionMap.put(partitionId, partition);
+    if (partition.getState() == Partition.State.READ_WRITE) {
+      writablePartitions.add(partition);
+    }
 
     if (disks != null) {
       for (Disk disk : disks) {

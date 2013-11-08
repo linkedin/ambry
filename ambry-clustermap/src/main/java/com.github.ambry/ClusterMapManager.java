@@ -1,7 +1,8 @@
 package com.github.ambry;
 
-// TODO: ClusterMapAPI with javadoc
-
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionIdentifier;
+import com.github.ambry.clustermap.ReplicaContext;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,7 +21,7 @@ import java.util.List;
  * ClusterMapManager allows components in Ambry to query the topology. This covers both cluster hardware and data
  * layout.
  */
-public class ClusterMapManager {
+public class ClusterMapManager implements ClusterMap {
   protected Cluster cluster;
   protected Layout layout;
 
@@ -68,28 +69,62 @@ public class ClusterMapManager {
     return new ClusterMapManager(cluster, layout);
   }
 
-  // API for the Coordinator
-  // -----------------------
+  // Implementation of ClusterMap interface
+  // --------------------------------------
 
-  public ArrayList<Partition> getReadWritePartitions() {
-    ArrayList<Partition> rwPartitions = new ArrayList<Partition>();
-    for (Partition partition : layout.getPartitions()) {
-      if (partition.getState() == Partition.State.READ_WRITE) {
-        rwPartitions.add(partition);
+  public List<Partition> getWritablePartitions() {
+    return layout.getWritablePartitions();
+  }
+
+  @Override
+  public int getNumWritablePartitions() {
+    return getWritablePartitions().size();
+  }
+
+  @Override
+  public PartitionIdentifier getWritablePartitionByOffset(int offset) {
+    return layout.getWritablePartitions().get(offset).getPartitionId();
+  }
+
+  @Override
+  public PartitionId getPartitionIdentifier(byte[] bytes) {
+    return PartitionId.make(bytes);
+  }
+
+  public Partition getPartition(PartitionIdentifier partitionIdentifier) {
+    return layout.getPartition(partitionIdentifier);
+  }
+
+  @Override
+  public List<ReplicaContext> getReplicas(PartitionIdentifier partitionIdentifier) {
+    List<ReplicaContext> replicaContexts = new ArrayList<ReplicaContext>();
+
+    for (Replica replica : getPartition(partitionIdentifier).getReplicas()) {
+        replicaContexts.add(replica.getReplicaContext());
+
+    }
+
+    return replicaContexts;
+  }
+
+
+  @Override
+  public List<ReplicaContext> getPeerReplicas(PartitionIdentifier partitionIdentifier, ReplicaContext replicaContext) {
+    List<ReplicaContext> peerReplicaContexts = new ArrayList<ReplicaContext>();
+    for(ReplicaContext peerReplicaContext : getReplicas(partitionIdentifier)) {
+      if (!peerReplicaContext.equals(replicaContext)) {
+        peerReplicaContexts.add(peerReplicaContext);
       }
     }
-    return rwPartitions;
-  }
 
-  public Partition getPartition(PartitionId partitionId) {
-    return layout.getPartition(partitionId);
+    return peerReplicaContexts;
   }
 
 
-  // API for the DataNode
+  // Administrative API
   // -----------------------
 
-  public ArrayList<Replica> getPeerReplicas(Replica replica) {
+  public List<Replica> getPeerReplicas(Replica replica) {
     ArrayList<Replica> peerReplicas = new ArrayList<Replica>();
 
     for (Replica peerReplica : replica.getPartition().getReplicas()) {
@@ -101,8 +136,6 @@ public class ClusterMapManager {
     return peerReplicas;
   }
 
-  // Administrative API
-  // -----------------------
 
   public long getRawCapacityGB() {
     return cluster.getCapacityGB();
