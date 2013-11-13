@@ -13,7 +13,19 @@ public class Utils {
 
   public static String readShortString(DataInputStream input) throws IOException {
     Short size = input.readShort();
-    if(size < 0)
+    if(size <= 0)
+      return null;
+    byte[] bytes = new byte[size];
+    int read = input.read(bytes);
+    if (read != size) {
+      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+    }
+    return new String(bytes, "UTF-8");
+  }
+
+  public static String readIntString(DataInputStream input) throws IOException {
+    int size = input.readInt();
+    if(size <= 0)
       return null;
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
@@ -167,5 +179,28 @@ public class Utils {
     Properties props = new Properties();
     props.load(propStream);
     return props;
+  }
+
+  /**
+   * Serializes a nullable string into byte buffer
+   * @param outputBuffer The output buffer to serialize the value to
+   * @param value The value to serialize
+   */
+  public static void serializeNullableString(ByteBuffer outputBuffer, String value) {
+    if (value == null)
+      outputBuffer.putInt(0);
+    else {
+      outputBuffer.putInt(value.length());
+      outputBuffer.put(value.getBytes());
+    }
+  }
+
+  /**
+   * Returns the length of a nullable string
+   * @param value The string whose length is needed
+   * @return The length of the string. 0 if null.
+   */
+  public static int getNullableStringLength(String value) {
+    return value == null ? 0 : value.length();
   }
 }

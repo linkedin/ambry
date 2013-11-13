@@ -7,72 +7,18 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * The set of data stored in the index
- */
-
-class BlobIndexValue {
-  private final long size;
-  private final long offset;
-  private byte flags;
-  private long timeToLive;
-
-  BlobIndexValue(long size, long offset, byte flags, long timeToLive) {
-    this.size = size;
-    this.offset = offset;
-    this.flags = flags;
-    this.timeToLive = timeToLive;
-  }
-
-  public long getSize() {
-    return size;
-  }
-
-  public long getOffset() {
-    return offset;
-  }
-
-  public byte getFlags() {
-    return flags;
-  }
-
-  public long getTimeToLive() {
-    return timeToLive;
-  }
-}
-
-/**
- * A key and value that represents an index entry
- */
-class BlobIndexEntry {
-  private IndexKey key;
-  private BlobIndexValue value;
-
-  public BlobIndexEntry(IndexKey key, BlobIndexValue value) {
-    this.key = key;
-    this.value = value;
-  }
-
-  public IndexKey getKey() {
-    return this.key;
-  }
-
-  public BlobIndexValue getValue() {
-    return this.value;
-  }
-}
-
-/**
  * The index implementation that is responsible for adding and modifying index entries,
  * recovering an index from the log and commit and recover index to disk
  */
 public class BlobIndex {
-  private ConcurrentHashMap<IndexKey, BlobIndexValue> index = new ConcurrentHashMap<IndexKey, BlobIndexValue>();
+  protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
   private AtomicLong logEndOffset;
   private BlobJournal indexJournal;
   private File indexFile;
@@ -82,7 +28,82 @@ public class BlobIndex {
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  BlobIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException  {
+  /**
+   * A key and value that represents an index entry
+   */
+  public static class BlobIndexEntry {
+    private StoreKey key;
+    private BlobIndexValue value;
+
+    public BlobIndexEntry(StoreKey key, BlobIndexValue value) {
+      this.key = key;
+      this.value = value;
+    }
+
+    public StoreKey getKey() {
+      return this.key;
+    }
+
+    public BlobIndexValue getValue() {
+      return this.value;
+    }
+  }
+
+  /**
+   * The set of data stored in the index
+   */
+
+  public static class BlobIndexValue {
+    public enum Flags {
+      Delete_Index
+    }
+
+    private final long size;
+    private final long offset;
+    private byte flags;
+    private long timeToLiveInMs;
+
+    public BlobIndexValue(long size, long offset, byte flags, long timeToLiveInMs) {
+      this.size = size;
+      this.offset = offset;
+      this.flags = flags;
+      this.timeToLiveInMs = timeToLiveInMs;
+    }
+
+    public BlobIndexValue(long size, long offset, long timeToLiveInMs) {
+      this(size, offset, (byte)0, timeToLiveInMs);
+    }
+
+    public long getSize() {
+      return size;
+    }
+
+    public long getOffset() {
+      return offset;
+    }
+
+    public byte getFlags() {
+      return flags;
+    }
+
+    public boolean isFlagSet(Flags flag) {
+      return ((flags & (1 << flag.ordinal())) != 0);
+    }
+
+    public long getTimeToLiveInMs() {
+      return timeToLiveInMs;
+    }
+
+    public void setTimeToLive(long timeToLiveInMs) {
+      this.timeToLiveInMs = timeToLiveInMs;
+    }
+
+    public void setFlag(Flags flag) {
+      flags = (byte)(flags | (1 << flag.ordinal()));
+    }
+  }
+
+  public BlobIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException  {
     try {
       logEndOffset = new AtomicLong(0);
       indexJournal = new BlobJournal();
@@ -116,31 +137,58 @@ public class BlobIndex {
     this.logEndOffset.set(fileEndOffset);
   }
 
-  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
-    if (this.logEndOffset.get() >fileEndOffset) {
+  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long logEndOffset) {
+    if (this.logEndOffset.get() > logEndOffset) {
       throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset");
     }
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
     }
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(logEndOffset);
   }
 
-  public boolean exist(IndexKey key) {
+  public boolean exist(StoreKey key) {
     return index.containsKey(key);
   }
 
-  public ArrayList<IndexKey> findMissingEntries(ArrayList<IndexKey> keys) {
-    ArrayList<IndexKey> missingEntries = new ArrayList<IndexKey>();
-    for (IndexKey key : keys) {
+  public void markAsDeleted(StoreKey id, long logEndOffset) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null) {
+      logger.error("id {} not present in index. marking id as deleted failed", id);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    value.setFlag(BlobIndexValue.Flags.Delete_Index);
+    index.put(id, value);
+    this.logEndOffset.set(logEndOffset);
+  }
+
+  public void updateTTL(StoreKey id, long ttl, long logEnfOffset) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null) {
+      logger.error("id {} not present in index. updating ttl failed", id);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    value.setTimeToLive(ttl);
+    index.put(id, value);
+    this.logEndOffset.set(logEnfOffset);
+  }
+
+  public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
+    BlobIndexValue value = index.get(id);
+    if (value == null || value.isFlagSet(BlobIndexValue.Flags.Delete_Index)) {
+      logger.error("id {} not present in index. cannot find blob");
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    }
+    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
+  }
+
+  public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
+    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
+    for (StoreKey key : keys) {
       if (!exist(key))
         missingEntries.add(key);
     }
     return missingEntries;
-  }
-
-  public BlobIndexValue getValue(IndexKey key) {
-    return index.get(key);
   }
 
   // TODO need to fix this
@@ -163,7 +211,7 @@ public class BlobIndex {
     private Object lock = new Object();
     private final File file;
     private Short version = 0;
-    private IndexKeyFactory factory;
+    private StoreKeyFactory factory;
 
     public IndexPersistor(File file)
             throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException {
@@ -191,10 +239,10 @@ public class BlobIndex {
           log.flush();
 
           // write the entries
-          for (Map.Entry<IndexKey, BlobIndexValue> entry : index.entrySet()) {
+          for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
             writer.write(entry.getKey().toString() + " " + entry.getValue().getOffset() + " " +
                     entry.getValue().getSize() + " " + entry.getValue().getFlags() + " " +
-                    entry.getValue().getTimeToLive());
+                    entry.getValue().getTimeToLiveInMs());
             writer.newLine();
           }
           writer.write("fileendpointer " + fileEndPointer);
@@ -242,7 +290,7 @@ public class BlobIndex {
                  }
                  else if(fields.length == 5) {
                    // get key
-                   IndexKey key = factory.getKey(fields[0]);
+                   StoreKey key = factory.getStoreKey(fields[0]);
                    long offset = Long.parseLong(fields[1]);
                    long size = Long.parseLong(fields[2]);
                    byte flags = Byte.parseByte(fields[3]);

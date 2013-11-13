@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -31,7 +32,7 @@ public class Log implements Write, Read {
     currentWriteOffset = new AtomicLong(0);
   }
 
-  MessageReadSet getView(BlobReadOptions[] readOptions) throws IOException {
+  MessageReadSet getView(List<BlobReadOptions> readOptions) throws IOException {
     return new BlobMessageReadSet(file, fileChannel, readOptions, currentWriteOffset.get());
   }
 
@@ -40,12 +41,16 @@ public class Log implements Write, Read {
   }
 
   public void setLogEndOffset(long endOffset) throws IOException {
-    if (endOffset >= fileChannel.size()) {
+    if (endOffset > fileChannel.size()) {
       throw new IllegalArgumentException("fileEndPosition outside the file size");
     }
     fileChannel.position(endOffset);
     logger.trace("Setting log end offset {}", endOffset);
     this.currentWriteOffset.set(endOffset);
+  }
+
+  public long getLogEndOffset() {
+    return currentWriteOffset.get();
   }
 
   @Override
@@ -78,7 +83,7 @@ public class Log implements Write, Read {
   }
 
   @Override
-  public void readInto(ByteBuffer buffer , int position) throws IOException {
+  public void readInto(ByteBuffer buffer , long position) throws IOException {
     fileChannel.read(buffer, position);
   }
 }

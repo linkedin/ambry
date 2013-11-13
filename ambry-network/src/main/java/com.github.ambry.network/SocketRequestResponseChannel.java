@@ -89,8 +89,9 @@ public class SocketRequestResponseChannel implements RequestResponseChannel{
   }
 
   /** Send a response back to the socket server to be sent over the network */
-  public void sendResponse(Response response) throws InterruptedException {
-    responseQueues.get(((SocketServerResponse)response).getProcessor()).put(response);
+  public void sendResponse(Send payloadToSend, Request originalRequest) throws InterruptedException {
+    SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend);
+    responseQueues.get(response.getProcessor()).put(response);
   }
 
   /** Get the next request or block until there is one */

@@ -4,9 +4,8 @@ package com.github.ambry.messageformat;
  * Set of flags used to identify different types of messages
  **/
 public enum MessageFormatFlags {
-  SystemMetadata,
+  BlobProperties,
   UserMetadata,
-  MessageHeader,
   Data,
   All
 }

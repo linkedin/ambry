@@ -10,28 +10,30 @@ import java.nio.ByteBuffer;
 /**
  * Request Response for serialization and de-serialization
  */
-enum RequestResponseType {
-  PutRequest,
-  GetRequest,
-  PutReponse,
-  GetResponse
-}
 
 public abstract class RequestOrResponse implements Send {
   protected final RequestResponseType type;
   protected final int correlationId;
   protected short versionId;
+  protected String clientId;
   protected ByteBuffer bufferToSend;
   protected Logger logger = LoggerFactory.getLogger(getClass());
-  private static final int Request_Response_Size = 8;
-  private static final int Request_Response_Type_Size = 2;
-  private static final int Request_Response_Version_Size = 2;
-  private static final int Correlation_Id_Size = 4;
+  protected static final int PartitionId_Size_In_Bytes = 8;
+  protected static final int Blob_Id_Size_In_Bytes = 2;
+  protected static final short Request_Response_Version = 1;
 
-  public RequestOrResponse(RequestResponseType type, short versionId, int correlationId) {
+  private static final int Request_Response_Size_In_Bytes = 8;
+  private static final int Request_Response_Type_Size_In_Bytes = 2;
+  private static final int Request_Response_Version_Size_In_Bytes = 2;
+  private static final int Correlation_Id_Size_In_Bytes = 4;
+  private static final int ClientId_Field_Size_In_Bytes = 4;
+
+
+  public RequestOrResponse(RequestResponseType type, short versionId, int correlationId, String clientId) {
     this.type = type;
     this.versionId = versionId;
     this.correlationId = correlationId;
+    this.clientId = clientId;
   }
 
   public RequestResponseType getRequestType() {
@@ -46,6 +48,10 @@ public abstract class RequestOrResponse implements Send {
     return versionId;
   }
 
+  public String getClientId() {
+    return clientId;
+  }
+
   protected void writeHeader() {
     if (bufferToSend == null) {
       throw new IllegalStateException("Buffer to send should not be null");
@@ -54,12 +60,15 @@ public abstract class RequestOrResponse implements Send {
     bufferToSend.putShort((short)type.ordinal());
     bufferToSend.putShort(versionId);
     bufferToSend.putInt(correlationId);
+    bufferToSend.putInt(clientId.length());
+    bufferToSend.put(clientId.getBytes());
   }
 
   public long sizeInBytes() {
-    // size + type + versionId + correlationId
-    return Request_Response_Size + Request_Response_Type_Size +
-            Request_Response_Version_Size + Correlation_Id_Size;
+    // size + type + versionId + correlationId + clientId
+    return Request_Response_Size_In_Bytes + Request_Response_Type_Size_In_Bytes +
+            Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
+            ClientId_Field_Size_In_Bytes + clientId.length();
   }
 }
 

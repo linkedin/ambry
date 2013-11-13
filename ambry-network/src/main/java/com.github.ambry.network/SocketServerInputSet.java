@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.utils.ByteBufferInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,7 @@ import java.nio.ByteBuffer;
 public class SocketServerInputSet extends InputStream implements Receive {
 
   private ByteBuffer buffer = null;
+  private ByteBufferInputStream stream;
   private int sizeToRead;        // need to change to long
   private int sizeRead;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -27,7 +29,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
 
   @Override
   public int read() throws IOException {
-    return buffer.get();
+    return (buffer.get() & 0xFF);
   }
 
   @Override

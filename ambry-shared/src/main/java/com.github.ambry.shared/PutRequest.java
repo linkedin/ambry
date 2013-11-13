@@ -2,6 +2,8 @@ package com.github.ambry.shared;
 
 
 import com.github.ambry.utils.Utils;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobPropertySerDe;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -11,81 +13,78 @@ import java.nio.channels.WritableByteChannel;
  */
 public class PutRequest extends RequestOrResponse {
 
-  private long logicalVolumeId;
-  private ByteBuffer metadata;
+  private long partitionId;
+  private ByteBuffer usermetadata;
   private InputStream data;
-  private String clientId;
-  private String blobId;
-  private Long dataSize;
+  private BlobId blobId;
   private long sentBytes = 0;
+  private BlobProperties properties;
+
+  private static final int UserMetadata_Size_InBytes = 4;
 
 
-  private static final int Logical_Volume_Id_Size_InBytes = 8;
-  private static final int ClientId_Size_InBytes = 2;
-  private static final int BlobId_Size_InBytes = 2;
-  private static final int Metadata_Size_InBytes = 4;
-  private static final int Data_Size_InBytes = 8;
-
-
-  public PutRequest(short versionId, long logicalVolumeId, int correlationId, String clientId,
-                    String blobId, ByteBuffer metadata, InputStream data, long dataSize) {
-    super(RequestResponseType.PutRequest, versionId, correlationId);
+  public PutRequest(long partitionId, int correlationId, String clientId,
+                    BlobId blobId, ByteBuffer usermetadata,
+                    InputStream data, BlobProperties properties) {
+    super(RequestResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
 
     this.blobId = blobId;
-    this.clientId = clientId;
-    this.logicalVolumeId = logicalVolumeId;
-    this.metadata = metadata;
+    this.partitionId = partitionId;
+    this.usermetadata = usermetadata;
     this.data = data;
-    this.dataSize = dataSize;
+    this.properties = properties;
   }
 
   public static PutRequest readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutRequest) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
-    }
+    RequestResponseType type = RequestResponseType.PutRequest;
     short versionId  = stream.readShort();
     int correlationId = stream.readInt();
-    long logicalVolumeId = stream.readLong();
-    String clientId = Utils.readShortString(stream);
-    String blobId = Utils.readShortString(stream);
+    String clientId = Utils.readIntString(stream);
+    long partitionId = stream.readLong();
+    ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
+    BlobId id = new BlobId(blobIdBytes);
+    BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
-    long dataSize = stream.readLong();
     InputStream data = stream;
-    return new PutRequest(versionId, logicalVolumeId, correlationId, clientId, blobId, metadata, data, dataSize);
+    // ignore version for now
+    return new PutRequest(partitionId, correlationId, clientId, id, metadata, data, properties);
   }
 
-  public long getLogicalVolumeId() {
-    return logicalVolumeId;
+  public long getPartitionId() {
+    return partitionId;
   }
 
-  public String getClientId() {
-    return clientId;
-  }
-
-  public String getBlobId() {
+  public BlobId getBlobId() {
     return blobId;
   }
 
-  public ByteBuffer getMetadata() {
-    return metadata;
+  public ByteBuffer getUsermetadata() {
+    return usermetadata;
   }
 
   public InputStream getData() {
     return data;
   }
 
+  public long getDataSize() {
+    return properties.getBlobSize();
+  }
+
+  public BlobProperties getBlobProperties() {
+    return properties;
+  }
+
   @Override
   public long sizeInBytes() {
-    // sizeExcludingData + data size
-    return  sizeExcludingData() + dataSize;
+    // sizeExcludingData + blob size
+    return  sizeExcludingData() + properties.getBlobSize();
   }
 
   private int sizeExcludingData() {
-    // header + logicalVolumeId + clientId size + clientId +
-    // blobId size + blobId + metadata size + metadata + data size
-    return  (int)super.sizeInBytes() + Logical_Volume_Id_Size_InBytes + ClientId_Size_InBytes + clientId.length() +
-            BlobId_Size_InBytes + blobId.length() + Metadata_Size_InBytes + metadata.capacity() + Data_Size_InBytes;
+    // header + partitionId + blobId size + blobId + metadata size + metadata + blob property size
+    return  (int)super.sizeInBytes() + PartitionId_Size_In_Bytes + Blob_Id_Size_In_Bytes +
+            blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
+            BlobPropertySerDe.getBlobPropertySize(properties);
   }
 
   @Override
@@ -93,14 +92,12 @@ public class PutRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
-      bufferToSend.putLong(logicalVolumeId);
-      bufferToSend.putShort((short)clientId.length());
-      bufferToSend.put(clientId.getBytes());
-      bufferToSend.putShort((short)blobId.length());
-      bufferToSend.put(blobId.getBytes());
-      bufferToSend.putInt(metadata.capacity());
-      bufferToSend.put(metadata);
-      bufferToSend.putLong(dataSize);
+      bufferToSend.putLong(partitionId);
+      bufferToSend.putShort(blobId.sizeInBytes());
+      bufferToSend.put(blobId.toBytes());
+      BlobPropertySerDe.putBlobPropertyToBuffer(bufferToSend, properties);
+      bufferToSend.putInt(usermetadata.capacity());
+      bufferToSend.put(usermetadata);
       bufferToSend.flip();
     }
     while (sentBytes < sizeInBytes()) {
@@ -114,7 +111,7 @@ public class PutRequest extends RequestOrResponse {
       }
       logger.trace("sent Bytes from Put Request {}", sentBytes);
       bufferToSend.clear();
-      int dataRead = data.read(bufferToSend.array(), 0, (int)Math.min(bufferToSend.capacity(), dataSize));
+      int dataRead = data.read(bufferToSend.array(), 0, (int)Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
       bufferToSend.limit(dataRead);
     }
   }

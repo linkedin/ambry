@@ -2,6 +2,9 @@ package com.github.ambry.network;
 
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -46,24 +49,27 @@ public class SocketServerTest {
     new Random().nextBytes(bufmetadata);
 
     PutRequest emptyRequest =
-            new PutRequest((short)1,0, correlationId, "test", "1234", ByteBuffer.wrap(bufmetadata), stream, 10);
+            new PutRequest(0, correlationId, "test", new BlobId("1234"), ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
     channel.send(emptyRequest);
     RequestResponseChannel requestResponseChannel = server.getRequestResponseChannel();
     Request request = requestResponseChannel.receiveRequest();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
+    Assert.assertEquals(requestStream.readShort(), 0); // read type
     PutRequest requestFromNetwork = PutRequest.readFrom(requestStream);
     Assert.assertEquals(1, requestFromNetwork.getVersionId());
-    Assert.assertEquals(0, requestFromNetwork.getLogicalVolumeId());
+    Assert.assertEquals(0, requestFromNetwork.getPartitionId());
     Assert.assertEquals(correlationId, requestFromNetwork.getCorrelationId());
     Assert.assertEquals("test", requestFromNetwork.getClientId());
-    Assert.assertEquals("1234", requestFromNetwork.getBlobId());
-    Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getMetadata().array());
+    Assert.assertEquals("1234", new String(requestFromNetwork.getBlobId().toBytes().array()));
+    Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getUsermetadata().array());
+    Assert.assertEquals(10, requestFromNetwork.getDataSize());
+    Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());
     InputStream streamFromNetwork = requestFromNetwork.getData();
     for (int i = 0; i < 10; i++)
     {
-      Assert.assertEquals(bufdata[i], streamFromNetwork.read());
+      Assert.assertEquals(bufdata[i], (byte)streamFromNetwork.read());
     }
     try {
       streamFromNetwork.read();
@@ -74,12 +80,12 @@ public class SocketServerTest {
     }
 
     // send response back and ensure response is received
-    PutResponse response = new PutResponse((short)0, 1, (short)2);
-    requestResponseChannel.sendResponse(new SocketServerResponse(request,response));
+    PutResponse response = new PutResponse(1, "clientid1", (short)2);
+    requestResponseChannel.sendResponse(response, request);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);
-    Assert.assertEquals(responseReplay.getVersionId(), 0);
+    Assert.assertEquals(responseReplay.getVersionId(), 1);
     Assert.assertEquals(responseReplay.getError(), 2);
   }
 

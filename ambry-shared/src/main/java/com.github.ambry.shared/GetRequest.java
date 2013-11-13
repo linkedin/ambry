@@ -1,12 +1,15 @@
 package com.github.ambry.shared;
 
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 
 /**
  * GetRequest to fetch data
@@ -14,37 +17,56 @@ import java.nio.channels.WritableByteChannel;
 public class GetRequest extends RequestOrResponse {
 
   private MessageFormatFlags flags;
-  private BlobId id;
+  private ArrayList<BlobId> ids;
+  private int sizeSent;
+  private long totalIdSize;
+  private long partitionId;
 
   private static final int MessageFormat_Size_InBytes = 2;
-  private static final int Blob_Id_Size_InBytes = 2;
+  private static final int Blob_Id_Count_Size_InBytes = 4;
 
-  public GetRequest(short versionId, int correlationId, MessageFormatFlags flags, BlobId id) {
-    super(RequestResponseType.GetRequest, versionId, correlationId);
+  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, long partitionId, ArrayList<BlobId> ids) {
+    super(RequestResponseType.GetRequest, Request_Response_Version, correlationId,clientId);
 
     this.flags = flags;
-    this.id = id;
+    this.ids = ids;
+    this.sizeSent = 0;
+    this.partitionId = partitionId;
+    totalIdSize = 0;
+    for (BlobId id : ids) {
+      totalIdSize += Blob_Id_Size_In_Bytes + id.sizeInBytes();
+    }
   }
 
   public MessageFormatFlags getMessageFormatFlag() {
     return flags;
   }
 
-  public BlobId getBlobId() {
-    return id;
+  public List<? extends StoreKey> getBlobIds() {
+    return ids;
+  }
+
+  public long getPartitionId() {
+    return partitionId;
   }
 
   public static GetRequest readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.GetRequest) {
-      throw new IllegalArgumentException("The type of request response is not compatible");
-    }
+    RequestResponseType type = RequestResponseType.GetRequest;
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
+    String clientId = Utils.readIntString(stream);
     MessageFormatFlags messageType = MessageFormatFlags.values()[stream.readShort()];
-    ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
-    BlobId id = new BlobId(blobIdBytes);
-    return new GetRequest(versionId, correlationId, messageType, id);
+    long partition = stream.readLong();
+    int blobCount = stream.readInt();
+    ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
+    while (blobCount > 0) {
+      ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
+      BlobId id = new BlobId(blobIdBytes);
+      ids.add(id);
+      blobCount--;
+    }
+    // ignore version for now
+    return new GetRequest(correlationId, clientId, messageType, partition, ids);
   }
 
   @Override
@@ -53,24 +75,30 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putShort((short) flags.ordinal());
-      ByteBuffer buf = id.toBytes();
-      bufferToSend.putShort((short)id.sizeInBytes());
-      bufferToSend.put(buf.array());
+      bufferToSend.putLong(partitionId);
+      bufferToSend.putInt(ids.size());
+      for (BlobId id : ids) {
+        ByteBuffer buf = id.toBytes();
+        bufferToSend.putShort(id.sizeInBytes());
+        bufferToSend.put(buf.array());
+      }
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
-      channel.write(bufferToSend);
+      int written = channel.write(bufferToSend);
+      sizeSent += written;
     }
   }
 
   @Override
   public boolean isSendComplete() {
-    return bufferToSend.remaining() == 0;
+    return sizeSent == sizeInBytes();
   }
 
   @Override
   public long sizeInBytes() {
     // header + error
-    return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Size_InBytes + id.sizeInBytes();
+    return super.sizeInBytes() + MessageFormat_Size_InBytes + PartitionId_Size_In_Bytes +
+           Blob_Id_Count_Size_InBytes + totalIdSize;
   }
 }

@@ -8,10 +8,11 @@ public interface RequestResponseChannel {
 
   /**
    * Queue's the response into the channel for the network server to pick up
-   * @param response The response to be sent over the network
+   * @param payloadToSend The payload to be sent over the network
+   * @param originalRequest The original request this response belongs to
    * @throws InterruptedException
    */
-  public void sendResponse(Response response) throws InterruptedException;
+  public void sendResponse(Send payloadToSend, Request originalRequest) throws InterruptedException;
 
   /**
    * Receives the request from the channel

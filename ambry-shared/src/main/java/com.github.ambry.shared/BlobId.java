@@ -1,13 +1,13 @@
 package com.github.ambry.shared;
 
-import com.github.ambry.store.IndexKey;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
 /**
  * The Id used to represent a blob uniquely
  */
-public class BlobId implements IndexKey, Comparable<BlobId>{
+public class BlobId implements StoreKey, Comparable<BlobId>{
 
   public static final int size = 24;
 
@@ -21,8 +21,8 @@ public class BlobId implements IndexKey, Comparable<BlobId>{
     this.id = new String(buf.array());
   }
 
-  public int sizeInBytes() {
-    return id.length();
+  public short sizeInBytes() {
+    return (short)id.length();
   }
 
   @Override

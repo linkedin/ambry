@@ -9,10 +9,10 @@ import java.io.IOException;
 public interface Read {
 
   /**
-   * Read from the underlying store(file) into the buffer starting at the given position
+   * Read from the underlying store(file) into the buffer starting at the given position in the store
    * @param buffer The buffer into which the read needs to write to
    * @param position The position to start the read from
    * @throws IOException
    */
-  void readInto(ByteBuffer buffer , int position) throws IOException;
+  void readInto(ByteBuffer buffer , long position) throws IOException;
 }

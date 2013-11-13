@@ -1,6 +1,8 @@
 package com.github.ambry.shared;
 
 
+import com.github.ambry.utils.Utils;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
@@ -14,8 +16,8 @@ public class PutResponse extends RequestOrResponse {
   private short error;
   private static final int Error_Size_InBytes = 2;
 
-  public PutResponse(short versionId, int correlationId, short error) {
-    super(RequestResponseType.PutReponse, versionId, correlationId);
+  public PutResponse(int correlationId, String clientId, short error) {
+    super(RequestResponseType.PutResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
   }
 
@@ -25,13 +27,15 @@ public class PutResponse extends RequestOrResponse {
 
   public static PutResponse readFrom(DataInputStream stream) throws IOException {
     RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutReponse) {
+    if (type != RequestResponseType.PutResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
+    String clientId = Utils.readIntString(stream);
     Short error = stream.readShort();
-    return new PutResponse(versionId, correlationId, error);
+    // ignore version for now
+    return new PutResponse(correlationId, clientId, error);
   }
 
   @Override

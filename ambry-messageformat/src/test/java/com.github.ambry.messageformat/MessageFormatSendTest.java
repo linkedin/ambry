@@ -43,23 +43,24 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTest() throws IOException {
-    // create three list of buffers each of size 1000 bytes
+  public void sendWriteTest() throws IOException, UnknownMessageFormatException {
+    // create one buffer of size 1004
 
     // add header,system metadata, user metadata and data to the buffers
-    ByteBuffer buf1 = ByteBuffer.allocate(1000);
+    ByteBuffer buf1 = ByteBuffer.allocate(1004);
     // fill header
-    buf1.putShort((short)0);                    // version
-    buf1.putLong(1000);                          // total size
-    String id = new String("012345678910123456789012");     // blob id
-    buf1.put(id.getBytes());
+    buf1.putShort((short)1);                    // version
+    buf1.putLong(950);                          // total size
     // put relative offsets
-    buf1.putInt(50);                           // system metadata relative offset
-    buf1.putInt(71);                           // user metadata relative offset
-    buf1.putInt(181);                          // data relative offset
+    buf1.putInt(54);                           // system metadata relative offset
+    buf1.putInt(75);                           // user metadata relative offset
+    buf1.putInt(185);                          // data relative offset
     buf1.putInt(123);                          // crc
+    String id = new String("012345678910123456789012");     // blob id
+    buf1.putInt(id.length());
+    buf1.put(id.getBytes());
 
-    buf1.putShort((short)0); // system metadata version
+    buf1.putShort((short)1); // system metadata version
     String attribute1 = "ttl";
     String attribute2 = "del";
     buf1.put(attribute1.getBytes()); // ttl name
@@ -69,19 +70,19 @@ public class MessageFormatSendTest {
     buf1.put(b);      // delete flag
     buf1.putInt(456); //crc
 
-    buf1.putShort((short)0); // user metadata version
+    buf1.putShort((short)1); // user metadata version
     buf1.putInt(100);
     byte[] usermetadata = new byte[100];
     new Random().nextBytes(usermetadata);
     buf1.put(usermetadata);
     buf1.putInt(123);
 
-    buf1.putShort((short)0); // data
-    buf1.putLong(805);
-    byte[] data = new byte[805];
+    buf1.putShort((short)0); // data version
+    buf1.putLong(805);       // data size
+    byte[] data = new byte[805];         // data
     new Random().nextBytes(data);
     buf1.put(data);
-    buf1.putInt(123);
+    buf1.putInt(123);                    // data crc
     buf1.flip();
 
     ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
@@ -90,43 +91,58 @@ public class MessageFormatSendTest {
 
     // get all
     MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All);
-    Assert.assertEquals(send.sizeInBytes(), 1000);
-    ByteBuffer bufresult = ByteBuffer.allocate(1000);
+    Assert.assertEquals(send.sizeInBytes(), 1004);
+    ByteBuffer bufresult = ByteBuffer.allocate(1004);
     WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
     while (!send.isSendComplete()) {
       send.writeTo(channel1);
     }
     Assert.assertArrayEquals(buf1.array(), bufresult.array());
-    buf1.flip();
 
     // get data
     MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Data);
-    Assert.assertEquals(send1.sizeInBytes(), 809);
+    Assert.assertEquals(send1.sizeInBytes(), 819);
     bufresult.clear();
     WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
     while (!send1.isSendComplete()) {
       send1.writeTo(channel2);
     }
 
-    for (int i = 0; i < 805; i++) {
-      Assert.assertEquals(data[i], bufresult.array()[i]);
+    for (int i = 10; i < 815; i++) {
+      Assert.assertEquals(data[i - 10], bufresult.array()[i]);
     }
-    buf1.flip();
 
     // get user metadata
     MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.UserMetadata);
-    Assert.assertEquals(send2.sizeInBytes(), 104);
+    Assert.assertEquals(send2.sizeInBytes(), 110);
     bufresult.clear();
     WritableByteChannel channel3 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
     while (!send2.isSendComplete()) {
       send2.writeTo(channel2);
     }
 
-    for (int i = 0; i < 100; i++) {
-      Assert.assertEquals(usermetadata[i], bufresult.array()[i]);
+    for (int i = 6; i < 102; i++) {
+      Assert.assertEquals(usermetadata[i - 6], bufresult.array()[i]);
     }
 
     // get system metadata
+    MessageFormatSend send3 = new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties);
+    Assert.assertEquals(send3.sizeInBytes(), 21);
+    bufresult.clear();
+    WritableByteChannel channel4 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
+    while (!send3.isSendComplete()) {
+      send3.writeTo(channel4);
+    }
 
+    bufresult.flip();
+    Assert.assertEquals(bufresult.getShort(), (short)1);
+    byte[] attributes = new byte[3];
+    bufresult.get(attributes);
+    Assert.assertEquals("ttl", new String(attributes));
+    Assert.assertEquals(12345, bufresult.getLong());
+    bufresult.get(attributes);
+    Assert.assertEquals("del", new String(attributes));
+    Assert.assertEquals(1, bufresult.get());
+    Assert.assertEquals(456, bufresult.getInt());
   }
 }
