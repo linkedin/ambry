@@ -61,13 +61,17 @@ public class BlobIndex {
     private final long size;
     private final long offset;
     private byte flags;
-    private long timeToLive;
+    private long timeToLiveInMs;
 
-    public BlobIndexValue(long size, long offset, byte flags, long timeToLive) {
+    public BlobIndexValue(long size, long offset, byte flags, long timeToLiveInMs) {
       this.size = size;
       this.offset = offset;
       this.flags = flags;
-      this.timeToLive = timeToLive;
+      this.timeToLiveInMs = timeToLiveInMs;
+    }
+
+    public BlobIndexValue(long size, long offset, long timeToLiveInMs) {
+      this(size, offset, (byte)0, timeToLiveInMs);
     }
 
     public long getSize() {
@@ -86,12 +90,12 @@ public class BlobIndex {
       return ((flags & (1 << flag.ordinal())) != 0);
     }
 
-    public long getTimeToLive() {
-      return timeToLive;
+    public long getTimeToLiveInMs() {
+      return timeToLiveInMs;
     }
 
-    public void setTimeToLive(long ttl) {
-      timeToLive = ttl;
+    public void setTimeToLive(long timeToLiveInMs) {
+      this.timeToLiveInMs = timeToLiveInMs;
     }
 
     public void setFlag(Flags flag) {
@@ -175,7 +179,7 @@ public class BlobIndex {
       logger.error("id {} not present in index. cannot find blob");
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
     }
-    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLive());
+    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
   }
 
   public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
@@ -238,7 +242,7 @@ public class BlobIndex {
           for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
             writer.write(entry.getKey().toString() + " " + entry.getValue().getOffset() + " " +
                     entry.getValue().getSize() + " " + entry.getValue().getFlags() + " " +
-                    entry.getValue().getTimeToLive());
+                    entry.getValue().getTimeToLiveInMs());
             writer.newLine();
           }
           writer.write("fileendpointer " + fileEndPointer);

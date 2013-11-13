@@ -43,7 +43,7 @@ public class GetResponse extends RequestOrResponse {
       outputBuffer.putShort(messageInfo.getStoreKey().sizeInBytes());
       outputBuffer.put(messageInfo.getStoreKey().toBytes());
       outputBuffer.putLong(messageInfo.getSize());
-      outputBuffer.putLong(messageInfo.getTimeToLive());
+      outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
     }
   }
 

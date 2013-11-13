@@ -26,6 +26,9 @@ public class MessageFormat {
   public static final int Data_Current_Version = 1;
 
   public static final short Message_Header_Version_V1 = 1;
+  public static final short SystemMetadata_Version_V1 = 1;
+  public static final short UserMetadata_Version_V1 = 1;
+  public static final short Data_Version_V1 = 1;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
   // Methods below defines the write format for the current version. W.r.t write there is always only one version,
@@ -97,7 +100,7 @@ public class MessageFormat {
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case 1:
+      case SystemMetadata_Version_V1:
         return SystemMetadata_Format_V1.deserializeBlobProperties(crcStream);
       default:
         throw new DataCorruptException("blob property version not supported");
@@ -109,7 +112,7 @@ public class MessageFormat {
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case 1:
+      case SystemMetadata_Version_V1:
         return SystemMetadata_Format_V1.deserializeDeleteRecord(crcStream);
       default:
         throw new DataCorruptException("delete record version not supported");
@@ -121,7 +124,7 @@ public class MessageFormat {
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case 1:
+      case SystemMetadata_Version_V1:
         return SystemMetadata_Format_V1.deserializeTTLRecord(crcStream);
       default:
         throw new DataCorruptException("ttl record version not supported");
@@ -133,7 +136,7 @@ public class MessageFormat {
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case 1:
+      case UserMetadata_Version_V1:
         return UserMetadata_Format_V1.deserializeUserMetadata(crcStream);
       default:
         throw new DataCorruptException("ttl record version not supported");
@@ -145,7 +148,7 @@ public class MessageFormat {
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case 1:
+      case Data_Version_V1:
         return Data_Format_V1.deserializeData(crcStream);
       default:
         throw new DataCorruptException("ttl record version not supported");
@@ -266,7 +269,7 @@ public class MessageFormat {
 
     public static void serializeBlobPropertyRecord(ByteBuffer outputBuffer, BlobProperties properties) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(SystemMetadata_Version_V1);
       outputBuffer.putShort((short)SystemMetadataRecordType.BlobPropertyRecord.ordinal());
       BlobPropertySerDe.putBlobPropertyToBuffer(outputBuffer, properties);
       Crc32 crc = new Crc32();
@@ -276,7 +279,7 @@ public class MessageFormat {
 
     public static void serializeDeleteRecord(ByteBuffer outputBuffer, boolean deleteFlag) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(SystemMetadata_Version_V1);
       outputBuffer.putShort((short)SystemMetadataRecordType.DeleteRecord.ordinal());
       outputBuffer.put(deleteFlag ? (byte) 1 : (byte) 0);
       Crc32 crc = new Crc32();
@@ -286,7 +289,7 @@ public class MessageFormat {
 
     public static void serializeTTLRecord(ByteBuffer outputBuffer, long ttl) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(SystemMetadata_Version_V1);
       outputBuffer.putShort((short)SystemMetadataRecordType.TTLRecord.ordinal());
       outputBuffer.putLong(ttl);
       Crc32 crc = new Crc32();
@@ -362,7 +365,7 @@ public class MessageFormat {
 
     public static void serializeUserMetadata(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(UserMetadata_Version_V1);
       outputBuffer.putInt(userMetadata.limit());
       outputBuffer.put(userMetadata);
       Crc32 crc = new Crc32();
@@ -396,7 +399,7 @@ public class MessageFormat {
     }
 
     public static void serializePartialData(ByteBuffer outputBuffer, long dataSize) {
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(UserMetadata_Version_V1);
       outputBuffer.putLong(dataSize);
     }
 

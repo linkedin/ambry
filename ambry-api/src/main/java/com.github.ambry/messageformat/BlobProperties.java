@@ -21,7 +21,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId) {
     // default set to 1 hour
-    timeToLiveInMs = SystemTime.getInstance().milliseconds() + (SystemTime.SecsPerHour * SystemTime.MsPerSec);
+    timeToLiveInMs = SystemTime.getInstance().milliseconds() + (SystemTime.MsPerSec * SystemTime.SecsPerHour);
     isPrivate = false;
     this.blobSize = blobSize;
     this.creationTimeInMs = SystemTime.getInstance().milliseconds();

@@ -51,20 +51,17 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
  */
 public class BlobMessageReadSet implements MessageReadSet {
 
-  private AtomicLong size;
   private final List<BlobReadOptions> readOptions;
   private final FileChannel fileChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public BlobMessageReadSet(File file, FileChannel fileChannel, List<BlobReadOptions> readOptions, long fileEndPosition) throws IOException {
 
-    size = new AtomicLong(0);
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
       if (readOption.getOffset() + readOption.getSize() > fileEndPosition) {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
-      size.addAndGet(readOption.getSize());
       logger.trace("MessageReadSet entry offset: {} size: ", readOption.getOffset(), readOption.getSize());
     }
     this.readOptions = readOptions;

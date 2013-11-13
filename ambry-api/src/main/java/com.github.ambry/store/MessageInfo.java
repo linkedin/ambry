@@ -6,12 +6,12 @@ package com.github.ambry.store;
 public class MessageInfo {
   private StoreKey key;
   private long size;
-  private long timeToLive;
+  private long timeToLiveInMs;
 
-  public MessageInfo(StoreKey key, long size, long timeToLive) {
+  public MessageInfo(StoreKey key, long size, long timeToLiveInMs) {
     this.key= key;
     this.size = size;
-    this.timeToLive = timeToLive;
+    this.timeToLiveInMs = timeToLiveInMs;
   }
 
   public MessageInfo(StoreKey key, long size) {
@@ -26,7 +26,7 @@ public class MessageInfo {
     return size;
   }
 
-  public long getTimeToLive() {
-    return timeToLive;
+  public long getTimeToLiveInMs() {
+    return timeToLiveInMs;
   }
 }

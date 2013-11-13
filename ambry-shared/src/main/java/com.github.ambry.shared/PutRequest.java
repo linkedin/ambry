@@ -76,12 +76,12 @@ public class PutRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // sizeExcludingData + data size
+    // sizeExcludingData + blob size
     return  sizeExcludingData() + properties.getBlobSize();
   }
 
   private int sizeExcludingData() {
-    // header + logicalVolumeId + blobId size + blobId + metadata size + metadata + data size
+    // header + partitionId + blobId size + blobId + metadata size + metadata + blob property size
     return  (int)super.sizeInBytes() + PartitionId_Size_In_Bytes + Blob_Id_Size_In_Bytes +
             blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
             BlobPropertySerDe.getBlobPropertySize(properties);

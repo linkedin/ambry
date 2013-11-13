@@ -7,11 +7,11 @@ import java.util.List;
  */
 public class StoreInfo {
   private final MessageReadSet readSet;
-  private final List<MessageInfo> messageSetInfo;
+  private final List<MessageInfo> messageSetInfos;
 
-  public StoreInfo(MessageReadSet readSet, List<MessageInfo> messageSetInfo) {
+  public StoreInfo(MessageReadSet readSet, List<MessageInfo> messageSetInfos) {
     this.readSet = readSet;
-    this.messageSetInfo = messageSetInfo;
+    this.messageSetInfos = messageSetInfos;
   }
 
   public MessageReadSet getMessageReadSet() {
@@ -19,6 +19,6 @@ public class StoreInfo {
   }
 
   public List<MessageInfo> getMessageReadSetInfo() {
-    return messageSetInfo;
+    return messageSetInfos;
   }
 }

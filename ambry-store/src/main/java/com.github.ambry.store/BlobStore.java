@@ -75,7 +75,9 @@ public class BlobStore implements Store {
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<BlobIndex.BlobIndexEntry> indexEntries = new ArrayList<BlobIndex.BlobIndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          BlobIndex.BlobIndexValue value = new BlobIndex.BlobIndexValue(info.getSize(), writeStartOffset, (byte)0, info.getTimeToLive());
+          BlobIndex.BlobIndexValue value = new BlobIndex.BlobIndexValue(info.getSize(),
+                                                                        writeStartOffset,
+                                                                        (byte)0, info.getTimeToLiveInMs());
           BlobIndex.BlobIndexEntry entry = new BlobIndex.BlobIndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
@@ -111,7 +113,7 @@ public class BlobStore implements Store {
         messageSetToUpdateTTL.writeTo(log);
         List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
         for (MessageInfo info : infoList) {
-          index.updateTTL(info.getStoreKey(), info.getTimeToLive(), log.getLogEndOffset());
+          index.updateTTL(info.getStoreKey(), info.getTimeToLiveInMs(), log.getLogEndOffset());
         }
       }
       catch (IOException e) {
