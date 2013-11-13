@@ -6,44 +6,58 @@ import com.github.ambry.utils.SystemTime;
  * The set of properties that the client can set
  */
 public class BlobProperties {
-  private long timeToLive;
-  private boolean isPrivate;
-  private String contentType;
-  private String memberId;
-  private String parentBlobId;
-  private long blobSize;
-  private String serviceId;
-  private long creationTime;
+  protected long timeToLiveInMs;
+  protected boolean isPrivate;
+  protected String contentType;
+  protected String memberId;
+  protected String parentBlobId;
+  protected long blobSize;
+  protected String serviceId;
+  protected long creationTimeInMs;
 
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   */
   public BlobProperties(long blobSize, String serviceId) {
-    timeToLive = SystemTime.getInstance().milliseconds() + (SystemTime.SecsPerHour * SystemTime.MsPerSec);
+    // default set to 1 hour
+    timeToLiveInMs = SystemTime.getInstance().milliseconds() + (SystemTime.SecsPerHour * SystemTime.MsPerSec);
     isPrivate = false;
     this.blobSize = blobSize;
-    this.creationTime = SystemTime.getInstance().milliseconds();
+    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
     this.serviceId = serviceId;
     this.contentType = null;
     this.memberId = null;
     this.parentBlobId = null;
   }
 
-  public BlobProperties(long timeToLive, boolean isPrivate, String contentType, String memberId,
-                        String parentBlobId, long blobSize, String serviceId, long creationTime) {
-    this.timeToLive = timeToLive;
+  /**
+   * @param timeToLiveInMs The System time in ms when the blob needs to be deleted
+   * @param isPrivate Is the blob secure
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param memberId The user who created this blob. Can be Null
+   * @param parentBlobId If this blob was generated from another blob, the id needs to be specified. Null otherwise
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   */
+  public BlobProperties(long timeToLiveInMs, boolean isPrivate, String contentType, String memberId,
+                        String parentBlobId, long blobSize, String serviceId) {
+    this.timeToLiveInMs = timeToLiveInMs;
     this.isPrivate = isPrivate;
     this.contentType = contentType;
     this.memberId = memberId;
     this.parentBlobId = parentBlobId;
     this.blobSize = blobSize;
     this.serviceId = serviceId;
-    this.creationTime = creationTime;
+    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
-  public void setTimeToLive(long timeToLive) {
-    this.timeToLive = timeToLive;
+  public void setTimeToLiveInMs(long timeToLiveInMs) {
+    this.timeToLiveInMs = timeToLiveInMs;
   }
 
-  public long getTimeToLive() {
-    return timeToLive;
+  public long getTimeToLiveInMs() {
+    return timeToLiveInMs;
   }
 
   public void setBlobSize(long blobSize) {
@@ -94,7 +108,7 @@ public class BlobProperties {
     return serviceId;
   }
 
-  public long getCreationTime() {
-    return creationTime;
+  public long getCreationTimeInMs() {
+    return creationTimeInMs;
   }
 }

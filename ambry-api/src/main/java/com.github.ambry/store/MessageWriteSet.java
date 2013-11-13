@@ -17,7 +17,8 @@ public interface MessageWriteSet {
   public long writeTo(Write writeChannel) throws IOException;
 
   /**
-   * Returns info about the messages contained in this write set
+   * Returns info about the messages contained in this write set. The messages
+   * need not be ordered in any specific format
    * @return The list of message info about the message set
    */
   public List<MessageInfo> getMessageSetInfo();

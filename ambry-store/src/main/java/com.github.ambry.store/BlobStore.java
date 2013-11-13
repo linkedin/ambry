@@ -66,7 +66,7 @@ public class BlobStore implements Store {
       try {
         // if any of the keys alreadys exist in the store, we fail
         for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-          if (index.exist(info.getKey())) {
+          if (index.exist(info.getStoreKey())) {
             throw new StoreException("key {} already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
           }
         }
@@ -75,8 +75,8 @@ public class BlobStore implements Store {
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<BlobIndex.BlobIndexEntry> indexEntries = new ArrayList<BlobIndex.BlobIndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          BlobIndex.BlobIndexValue value = new BlobIndex.BlobIndexValue(info.getSize(), writeStartOffset, (byte)0, info.getTTL());
-          BlobIndex.BlobIndexEntry entry = new BlobIndex.BlobIndexEntry(info.getKey(), value);
+          BlobIndex.BlobIndexValue value = new BlobIndex.BlobIndexValue(info.getSize(), writeStartOffset, (byte)0, info.getTimeToLive());
+          BlobIndex.BlobIndexEntry entry = new BlobIndex.BlobIndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
         }
@@ -95,7 +95,7 @@ public class BlobStore implements Store {
         messageSetToDelete.writeTo(log);
         List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
         for (MessageInfo info : infoList) {
-          index.markAsDeleted(info.getKey(), log.getLogEndOffset());
+          index.markAsDeleted(info.getStoreKey(), log.getLogEndOffset());
         }
       }
       catch (IOException e) {
@@ -111,7 +111,7 @@ public class BlobStore implements Store {
         messageSetToUpdateTTL.writeTo(log);
         List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
         for (MessageInfo info : infoList) {
-          index.updateTTL(info.getKey(), info.getTTL(), log.getLogEndOffset());
+          index.updateTTL(info.getStoreKey(), info.getTimeToLive(), log.getLogEndOffset());
         }
       }
       catch (IOException e) {

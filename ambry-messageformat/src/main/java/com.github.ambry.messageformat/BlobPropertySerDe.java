@@ -5,6 +5,15 @@ import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import java.io.IOException;
 
+// A class that derives from blob properties. It is mainly used to set
+// properties in BlobProperties that are not user editable
+class SystemMetadata extends BlobProperties {
+  public SystemMetadata(long timeToLiveInMs, boolean isPrivate, String contentType, String memberId,
+                        String parentBlobId, long blobSize, String serviceId, long creationTime) {
+    super(timeToLiveInMs, isPrivate, contentType, memberId, parentBlobId, blobSize, serviceId);
+    this.creationTimeInMs = creationTime;
+  }
+}
 /**
  * Serializes and deserializes BlobProperties
  */
@@ -21,41 +30,33 @@ public class BlobPropertySerDe {
            Private_Field_Size_In_Bytes +
            CreationTime_Field_Size_In_Bytes +
            BlobSize_Field_Size_In_Bytes +
-           Variable_Field_Size_In_Bytes + (properties.getContentType() == null ? 0 : properties.getContentType().length()) +
-           Variable_Field_Size_In_Bytes + (properties.getMemberId() == null ? 0 : properties.getMemberId().length()) +
-           Variable_Field_Size_In_Bytes + (properties.getParentBlobId() == null ? 0 : properties.getParentBlobId().length()) +
-           Variable_Field_Size_In_Bytes + (properties.getServiceId() == null ? 0 : properties.getServiceId().length());
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getContentType()) +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getMemberId()) +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getParentBlobId()) +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getServiceId());
   }
 
   public static BlobProperties getBlobPropertyFromStream(DataInputStream stream) throws IOException {
     long ttl = stream.readLong();
     boolean isPrivate = stream.readByte() == 1 ? true : false;
+    // TODO find how to use creation time
     long creationTime = stream.readLong();
     long blobSize = stream.readLong();
     String contentType = Utils.readIntString(stream);
     String memberId = Utils.readIntString(stream);
     String parentBlobId = Utils.readIntString(stream);
     String serviceId = Utils.readIntString(stream);
-    return new BlobProperties(ttl, isPrivate, contentType, memberId, parentBlobId, blobSize, serviceId, creationTime);
+    return new SystemMetadata(ttl, isPrivate, contentType, memberId, parentBlobId, blobSize, serviceId, creationTime);
   }
 
   public static void putBlobPropertyToBuffer(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putLong(properties.getTimeToLive());
+    outputBuffer.putLong(properties.getTimeToLiveInMs());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
-    outputBuffer.putLong(properties.getCreationTime());
+    outputBuffer.putLong(properties.getCreationTimeInMs());
     outputBuffer.putLong(properties.getBlobSize());
-    serializeNullableString(outputBuffer, properties.getContentType());
-    serializeNullableString(outputBuffer, properties.getMemberId());
-    serializeNullableString(outputBuffer, properties.getParentBlobId());
-    serializeNullableString(outputBuffer, properties.getServiceId());
-  }
-
-  private static void serializeNullableString(ByteBuffer outputBuffer, String value) {
-    if (value == null)
-      outputBuffer.putInt(0);
-    else {
-      outputBuffer.putInt(value.length());
-      outputBuffer.put(value.getBytes());
-    }
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getMemberId());
+    Utils.serializeNullableString(outputBuffer, properties.getParentBlobId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
   }
 }

@@ -286,7 +286,7 @@ public class BlobIndex {
                  }
                  else if(fields.length == 5) {
                    // get key
-                   StoreKey key = factory.getKey(fields[0]);
+                   StoreKey key = factory.getStoreKey(fields[0]);
                    long offset = Long.parseLong(fields[1]);
                    long size = Long.parseLong(fields[2]);
                    byte flags = Byte.parseByte(fields[3]);

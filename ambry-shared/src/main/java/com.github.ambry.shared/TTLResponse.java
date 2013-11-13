@@ -16,7 +16,7 @@ public class TTLResponse extends RequestOrResponse {
   private static final int Error_Size_InBytes = 2;
 
   public TTLResponse(int correlationId, String clientId, short error) {
-    super(RequestResponseType.TTLResponse, (short)1, correlationId, clientId);
+    super(RequestResponseType.TTLResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
   }
 

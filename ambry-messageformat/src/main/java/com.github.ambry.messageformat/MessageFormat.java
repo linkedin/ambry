@@ -19,7 +19,14 @@ public class MessageFormat {
   // Common info for all formats
   public static final int Version_Field_Size_In_Bytes = 2;
   public static final int Crc_Size = 8;
+
+  public static final int Header_Current_Version = 1;
+  public static final int SystemMetadata_Current_Version = 1;
+  public static final int UserMetadata_Current_Version = 1;
+  public static final int Data_Current_Version = 1;
+
   public static final short Message_Header_Version_V1 = 1;
+  public static final int Message_Header_Invalid_Relative_Offset = -1;
 
   // Methods below defines the write format for the current version. W.r.t write there is always only one version,
   // the most recent one
@@ -77,6 +84,7 @@ public class MessageFormat {
     UserMetadata_Format_V1.serializeUserMetadata(outputBuffer, userMetadata);
   }
 
+  // We only serialize partial data for blobs. This is to support streaming serialization of data.
   public static void  serializeCurrentVersionPartialData(ByteBuffer outputBuffer, long dataSize) {
     Data_Format_V1.serializePartialData(outputBuffer, dataSize);
   }
@@ -85,7 +93,6 @@ public class MessageFormat {
   // Deserialization methods for all data types
 
   public static BlobProperties deserializeBlobProperties(InputStream stream) throws IOException, DataCorruptException {
-    // read version
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -98,7 +105,6 @@ public class MessageFormat {
   }
 
   public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, DataCorruptException {
-    // read version
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -111,7 +117,6 @@ public class MessageFormat {
   }
 
   public static long deserializeTTLRecord(InputStream stream) throws IOException, DataCorruptException {
-    // read version
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -124,7 +129,6 @@ public class MessageFormat {
   }
 
   public static ByteBuffer deserializeMetadata(InputStream stream) throws IOException, DataCorruptException {
-    // read version
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -137,7 +141,6 @@ public class MessageFormat {
   }
 
   public static ByteBufferInputStream deserializeData(InputStream stream) throws IOException, DataCorruptException {
-    // read version
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -164,6 +167,8 @@ public class MessageFormat {
 
     public static final int Relative_Offset_Field_Sizes_In_Bytes = 4;
 
+    private static final int Number_Of_Relative_Offset_Fields = 3;
+
     public static final int UserMetadata_Relative_Offset_Field_Offset_In_Bytes =
             SystemMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
@@ -176,7 +181,7 @@ public class MessageFormat {
     public static int getHeaderSize() {
       return Version_Field_Size_In_Bytes +
              Total_Size_Field_Size_In_Bytes +
-             (3 * Relative_Offset_Field_Sizes_In_Bytes) +
+             (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) +
              Crc_Size;
     }
 
@@ -186,7 +191,7 @@ public class MessageFormat {
                                        int userMetadataRelativeOffset,
                                        int dataRelativeOffset) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort((short)1);
+      outputBuffer.putShort(Message_Header_Version_V1);
       outputBuffer.putLong(totalSize);
       outputBuffer.putInt(systemMetadataRelativeOffset);
       outputBuffer.putInt(userMetadataRelativeOffset);
@@ -226,7 +231,7 @@ public class MessageFormat {
     }
   }
 
-  public static enum SystemMetadataType {
+  public static enum SystemMetadataRecordType {
     BlobPropertyRecord,
     DeleteRecord,
     TTLRecord
@@ -262,7 +267,7 @@ public class MessageFormat {
     public static void serializeBlobPropertyRecord(ByteBuffer outputBuffer, BlobProperties properties) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort((short)1);
-      outputBuffer.putShort((short)SystemMetadataType.BlobPropertyRecord.ordinal());
+      outputBuffer.putShort((short)SystemMetadataRecordType.BlobPropertyRecord.ordinal());
       BlobPropertySerDe.putBlobPropertyToBuffer(outputBuffer, properties);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getBlobPropertyRecordSize(properties) - Crc_Size);
@@ -272,7 +277,7 @@ public class MessageFormat {
     public static void serializeDeleteRecord(ByteBuffer outputBuffer, boolean deleteFlag) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort((short)1);
-      outputBuffer.putShort((short)SystemMetadataType.DeleteRecord.ordinal());
+      outputBuffer.putShort((short)SystemMetadataRecordType.DeleteRecord.ordinal());
       outputBuffer.put(deleteFlag ? (byte) 1 : (byte) 0);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
@@ -282,7 +287,7 @@ public class MessageFormat {
     public static void serializeTTLRecord(ByteBuffer outputBuffer, long ttl) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort((short)1);
-      outputBuffer.putShort((short)SystemMetadataType.TTLRecord.ordinal());
+      outputBuffer.putShort((short)SystemMetadataRecordType.TTLRecord.ordinal());
       outputBuffer.putLong(ttl);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getTTLRecordSize() - Crc_Size);
@@ -292,10 +297,10 @@ public class MessageFormat {
     public static BlobProperties deserializeBlobProperties(CrcInputStream crcStream) throws IOException, DataCorruptException {
       try {
         DataInputStream dataStream = new DataInputStream(crcStream);
-        SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+        SystemMetadataRecordType type = SystemMetadataRecordType.values()[dataStream.readShort()];
 
         // ensure the type fields match
-        if (type != SystemMetadataType.BlobPropertyRecord)
+        if (type != SystemMetadataRecordType.BlobPropertyRecord)
           throw new IllegalArgumentException("Invalid system metadata type");
         BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(dataStream);
         long crc = crcStream.getValue();
@@ -313,10 +318,10 @@ public class MessageFormat {
 
     public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, DataCorruptException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+      SystemMetadataRecordType type = SystemMetadataRecordType.values()[dataStream.readShort()];
 
       // ensure the type fields match
-      if (type != SystemMetadataType.DeleteRecord)
+      if (type != SystemMetadataRecordType.DeleteRecord)
         throw new IllegalArgumentException("Invalid system metadata type");
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
       long crc = crcStream.getValue();
@@ -329,10 +334,10 @@ public class MessageFormat {
 
     public static long deserializeTTLRecord(CrcInputStream crcStream) throws IOException, DataCorruptException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      SystemMetadataType type = SystemMetadataType.values()[dataStream.readShort()];
+      SystemMetadataRecordType type = SystemMetadataRecordType.values()[dataStream.readShort()];
 
       // ensure the type fields match
-      if (type != SystemMetadataType.TTLRecord)
+      if (type != SystemMetadataRecordType.TTLRecord)
         throw new IllegalArgumentException("Invalid system metadata type");
       long ttl = dataStream.readLong();
       long crc = crcStream.getValue();

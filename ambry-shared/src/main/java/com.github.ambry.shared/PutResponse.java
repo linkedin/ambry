@@ -17,7 +17,7 @@ public class PutResponse extends RequestOrResponse {
   private static final int Error_Size_InBytes = 2;
 
   public PutResponse(int correlationId, String clientId, short error) {
-    super(RequestResponseType.PutReponse, (short)1, correlationId, clientId);
+    super(RequestResponseType.PutResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
   }
 
@@ -27,7 +27,7 @@ public class PutResponse extends RequestOrResponse {
 
   public static PutResponse readFrom(DataInputStream stream) throws IOException {
     RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutReponse) {
+    if (type != RequestResponseType.PutResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId  = stream.readShort();

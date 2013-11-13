@@ -46,7 +46,7 @@ public class MessageFormatSend implements Send {
     }
   }
 
-  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag) throws IOException {
+  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag) throws IOException, UnknownMessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
     totalSizeToWrite = 0;
@@ -57,8 +57,8 @@ public class MessageFormatSend implements Send {
   }
 
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
-  // based on the type of data requested (system metadata or user metadata or data or all)
-  private void calculateOffsets() throws IOException {
+  // based on the type of data requested as indicated by the flags
+  private void calculateOffsets() throws IOException, UnknownMessageFormatException {
     // get size
     int messageCount = readSet.count();
     // for each message, determine the offset and size that needs to be sent based on the flag
@@ -66,13 +66,15 @@ public class MessageFormatSend implements Send {
     for (int i = 0; i < messageCount; i++) {
       if (flag == MessageFormatFlags.All) {
         // just copy over the total size and use relative offset to be 0
+        // We do not have to check any version in this case as we dont
+        // have to read any data to deserialize anything.
         infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
         totalSizeToWrite += readSet.sizeInBytes(i);
 
       }
       else {
         // read header version
-        ByteBuffer headerVersion = ByteBuffer.allocate(2);
+        ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormat.Version_Field_Size_In_Bytes);
         readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
                                                MessageFormat.Version_Field_Size_In_Bytes);
         headerVersion.flip();
@@ -93,7 +95,7 @@ public class MessageFormatSend implements Send {
               int systemMetadataSize = headerFormat.getUserMetadataRelativeOffset() - headerFormat.getSystemMetadataRelativeOffset();
               infoList.add(i, new SendInfo(headerFormat.getSystemMetadataRelativeOffset(), systemMetadataSize));
               totalSizeToWrite += systemMetadataSize;
-              logger.trace("Sending all data for message relativeOffset : {} size : {}",
+              logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
             else if (flag == MessageFormatFlags.UserMetadata) {
@@ -121,7 +123,7 @@ public class MessageFormatSend implements Send {
             }
             break;
           default:
-            // TODO throw invalid message format
+            throw new UnknownMessageFormatException("Version not known while reading message - " + headerVersion.getShort());
         }
       }
     }

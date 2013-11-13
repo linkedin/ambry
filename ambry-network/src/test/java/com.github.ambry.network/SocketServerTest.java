@@ -3,6 +3,7 @@ package com.github.ambry.network;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
@@ -48,7 +49,7 @@ public class SocketServerTest {
     new Random().nextBytes(bufmetadata);
 
     PutRequest emptyRequest =
-            new PutRequest(0, correlationId, "test", "1234", ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
+            new PutRequest(0, correlationId, "test", new BlobId("1234"), ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
     channel.send(emptyRequest);
@@ -58,10 +59,10 @@ public class SocketServerTest {
     Assert.assertEquals(requestStream.readShort(), 0); // read type
     PutRequest requestFromNetwork = PutRequest.readFrom(requestStream);
     Assert.assertEquals(1, requestFromNetwork.getVersionId());
-    Assert.assertEquals(0, requestFromNetwork.getPartition());
+    Assert.assertEquals(0, requestFromNetwork.getPartitionId());
     Assert.assertEquals(correlationId, requestFromNetwork.getCorrelationId());
     Assert.assertEquals("test", requestFromNetwork.getClientId());
-    Assert.assertEquals("1234", requestFromNetwork.getBlobId());
+    Assert.assertEquals("1234", new String(requestFromNetwork.getBlobId().toBytes().array()));
     Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getUsermetadata().array());
     Assert.assertEquals(10, requestFromNetwork.getDataSize());
     Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());

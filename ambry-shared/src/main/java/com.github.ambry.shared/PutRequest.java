@@ -13,26 +13,23 @@ import java.nio.channels.WritableByteChannel;
  */
 public class PutRequest extends RequestOrResponse {
 
-  private long partition;
+  private long partitionId;
   private ByteBuffer usermetadata;
   private InputStream data;
-  private String blobId;
+  private BlobId blobId;
   private long sentBytes = 0;
   private BlobProperties properties;
 
-
-  private static final int Partition_Size_InBytes = 8;
-  private static final int BlobId_Size_InBytes = 2;
   private static final int UserMetadata_Size_InBytes = 4;
 
 
-  public PutRequest(long partition, int correlationId, String clientId,
-                    String blobId, ByteBuffer usermetadata,
+  public PutRequest(long partitionId, int correlationId, String clientId,
+                    BlobId blobId, ByteBuffer usermetadata,
                     InputStream data, BlobProperties properties) {
-    super(RequestResponseType.PutRequest, (short)1, correlationId, clientId);
+    super(RequestResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
 
     this.blobId = blobId;
-    this.partition = partition;
+    this.partitionId = partitionId;
     this.usermetadata = usermetadata;
     this.data = data;
     this.properties = properties;
@@ -44,19 +41,20 @@ public class PutRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partitionId = stream.readLong();
-    String blobId = Utils.readShortString(stream);
+    ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
+    BlobId id = new BlobId(blobIdBytes);
     BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
     InputStream data = stream;
     // ignore version for now
-    return new PutRequest(partitionId, correlationId, clientId, blobId, metadata, data, properties);
+    return new PutRequest(partitionId, correlationId, clientId, id, metadata, data, properties);
   }
 
-  public long getPartition() {
-    return partition;
+  public long getPartitionId() {
+    return partitionId;
   }
 
-  public String getBlobId() {
+  public BlobId getBlobId() {
     return blobId;
   }
 
@@ -84,8 +82,8 @@ public class PutRequest extends RequestOrResponse {
 
   private int sizeExcludingData() {
     // header + logicalVolumeId + blobId size + blobId + metadata size + metadata + data size
-    return  (int)super.sizeInBytes() + Partition_Size_InBytes + BlobId_Size_InBytes +
-            blobId.length() + UserMetadata_Size_InBytes + usermetadata.capacity() +
+    return  (int)super.sizeInBytes() + PartitionId_Size_In_Bytes + Blob_Id_Size_In_Bytes +
+            blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
             BlobPropertySerDe.getBlobPropertySize(properties);
   }
 
@@ -94,9 +92,9 @@ public class PutRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
-      bufferToSend.putLong(partition);
-      bufferToSend.putShort((short)blobId.length());
-      bufferToSend.put(blobId.getBytes());
+      bufferToSend.putLong(partitionId);
+      bufferToSend.putShort(blobId.sizeInBytes());
+      bufferToSend.put(blobId.toBytes());
       BlobPropertySerDe.putBlobPropertyToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());
       bufferToSend.put(usermetadata);

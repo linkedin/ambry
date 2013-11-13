@@ -16,7 +16,7 @@ public interface Store {
   void start() throws StoreException;
 
   /**
-   * Returns the message set for the given ids
+   * Returns the store info for the given ids
    * @param ids The list of ids whose messages need to be retrieved
    * @return The store info for the given ids
    * @throws StoreException

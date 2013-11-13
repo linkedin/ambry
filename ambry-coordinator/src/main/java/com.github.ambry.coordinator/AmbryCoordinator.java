@@ -18,7 +18,7 @@ public class AmbryCoordinator implements Coordinator {
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) {
     try {
       // put blob
-      PutRequest putRequest = new PutRequest(1, 1, "client1", "id1", userMetadata, blob, blobProperties);
+      PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId("id1"), userMetadata, blob, blobProperties);
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.connect();
       channel.send(putRequest);
@@ -36,7 +36,7 @@ public class AmbryCoordinator implements Coordinator {
   public void deleteBlob(String id) throws BlobNotFoundException {
     try {
       // delete blob
-      DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", "id1");
+      DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", new BlobId("id1"));
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.connect();
       channel.send(deleteRequest);
@@ -52,7 +52,7 @@ public class AmbryCoordinator implements Coordinator {
   public void updateTTL(String id, long newTTL) throws BlobNotFoundException {
     try {
       // update ttl of the blob
-      TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", "id1", newTTL);
+      TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", new BlobId("id1"), newTTL);
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.connect();
       channel.send(ttlRequest);

@@ -9,7 +9,7 @@ import com.github.ambry.store.StoreKeyFactory;
 public class BlobIdFactory implements StoreKeyFactory {
 
   @Override
-  public StoreKey getKey(String value) {
+  public StoreKey getStoreKey(String value) {
     return new BlobId(value);
   }
 }

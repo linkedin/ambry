@@ -10,15 +10,12 @@ import java.nio.channels.WritableByteChannel;
  * Delete request to delete blob
  */
 public class DeleteRequest extends RequestOrResponse {
-  private String blobId;
+  private BlobId blobId;
   private long partitionId;
   private int sizeSent;
 
-  private static final int Partition_Size_In_Bytes = 8;
-  private static final int Blob_Id_Size_InBytes = 2;
-
-  public DeleteRequest(long partition, int correlationId, String clientId, String blobId) {
-    super(RequestResponseType.DeleteRequest, (short)1, correlationId, clientId);
+  public DeleteRequest(long partition, int correlationId, String clientId, BlobId blobId) {
+    super(RequestResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
     this.blobId = blobId;
     this.partitionId = partition;
     sizeSent = 0;
@@ -30,17 +27,17 @@ public class DeleteRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partition = stream.readLong();
-    String blobId = Utils.readShortString(stream);
-
+    ByteBuffer blobIdBuffer = Utils.readShortBuffer(stream);
+    BlobId id = new BlobId(blobIdBuffer);
     // ignore version for now
-    return new DeleteRequest(partition, correlationId, clientId, blobId);
+    return new DeleteRequest(partition, correlationId, clientId, id);
   }
 
-  public long getPartition() {
+  public long getPartitionId() {
     return partitionId;
   }
 
-  public String getBlobId() {
+  public BlobId getBlobId() {
     return blobId;
   }
 
@@ -50,8 +47,8 @@ public class DeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putLong(partitionId);
-      bufferToSend.putShort((short)blobId.length());
-      bufferToSend.put(blobId.getBytes());
+      bufferToSend.putShort(blobId.sizeInBytes());
+      bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -68,7 +65,7 @@ public class DeleteRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + partition + blobId
-    return super.sizeInBytes() + Partition_Size_In_Bytes +
-            Blob_Id_Size_InBytes + blobId.length();
+    return super.sizeInBytes() + PartitionId_Size_In_Bytes +
+            Blob_Id_Size_In_Bytes + blobId.sizeInBytes();
   }
 }

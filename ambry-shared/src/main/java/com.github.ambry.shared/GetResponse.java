@@ -30,7 +30,7 @@ public class GetResponse extends RequestOrResponse {
     size += listcountSize;
     for (MessageInfo messageInfo : messageInfoList) {
       size += keySize;
-      size += messageInfo.getKey().sizeInBytes();
+      size += messageInfo.getStoreKey().sizeInBytes();
       size += fieldSize;
       size += fieldSize;
     }
@@ -40,10 +40,10 @@ public class GetResponse extends RequestOrResponse {
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
     outputBuffer.putInt(messageInfoList.size());
     for (MessageInfo messageInfo : messageInfoList) {
-      outputBuffer.putShort(messageInfo.getKey().sizeInBytes());
-      outputBuffer.put(messageInfo.getKey().toBytes());
+      outputBuffer.putShort(messageInfo.getStoreKey().sizeInBytes());
+      outputBuffer.put(messageInfo.getStoreKey().toBytes());
       outputBuffer.putLong(messageInfo.getSize());
-      outputBuffer.putLong(messageInfo.getTTL());
+      outputBuffer.putLong(messageInfo.getTimeToLive());
     }
   }
 
@@ -60,14 +60,14 @@ public class GetResponse extends RequestOrResponse {
   }
 
   public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send) {
-    super(RequestResponseType.GetResponse, (short)1, correlationId, clientId);
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.toSend = send;
   }
 
   public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream) {
-    super(RequestResponseType.GetResponse, (short)1, correlationId, clientId);
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.stream = stream;

@@ -20,23 +20,21 @@ public class GetRequest extends RequestOrResponse {
   private ArrayList<BlobId> ids;
   private int sizeSent;
   private long totalIdSize;
-  private long partition;
+  private long partitionId;
 
   private static final int MessageFormat_Size_InBytes = 2;
-  private static final int Blob_Id_Size_InBytes = 2;
   private static final int Blob_Id_Count_Size_InBytes = 4;
-  private static final int Partition_Size_In_Bytes = 8;
 
-  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, long partition, ArrayList<BlobId> ids) {
-    super(RequestResponseType.GetRequest, (short)1, correlationId,clientId);
+  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, long partitionId, ArrayList<BlobId> ids) {
+    super(RequestResponseType.GetRequest, Request_Response_Version, correlationId,clientId);
 
     this.flags = flags;
     this.ids = ids;
     this.sizeSent = 0;
-    this.partition = partition;
+    this.partitionId = partitionId;
     totalIdSize = 0;
     for (BlobId id : ids) {
-      totalIdSize += Blob_Id_Size_InBytes + id.sizeInBytes();
+      totalIdSize += Blob_Id_Size_In_Bytes + id.sizeInBytes();
     }
   }
 
@@ -48,8 +46,8 @@ public class GetRequest extends RequestOrResponse {
     return ids;
   }
 
-  public long getPartition() {
-    return partition;
+  public long getPartitionId() {
+    return partitionId;
   }
 
   public static GetRequest readFrom(DataInputStream stream) throws IOException {
@@ -77,11 +75,11 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putShort((short) flags.ordinal());
-      bufferToSend.putLong(partition);
+      bufferToSend.putLong(partitionId);
       bufferToSend.putInt(ids.size());
       for (BlobId id : ids) {
         ByteBuffer buf = id.toBytes();
-        bufferToSend.putShort((short)id.sizeInBytes());
+        bufferToSend.putShort(id.sizeInBytes());
         bufferToSend.put(buf.array());
       }
       bufferToSend.flip();
@@ -100,7 +98,7 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + error
-    return super.sizeInBytes() + MessageFormat_Size_InBytes + Partition_Size_In_Bytes +
+    return super.sizeInBytes() + MessageFormat_Size_InBytes + PartitionId_Size_In_Bytes +
            Blob_Id_Count_Size_InBytes + totalIdSize;
   }
 }

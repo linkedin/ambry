@@ -46,18 +46,18 @@ public class BlobIndexTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
-      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId1),
+      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId1),
               new BlobIndex.BlobIndexValue(100, 1000, flags, 12345));
-      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId2),
+      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId2),
               new BlobIndex.BlobIndexValue(200, 2000, flags, 12567));
-      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId3),
+      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId3),
               new BlobIndex.BlobIndexValue(300, 3000, flags, 12567));
       index.AddToIndex(entry1, 3000);
       index.AddToIndex(entry2, 4000);
       index.AddToIndex(entry3, 5000);
-      BlobIndex.BlobIndexValue value1 = index.getValue(factory.getKey(blobId1));
-      BlobIndex.BlobIndexValue value2 = index.getValue(factory.getKey(blobId2));
-      BlobIndex.BlobIndexValue value3 = index.getValue(factory.getKey(blobId3));
+      BlobIndex.BlobIndexValue value1 = index.getValue(factory.getStoreKey(blobId1));
+      BlobIndex.BlobIndexValue value2 = index.getValue(factory.getStoreKey(blobId2));
+      BlobIndex.BlobIndexValue value3 = index.getValue(factory.getStoreKey(blobId3));
       Assert.assertEquals(value1.getOffset(), 1000);
       Assert.assertEquals(value2.getOffset(), 2000);
       Assert.assertEquals(value3.getOffset(), 3000);
@@ -84,11 +84,11 @@ public class BlobIndexTest {
       StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
-      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId1),
+      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId1),
               new BlobIndex.BlobIndexValue(100, 1000, flags, 12345));
-      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId2),
+      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId2),
               new BlobIndex.BlobIndexValue(200, 2000, flags, 12567));
-      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId3),
+      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId3),
               new BlobIndex.BlobIndexValue(300, 3000, flags, 12567));
       index.AddToIndex(entry1, 3000);
       index.AddToIndex(entry2, 4000);
@@ -98,9 +98,9 @@ public class BlobIndexTest {
       // create a new index and ensure the index is restored
       MockIndex indexNew = new MockIndex(logFile, scheduler, log);
 
-      BlobIndex.BlobIndexValue value1 = indexNew.getValue(factory.getKey(blobId1));
-      BlobIndex.BlobIndexValue value2 = indexNew.getValue(factory.getKey(blobId2));
-      BlobIndex.BlobIndexValue value3 = indexNew.getValue(factory.getKey(blobId3));
+      BlobIndex.BlobIndexValue value1 = indexNew.getValue(factory.getStoreKey(blobId1));
+      BlobIndex.BlobIndexValue value2 = indexNew.getValue(factory.getStoreKey(blobId2));
+      BlobIndex.BlobIndexValue value3 = indexNew.getValue(factory.getStoreKey(blobId3));
       Assert.assertEquals(value1.getOffset(), 1000);
       Assert.assertEquals(value2.getOffset(), 2000);
       Assert.assertEquals(value3.getOffset(), 3000);
@@ -128,20 +128,20 @@ public class BlobIndexTest {
       StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
 
       byte flags = 3;
-      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId1),
+      BlobIndex.BlobIndexEntry entry1 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId1),
               new BlobIndex.BlobIndexValue(100, 1000, flags, 12345));
-      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId2),
+      BlobIndex.BlobIndexEntry entry2 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId2),
               new BlobIndex.BlobIndexValue(200, 2000, flags, 12567));
-      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getKey(blobId3),
+      BlobIndex.BlobIndexEntry entry3 = new BlobIndex.BlobIndexEntry(factory.getStoreKey(blobId3),
               new BlobIndex.BlobIndexValue(300, 3000, flags, 12567));
       ArrayList<BlobIndex.BlobIndexEntry> list = new ArrayList<BlobIndex.BlobIndexEntry>();
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
       index.AddToIndex(list, 5000);
-      BlobIndex.BlobIndexValue value1 = index.getValue(factory.getKey(blobId1));
-      BlobIndex.BlobIndexValue value2 = index.getValue(factory.getKey(blobId2));
-      BlobIndex.BlobIndexValue value3 = index.getValue(factory.getKey(blobId3));
+      BlobIndex.BlobIndexValue value1 = index.getValue(factory.getStoreKey(blobId1));
+      BlobIndex.BlobIndexValue value2 = index.getValue(factory.getStoreKey(blobId2));
+      BlobIndex.BlobIndexValue value3 = index.getValue(factory.getStoreKey(blobId3));
       Assert.assertEquals(value1.getOffset(), 1000);
       Assert.assertEquals(value2.getOffset(), 2000);
       Assert.assertEquals(value3.getOffset(), 3000);

@@ -11,6 +11,6 @@ public interface StoreKeyFactory {
    * @param value The value the key needs to store  in string format
    * @return The index key containing the value provided
    */
-  StoreKey getKey(String value);
+  StoreKey getStoreKey(String value);
 }
 

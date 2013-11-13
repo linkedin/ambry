@@ -8,7 +8,7 @@ public class StoreConfig {
 
 
   /**
-   * The number of network threads that the server uses for handling network requests
+   * The directory for the store from where it can read the data
    */
   @Config("store.data.dir")
   @Default("/tmp/ambrydir")

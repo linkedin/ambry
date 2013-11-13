@@ -16,7 +16,7 @@ public class DeleteResponse extends RequestOrResponse {
   private static final int Error_Size_InBytes = 2;
 
   public DeleteResponse(int correlationId, String clientId, short error) {
-    super(RequestResponseType.DeleteResponse, (short)1, correlationId, clientId);
+    super(RequestResponseType.DeleteResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
   }
 

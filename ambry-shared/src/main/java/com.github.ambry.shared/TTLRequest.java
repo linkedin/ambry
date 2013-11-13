@@ -11,24 +11,22 @@ import java.nio.channels.WritableByteChannel;
  */
 
 public class TTLRequest extends RequestOrResponse {
-  private String blobId;
+  private BlobId blobId;
   private long partitionId;
   private long newTTL;
   private int sizeSent;
 
-  private static final int Partition_Size_In_Bytes = 8;
-  private static final int Blob_Id_Size_InBytes = 2;
   private static final int TTL_Size_In_Bytes = 8;
 
-  public TTLRequest(long partition, int correlationId, String clientId, String blobId, long newTTL) {
-    super(RequestResponseType.DeleteRequest, (short)1, correlationId, clientId);
+  public TTLRequest(long partition, int correlationId, String clientId, BlobId blobId, long newTTL) {
+    super(RequestResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
     this.blobId = blobId;
     this.partitionId = partition;
     this.newTTL = newTTL;
     sizeSent = 0;
   }
 
-  public String getBlobId() {
+  public BlobId getBlobId() {
     return blobId;
   }
 
@@ -46,11 +44,12 @@ public class TTLRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partition = stream.readLong();
-    String blobId = Utils.readShortString(stream);
+    ByteBuffer blobIdBuffer = Utils.readShortBuffer(stream);
+    BlobId id = new BlobId(blobIdBuffer);
     long newTTL = stream.readLong();
 
     // ignore version for now
-    return new TTLRequest(partition, correlationId, clientId, blobId, newTTL);
+    return new TTLRequest(partition, correlationId, clientId, id, newTTL);
   }
 
   @Override
@@ -59,8 +58,8 @@ public class TTLRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putLong(partitionId);
-      bufferToSend.putShort((short)blobId.length());
-      bufferToSend.put(blobId.getBytes());
+      bufferToSend.putShort(blobId.sizeInBytes());
+      bufferToSend.put(blobId.toBytes());
       bufferToSend.putLong(newTTL);
       bufferToSend.flip();
     }
@@ -78,8 +77,8 @@ public class TTLRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + partition + blobId
-    return super.sizeInBytes() + Partition_Size_In_Bytes +
-            Blob_Id_Size_InBytes + blobId.length() + TTL_Size_In_Bytes;
+    return super.sizeInBytes() + PartitionId_Size_In_Bytes +
+            Blob_Id_Size_In_Bytes + blobId.sizeInBytes() + TTL_Size_In_Bytes;
   }
 }
 

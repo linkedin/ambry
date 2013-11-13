@@ -1,8 +1,8 @@
 package com.github.ambry.messageformat;
 
 
-// Exception used when there corrupt data is detected
-
+// Exception used when there corrupt data is detected.
+// Used when the underlying stores data is corrupt on read.
 public class DataCorruptException extends Exception
 {
   private static final long serialVersionUID = 1;

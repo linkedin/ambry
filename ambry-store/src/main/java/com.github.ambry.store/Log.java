@@ -83,7 +83,7 @@ public class Log implements Write, Read {
   }
 
   @Override
-  public void readInto(ByteBuffer buffer , int position) throws IOException {
+  public void readInto(ByteBuffer buffer , long position) throws IOException {
     fileChannel.read(buffer, position);
   }
 }

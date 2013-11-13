@@ -2,13 +2,11 @@ package com.github.ambry.server;
 
 import java.io.DataInputStream;
 
-import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.*;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.shared.*;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.Send;
-import com.github.ambry.messageformat.MessageFormatSend;
-import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.store.*;
 
 import java.io.IOException;
@@ -57,14 +55,14 @@ public class AmbryRequests {
   private void handlePutRequest(Request request) throws IOException {
     try {
       PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()));
-      MessageFormatInputStream stream = new MessageFormatInputStream(new BlobId(putRequest.getBlobId()),
-                                                                     putRequest.getBlobProperties(),
-                                                                     putRequest.getUsermetadata(),
-                                                                     putRequest.getData(),
-                                                                     putRequest.getBlobProperties().getBlobSize());
-      MessageInfo info = new MessageInfo(new BlobId(putRequest.getBlobId()),
+      MessageFormatInputStream stream = new PutMessageFormatInputStream(putRequest.getBlobId(),
+                                                                        putRequest.getBlobProperties(),
+                                                                        putRequest.getUsermetadata(),
+                                                                        putRequest.getData(),
+                                                                        putRequest.getBlobProperties().getBlobSize());
+      MessageInfo info = new MessageInfo(putRequest.getBlobId(),
                                          stream.getSize(),
-                                         putRequest.getBlobProperties().getTimeToLive());
+                                         putRequest.getBlobProperties().getTimeToLiveInMs());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
       infoList.add(info);
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
@@ -97,13 +95,15 @@ public class AmbryRequests {
   private void handleDeleteRequest(Request request) {
     try {
       DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()));
-      MessageFormatInputStream stream = new MessageFormatInputStream(new BlobId(deleteRequest.getBlobId()), true);
-      MessageInfo info = new MessageInfo(new BlobId(deleteRequest.getBlobId()), stream.getSize(), 0); // ignore ttl
+      MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
+      MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
       infoList.add(info);
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
       blobStore.delete(writeset);
-      DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), (short)0);
+      DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(),
+                                                   deleteRequest.getClientId(),
+                                                   (short)0);
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
@@ -114,8 +114,8 @@ public class AmbryRequests {
   private void handleTTLRequest(Request request) {
     try {
       TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()));
-      MessageFormatInputStream stream = new MessageFormatInputStream(new BlobId(ttlRequest.getBlobId()), ttlRequest.getNewTTL());
-      MessageInfo info = new MessageInfo(new BlobId(ttlRequest.getBlobId()), stream.getSize(), ttlRequest.getNewTTL()); // ignore ttl
+      MessageFormatInputStream stream = new TTLMessageFormatInputStream(ttlRequest.getBlobId(), ttlRequest.getNewTTL());
+      MessageInfo info = new MessageInfo(ttlRequest.getBlobId(), stream.getSize(), ttlRequest.getNewTTL());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
       infoList.add(info);
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);

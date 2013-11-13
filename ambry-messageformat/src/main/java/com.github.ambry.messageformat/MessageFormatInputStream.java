@@ -3,95 +3,28 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Crc32;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
- * Converts a set of message inputs into the right message format
+ * Converts a set of message inputs into the right message format.
+ * This provides the base implementation for all types of messages
+ * that need to be persisted.
  */
-public class MessageFormatInputStream extends InputStream {
+public abstract class MessageFormatInputStream extends InputStream {
 
-  private ByteBuffer buffer = null;
-  private CrcInputStream stream = null;
-  private long streamLength = 0;
-  private long streamRead = 0;
-  private static int StoreKey_Size_Field_Size_In_Bytes = 4;
+  protected ByteBuffer buffer = null;
+  protected CrcInputStream stream = null;
+  protected long streamLength = 0;
+  protected long streamRead = 0;
+  protected static int StoreKey_Size_Field_Size_In_Bytes = 4;
   ByteBuffer crc = ByteBuffer.allocate(MessageFormat.Crc_Size);
-  private long messageLength;
-
-  public MessageFormatInputStream(StoreKey key, BlobProperties blobProperty,
-                                  ByteBuffer userMetadata, InputStream data,
-                                  long streamSize) {
-
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionBlobPropertyRecordSize(blobProperty);
-    int userMetadataSize = MessageFormat.getCurrentVersionUserMetadataSize(userMetadata);
-    long dataSize = MessageFormat.getCurrentVersionDataSize(streamSize);
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
-    buffer = ByteBuffer.allocate(headerSize +
-                                 idSize +
-                                 systemMetadataSize +
-                                 userMetadataSize +
-                                 (int)(dataSize - streamSize - MessageFormat.Crc_Size));
-
-    MessageFormat.serializeCurrentVersionHeader(buffer,
-                                                systemMetadataSize + userMetadataSize + dataSize,
-                                                headerSize + idSize,
-                                                headerSize + idSize + systemMetadataSize,
-                                                headerSize + idSize + systemMetadataSize + userMetadataSize);
-    buffer.putInt(key.sizeInBytes());
-    buffer.put(key.toBytes());
-    MessageFormat.serializeCurrentVersionBlobPropertyRecord(buffer, blobProperty);
-    MessageFormat.serializeCurrentVersionUserMetadata(buffer, userMetadata);
-    int bufferDataStart = buffer.position();
-    MessageFormat.serializeCurrentVersionPartialData(buffer, streamSize);
-    Crc32 crc = new Crc32();
-    crc.update(buffer.array(), bufferDataStart, buffer.position() - bufferDataStart);
-    stream = new CrcInputStream(crc, data);
-    streamLength = streamSize;
-    messageLength = buffer.capacity() + streamLength + MessageFormat.Crc_Size;
-    buffer.flip();
-  }
-
-  public MessageFormatInputStream(StoreKey key, boolean deleteFlag) {
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionDeleteRecordSize();
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
-    buffer = ByteBuffer.allocate(headerSize +
-                                 idSize +
-                                 systemMetadataSize);
-    MessageFormat.serializeCurrentVersionHeader(buffer,
-                                                systemMetadataSize,
-                                                headerSize + idSize,
-                                                -1,
-                                                -1);
-    buffer.putInt(key.sizeInBytes());
-    buffer.put(key.toBytes());
-    MessageFormat.serializeCurrentVersionDeleteRecord(buffer, deleteFlag);
-    messageLength = buffer.capacity();
-    buffer.flip();
-  }
-
-  public MessageFormatInputStream(StoreKey key, long ttl) {
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionTTLRecordSize();
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
-    buffer = ByteBuffer.allocate(headerSize +
-                                 idSize +
-                                 systemMetadataSize);
-    MessageFormat.serializeCurrentVersionHeader(buffer,
-                                                systemMetadataSize,
-                                                headerSize + idSize,
-                                                -1,
-                                                -1);
-    buffer.putInt(key.sizeInBytes());
-    buffer.put(key.toBytes());
-    MessageFormat.serializeCurrentVersionTTLRecord(buffer, ttl);
-    messageLength = buffer.capacity();
-    buffer.flip();
-  }
+  protected long messageLength;
+  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
   public int read() throws IOException {

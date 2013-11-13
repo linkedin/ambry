@@ -30,10 +30,11 @@ public interface Coordinator {
   /**
    * Updates the ttl of the blob specified
    * @param id The id of the blob that needs its TTL updated
-   * @param newTTL The new ttl value to update to
+   * @param newTTLInMs The new ttl value to update to. It is the System time in ms
+   *                   when the blob needs to be deleted.
    * @throws BlobNotFoundException
    */
-  void updateTTL(String id, long newTTL) throws BlobNotFoundException;
+  void updateTTL(String id, long newTTLInMs) throws BlobNotFoundException;
 
   /**
    * Gets the blob that corresponds to the given blob id.
