@@ -1,4 +1,5 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
+
 
 import org.json.JSONException;
 import org.junit.Test;
@@ -9,23 +10,20 @@ import static org.junit.Assert.fail;
 /**
  *
  */
-public class DataNodeIdTest {
+public class ReplicaIdTest {
 
   @Test
   public void jsonSerDeTest() {
-    DataNodeId dataNodeIdSer = new DataNodeId("localhost", TestUtils.getNewPort());
-    // System.out.println(dataNodeIdSer.toString());
+    ReplicaId replicaIdSer = TestUtils.getNewReplicaId();
+    // System.out.println(replicaIdSer.toString());
 
     try {
-      DataNodeId dataNodeIdDe = new DataNodeId(dataNodeIdSer.toJSONObject());
+      ReplicaId replicaIdDe = new ReplicaId(replicaIdSer.toJSONObject());
 
-      assertEquals(dataNodeIdSer, dataNodeIdDe);
+      assertEquals(replicaIdSer, replicaIdDe);
     } catch (JSONException e) {
       e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
       fail();
     }
-
   }
-
-
 }

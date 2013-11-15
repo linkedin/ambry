@@ -1,4 +1,5 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
+
 
 import org.json.JSONException;
 import org.junit.Test;
@@ -6,20 +7,21 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+
 /**
  *
  */
-public class PartitionIdTest {
+public class DiskTest {
 
   @Test
   public void jsonSerDeTest() {
-    PartitionId partitionIdSer = TestUtils.getNewPartitionId();
-    // System.out.println(partitionIdSer.toString());
+    Disk diskSer = TestUtils.getNewTestDisk();
+    // System.out.println(diskSer.toString());
 
     try {
-      PartitionId partitionIdDe = new PartitionId(partitionIdSer.toJSONObject());
+      Disk diskDe = new TestUtils.TestDisk(diskSer.toJSONObject());
 
-      assertEquals(partitionIdSer, partitionIdDe);
+      assertEquals(diskSer, diskDe);
     } catch (JSONException e) {
       e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
       fail();

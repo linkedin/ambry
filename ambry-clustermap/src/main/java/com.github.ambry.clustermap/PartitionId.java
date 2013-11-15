@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.PartitionIdentifier;
 import org.json.JSONException;
@@ -30,6 +30,7 @@ public class PartitionId implements PartitionIdentifier {
     if (id < 0) {
       throw new IllegalStateException("Invalid PartitionId with id:" + id);
     }
+
   }
 
   public static PartitionId getFirstPartitionId() {

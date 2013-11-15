@@ -1,4 +1,5 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
+
 
 import org.json.JSONException;
 import org.json.JSONObject;

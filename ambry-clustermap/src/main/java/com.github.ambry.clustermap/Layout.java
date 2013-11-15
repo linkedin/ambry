@@ -1,4 +1,5 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
+
 
 import com.github.ambry.clustermap.PartitionIdentifier;
 import org.json.JSONArray;

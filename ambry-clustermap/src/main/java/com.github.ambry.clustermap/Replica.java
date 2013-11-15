@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.ReplicaContext;
 import org.json.JSONException;
