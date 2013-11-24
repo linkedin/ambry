@@ -2,7 +2,6 @@ buildscript {
   repositories {
     mavenCentral()
   }
-
   apply from: file('gradle/buildscript.gradle'), to: buildscript 
 }
 
@@ -41,6 +40,7 @@ project(':ambry-api') {
   dependencies {
     compile project(':ambry-utils')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -72,13 +72,14 @@ project(':ambry-server') {
   apply plugin: 'java'
 
   dependencies {
-   compile project(':ambry-network')
-   compile project(':ambry-utils')
-   compile project(':ambry-shared')
-   compile project(':ambry-store')
-   compile project(':ambry-messageformat')
-   compile "org.slf4j:slf4j-api:$slf4jVersion"
-   testCompile "junit:junit:$junitVersion"
+    compile project(':ambry-network')
+    compile project(':ambry-utils')
+    compile project(':ambry-shared')
+    compile project(':ambry-store')
+    compile project(':ambry-messageformat')
+    compile project(':ambry-metrics')
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    testCompile "junit:junit:$junitVersion"
   }
 }
 
@@ -89,6 +90,7 @@ project(':ambry-store') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile project(':ambry-shared')
+    compile project(':ambry-metrics')
     compile "org.slf4j:slf4j-api:$slf4jVersion"   
     testCompile "junit:junit:$junitVersion"
   }
@@ -146,6 +148,16 @@ project(':ambry-tools') {
     compile project(':ambry-api')
     compile project(':ambry-store')
     compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+  }
+}
+
+project(':ambry-metrics') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    testCompile "junit:junit:$junitVersion"
   }
 }
 

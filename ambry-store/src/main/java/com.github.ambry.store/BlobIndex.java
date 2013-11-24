@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,12 +20,13 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class BlobIndex {
   protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
+  protected Scheduler scheduler;
   private AtomicLong logEndOffset;
   private BlobJournal indexJournal;
   private File indexFile;
   private static final String indexFileName = "index_current";
+  private static final int TTL_Infinite = -1;
   private IndexPersistor persistor;
-  private Scheduler scheduler;
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -72,6 +74,10 @@ public class BlobIndex {
 
     public BlobIndexValue(long size, long offset, long timeToLiveInMs) {
       this(size, offset, (byte)0, timeToLiveInMs);
+    }
+
+    public BlobIndexValue(long size, long offset) {
+      this(size, offset, (byte)0, -1);
     }
 
     public long getSize() {
@@ -130,54 +136,61 @@ public class BlobIndex {
   }
 
   public void AddToIndex(BlobIndexEntry entry, long fileEndOffset) {
-    if (this.logEndOffset.get() >= fileEndOffset) {
-      throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset");
-    }
+    verifyFileEndOffset(fileEndOffset);
     index.put(entry.getKey(), entry.getValue());
     this.logEndOffset.set(fileEndOffset);
   }
 
-  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long logEndOffset) {
-    if (this.logEndOffset.get() > logEndOffset) {
-      throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset");
-    }
+  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
+    verifyFileEndOffset(fileEndOffset);
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
     }
-    this.logEndOffset.set(logEndOffset);
+    this.logEndOffset.set(fileEndOffset);
   }
 
   public boolean exist(StoreKey key) {
     return index.containsKey(key);
   }
 
-  public void markAsDeleted(StoreKey id, long logEndOffset) throws StoreException {
+  public void markAsDeleted(StoreKey id, long fileEndOffset) throws StoreException {
+    verifyFileEndOffset(fileEndOffset);
     BlobIndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. marking id as deleted failed", id);
-      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
     index.put(id, value);
-    this.logEndOffset.set(logEndOffset);
+    this.logEndOffset.set(fileEndOffset);
   }
 
-  public void updateTTL(StoreKey id, long ttl, long logEnfOffset) throws StoreException {
+  public void updateTTL(StoreKey id, long ttl, long fileEndOffset) throws StoreException {
+    verifyFileEndOffset(fileEndOffset);
     BlobIndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. updating ttl failed", id);
-      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+      throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setTimeToLive(ttl);
     index.put(id, value);
-    this.logEndOffset.set(logEnfOffset);
+    this.logEndOffset.set(fileEndOffset);
   }
 
   public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
     BlobIndexValue value = index.get(id);
-    if (value == null || value.isFlagSet(BlobIndexValue.Flags.Delete_Index)) {
-      logger.error("id {} not present in index. cannot find blob");
-      throw new StoreException("id not present in index : " + id, StoreErrorCodes.Key_Not_Found);
+    if (value == null) {
+      logger.error("id {} not present in index. cannot find blob", id);
+      throw new StoreException("id not present in index " + id, StoreErrorCodes.ID_Not_Found);
+    }
+    else if (value.isFlagSet(BlobIndexValue.Flags.Delete_Index)) {
+      logger.error("id {} has been deleted", id);
+      throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
+    }
+    else if (value.getTimeToLiveInMs() != TTL_Infinite &&
+             SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
+      logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
+      throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
   }
@@ -204,6 +217,15 @@ public class BlobIndex {
 
   public long getCurrentEndOffset() {
     return logEndOffset.get();
+  }
+
+  private void verifyFileEndOffset(long fileEndOffset) {
+    if (this.logEndOffset.get() > fileEndOffset) {
+      logger.error("File end offset provided to the index is less than the current end offset. " +
+              "logEndOffset {} inputFileEndOffset {}", logEndOffset.get(), fileEndOffset);
+      throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset. " +
+              "logEndOffset " + logEndOffset.get() + " inputFileEndOffset " + fileEndOffset);
+    }
   }
 
   class IndexPersistor implements Runnable {
@@ -300,7 +322,7 @@ public class BlobIndex {
                            key, size, offset, flags, timeToLive);
                  }
                  else
-                   throw new IOException("Malformed line in index file: '%s'.".format(line));
+                   throw new IndexCreationException("Malformed line in index file: '%s'.".format(line));
                  line = reader.readLine();
                }
                logEndOffset.set(Long.parseLong(fields[1]));

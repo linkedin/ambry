@@ -23,13 +23,15 @@ public class Log implements Write, Read {
   private AtomicLong currentWriteOffset;
   private final FileChannel fileChannel;
   private final File file;
+  private final Metrics metrics;
   private static final String logFileName = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Log(String dataDir) throws IOException {
+  public Log(String dataDir, Metrics metrics) throws IOException {
     file = new File(dataDir, logFileName);
     fileChannel = Utils.openChannel(file, true);
     currentWriteOffset = new AtomicLong(0);
+    this.metrics = metrics;
   }
 
   MessageReadSet getView(List<BlobReadOptions> readOptions) throws IOException {
@@ -41,8 +43,9 @@ public class Log implements Write, Read {
   }
 
   public void setLogEndOffset(long endOffset) throws IOException {
-    if (endOffset > fileChannel.size()) {
-      throw new IllegalArgumentException("fileEndPosition outside the file size");
+    if (endOffset < 0 || endOffset > fileChannel.size()) {
+      logger.error("endOffset {} outside the file size {}", endOffset, fileChannel.size());
+      throw new IllegalArgumentException("endOffset " + endOffset + " outside the file size " + fileChannel.size());
     }
     fileChannel.position(endOffset);
     logger.trace("Setting log end offset {}", endOffset);
@@ -55,19 +58,33 @@ public class Log implements Write, Read {
 
   @Override
   public int appendFrom(ByteBuffer buffer) throws IOException {
+    if (currentWriteOffset.get() + buffer.remaining() > fileChannel.size()) {
+      metrics.overflowWriteError.inc(1);
+      logger.error("Error trying to append to log from buffer since new data size {} exceeds log size {}",
+                   buffer.remaining(), currentWriteOffset.get());
+      throw new IllegalArgumentException("Error trying to append to log from buffer since new data size " +
+                                         buffer.remaining() + "exceeds log size " + currentWriteOffset.get());
+    }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
     logger.trace("Bytes appended to the log from bytebuffer for logfile {} byteswritten: {}",
-            file.getPath(), bytesWritten);
+                 file.getPath(), bytesWritten);
     return bytesWritten;
   }
 
   @Override
   public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
+    if (currentWriteOffset.get() + size > fileChannel.size()) {
+      metrics.overflowWriteError.inc(1);
+      logger.error("Error trying to append to log from channel since new data size {} exceeds log size {}",
+                   size, currentWriteOffset.get());
+      throw new IllegalArgumentException("Error trying to append to log from channel since new data size " +
+                                         size + "exceeds log size " + currentWriteOffset.get());
+    }
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
     currentWriteOffset.addAndGet(bytesWritten);
     logger.trace("Bytes appended to the log from read channel for logfile {} byteswritten: {}",
-            file.getPath(), bytesWritten);
+                 file.getPath(), bytesWritten);
     return bytesWritten;
   }
 
@@ -75,6 +92,7 @@ public class Log implements Write, Read {
    * Close this log
    */
   void close() throws IOException {
+    flush();
     fileChannel.close();
   }
 
@@ -84,6 +102,12 @@ public class Log implements Write, Read {
 
   @Override
   public void readInto(ByteBuffer buffer , long position) throws IOException {
+    if (currentWriteOffset.get() < position || (position + buffer.remaining() > currentWriteOffset.get())) {
+      logger.error("Error trying to read outside the log range. log end position {} input buffer size {}",
+                   currentWriteOffset.get(), buffer.remaining());
+      throw new IllegalArgumentException("Error trying to read outside the log range. log end position " +
+                                         currentWriteOffset.get() + " input buffer size " + buffer.remaining());
+    }
     fileChannel.read(buffer, position);
   }
 }

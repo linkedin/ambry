@@ -47,5 +47,5 @@ public interface Store {
   /**
    * Shutsdown the store
    */
-  void shutdown();
+  void shutdown() throws StoreException;
 }

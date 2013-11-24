@@ -1,5 +1,7 @@
 package com.github.ambry.store;
 
+import com.github.ambry.metrics.MetricsRegistryMap;
+import com.github.ambry.metrics.ReadableMetricsRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -37,7 +39,9 @@ public class BlobMessageReadSetTest {
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file
     randomFile.setLength(5000);
-    Log logTest = new Log(tempFile.getParent());
+    ReadableMetricsRegistry registry = new MetricsRegistryMap();
+    Metrics metrics = new Metrics("test", registry);
+    Log logTest = new Log(tempFile.getParent(), metrics);
     byte[] testbuf = new byte[3000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer
@@ -72,6 +76,37 @@ public class BlobMessageReadSetTest {
     buf.flip();
     for (int i = 200; i < 300; i++) {
       Assert.assertEquals(buf.get(), testbuf[i]);
+    }
+
+    // verify args
+    readOptions1 = new BlobReadOptions(500, 30, 1);
+    readOptions2 = new BlobReadOptions(100, 15, 1);
+    readOptions3 = new BlobReadOptions(200, 100, 1);
+    options = new ArrayList<BlobReadOptions>(3);
+    options.add(0, readOptions1);
+    options.add(1, readOptions2);
+    options.add(2, readOptions3);
+    try {
+      readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 10);
+      Assert.assertTrue(false);
+    }
+    catch (IllegalArgumentException e) {
+      Assert.assertTrue(true);
+    }
+    readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 1000);
+    try {
+      readSet.sizeInBytes(4);
+      Assert.assertTrue(false);
+    }
+    catch (IndexOutOfBoundsException e) {
+      Assert.assertTrue(true);
+    }
+    try {
+      readSet.writeTo(4, randomFile.getChannel(), 100, 100);
+      Assert.assertTrue(false);
+    }
+    catch (IndexOutOfBoundsException e) {
+      Assert.assertTrue(true);
     }
   }
 }

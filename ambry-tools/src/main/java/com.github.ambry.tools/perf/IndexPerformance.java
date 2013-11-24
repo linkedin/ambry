@@ -1,5 +1,7 @@
 package com.github.ambry.tools.perf;
 
+import com.github.ambry.metrics.MetricsRegistryMap;
+import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.*;
 import com.github.ambry.utils.Scheduler;
@@ -156,7 +158,9 @@ public class IndexPerformance {
       File indexFile = new File(f.getParent(), "index_current");
       System.out.println("deleting index file " + indexFile.getAbsolutePath());
       indexFile.delete();
-      Log log = new Log(f.getParent());
+      ReadableMetricsRegistry registry = new MetricsRegistryMap();
+      Metrics metrics = new Metrics("test", registry);
+      Log log = new Log(f.getParent(), metrics);
       Scheduler s = new Scheduler(numberOfWriters, "index", false);
 
       ArrayList<BlobIndexMetrics> indexWithMetrics = new ArrayList<BlobIndexMetrics>(numberOfIndexes);
