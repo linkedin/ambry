@@ -53,19 +53,24 @@ public class BlobMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private final FileChannel fileChannel;
+  private final File file;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BlobMessageReadSet(File file, FileChannel fileChannel, List<BlobReadOptions> readOptions, long fileEndPosition) throws IOException {
+  public BlobMessageReadSet(File file, FileChannel fileChannel,
+                            List<BlobReadOptions> readOptions,
+                            long fileEndPosition) throws IOException {
 
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
       if (readOption.getOffset() + readOption.getSize() > fileEndPosition) {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
-      logger.trace("MessageReadSet entry offset: {} size: ", readOption.getOffset(), readOption.getSize());
+      logger.trace("MessageReadSet entry file: {} offset: {} size: {} ", file.getAbsolutePath(),
+                   readOption.getOffset(), readOption.getSize());
     }
     this.readOptions = readOptions;
     this.fileChannel = fileChannel;
+    this.file = file;
   }
 
   @Override
@@ -75,7 +80,7 @@ public class BlobMessageReadSet implements MessageReadSet {
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
     long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
-    logger.trace("Written {} bytes to the write channel from the file channel", written);
+    logger.trace("Written {} bytes to the write channel from the file channel : ", written, file.getAbsolutePath());
     return written;
   }
 
@@ -87,7 +92,7 @@ public class BlobMessageReadSet implements MessageReadSet {
   @Override
   public long sizeInBytes(int index) {
     if (index >= readOptions.size()) {
-      throw new IndexOutOfBoundsException("index out of the messageset");
+      throw new IndexOutOfBoundsException("index out of the messageset for file " + file.getAbsolutePath());
     }
     return readOptions.get(index).getSize();
   }
