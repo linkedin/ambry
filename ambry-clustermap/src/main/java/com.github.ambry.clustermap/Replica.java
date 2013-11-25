@@ -1,44 +1,64 @@
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.ReplicaContext;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Replica represents one replica of a partition in Ambry. Each Replica is uniquely identifiable by a ReplicaId
- * (effectively a PartitionId-DiskId pair) Note that this induces a constraint that a partition can never have more than
- * one replica on a given disk. This ensures replicas do not share a lowest-level single-point-of-failure.
- * <p/>
- * The state of a replica is a function of its partition state and disk state.
- */
-public class Replica {
-  private ReplicaId replicaId;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * A Replica is one constituent piece of a {@link Partition}. A Replica is uniquely identifiable by its Partition and
+ * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
+ * given Disk. This ensures that a Partition does not have Replicas that share fates.
+ */
+public class Replica implements ReplicaId {
   private Partition partition;
+  private Disk disk;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-
-  public Replica(Partition partition, DiskId diskId) {
-    this.replicaId = new ReplicaId(partition.getPartitionId(), diskId);
-
-    this.partition = partition;
-
-    validate();
-  }
-
   public Replica(Partition partition, Disk disk) {
-    this(partition, disk.getDiskId());
-  }
-
-  public Replica(Partition partition, JSONObject jsonObject) throws JSONException {
-    this.replicaId = new ReplicaId(jsonObject.getJSONObject("replicaId"));
-
     this.partition = partition;
+    this.disk = disk;
 
     validate();
+  }
+
+  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
+    this.partition = partition;
+
+    this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"),
+            jsonObject.getInt("port"), jsonObject.getString("mountPath"));
+
+    validate();
+  }
+
+  @Override
+  public PartitionId getPartitionId() {
+    return getPartition();
+  }
+
+  @Override
+  public DataNodeId getDataNodeId() {
+    return disk.getDataNode();
+  }
+
+  @Override
+  public String getMountPath() {
+    return disk.getMountPath();
+  }
+
+  @Override
+  public String getReplicaPath() {
+    return getMountPath() + File.separator + partition.toPathString();
+  }
+
+  @Override
+  public List<? extends ReplicaId> getPeerReplicaIds() {
+    return getPeerReplicas();
   }
 
   public Partition getPartition() {
@@ -46,42 +66,48 @@ public class Replica {
   }
 
   public Disk getDisk() {
-    return partition.getLayout().getCluster().getDisk(replicaId.getDiskId());
-  }
-
-  public ReplicaId getReplicaId() {
-    return replicaId;
+    return disk;
   }
 
   public long getCapacityGB() {
     return partition.getReplicaCapacityGB();
   }
 
-  public ReplicaContext getReplicaContext() {
-    return new ReplicaContext(replicaId.getDiskId().getDataNodeId().getHostname(),
-            replicaId.getDiskId().getDataNodeId().getPort(),
-            replicaId.getDiskId().getMountPath());
+  public List<Replica> getPeerReplicas() {
+    List<Replica> peers = new ArrayList<Replica>(partition.getReplicas().size());
+    for (Replica peer : partition.getReplicas()) {
+      if (!peer.equals(this)) {
+        peers.add(peer);
+      }
+    }
+    return peers;
   }
 
-  protected void validatePartitionId() {
-    // Do not call partition.validate(). Could introduce infinite call cycle.
-    if (!replicaId.getPartitionId().equals(partition.getPartitionId())) {
-      throw new IllegalStateException("Invalid Replica. PartitionId in ReplicaId does not match Partition's id:" +
-              replicaId.getPartitionId() + " != " + partition.getPartitionId());
+  protected void validatePartition() {
+    if (partition == null) {
+      throw new IllegalStateException("Partition cannot be null.");
     }
   }
 
-  public void validate() {
-    replicaId.validate();
-    validatePartitionId();
-    // Do not call disk.validate(). Could introduce infinite call cycle.
-    // TODO: Add validation that only one replica per DataNode? Per Disk? Should probably do this at Layout validation.
-    // No need to validate disk id since it is looked up from cluster.
+  protected void validateDisk() {
+    if (disk == null) {
+      throw new IllegalStateException("Disk cannot be null.");
+    }
+  }
+
+  protected void validate() {
+    logger.trace("begin validate.");
+    validatePartition();
+    validateDisk();
+    logger.trace("complete validate.");
   }
 
   public JSONObject toJSONObject() throws JSONException {
+    // Effectively serializes the "foreign key" into hardwareLayout to find Disk.
     return new JSONObject()
-            .put("replicaId", replicaId.toJSONObject());
+            .put("hostname", disk.getDataNode().getHostname())
+            .put("port", disk.getDataNode().getPort())
+            .put("mountPath", disk.getMountPath());
   }
 
   @Override
@@ -89,25 +115,10 @@ public class Replica {
     try {
       return toJSONObject().toString();
     } catch (JSONException e) {
-      logger.warn("JSONException caught in toString:" + e.getCause());
+      logger.error("JSONException caught in toString: {}",  e.getCause());
     }
     return null;
   }
 
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
 
-    Replica replica = (Replica) o;
-
-    if (!replicaId.equals(replica.replicaId)) return false;
-
-    return true;
-  }
-
-  @Override
-  public int hashCode() {
-    return replicaId.hashCode();
-  }
 }

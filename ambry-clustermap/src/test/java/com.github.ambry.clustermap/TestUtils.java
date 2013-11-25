@@ -1,318 +1,429 @@
 package com.github.ambry.clustermap;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 
-/**
- *
- */
+import static org.junit.Assert.assertEquals;
+
 public class TestUtils {
-  static private int basePort = 6666;
-  static private int baseMountPathOffset = 0;
 
-  static private PartitionId prevPartitionId = PartitionId.getFirstPartitionId();
-  static public final long replicaCapacityGB = 100;
-  static public final long diskCapacityGB = 1000;
+  public static JSONObject getJsonDisk(String mountPath, HardwareState hardwareState, long capacityGB) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("mountPath", mountPath);
+    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("capacityGB", capacityGB);
+    return jsonObject;
+  }
 
+  // Appends "index" to baseMountPath to ensure each disk has unique mount path.
+  public static JSONArray getJsonArrayDisks(int diskCount, String baseMountPath, HardwareState hardwareState, long capacityGB) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < diskCount; ++i) {
+      jsonArray.put(getJsonDisk(baseMountPath + i, hardwareState, capacityGB));
+    }
+    return jsonArray;
+  }
 
-  // Permit Disk to be constructed with null DataNode
-  public static class TestDisk extends Disk {
+  // Does append anything to mountPath and so generates same disk repeatedly.
+  public static JSONArray getJsonArrayDuplicateDisks(int diskCount, String mountPath, HardwareState hardwareState, long capacityGB) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < diskCount; ++i) {
+      jsonArray.put(getJsonDisk(mountPath, hardwareState, capacityGB));
+    }
+    return jsonArray;
+  }
 
-    // Permit disk to be constructed without a DataNode.
-    public TestDisk(JSONObject jsonObject) throws JSONException {
-      super(null, jsonObject);
+  public static JSONObject getJsonDataNode(String hostname, int port, HardwareState hardwareState, JSONArray disks) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("hostname", hostname);
+    jsonObject.put("port", port);
+    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("disks", disks);
+    return jsonObject;
+  }
+
+  // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
+  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  // Does not increment basePort for each data node...
+  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      jsonArray.put(getJsonDataNode(hostname, basePort, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  public static JSONObject getJsonDatacenter(String name, JSONArray dataNodes) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("name", name);
+    jsonObject.put("dataNodes", dataNodes);
+    return jsonObject;
+  }
+
+  public static JSONArray getJsonArrayDatacenters(List<String> names, List<JSONArray> dataNodes) throws JSONException {
+    if(names.size() != dataNodes.size()) {
+      throw new IllegalArgumentException("Size of lists do not match");
     }
 
-    public TestDisk(DiskId diskId, long capacityGB) {
-      super(null, diskId, capacityGB);
+    JSONArray datacenterJSONArray = new JSONArray();
+    for (int i = 0; i < names.size(); i++) {
+      datacenterJSONArray.put(getJsonDatacenter(names.get(i), dataNodes.get(i)));
+    }
+    return datacenterJSONArray;
+  }
+
+  public static JSONObject getJsonHardwareLayout(String clusterName, JSONArray datacenters) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("clusterName", clusterName);
+    jsonObject.put("datacenters", datacenters);
+    return jsonObject;
+  }
+
+  public static JSONObject getJsonReplica(String hostname, int port, String mountPath) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("hostname", hostname);
+    jsonObject.put("port", port);
+    jsonObject.put("mountPath", mountPath);
+    return jsonObject;
+  }
+
+  public static JSONObject getJsonReplica(Disk disk) throws JSONException {
+    return getJsonReplica(disk.getDataNode().getHostname(), disk.getDataNode().getPort(), disk.getMountPath());
+  }
+
+  public static JSONArray getJsonArrayReplicas(List<Disk> disks) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (Disk disk : disks) {
+      jsonArray.put(getJsonReplica(disk));
+    }
+    return jsonArray;
+  }
+
+  public static JSONObject getJsonPartition(long id, PartitionState partitionState, long replicaCapacityGB, JSONArray replicas) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("id", id);
+    jsonObject.put("partitionState", partitionState);
+    jsonObject.put("replicaCapacityGB", replicaCapacityGB);
+    jsonObject.put("replicas", replicas);
+    return jsonObject;
+  }
+
+  public static JSONArray getJsonPartitions(long partitionCount, PartitionState partitionState, long replicaCapacityGB, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for(int i = 0; i < partitionCount; i++) {
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCount));
+      jsonArray.put(getJsonPartition(i, partitionState, replicaCapacityGB, jsonReplicas));
+    }
+    return jsonArray;
+  }
+
+  public static JSONArray getJsonDuplicatePartitions(long partitionCount, PartitionState partitionState, long replicaCapacityGB, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for(int i = 0; i < partitionCount; i++) {
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCount));
+      jsonArray.put(getJsonPartition(0, partitionState, replicaCapacityGB, jsonReplicas));
+    }
+    return jsonArray;
+  }
+
+  public static JSONArray getJsonDuplicateReplicas(long partitionCount, PartitionState partitionState, long replicaCapacityGB, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for(int i = 0; i < partitionCount; i++) {
+      ArrayList<Disk> disks = new ArrayList<Disk>(replicaCount);
+      Disk randomDisk = testHardwareLayout.getRandomDisk();
+      for(int j=0; j<replicaCount; j++) {
+        disks.add(randomDisk);
+      }
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(disks);
+      jsonArray.put(getJsonPartition(i, partitionState, replicaCapacityGB, jsonReplicas));
+    }
+    return jsonArray;
+  }
+
+  public static JSONArray getJsonPartitionsWithBadIds(long partitionCount, PartitionState partitionState, long replicaCapacityGB, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for(int i = 0; i < partitionCount; i++) {
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCount));
+      jsonArray.put(getJsonPartition(i+10, partitionState, replicaCapacityGB, jsonReplicas));
+    }
+    return jsonArray;
+  }
+
+  public static JSONObject getJsonPartitionLayout(String clusterName, long partitionCount, JSONArray partitions) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("clusterName", clusterName);
+    jsonObject.put("partitionIdFactory", partitionCount);
+    jsonObject.put("partitions", partitions);
+    return jsonObject;
+  }
+
+  // TODO: Better name? Extract into own file?
+  public static class TestHardwareLayout {
+    private static final int defaultDiskCount = 10; // per DataNode
+    private static final long defaultDiskCapacityGB = 1000;
+    private static final int defaultDataNodeCount = 4; // per Datacenter
+    private static final int defaultDatacenterCount = 3;
+    private static final int defaultBasePort = 6666;
+
+    private int diskCount;
+    private long diskCapacityGB;
+    private int dataNodeCount;
+    private int datacenterCount;
+    private int basePort;
+
+    private HardwareLayout hardwareLayout;
+
+    protected JSONArray getDisks() throws JSONException {
+      return getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
     }
 
-    @Override
-    public void validateDataNode() {
-      // Null DataNode OK for test.
-    }
-  }
-
-  // Permit DataNode to be constructed with a null Datacenter
-  public static class TestDataNode extends DataNode {
-
-    public TestDataNode(JSONObject jsonObject) throws JSONException {
-      super(null, jsonObject);
+    protected JSONArray getDataNodes(int basePort, JSONArray disks) throws JSONException {
+      return getJsonArrayDataNodes(dataNodeCount, "localhost", basePort, HardwareState.AVAILABLE, disks);
     }
 
-    public TestDataNode(String hostname, int port) {
-      super(null, hostname, port);
+    protected JSONArray getDatacenters() throws JSONException {
+      List<String> names = new ArrayList<String>(datacenterCount);
+      List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
+
+      int curBasePort = basePort;
+      for (int i=0; i<datacenterCount; i++) {
+        names.add(i, "DC"+i);
+        dataNodes.add(i, getDataNodes(curBasePort, getDisks()));
+        curBasePort += dataNodeCount;
+      }
+
+      return TestUtils.getJsonArrayDatacenters(names, dataNodes);
     }
 
-    @Override
-    public void validateDatacenter() {
-      // Null datacenter OK for test.
-    }
-  }
+    public TestHardwareLayout(String clusterName, int diskCount, long diskCapacityGB, int dataNodeCount, int datacenterCount, int basePort) throws JSONException {
+      this.diskCount = diskCount;
+      this.diskCapacityGB = diskCapacityGB;
+      this.dataNodeCount = dataNodeCount;
+      this.datacenterCount =datacenterCount;
+      this.basePort = basePort;
 
-  // Permit Datacenter to be constructed with a null Cluster
-  public static class TestDatacenter extends Datacenter {
-
-    public TestDatacenter(JSONObject jsonObject) throws JSONException {
-      super(null, jsonObject);
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()));
     }
 
-    public TestDatacenter(String name) {
-      super(null, name);
+    public TestHardwareLayout(String clusterName) throws JSONException {
+      this(clusterName, defaultDiskCount, defaultDiskCapacityGB, defaultDataNodeCount, defaultDatacenterCount, defaultBasePort);
     }
 
-    @Override
-    public void validateCluster() {
-      // Null cluster OK for test.
-    }
-  }
-
-  // Permit Partition to be constructed with a null Layout
-  public static class TestPartition extends Partition {
-
-    TestPartition(PartitionId partitionId, long replicaCapacityGB) {
-      super(null, partitionId, replicaCapacityGB);
+    public HardwareLayout getHardwareLayout() {
+      return hardwareLayout;
     }
 
-    TestPartition(JSONObject jsonObject) throws JSONException {
-      super(null, jsonObject);
+    public int getDiskCount() {
+      return diskCount;
     }
 
-    @Override
-    protected void validateLayout() {
-      // Null layout OK for test.
+    public long getDiskCapacityGB() {
+      return diskCapacityGB;
     }
-  }
 
-  static public int getNewPort() {
-    int port = basePort;
-    basePort++;
-    return port;
-  }
-
-  static public String getNewMountPath() {
-    String mountPath = "/mnt" + baseMountPathOffset;
-    baseMountPathOffset++;
-    return mountPath;
-  }
-
-  // Return fully constructed DataNodeId
-  static public DataNodeId getNewDataNodeId() {
-    return new DataNodeId("localhost", getNewPort());
-  }
-
-  // Return fully constructed DiskId
-  static public DiskId getNewDiskId() {
-    return new DiskId(getNewDataNodeId(), getNewMountPath());
-  }
-
-  // Return fully constructed Disk for given DataNode.
-  static public Disk getNewDisk(DataNode dataNode) {
-    return new Disk(dataNode, getNewMountPath(), diskCapacityGB);
-  }
-
-  // Return partially constructed Disk. Returned Disk lacks "parent" reference to DataNode.
-  static public Disk getNewTestDisk() {
-    return new TestDisk(getNewDiskId(), diskCapacityGB);
-  }
-
-  // Add two disks to dataNode.
-  static public void populateDataNode(DataNode dataNode) {
-    dataNode.addDisk(getNewDisk(dataNode));
-    dataNode.addDisk(getNewDisk(dataNode));
-  }
-
-  // Return fully constructed DataNode with two disks.
-  static public DataNode getNewDataNode(Datacenter datacenter) {
-    DataNode dataNode = new DataNode(datacenter, "localhost", getNewPort());
-    populateDataNode(dataNode);
-    return dataNode;
-  }
-
-  // Return partially constructed DataNode. Returned DataNode lacks "parent" reference to Datacenter. Has two disks.
-  static public DataNode getNewTestDataNode() {
-    DataNode dataNode = new TestDataNode("localhost", getNewPort());
-    populateDataNode(dataNode);
-    return dataNode;
-  }
-
-  // Add two DataNodes to Datacenter
-  static public void populateDatacenter(Datacenter datacenter) {
-    datacenter.addDataNode(getNewDataNode(datacenter));
-    datacenter.addDataNode(getNewDataNode(datacenter));
-  }
-
-  // Return fully constructed Datacenter populated with DataNodes and Disks.
-  static public Datacenter getNewDatacenter(Cluster cluster, String name) {
-    Datacenter datacenter = new Datacenter(cluster, name);
-    populateDatacenter(datacenter);
-    return datacenter;
-  }
-
-  // Return partially constructed Datacenter. Returned Datacenter lacks "parent" reference to Cluster. Has two nodes.
-  static public Datacenter getNewTestDatacenter(String name) {
-    Datacenter datacenter = new TestDatacenter(name);
-    populateDatacenter(datacenter);
-    return datacenter;
-  }
-
-  // Return fully constructed cluster populated with datacenters, datanodes, and disks. Cluster is built using
-  // various TestUtils methods.
-  static public Cluster getNewCluster(String name) {
-    Cluster cluster = new Cluster(name);
-
-    cluster.addDatacenter(getNewDatacenter(cluster, "ELA4"));
-    cluster.addDatacenter(getNewDatacenter(cluster, "LVA1"));
-
-    return cluster;
-  }
-
-  // Return fully constructed cluster populated with datacenters, datanodes, and disks. Cluster is built using the
-  // cluster API.
-  public static Cluster buildCluster(String clusterName) {
-    Cluster cluster = new Cluster(clusterName);
-
-    cluster.addNewDataCenter("ELA4");
-
-    int port = getNewPort();
-    cluster.addNewDataNode("ELA4", "localhost", port);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    port = getNewPort();
-    cluster.addNewDataNode("ELA4", "localhost", port);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    cluster.addNewDataCenter("LVA1");
-
-    port = getNewPort();
-    cluster.addNewDataNode("LVA1", "localhost", port);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    port = getNewPort();
-    cluster.addNewDataNode("LVA1", "localhost", port);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    cluster.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    return cluster;
-  }
-
-  // Return fully constructed PartitionId
-  static public PartitionId getNewPartitionId() {
-    if (prevPartitionId == null) {
-      prevPartitionId = PartitionId.getFirstPartitionId();
-    } else {
-      prevPartitionId = PartitionId.getNewPartitionId(prevPartitionId);
+    public int getDataNodeCount() {
+      return dataNodeCount;
     }
-    return prevPartitionId;
-  }
 
-  static public Partition getNewTestPartition() {
-    return new TestPartition(getNewPartitionId(), replicaCapacityGB);
-  }
+    public int getDatacenterCount() {
+      return datacenterCount;
+    }
 
-  // Return fully constructed ReplicaId
-  static public ReplicaId getNewReplicaId() {
-    return new ReplicaId(getNewPartitionId(), getNewDiskId());
-  }
+    public Datacenter getRandomDatacenter() {
+      if (hardwareLayout.getDatacenters().size()==0) {
+        return null;
+      }
+      return hardwareLayout.getDatacenters().get(new Random().nextInt(hardwareLayout.getDatacenters().size()));
+    }
 
-  // Populate disksA and disksB for use in Partition construction. Hacky and ugly interface.
-  private static void populateDiskSetsForPartitions(Cluster cluster, ArrayList<Disk> disksA, ArrayList<Disk> disksB) {
-    for (Datacenter datacenter : cluster.getDatacenters()) {
-      for (DataNode dataNode : datacenter.getDataNodes()) {
-        int count = 0;
-        for (Disk disk : dataNode.getDisks()) {
-          if (count == 0) {
-            disksA.add(disk);
-            count++;
-          } else if (count == 1) {
-            disksB.add(disk);
-            count++;
-          } else {
-            break;
+    public DataNode getRandomDataNode() {
+      Datacenter datacenter = getRandomDatacenter();
+      if (datacenter == null || datacenter.getDataNodes().size()==0) {
+        return null;
+      }
+      return datacenter.getDataNodes().get(new Random().nextInt(datacenter.getDataNodes().size()));
+    }
+
+    public List<DataNode> getRandomDataNodes(int dataNodeCount) {
+      List<DataNode> dataNodes = new ArrayList<DataNode>();
+      for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+        dataNodes.addAll(datacenter.getDataNodes());
+      }
+      if (dataNodes.size() < dataNodeCount || dataNodeCount < 0) {
+        throw new IndexOutOfBoundsException("dataNodeCount out of bounds:" + dataNodeCount);
+      }
+      Collections.shuffle(dataNodes);
+      return dataNodes.subList(0, dataNodeCount);
+    }
+
+    public Disk getRandomDisk() {
+      DataNode dataNode = getRandomDataNode();
+      if (dataNode == null || dataNode.getDisks().size()==0) {
+        return null;
+      }
+      return dataNode.getDisks().get(new Random().nextInt(dataNode.getDisks().size()));
+    }
+
+    // Finds diskCount disks, each on distinct random datanodes.
+    public List<Disk> getIndependentDisks(int diskCount) {
+      List<DataNode> dataNodes = getRandomDataNodes(diskCount);
+      List<Disk> disks = new ArrayList<Disk>(diskCount);
+      for (DataNode dataNode : dataNodes) {
+        disks.add(dataNode.getDisks().get(new Random().nextInt(dataNode.getDisks().size())));
+      }
+      return disks;
+    }
+
+    // Finds disks that share a DataNode
+    public List<Disk> getDependentDisks(int diskCount) {
+      List<Disk> disks = new ArrayList<Disk>(diskCount);
+      if (diskCount < 2) {
+        throw new IllegalArgumentException("diskcount does not make sense:" + diskCount);
+      }
+
+      // Add 2 random disks from same DataNode
+      for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+        for (DataNode dataNode : datacenter.getDataNodes()) {
+          int numDisks = dataNode.getDisks().size();
+          if (numDisks > 1) {
+            diskCount -= 2;
+            int rndDiskA = new Random().nextInt(numDisks);
+            int rndDiskB = (rndDiskA + new Random().nextInt(numDisks - 1)) % numDisks;
+            disks.add(dataNode.getDisks().get(rndDiskA));
+            disks.add(dataNode.getDisks().get(rndDiskB));
           }
         }
       }
+
+      // Add more disks, possibly adding same disk multiple times.
+      while(diskCount > 0) {
+        disks.add(getRandomDisk());
+        diskCount--;
+      }
+
+      return disks;
     }
   }
 
-  public static Layout buildLayout(Cluster cluster) {
-    Layout layout = new Layout(cluster);
+  // TODO: Better name? Extract into own file?
+  public static class TestPartitionLayout {
+    protected static final int defaultPartitionCount = 10;
+    protected static final PartitionState defaultPartitionState = PartitionState.READ_WRITE;
+    protected static final long defaultReplicaCapacityGB = 100;
+    protected static final int defaultReplicaCount = 6; // Per Partition
 
-    ArrayList<Disk> disksA = new ArrayList<Disk>();
-    ArrayList<Disk> disksB = new ArrayList<Disk>();
-    populateDiskSetsForPartitions(cluster, disksA, disksB);
+    protected int partitionCount;
+    protected PartitionState partitionState;
+    protected long replicaCapacityGB;
+    protected int replicaCount;
 
-    layout.addNewPartition(disksA, replicaCapacityGB);
-    layout.addNewPartition(disksB, replicaCapacityGB);
+    protected TestHardwareLayout testHardwareLayout;
+    protected PartitionLayout partitionLayout;
 
-    return layout;
+    protected JSONObject makeJsonPartitionLayout() throws JSONException {
+      JSONArray jsonPartitions = getJsonPartitions(partitionCount, partitionState, replicaCapacityGB, replicaCount, testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), partitionCount, jsonPartitions);
+    }
+
+    public TestPartitionLayout(TestHardwareLayout testHardwareLayout, int partitionCount, PartitionState partitionState, long replicaCapacityGB, int replicaCount) throws JSONException {
+      this.partitionCount = partitionCount;
+      this.partitionState = partitionState;
+      this.replicaCapacityGB = replicaCapacityGB;
+      this.replicaCount = replicaCount;
+
+      this.testHardwareLayout = testHardwareLayout;
+      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), makeJsonPartitionLayout());
+    }
+
+    public TestPartitionLayout(TestHardwareLayout testHardwareLayout) throws JSONException {
+      this(testHardwareLayout, defaultPartitionCount, defaultPartitionState, defaultReplicaCapacityGB, defaultReplicaCount);
+    }
+
+    public PartitionLayout getPartitionLayout() {
+      return partitionLayout;
+    }
+
+    public int getPartitionCount() {
+      return partitionCount;
+    }
+
+    public int getReplicaCount() {
+      return replicaCount;
+    }
+
+    public long getCapacityGB() {
+      return partitionCount * replicaCount * replicaCapacityGB;
+    }
   }
 
-  public static ClusterMapManager buildClusterMapManagerIndirectly(String name) {
-    Cluster cluster = buildCluster(name);
-    Layout layout = new Layout(cluster);
+  public static class TestPartitionLayoutWithDuplicatePartitions  extends TestPartitionLayout {
+    protected JSONObject makeJsonPartitionLayout() throws JSONException {
+      JSONArray jsonPartitions = getJsonDuplicatePartitions(partitionCount, partitionState, replicaCapacityGB, replicaCount, testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), partitionCount, jsonPartitions);
+    }
 
-    ClusterMapManager clusterMapManager = new ClusterMapManager(cluster, layout);
+    public TestPartitionLayoutWithDuplicatePartitions(TestHardwareLayout testHardwareLayout) throws JSONException {
+      super(testHardwareLayout);
+    }
+  }
 
-    ArrayList<Disk> disksA = new ArrayList<Disk>();
-    ArrayList<Disk> disksB = new ArrayList<Disk>();
-    populateDiskSetsForPartitions(cluster, disksA, disksB);
+  public static class TestPartitionLayoutWithDuplicateReplicas  extends TestPartitionLayout {
+    protected JSONObject makeJsonPartitionLayout() throws JSONException {
+      JSONArray jsonPartitions = getJsonDuplicateReplicas(partitionCount, partitionState, replicaCapacityGB, replicaCount, testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), partitionCount, jsonPartitions);
+    }
 
-    clusterMapManager.addNewPartition(disksA, replicaCapacityGB);
-    clusterMapManager.addNewPartition(disksB, replicaCapacityGB);
+    public TestPartitionLayoutWithDuplicateReplicas(TestHardwareLayout testHardwareLayout) throws JSONException {
+      super(testHardwareLayout);
+    }
+  }
+
+  public static class TestPartitionLayoutWithBadPartitionIds  extends TestPartitionLayout {
+    protected JSONObject makeJsonPartitionLayout() throws JSONException {
+      JSONArray jsonPartitions = getJsonPartitionsWithBadIds(partitionCount, partitionState, replicaCapacityGB, replicaCount, testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), partitionCount, jsonPartitions);
+    }
+
+    public TestPartitionLayoutWithBadPartitionIds(TestHardwareLayout testHardwareLayout) throws JSONException {
+      super(testHardwareLayout);
+    }
+  }
+
+
+  public static ClusterMapManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter, long replicaCapacityGB) throws JSONException {
+
+    TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
+
+    ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
+    List<PartitionId> allocatedPartitions;
+
+    allocatedPartitions = clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityGB);
+    assertEquals(allocatedPartitions.size(), 5);
 
     return clusterMapManager;
   }
 
+  public static ClusterMapManager getTestClusterMap() throws JSONException {
+    int numPartitions = 5;
+    int replicaCountPerDatacenter = 2;
+    long replicaCapacityGB = 100;
 
-  public static ClusterMapManager buildClusterMapManagerWithoutPartitions(String name) {
-    Cluster cluster = buildCluster(name);
-    Layout layout = new Layout(cluster);
-
-    return new ClusterMapManager(cluster, layout);
+    return getTestClusterMap(numPartitions, replicaCountPerDatacenter, replicaCapacityGB);
   }
-
-  public static ClusterMapManager buildClusterMapManagerDirectly(String clusterName) {
-    ClusterMapManager clusterMapManager = new ClusterMapManager(clusterName);
-
-    clusterMapManager.addNewDataCenter("ELA4");
-
-    int port = getNewPort();
-    clusterMapManager.addNewDataNode("ELA4", "localhost", port);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    port = getNewPort();
-    clusterMapManager.addNewDataNode("ELA4", "localhost", port);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    clusterMapManager.addNewDataCenter("LVA1");
-
-    port = getNewPort();
-    clusterMapManager.addNewDataNode("LVA1", "localhost", port);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    port = getNewPort();
-    clusterMapManager.addNewDataNode("LVA1", "localhost", port);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-    clusterMapManager.addNewDisk("localhost", port, getNewMountPath(), diskCapacityGB);
-
-    ArrayList<Disk> disksA = new ArrayList<Disk>();
-    ArrayList<Disk> disksB = new ArrayList<Disk>();
-    populateDiskSetsForPartitions(clusterMapManager.getCluster(), disksA, disksB);
-
-    clusterMapManager.addNewPartition(disksA, replicaCapacityGB);
-    clusterMapManager.addNewPartition(disksB, replicaCapacityGB);
-
-    return clusterMapManager;
-  }
-
 
 }
+

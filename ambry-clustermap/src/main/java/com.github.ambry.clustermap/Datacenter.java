@@ -8,39 +8,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
- * Datacenter represents a datacenter in Ambry. Each Datacenter is uniquely identifiable by its name.
+ * A Datacenter in an Ambry cluster. A Datacenter is uniquely identifiable by its name. A Datacenter is the primary unit
+ * at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link DataNode}s.
  */
 public class Datacenter {
-  private Cluster cluster;
+  private HardwareLayout hardwareLayout;
   private String name; // E.g., "ELA4"
   private ArrayList<DataNode> dataNodes;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Datacenter(Cluster cluster, JSONObject jsonObject) throws JSONException {
-    this.cluster = cluster;
+  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
 
-    this.dataNodes = new ArrayList<DataNode>();
+    this.dataNodes = new ArrayList<DataNode>(jsonObject.getJSONArray("dataNodes").length());
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
       this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i)));
     }
     validate();
   }
 
-  public Datacenter(Cluster cluster, String name) {
-    this.cluster = cluster;
-    this.name = name;
-    this.dataNodes = new ArrayList<DataNode>();
-    validate();
-  }
-
-  public Cluster getCluster() {
-    return cluster;
+  public HardwareLayout getHardwareLayout() {
+    return hardwareLayout;
   }
 
   public String getName() {
@@ -55,33 +48,29 @@ public class Datacenter {
     return capacityGB;
   }
 
+  public List<DataNode> getDataNodes() {
+    return dataNodes;
+  }
 
-  protected void validateCluster() {
-    if (cluster == null) {
-      throw new IllegalStateException("Cluster cannot be null");
+  protected void validateHardwareLayout() {
+    if (hardwareLayout == null) {
+      throw new IllegalStateException("HardwareLayout cannot be null");
     }
   }
 
   protected void validateName() {
     if (name == null) {
       throw new IllegalStateException("Datacenter name cannot be null.");
+    } else if (name.length() == 0) {
+      throw new IllegalStateException("Datacenter name cannot be zero length.");
     }
   }
 
-  public void validate() {
-    validateCluster();
+  protected void validate() {
+    logger.trace("begin validate.");
+    validateHardwareLayout();
     validateName();
-    for (DataNode dataNode : dataNodes) {
-      dataNode.validate();
-    }
-  }
-
-  public void addDataNode(DataNode dataNode) {
-    dataNodes.add(dataNode);
-  }
-
-  public List<DataNode> getDataNodes() {
-    return Collections.unmodifiableList(dataNodes);
+    logger.trace("complete validate.");
   }
 
   public JSONObject toJSONObject() throws JSONException {
@@ -99,7 +88,7 @@ public class Datacenter {
     try {
       return toJSONObject().toString();
     } catch (JSONException e) {
-      logger.warn("JSONException caught in toString:" + e.getCause());
+      logger.error("JSONException caught in toString: {}",  e.getCause());
     }
     return null;
   }
@@ -111,7 +100,6 @@ public class Datacenter {
 
     Datacenter that = (Datacenter) o;
 
-    if (!dataNodes.equals(that.dataNodes)) return false;
     if (!name.equals(that.name)) return false;
 
     return true;
@@ -119,8 +107,6 @@ public class Datacenter {
 
   @Override
   public int hashCode() {
-    int result = name.hashCode();
-    result = 31 * result + dataNodes.hashCode();
-    return result;
+    return name.hashCode();
   }
 }

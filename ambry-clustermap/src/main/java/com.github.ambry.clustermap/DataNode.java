@@ -6,64 +6,74 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
- * DataNode represents data nodes in Ambry. Each DataNode is uniquely identifiable by its hostname.
+ * DataNode is uniquely identified by its hostname and port. A DataNode is in a {@link Datacenter}. A DataNode has zero
+ * or more {@link Disk}s.
  */
-public class DataNode {
-  public enum State {
-    AVAILABLE,
-    UNAVAILABLE
-  }
+public class DataNode implements DataNodeId {
+  private static final int MinPort = 1025;
+  private static final int MaxPort = 65535;
 
   private Datacenter datacenter;
-  private DataNodeId dataNodeId;
-  private State state;
+  private String hostname;
+  private int port;
+  private HardwareState hardwareState;
   private ArrayList<Disk> disks;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public DataNode(Datacenter datacenter, String hostname, int port) {
-    this.datacenter = datacenter;
-    this.dataNodeId = new DataNodeId(hostname, port);
-    this.state = State.AVAILABLE;
-    this.disks = new ArrayList<Disk>();
-    validate();
-  }
-
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
     this.datacenter = datacenter;
-    this.dataNodeId = new DataNodeId(jsonObject.getJSONObject("dataNodeId"));
-    this.state = State.valueOf(jsonObject.getString("state"));
-    this.disks = new ArrayList<Disk>();
+
+    this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
+    this.port = jsonObject.getInt("port");
+    this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
+    this.disks = new ArrayList<Disk>(diskJSONArray.length());
     for (int i = 0; i < diskJSONArray.length(); ++i) {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i)));
     }
+
     validate();
   }
 
-  public DataNodeId getDataNodeId() {
-    return dataNodeId;
-  }
+  protected String getFullyQualifiedDomainName(String unqualifiedHostname) {
+    if (unqualifiedHostname == null) {
+      throw new IllegalStateException("Hostname cannot be null.");
+    } else if (unqualifiedHostname.length() == 0) {
+      throw new IllegalStateException("Hostname cannot be zero length.");
+    }
 
-  public String getHostname() {
-    return dataNodeId.getHostname();
-  }
-
-  public int getPort() {
-    return dataNodeId.getPort();
+    try {
+      return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName();
+    } catch (UnknownHostException e) {
+      throw new IllegalStateException("Host (" + unqualifiedHostname
+              + ") is unknown so cannot determine fully qualified domain name.");
+    }
   }
 
   public Datacenter getDatacenter() {
     return datacenter;
   }
 
-  public State getState() {
-    return state;
+  @Override
+  public String getHostname() {
+    return hostname;
+  }
+
+  @Override
+  public int getPort() {
+    return port;
+  }
+
+  @Override
+  public HardwareState getHardwareState() {
+    return hardwareState;
   }
 
   public long getCapacityGB() {
@@ -74,48 +84,48 @@ public class DataNode {
     return capacityGB;
   }
 
-  public void addDisk(Disk disk) {
-    disks.add(disk);
-  }
-
   public List<Disk> getDisks() {
-    return Collections.unmodifiableList(disks);
+    return disks;
   }
 
   protected void validateDatacenter() {
     if (datacenter == null) {
-      throw new IllegalStateException("Datacenter cannot be null");
+      throw new IllegalStateException("Datacenter cannot be null.");
     }
   }
 
-  protected boolean isStateValid() {
-    for (State validState : State.values()) {
-      if (state == validState) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  protected void validateState() {
-    if (!isStateValid()) {
-      throw new IllegalStateException("Invalid DataNode state: " + state);
+  protected void validateHostname() {
+    String fqdn = getFullyQualifiedDomainName(hostname);
+    if (!fqdn.equals(hostname)) {
+      throw new IllegalStateException("Hostname for DataNode ("+hostname
+              + ") does not match its fully qualified domain name: " + fqdn + ".");
     }
   }
 
-  public void validate() {
+  protected void validatePort() {
+    if (port < MinPort) {
+      throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
+    } else if(port > MaxPort) {
+      throw new IllegalStateException("Invalid port: " + port + " is less than " + MaxPort);
+    }
+  }
+
+  protected void validate() {
+    logger.trace("begin validate.");
     validateDatacenter();
-    dataNodeId.validate();
-    validateState();
+    validateHostname();
+    validatePort();
     for (Disk disk : disks) {
       disk.validate();
     }
+    logger.trace("complete validate.");
   }
 
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
-            .put("dataNodeId", dataNodeId.toJSONObject())
-            .put("state", state)
+            .put("hostname", hostname)
+            .put("port", port)
+            .put("hardwareState", hardwareState)
             .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
@@ -128,7 +138,7 @@ public class DataNode {
     try {
       return toJSONObject().toString();
     } catch (JSONException e) {
-      logger.warn("JSONException caught in toString:" + e.getCause());
+      logger.error("JSONException caught in toString: {}",  e.getCause());
     }
     return null;
   }
@@ -140,18 +150,16 @@ public class DataNode {
 
     DataNode dataNode = (DataNode) o;
 
-    if (!dataNodeId.equals(dataNode.dataNodeId)) return false;
-    if (!disks.equals(dataNode.disks)) return false;
-    if (state != dataNode.state) return false;
+    if (port != dataNode.port) return false;
+    if (!hostname.equals(dataNode.hostname)) return false;
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    int result = dataNodeId.hashCode();
-    result = 31 * result + state.hashCode();
-    result = 31 * result + disks.hashCode();
+    int result = hostname.hashCode();
+    result = 31 * result + port;
     return result;
   }
 }

@@ -1,10 +1,9 @@
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionIdentifier;
-import com.github.ambry.clustermap.ReplicaContext;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -18,25 +17,26 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * ClusterMapManager allows components in Ambry to query the topology. This covers both cluster hardware and data
- * layout.
+ * ClusterMapManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
+ * {@link PartitionLayout}.
  */
 public class ClusterMapManager implements ClusterMap {
-  protected Cluster cluster;
-  protected Layout layout;
+  protected HardwareLayout hardwareLayout;
+  protected PartitionLayout partitionLayout;
 
-  public ClusterMapManager(String clusterName) {
-    this.cluster = new Cluster(clusterName);
-    this.layout = new Layout(cluster);
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
+  public ClusterMapManager(PartitionLayout partitionLayout) {
+    this.hardwareLayout = partitionLayout.getHardwareLayout();
+    this.partitionLayout = partitionLayout;
   }
 
-  public ClusterMapManager(Cluster cluster, Layout layout) {
-    this.cluster = cluster;
-    this.layout = layout;
+  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
+    this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
   }
 
-  // TODO: Ram, any preferences on file IO utility libraries? E.g., http://commons.apache.org/proper/commons-io/.
-  // Or, should we add file writer/reader helpers to ambry-utils.
+  // TODO: Move to utils after re-based.
   private static void writeStringToFile(String string, String path) throws IOException {
     FileWriter fileWriter = null;
     try {
@@ -50,6 +50,12 @@ public class ClusterMapManager implements ClusterMap {
     }
   }
 
+  // TODO: Move to utils after re-based.
+  private static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
+    writeStringToFile(jsonObject.toString(2), path);
+  }
+
+  // TODO: Move to utils after re-based.
   private static String readStringFromFile(String path) throws IOException {
     // Code cribbed from StackOverflow and is similar to IO Commons and Guava
     // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
@@ -57,97 +63,78 @@ public class ClusterMapManager implements ClusterMap {
     return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
   }
 
-  public void persist(String clusterPath, String layoutPath) throws IOException {
-    writeStringToFile(cluster.toString(), clusterPath);
-    writeStringToFile(layout.toString(), layoutPath);
+  // TODO: Move to utils after re-based.
+  private static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
+    return new JSONObject(readStringFromFile(path));
   }
 
-  public static ClusterMapManager buildFromFiles(String clusterPath, String layoutPath) throws IOException, JSONException {
-    Cluster cluster = new Cluster(new JSONObject(readStringFromFile(clusterPath)));
-    Layout layout = new Layout(cluster, new JSONObject(readStringFromFile(layoutPath)));
-
-    return new ClusterMapManager(cluster, layout);
+  public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+    writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
+    writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
   // Implementation of ClusterMap interface
   // --------------------------------------
 
-  public List<Partition> getWritablePartitions() {
-    return layout.getWritablePartitions();
+  public List<? extends PartitionId> getWritablePartitionIds() {
+    return partitionLayout.getWritablePartitions();
   }
 
   @Override
-  public int getNumWritablePartitions() {
-    return getWritablePartitions().size();
+  public PartitionId getPartitionIdFromBytes(byte[] bytes) {
+    return partitionLayout.getPartition(bytes);
   }
 
   @Override
-  public PartitionIdentifier getWritablePartitionByOffset(int offset) {
-    return layout.getWritablePartitions().get(offset).getPartitionId();
+  public long getWritablePartitionIdsCount() {
+    return getWritablePartitionIds().size();
   }
 
   @Override
-  public PartitionId getPartitionIdentifier(byte[] bytes) {
-    return PartitionId.make(bytes);
-  }
-
-  public Partition getPartition(PartitionIdentifier partitionIdentifier) {
-    return layout.getPartition(partitionIdentifier);
+  public PartitionId getWritablePartitionIdAt(long index) {
+    // TODO: Ints.checkedCast(index) seems much better to me. Why not use Guava? Should we implement checkedCast in
+    // utils if we don't import Guava?
+    // return partitionLayout.getWritablePartitionIds().get(Ints.checkedCast(index));
+    return partitionLayout.getWritablePartitions().get((int)index);
   }
 
   @Override
-  public List<ReplicaContext> getReplicas(PartitionIdentifier partitionIdentifier) {
-    List<ReplicaContext> replicaContexts = new ArrayList<ReplicaContext>();
-
-    for (Replica replica : getPartition(partitionIdentifier).getReplicas()) {
-        replicaContexts.add(replica.getReplicaContext());
-
-    }
-
-    return replicaContexts;
+  public DataNodeId getDataNodeId(String hostname, int port) {
+    return hardwareLayout.findDataNode(hostname, port);
   }
 
-
   @Override
-  public List<ReplicaContext> getPeerReplicas(PartitionIdentifier partitionIdentifier, ReplicaContext replicaContext) {
-    List<ReplicaContext> peerReplicaContexts = new ArrayList<ReplicaContext>();
-    for(ReplicaContext peerReplicaContext : getReplicas(partitionIdentifier)) {
-      if (!peerReplicaContext.equals(replicaContext)) {
-        peerReplicaContexts.add(peerReplicaContext);
+  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+    return getReplicas(dataNodeId);
+  }
+
+  public List<Replica> getReplicas(DataNodeId dataNodeId) {
+    List<Replica> replicas = new ArrayList<Replica>();
+    for (Partition partition : partitionLayout.getPartitions()) {
+      for (Replica replica : partition.getReplicas()) {
+        if (replica.getDataNodeId().equals(dataNodeId)) {
+          replicas.add(replica);
+        }
       }
     }
-
-    return peerReplicaContexts;
+    return replicas;
   }
 
 
   // Administrative API
   // -----------------------
 
-  public List<Replica> getPeerReplicas(Replica replica) {
-    ArrayList<Replica> peerReplicas = new ArrayList<Replica>();
-
-    for (Replica peerReplica : replica.getPartition().getReplicas()) {
-      if (!replica.equals(peerReplica)) {
-        peerReplicas.add(peerReplica);
-      }
-    }
-
-    return peerReplicas;
-  }
-
-
   public long getRawCapacityGB() {
-    return cluster.getCapacityGB();
+    return hardwareLayout.getCapacityGB();
   }
 
   public long getAllocatedCapacityGB() {
-    return layout.getCapacityGB();
+    return partitionLayout.getCapacityGB();
   }
 
   public long getAllocatedCapacityGB(Datacenter datacenter) {
     long allocatedCapacityGB = 0;
-    for (Partition partition : layout.getPartitions()) {
+    for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().getDataNode().getDatacenter().equals(datacenter)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -157,9 +144,9 @@ public class ClusterMapManager implements ClusterMap {
     return allocatedCapacityGB;
   }
 
-  public long getAllocatedCapacityGB(DataNode dataNode) {
+  public long getAllocatedCapacityGB(DataNodeId dataNode) {
     long allocatedCapacityGB = 0;
-    for (Partition partition : layout.getPartitions()) {
+    for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().getDataNode().equals(dataNode)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -171,7 +158,7 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedCapacityGB(Disk disk) {
     long allocatedCapacityGB = 0;
-    for (Partition partition : layout.getPartitions()) {
+    for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         if (replica.getDisk().equals(disk)) {
           allocatedCapacityGB += replica.getCapacityGB();
@@ -197,31 +184,15 @@ public class ClusterMapManager implements ClusterMap {
     return disk.getCapacityGB() - getAllocatedCapacityGB(disk);
   }
 
-  public Cluster getCluster() {
-    return cluster;
+  public PartitionId addNewPartition(List<Disk> disks, long replicaCapacityGB) {
+    return partitionLayout.addNewPartition(disks, replicaCapacityGB);
   }
 
-  public Datacenter addNewDataCenter(String datacenterName) {
-    return cluster.addNewDataCenter(datacenterName);
-  }
-
-  public DataNode addNewDataNode(String datacenterName, String hostname, int port) {
-    return cluster.addNewDataNode(datacenterName, hostname, port);
-  }
-
-  public Disk addNewDisk(String hostname, int port, String mountPath, long capacityGB) {
-    return cluster.addNewDisk(hostname, port, mountPath, capacityGB);
-  }
-
-  public Partition addNewPartition(List<Disk> disks, long replicaCapacityGB) {
-    return layout.addNewPartition(disks, replicaCapacityGB);
-  }
-
-  // Determine if there is enough capacity to allocate a Partition
+  // Determine if there is enough capacity to allocate a PartitionId
   private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
-    for (Datacenter datacenter : cluster.getDatacenters()) {
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       if (getFreeCapacityGB(datacenter) < replicaCountPerDatacenter * replicaCapacityGB) {
-        // Log
+        logger.warn("Insufficient free space in datacenter {} ({} GB free)", datacenter.getName(), getFreeCapacityGB(datacenter));
         return false;
       }
 
@@ -230,12 +201,12 @@ public class ClusterMapManager implements ClusterMap {
         for (Disk disk : dataNode.getDisks()) {
           if (getFreeCapacityGB(disk) >= replicaCapacityGB) {
             rcpd--;
-            break; // Only one replica per DataNode.
+            break; // Only one replica per DataNodeId.
           }
         }
       }
       if (rcpd > 0) {
-        // Log
+        logger.warn("Insufficient DataNodes ({}) with free space in datacenter {} for {} Replicas)", rcpd, datacenter.getName(), replicaCountPerDatacenter);
         return false;
       }
     }
@@ -247,12 +218,12 @@ public class ClusterMapManager implements ClusterMap {
   private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityGB) {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
-    for (Datacenter datacenter : cluster.getDatacenters()) {
-      List<DataNode> suffledDataNodes = new ArrayList<DataNode>(datacenter.getDataNodes());
-      Collections.shuffle(suffledDataNodes);
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+      List<DataNode> shuffledDataNodes = new ArrayList<DataNode>(datacenter.getDataNodes());
+      Collections.shuffle(shuffledDataNodes);
 
       int rcpd = replicaCountPerDatacenter;
-      for (DataNode dataNode : suffledDataNodes) {
+      for (DataNode dataNode : shuffledDataNodes) {
         List<Disk> shuffledDisks = new ArrayList<Disk>(dataNode.getDisks());
         Collections.shuffle(shuffledDisks);
 
@@ -260,7 +231,7 @@ public class ClusterMapManager implements ClusterMap {
           if (disk.getCapacityGB() > replicaCapacityGB) {
             allocatedDisks.add(disk);
             rcpd--;
-            break; // Only one replica per DataNode.
+            break; // Only one replica per DataNodeId.
           }
         }
 
@@ -274,15 +245,13 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
-  // Hackish 1st attempt at Partition allocation policy to confirm Administrative API is sufficient.
-  public List<Partition> allocatePartitions(int numPartitions, long replicaCapacityGB) {
-    ArrayList<Partition> partitions = new ArrayList<Partition>();
-    final int replicaCountPerDatacenter = 2;
-
+  // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient.
+  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter, long replicaCapacityGB) {
+    ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityGB) && numPartitions > 0) {
       List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityGB);
-      partitions.add(layout.addNewPartition(disks, replicaCapacityGB));
+      partitions.add(partitionLayout.addNewPartition(disks, replicaCapacityGB));
       numPartitions--;
     }
 
@@ -296,16 +265,11 @@ public class ClusterMapManager implements ClusterMap {
 
     ClusterMapManager that = (ClusterMapManager) o;
 
-    if (!cluster.equals(that.cluster)) return false;
-    if (!layout.equals(that.layout)) return false;
+    if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null)
+      return false;
+    if (partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null)
+      return false;
 
     return true;
-  }
-
-  @Override
-  public int hashCode() {
-    int result = cluster.hashCode();
-    result = 31 * result + layout.hashCode();
-    return result;
   }
 }

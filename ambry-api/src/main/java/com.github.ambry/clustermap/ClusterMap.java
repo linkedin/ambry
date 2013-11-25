@@ -3,45 +3,48 @@ package com.github.ambry.clustermap;
 import java.util.List;
 
 /**
- * The ClusterMap provides a high level interface to Partitions and Replicas. A Partition consists of one or more
- * Replicas. A Partition is uniquely identified by a PartitionIdentifier. A Replica is hosted on some DataNode which is
- * identified by its hostname and port. On that DataNode, the Replica is stored in some path identified by the
- * mountPath. The ReplicaContext permits access to these key attributes of a Replica.
+ * The ClusterMap provides a high-level interface to {@link DataNodeId}s, {@link PartitionId}s and {@link ReplicaId}s.
  */
 public interface ClusterMap {
 
   /**
-   * Find out how many writable partitions there are.
-   * @return number of writable partitions.
+   * Gets PartitionId based on serialized bytes.
+   *
+   * @param bytes byte-serialized PartitionId.
+   * @return deserialized PartitionId.
    */
-  public int getNumWritablePartitions();
+  public PartitionId getPartitionIdFromBytes(byte[] bytes);
 
   /**
-   * Fetch PartitionIdentifier of specific Partition.
-   * @param offset of Partition of interest.
-   * @return PartitionIdentifier of writable Partition at specified offset.
+   * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such
+   * PartitionId.
+   *
+   * @return count of writable PartitionIds.
    */
-  public PartitionIdentifier getWritablePartitionByOffset(int offset);
+  public long getWritablePartitionIdsCount();
 
   /**
-   * Construct a PartitionIdentifier from serialized bytes.
-   * @param bytes serialized bytes.
-   * @return PartitionIdentifier constructed by deserialization of bytes.
+   * Gets a specific writable PartitionId by its index.
+   *
+   * @param index of desired writable PartitionId.
+   * @return specified writable PartitionId.
    */
-  public PartitionIdentifier getPartitionIdentifier(byte[] bytes);
+  public PartitionId getWritablePartitionIdAt(long index);
 
   /**
-   * Fetch a Partition's Replicas.
-   * @param partitionIdentifier  of Partition of interest.
-   * @return Partition's Replicas in form of ReplicaContexts.
+   * Gets a specific DataNodeId by its hostname and port.
+   *
+   * @param hostname of the DataNodeId
+   * @param port of the DataNodeId
+   * @return DataNodeId for this hostname and port.
    */
-  public List<ReplicaContext> getReplicas(PartitionIdentifier partitionIdentifier);
+  public DataNodeId getDataNodeId(String hostname, int port);
 
   /**
-   * Fetch a Replica's peers.
-   * @param partitionIdentifier of Partition.
-   * @param replicaContext of Replica.
-   * @return Peer Replicas in form of ReplicaContexts.
+   * Gets the ReplicaIds stored on the specified DataNodeId.
+   *
+   * @param dataNodeId
+   * @return list of ReplicaIds on the specified dataNodeId
    */
-  public List<ReplicaContext> getPeerReplicas(PartitionIdentifier partitionIdentifier, ReplicaContext replicaContext);
+  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId);
 }

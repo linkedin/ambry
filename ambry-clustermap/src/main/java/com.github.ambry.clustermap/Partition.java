@@ -6,66 +6,71 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * Partition is the unit of data management in Ambry. Blobs are stored in partitions. Partitions consist of replicas and
- * so are fault tolerant. Each Partition is uniquely identifiable by its PartitionId.
+ * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
+ * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
  */
-public class Partition {
-  public enum State {
-    READ_WRITE,
-    READ_ONLY
-  }
+public class Partition implements PartitionId {
 
-  Layout layout;
+  private static final long MinReplicaCapacityGB = 1;
+  private static final long MaxReplicaCapacityGB = 1024*10; // 10 TB
 
-  PartitionId partitionId;
-  State state;
-  // TODO: add replication policy object.
+  private long id;
+  PartitionState partitionState;
   long replicaCapacityGB;
-  ArrayList<Replica> replicas;
+  List<Replica> replicas;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
+  // For constructing new Partition
+  public Partition(long id, PartitionState partitionState, long replicaCapacityGB) {
 
-  public Partition(Layout layout, PartitionId partitionId, long replicaCapacityGB) {
-    this.layout = layout;
-
-    this.partitionId = partitionId;
-    this.state = State.READ_WRITE;
+    this.id = id;
+    this.partitionState = partitionState;
     this.replicaCapacityGB = replicaCapacityGB;
     this.replicas = new ArrayList<Replica>();
 
     validate();
   }
 
-  public Partition(Layout layout, JSONObject jsonObject) throws JSONException {
-    this.layout = layout;
+  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject) throws JSONException {
+    this(partitionLayout.getHardwareLayout(), jsonObject);
+  }
 
-    this.partitionId = new PartitionId(new JSONObject(jsonObject.getString("partitionId")));
-    this.state = State.valueOf(jsonObject.getString("state"));
+  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    this.id = jsonObject.getLong("id");
+    this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityGB = jsonObject.getLong("replicaCapacityGB");
-    this.replicas = new ArrayList<Replica>();
+    this.replicas = new ArrayList<Replica>(jsonObject.getJSONArray("replicas").length());
     for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
-      this.replicas.add(new Replica(this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
+      this.replicas.add(i, new Replica(hardwareLayout, this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
     }
 
     validate();
   }
 
-  public Layout getLayout() {
-    return layout;
+  @Override
+  public byte[] getBytes() {
+    ByteBuffer buffer = ByteBuffer.allocate(8);
+    buffer.putLong(id);
+    return buffer.array();
   }
 
-  public PartitionId getPartitionId() {
-    return partitionId;
+  @Override
+  public List<? extends ReplicaId> getReplicaIds() {
+    return getReplicas();
   }
 
-  public State getState() {
-    return state;
+  @Override
+  public PartitionState getPartitionState() {
+    return partitionState;
   }
 
   public long getCapacityGB() {
@@ -80,53 +85,60 @@ public class Partition {
     return Collections.unmodifiableList(replicas);
   }
 
+  /**
+   * Construct name based on Partition ID appropriate for use as a file or directory name.
+   *
+   * @return string representation of the Partition's ID for use as part of file system path.
+   */
+  public String toPathString() {
+    return Long.toString(id);
+  }
+
+  // For constructing new Partition
   public void addReplica(Replica replica) {
     replicas.add(replica);
+
+    validate();
   }
 
-  protected void validateLayout() {
-    if (layout == null) {
-      throw new IllegalStateException("Layout of a Partition cannot be null");
+  protected void validateReplicaCapacityGB() {
+    if (replicaCapacityGB < MinReplicaCapacityGB) {
+      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
+              + " is less than " + MinReplicaCapacityGB);
+    } else if(replicaCapacityGB > MaxReplicaCapacityGB) {
+      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
+              + " is more than " + MaxReplicaCapacityGB);
     }
   }
 
-  protected boolean isStateValid() {
-    for (State validState : State.values()) {
-      if (state == validState) {
-        return true;
+  protected void validateConstraints() {
+    // Ensure each replica is on distinct Disk and DataNode.
+    Set<DataNode> dataNodeSet = new HashSet<DataNode>();
+    Set<Disk> diskSet = new HashSet<Disk>();
+
+    for (Replica replica : replicas) {
+      if (!diskSet.add(replica.getDisk())) {
+        throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same Disk: "
+                + toString());
+      }
+      if (!dataNodeSet.add(replica.getDisk().getDataNode())) {
+        throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same DataNode: "
+                + toString());
       }
     }
-    return false;
   }
 
-  protected void validateState() {
-    if (!isStateValid()) {
-      throw new IllegalStateException("Invalid partition state: " + state);
-    }
-  }
-
-  protected void validateCapacity() {
-    if (replicaCapacityGB <= 0) {
-      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB);
-    }
-  }
-
-
-  public void validate() {
-    validateLayout();
-
-    partitionId.validate();
-    validateState();
-    validateCapacity();
-    for (Replica replica : replicas) {
-      replica.validate();
-    }
+  protected void validate() {
+    logger.trace("begin validate.");
+    validateReplicaCapacityGB();
+    validateConstraints();
+    logger.trace("complete validate.");
   }
 
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
-            .put("partitionId", partitionId.toJSONObject())
-            .put("state", state)
+            .put("id", id)
+            .put("partitionState", partitionState)
             .put("replicaCapacityGB", replicaCapacityGB)
             .put("replicas", new JSONArray());
     for (Replica replica : replicas) {
@@ -140,7 +152,7 @@ public class Partition {
     try {
       return toJSONObject().toString();
     } catch (JSONException e) {
-      logger.warn("JSONException caught in toString:" + e.getCause());
+      logger.error("JSONException caught in toString: {}", e.getCause());
     }
     return null;
   }
@@ -152,20 +164,13 @@ public class Partition {
 
     Partition partition = (Partition) o;
 
-    if (replicaCapacityGB != partition.replicaCapacityGB) return false;
-    if (!partitionId.equals(partition.partitionId)) return false;
-    if (!replicas.equals(partition.replicas)) return false;
-    if (state != partition.state) return false;
+    if (id != partition.id) return false;
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    int result = partitionId.hashCode();
-    result = 31 * result + state.hashCode();
-    result = 31 * result + replicas.hashCode();
-    result = 31 * result + (int) (replicaCapacityGB ^ (replicaCapacityGB >>> 32));
-    return result;
+    return (int) (id ^ (id >>> 32));
   }
 }

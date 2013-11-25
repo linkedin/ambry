@@ -7,45 +7,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Disk represents a disk in Ambry. Each Disk is uniquely identifiable by its diskId.
+ * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
+ * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-public class Disk {
-  public enum State {
-    AVAILABLE,
-    UNAVAILABLE
-  }
+public class Disk  {
+  // Hard-code disk capacity limits in GB for validation
+  private static final long MinCapacityGB = 10;
+  private static final long MaxCapacityGB = 1024*1024; // 1 PB
 
   private DataNode dataNode;
-  private DiskId diskId;
-  private State state;
+  private String mountPath;
+  private HardwareState hardwareState;
   private long capacityGB;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
     this.dataNode = dataNode;
-    this.diskId = new DiskId(jsonObject.getJSONObject("diskId"));
-    this.state = State.valueOf(jsonObject.getString("state"));
+    this.mountPath = jsonObject.getString("mountPath");
+    this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
     this.capacityGB = jsonObject.getLong("capacityGB");
-
-    validate();
-  }
-
-  public Disk(DataNode dataNode, String mountPath, long capacityGB) {
-    this.dataNode = dataNode;
-    this.diskId = new DiskId(dataNode.getDataNodeId(), mountPath);
-    this.state = State.AVAILABLE;
-    this.capacityGB = capacityGB;
-
-    validate();
-  }
-
-  // Useful constructor for unit tests
-  protected Disk(DataNode dataNode, DiskId diskID, long capacityGB) {
-    this.dataNode = dataNode;
-    this.diskId = diskID;
-    this.state = State.AVAILABLE;
-    this.capacityGB = capacityGB;
 
     validate();
   }
@@ -54,12 +35,20 @@ public class Disk {
     return dataNode;
   }
 
-  public DiskId getDiskId() {
-    return diskId;
+  public String getMountPath() {
+    return mountPath;
   }
 
-  public State getState() {
-    return state;
+  public HardwareState getHardwareState() {
+    return hardwareState;
+  }
+
+  public HardwareState getOverallHardwareState() {
+    // A Disk is unavailable if its DataNode is unavailable.
+    if (dataNode.getHardwareState() == HardwareState.UNAVAILABLE) {
+      return HardwareState.UNAVAILABLE;
+    }
+    return hardwareState;
   }
 
   public long getCapacityGB() {
@@ -68,42 +57,39 @@ public class Disk {
 
   protected void validateDataNode() {
     if (dataNode == null) {
-      throw new IllegalStateException("DataNode cannot be null");
+      throw new IllegalStateException("DataNode cannot be null.");
+    }
+  }
+
+  protected void validateMountPath() {
+    if (mountPath == null) {
+      throw new IllegalStateException("Mount path cannot be null.");
+    }
+    if (mountPath.length() == 0) {
+      throw new IllegalStateException("Mount path cannot be zero-length string.");
     }
   }
 
   protected void validateCapacity() {
-    if (capacityGB <= 0) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityGB);
+    if (capacityGB < MinCapacityGB) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is less than " + MinCapacityGB);
+    } else if(capacityGB > MaxCapacityGB) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is more than " + MaxCapacityGB);
     }
   }
 
-  protected boolean isStateValid() {
-    for (State validState : State.values()) {
-      if (state == validState) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  protected void validateState() {
-    if (!isStateValid()) {
-      throw new IllegalStateException("Invalid disk state: " + state);
-    }
-  }
-
-  public void validate() {
+  protected void validate() {
+    logger.trace("begin validate.");
     validateDataNode();
-    diskId.validate();
+    validateMountPath();
     validateCapacity();
-    validateState();
+    logger.trace("complete validate.");
   }
 
   public JSONObject toJSONObject() throws JSONException {
     return new JSONObject()
-            .put("diskId", diskId.toJSONObject())
-            .put("state", state)
+            .put("mountPath", mountPath)
+            .put("hardwareState", hardwareState)
             .put("capacityGB", capacityGB);
   }
 
@@ -112,11 +98,10 @@ public class Disk {
     try {
       return toJSONObject().toString();
     } catch (JSONException e) {
-      logger.warn("JSONException caught in toString:" + e.getCause());
+      logger.error("JSONException caught in toString: {}",  e.getCause());
     }
     return null;
   }
-
 
   @Override
   public boolean equals(Object o) {
@@ -125,18 +110,16 @@ public class Disk {
 
     Disk disk = (Disk) o;
 
-    if (capacityGB != disk.capacityGB) return false;
-    if (!diskId.equals(disk.diskId)) return false;
-    if (state != disk.state) return false;
+    if (!dataNode.equals(disk.dataNode)) return false;
+    if (!mountPath.equals(disk.mountPath)) return false;
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    int result = diskId.hashCode();
-    result = 31 * result + (int) (capacityGB ^ (capacityGB >>> 32));
-    result = 31 * result + state.hashCode();
+    int result = dataNode.hashCode();
+    result = 31 * result + mountPath.hashCode();
     return result;
   }
 }
