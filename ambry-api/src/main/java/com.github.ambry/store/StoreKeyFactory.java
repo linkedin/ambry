@@ -1,7 +1,6 @@
 package com.github.ambry.store;
 
-
-import java.io.DataInput;
+import java.io.IOException;
 import java.io.DataInputStream;
 
 /**
@@ -14,6 +13,6 @@ public interface StoreKeyFactory {
    * @param value The value the key needs to store  in string format
    * @return The index key containing the value provided
    */
-  StoreKey getStoreKey(DataInputStream value);
+  StoreKey getStoreKey(DataInputStream value) throws IOException;
 }
 

@@ -44,8 +44,7 @@ public class TTLRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partition = stream.readLong();
-    ByteBuffer blobIdBuffer = Utils.readShortBuffer(stream);
-    BlobId id = new BlobId(blobIdBuffer);
+    BlobId id = new BlobId(stream);
     long newTTL = stream.readLong();
 
     // ignore version for now

@@ -60,8 +60,7 @@ public class GetRequest extends RequestOrResponse {
     int blobCount = stream.readInt();
     ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
     while (blobCount > 0) {
-      ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
-      BlobId id = new BlobId(blobIdBytes);
+      BlobId id = new BlobId(stream);
       ids.add(id);
       blobCount--;
     }
@@ -78,9 +77,8 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend.putLong(partitionId);
       bufferToSend.putInt(ids.size());
       for (BlobId id : ids) {
-        ByteBuffer buf = id.toBytes();
         bufferToSend.putShort(id.sizeInBytes());
-        bufferToSend.put(buf.array());
+        bufferToSend.put(id.toBytes());
       }
       bufferToSend.flip();
     }

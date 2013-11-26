@@ -2,23 +2,25 @@ package com.github.ambry.shared;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
+
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
  * The Id used to represent a blob uniquely
  */
-public class BlobId implements StoreKey, Comparable<BlobId>{
-
-  public static final int size = 24;
+public class BlobId extends StoreKey{
 
   private String id;
+  private static int Id_Size_In_Bytes = 2;
 
   public BlobId(String id) {
     this.id = id;
   }
 
-  public BlobId(ByteBuffer buf) {
-    this.id = new String(buf.array());
+  public BlobId(DataInputStream stream) throws IOException {
+    this.id = Utils.readShortString(stream);
   }
 
   public short sizeInBytes() {
@@ -26,13 +28,11 @@ public class BlobId implements StoreKey, Comparable<BlobId>{
   }
 
   @Override
-  public ByteBuffer toBytes() {
-    return ByteBuffer.wrap(id.getBytes());
-  }
-
-  @Override
-  public int compareTo(BlobId o) {
-    return id.compareTo(o.id);
+  public byte[] toBytes() {
+    ByteBuffer idBuf = ByteBuffer.allocate(Id_Size_In_Bytes + id.getBytes().length);
+    idBuf.putShort(sizeInBytes());
+    idBuf.put(id.getBytes());
+    return idBuf.array();
   }
 
   @Override
@@ -61,5 +61,13 @@ public class BlobId implements StoreKey, Comparable<BlobId>{
   @Override
   public String toString() {
     return id;
+  }
+
+  @Override
+  public int compareTo(StoreKey o) {
+    if (o == null)
+      throw new NullPointerException("input argument null");
+    BlobId other = (BlobId) o;
+    return id.compareTo(other.id);
   }
 }

@@ -51,7 +51,7 @@ public class GetResponse extends RequestOrResponse {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
-      BlobId id = new BlobId(Utils.readShortBuffer(stream));
+      BlobId id = new BlobId(stream);
       long size = stream.readLong();
       long ttl = stream.readLong();
       messageListInfo.add(new MessageInfo(id, size, ttl));

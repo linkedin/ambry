@@ -3,7 +3,7 @@ package com.github.ambry.shared;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 
-import java.io.DataInput;
+import java.io.IOException;
 import java.io.DataInputStream;
 
 /**
@@ -12,7 +12,7 @@ import java.io.DataInputStream;
 public class BlobIdFactory implements StoreKeyFactory {
 
   @Override
-  public StoreKey getStoreKey(DataInputStream value) {
+  public StoreKey getStoreKey(DataInputStream value) throws IOException {
     return new BlobId(value);
   }
 }

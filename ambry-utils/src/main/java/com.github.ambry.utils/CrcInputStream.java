@@ -1,7 +1,6 @@
 package com.github.ambry.utils;
 
 import java.io.InputStream;
-import com.github.ambry.utils.Crc32;
 import java.io.IOException;
 
 /**
@@ -41,6 +40,11 @@ public class CrcInputStream extends InputStream {
     int ret = stream.read(b, off, len);
     crc.update(b, off, ret);
     return ret;
+  }
+
+  @Override
+  public int available() throws IOException {
+    return stream.available();
   }
 
   public long getValue() {

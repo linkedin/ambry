@@ -1,12 +1,11 @@
 package com.github.ambry.store;
 
-import com.github.ambry.utils.Scheduler;
-import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,86 +29,7 @@ public class BlobIndex {
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  /**
-   * A key and value that represents an index entry
-   */
-  public static class BlobIndexEntry {
-    private StoreKey key;
-    private BlobIndexValue value;
-
-    public BlobIndexEntry(StoreKey key, BlobIndexValue value) {
-      this.key = key;
-      this.value = value;
-    }
-
-    public StoreKey getKey() {
-      return this.key;
-    }
-
-    public BlobIndexValue getValue() {
-      return this.value;
-    }
-  }
-
-  /**
-   * The set of data stored in the index
-   */
-
-  public static class BlobIndexValue {
-    public enum Flags {
-      Delete_Index
-    }
-
-    private final long size;
-    private final long offset;
-    private byte flags;
-    private long timeToLiveInMs;
-
-    public BlobIndexValue(long size, long offset, byte flags, long timeToLiveInMs) {
-      this.size = size;
-      this.offset = offset;
-      this.flags = flags;
-      this.timeToLiveInMs = timeToLiveInMs;
-    }
-
-    public BlobIndexValue(long size, long offset, long timeToLiveInMs) {
-      this(size, offset, (byte)0, timeToLiveInMs);
-    }
-
-    public BlobIndexValue(long size, long offset) {
-      this(size, offset, (byte)0, -1);
-    }
-
-    public long getSize() {
-      return size;
-    }
-
-    public long getOffset() {
-      return offset;
-    }
-
-    public byte getFlags() {
-      return flags;
-    }
-
-    public boolean isFlagSet(Flags flag) {
-      return ((flags & (1 << flag.ordinal())) != 0);
-    }
-
-    public long getTimeToLiveInMs() {
-      return timeToLiveInMs;
-    }
-
-    public void setTimeToLive(long timeToLiveInMs) {
-      this.timeToLiveInMs = timeToLiveInMs;
-    }
-
-    public void setFlag(Flags flag) {
-      flags = (byte)(flags | (1 << flag.ordinal()));
-    }
-  }
-
-  public BlobIndex(String datadir, Scheduler scheduler, Log log) throws IndexCreationException  {
+  public BlobIndex(String datadir, Scheduler scheduler, Log log) throws StoreException  {
     try {
       logEndOffset = new AtomicLong(0);
       indexJournal = new BlobJournal();
@@ -124,14 +44,14 @@ public class BlobIndex {
       this.scheduler = scheduler;
       this.scheduler.schedule("index persistor", persistor, 5000, 60000, TimeUnit.MILLISECONDS);
     }
-    catch (IndexCreationException e) {
+    catch (StoreException e) {
       // ignore any exception while reading the index file
       // reset to recover from start
       logEndOffset.set(0);
       index.clear();
     }
     catch (Exception e) {
-      throw new IndexCreationException("Error while creating index " + e);
+      throw new StoreException("Error while creating index", e, StoreErrorCodes.Index_Creation_Failure);
     }
   }
 
@@ -211,7 +131,7 @@ public class BlobIndex {
     return null;
   }
 
-  public void close() throws IOException {
+  public void close() throws StoreException, IOException {
     persistor.write();
   }
 
@@ -234,6 +154,8 @@ public class BlobIndex {
     private final File file;
     private Short version = 0;
     private StoreKeyFactory factory;
+    private int Crc_Size = 8;
+    private int Log_End_Offset_Size = 8;
 
     public IndexPersistor(File file)
             throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException {
@@ -243,37 +165,46 @@ public class BlobIndex {
       factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
     }
 
-    public void write() throws IOException {
+    public void write() throws StoreException, IOException {
       logger.info("writing index to disk for {}", indexFile.getPath());
-      synchronized(lock) {
-        // write to temp file and then swap with the existing file
-        File temp = new File(file.getAbsolutePath() + ".tmp");
-        BufferedWriter writer = new BufferedWriter(new FileWriter(temp));
-        try {
-          // write the current version
-          writer.write(version.toString());
-          writer.newLine();
+      // write to temp file and then swap with the existing file
+      File temp = new File(file.getAbsolutePath() + ".tmp");
+      FileOutputStream fileStream = new FileOutputStream(temp);
+      CrcOutputStream crc = new CrcOutputStream(fileStream);
+      DataOutputStream writer = new DataOutputStream(crc);
 
+      synchronized(lock) {
+        try {
           // before iterating the map, get the current file end pointer
           long fileEndPointer = logEndOffset.get();
 
           // flush the log to ensure everything till the fileEndPointer is flushed
           log.flush();
 
+          // write the current version
+          writer.writeShort(BlobPersistantIndex.version);
+
           // write the entries
           for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
-            writer.write(entry.getKey().toString() + " " + entry.getValue().getOffset() + " " +
-                    entry.getValue().getSize() + " " + entry.getValue().getFlags() + " " +
-                    entry.getValue().getTimeToLiveInMs());
-            writer.newLine();
+            byte[] idBytes = entry.getKey().toBytes();
+            writer.write(idBytes);
+            writer.write(entry.getValue().getBytes().array());
           }
-          writer.write("fileendpointer " + fileEndPointer);
+          writer.writeLong(fileEndPointer);
+          long crcValue = crc.getValue();
+          writer.writeLong(crcValue);
 
           // flush and overwrite old file
-          writer.flush();
+          fileStream.getChannel().force(true);
           // swap temp file with the original file
           temp.renameTo(file);
-        } finally {
+        }
+        catch (IOException e) {
+          logger.error("IO error while persisting index to disk {}", indexFile.getAbsoluteFile());
+          throw new StoreException("IO error while persisting index to disk " +
+                                   indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
+        }
+        finally {
           writer.close();
         }
       }
@@ -289,50 +220,38 @@ public class BlobIndex {
       }
     }
 
-    public void read() throws IOException, IndexCreationException {
+    public void read() throws IOException, StoreException {
       logger.info("Reading index from file {}", indexFile.getPath());
       synchronized(lock) {
-        index.clear();
-        BufferedReader reader = new BufferedReader(new FileReader(file));
+        CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
+        DataInputStream stream = new DataInputStream(crcStream);
         try {
-          String line = reader.readLine();
-          if(line == null)
-            throw new IndexCreationException("file does not have any lines");
-           Short version = (short)Integer.parseInt(line);
-           switch (version) {
-             case 0:
-               line = reader.readLine();
-               if(line == null)
-                   throw new IndexCreationException("file does not have any lines");
-               String[] fields = null;
-               while(line != null) {
-                 fields = line.split("\\s+");
-                 if (fields.length == 2 && fields[0].compareTo("fileendpointer") == 0) {
-                   break;
-                 }
-                 else if(fields.length == 5) {
-                   // get key
-                   StoreKey key = factory.getStoreKey(fields[0]);
-                   long offset = Long.parseLong(fields[1]);
-                   long size = Long.parseLong(fields[2]);
-                   byte flags = Byte.parseByte(fields[3]);
-                   long timeToLive = Long.parseLong(fields[4]);
-                   index.put(key, new BlobIndexValue(size, offset, flags, timeToLive));
-                   logger.trace("Index entry key : {} -> size: {} offset: {} flags: {} timeToLive: {}",
-                           key, size, offset, flags, timeToLive);
-                 }
-                 else
-                   throw new IndexCreationException("Malformed line in index file: '%s'.".format(line));
-                 line = reader.readLine();
-               }
-               logEndOffset.set(Long.parseLong(fields[1]));
-               logger.trace("logEndOffset " + logEndOffset.get());
-               break;
-             default:
-               throw new IndexCreationException("version of index file not supported");
-           }
-        } finally {
-              reader.close();
+          short version = stream.readShort();
+          switch (version) {
+            case 0:
+              while (stream.available() > (Crc_Size + Log_End_Offset_Size)) {
+                StoreKey key = factory.getStoreKey(stream);
+                byte[] value = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
+                stream.read(value);
+                BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
+                index.put(key, blobValue);
+              }
+              long endOffset = stream.readLong();
+              logEndOffset.set(endOffset);
+              long crc = crcStream.getValue();
+              if (crc != stream.readLong())
+                throw new StoreException("Crc check does not match", StoreErrorCodes.Index_Creation_Failure);
+              break;
+            default:
+              throw new StoreException("Invalid version in index file", StoreErrorCodes.Index_Version_Error);
+          }
+        }
+        catch (IOException e) {
+          throw new StoreException("IO error while reading from file " +
+                  indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
+        }
+        finally {
+          stream.close();
         }
       }
     }

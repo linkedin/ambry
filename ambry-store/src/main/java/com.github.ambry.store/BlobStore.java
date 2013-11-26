@@ -82,12 +82,12 @@ public class BlobStore implements Store {
         long writeStartOffset = log.getLogEndOffset();
         messageSetToWrite.writeTo(log);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
-        ArrayList<BlobIndex.BlobIndexEntry> indexEntries = new ArrayList<BlobIndex.BlobIndexEntry>(messageInfo.size());
+        ArrayList<BlobIndexEntry> indexEntries = new ArrayList<BlobIndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          BlobIndex.BlobIndexValue value = new BlobIndex.BlobIndexValue(info.getSize(),
+          BlobIndexValue value = new BlobIndexValue(info.getSize(),
                                                                         writeStartOffset,
                                                                         (byte)0, info.getTimeToLiveInMs());
-          BlobIndex.BlobIndexEntry entry = new BlobIndex.BlobIndexEntry(info.getStoreKey(), value);
+          BlobIndexEntry entry = new BlobIndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
         }
