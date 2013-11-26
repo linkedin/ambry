@@ -27,8 +27,7 @@ public class DeleteRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partition = stream.readLong();
-    ByteBuffer blobIdBuffer = Utils.readShortBuffer(stream);
-    BlobId id = new BlobId(blobIdBuffer);
+    BlobId id = new BlobId(stream);
     // ignore version for now
     return new DeleteRequest(partition, correlationId, clientId, id);
   }

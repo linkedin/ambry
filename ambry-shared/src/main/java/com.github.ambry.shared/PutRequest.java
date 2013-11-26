@@ -41,8 +41,7 @@ public class PutRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     long partitionId = stream.readLong();
-    ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
-    BlobId id = new BlobId(blobIdBytes);
+    BlobId id = new BlobId(stream);
     BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
     InputStream data = stream;

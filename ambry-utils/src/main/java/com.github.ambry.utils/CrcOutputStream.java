@@ -1,7 +1,6 @@
 package com.github.ambry.utils;
 
 import java.io.OutputStream;
-import com.github.ambry.utils.Crc32;
 import java.io.IOException;
 
 /**
