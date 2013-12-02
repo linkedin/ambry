@@ -21,6 +21,7 @@ public class ErrorMapping {
     tempMap.put(StoreErrorCodes.ID_Deleted, ServerErrorCode.Blob_Deleted);
     tempMap.put(StoreErrorCodes.ID_Not_Found, ServerErrorCode.Blob_Not_Found);
     tempMap.put(StoreErrorCodes.TTL_Expired, ServerErrorCode.Blob_Expired);
+    tempMap.put(StoreErrorCodes.Already_Exist, ServerErrorCode.Blob_Already_Exists);
     storeErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 

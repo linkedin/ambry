@@ -2,6 +2,7 @@ package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.utils.Utils;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -22,12 +23,12 @@ public class DeleteRequest extends RequestOrResponse {
 
   public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     RequestResponseType type = RequestResponseType.DeleteRequest;
-    Short versionId  = stream.readShort();
+    Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    BlobId id = new BlobId(stream, map);
+    BlobId blobId = new BlobId(stream, map);
     // ignore version for now
-    return new DeleteRequest(correlationId, clientId, id);
+    return new DeleteRequest(correlationId, clientId, blobId);
   }
 
   public BlobId getBlobId() {
@@ -37,8 +38,9 @@ public class DeleteRequest extends RequestOrResponse {
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
       writeHeader();
+      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
     }
@@ -56,6 +58,6 @@ public class DeleteRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + blobId
-    return super.sizeInBytes() + blobId.sizeInBytes();
+    return super.sizeInBytes() + Blob_Id_Size_In_Bytes + blobId.sizeInBytes();
   }
 }

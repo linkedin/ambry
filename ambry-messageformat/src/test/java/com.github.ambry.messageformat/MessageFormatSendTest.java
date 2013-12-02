@@ -105,7 +105,7 @@ public class MessageFormatSendTest {
       Assert.assertArrayEquals(buf1.array(), bufresult.array());
 
       // get data
-      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Data);
+      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob);
       Assert.assertEquals(send1.sizeInBytes(), 819);
       bufresult.clear();
       WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -118,7 +118,7 @@ public class MessageFormatSendTest {
       }
 
       // get user metadata
-      MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.UserMetadata);
+      MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata);
       Assert.assertEquals(send2.sizeInBytes(), 110);
       bufresult.clear();
       WritableByteChannel channel3 = Channels.newChannel(new ByteBufferOutputStream(bufresult));

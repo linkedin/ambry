@@ -20,6 +20,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.Random;
 
 /**
  * A set of utility methods
@@ -31,6 +32,7 @@ public class Utils {
     if(size <= 0)
       return null;
     byte[] bytes = new byte[size];
+    // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
     int read = input.read(bytes);
     if (read != size) {
       throw new IllegalArgumentException("the size of the input does not match the actual data size");
@@ -330,5 +332,20 @@ public class Utils {
 
   public static long getBytesFromGB(long sizeInGB) {
     return sizeInGB * 1024 * 1024 * 1024;
+  }
+
+  /**
+   * Generates a random long in specified range.
+   *
+   * @param n exclusive upper bound
+   * @return  a pseudorandom, uniformly distributed long value between 0 (inclusive) and the specified value (exclusive).
+   */
+  public static long getRandomLong(long n) {
+    // Approach borrowed from Stack Overflow:
+    // http://stackoverflow.com/questions/2546078/java-random-long-number-in-0-x-n-range
+    if (n<=0) {
+      throw new IllegalArgumentException("Cannot generate random long in range [0,n) for n<=0.");
+    }
+    return (long)(new Random().nextDouble()*n);
   }
 }

@@ -1,72 +1,85 @@
 package com.github.ambry.coordinator;
 
-
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+/**
+ * The Coordinator performs operations on an Ambry cluster.
+ */
 public interface Coordinator {
-
   /**
-   * Puts a blob into the store with a set of blob properties and user metadata. It returns the id of the blob if
-   * it was stored successfully.
-   * @param blobProperties The properties of the blob that needs to be stored. The blob size and serviceId are
-   *                       mandatory fields.
+   * Puts a blob into the store with a set of blob properties and user metadata. It returns the id of the blob if it was
+   * stored successfully.
+   *
+   * @param blobProperties The properties of the blob that needs to be stored.
    * @param userMetadata The user metadata that needs to be associated with the blob.
    * @param blob The blob that needs to be stored
    * @return The id of the blob if the blob was successfully stored
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
    */
-  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob);
+  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata,
+                 InputStream blob) throws CoordinatorException;
 
   /**
    * Deletes the blob that corresponds to the given id.
+   *
    * @param id The id of the blob that needs to be deleted.
-   * @throws
-   * BlobNotFoundException If the blob is not found for the given id
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
    */
-  void deleteBlob(String id) throws BlobNotFoundException;
+  void deleteBlob(String id) throws CoordinatorException;
 
   /**
-   * Updates the ttl of the blob specified
-   * @param id The id of the blob that needs its TTL updated
-   * @param newTTLInMs The new ttl value to update to. It is the System time in ms
-   *                   when the blob needs to be deleted.
-   * @throws BlobNotFoundException
+   * Cancels the ttl of the blob that correspond to the specified blob id. If the cancel succeeds, the blob will not
+   * expire.
+   *
+   * @param id The id of the blob that needs its TTL cancelled
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
    */
-  void updateTTL(String id, long newTTLInMs) throws BlobNotFoundException;
+  void cancelTTL(String id) throws CoordinatorException;
 
   /**
-   * Gets the blob that corresponds to the given blob id.
-   * @param blobId The id of the blob whose content needs to be retrieved.
-   * @return The inputstream that represents the blob.
-   * @throws
-   * BlobNotFoundException If the blob is not found for the given id
-   */
-  BlobOutput getBlob(String blobId) throws BlobNotFoundException;
-
-  /**
-   * Gets the user metadata that was associated with a given blob during a put.
-   * @param blobId The id of the blob whose user metadata needs to be retrieved.
-   * @return The buffer that contains the user metadata for the given blob id.
-   * @throws
-   * BlobNotFoundException If the blob is not found for the given id
-   */
-  ByteBuffer getUserMetadata(String blobId) throws BlobNotFoundException;
-
-  /**
-   * Gets the blob properties associated with a given blob during a put.
-   * @param blobId The id of the blob whose blob properties needs to be retrieved.
+   * Gets the properties of the blob that corresponds to the specified blob id.
+   *
+   * @param blobId The id of the blob for which to retrieve its blob properties.
    * @return The blob properties of the blob that corresponds to the blob id provided.
-   * @throws
-   * BlobNotFoundException If the blob is not found for the given id
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
    */
-  BlobProperties getBlobProperties(String blobId) throws BlobNotFoundException;
+  BlobProperties getBlobProperties(String blobId) throws CoordinatorException;
+
+  /**
+   * Gets the user metadata of the blob that corresponds to the specified blob id.
+   *
+   * @param blobId The id of the blob for which to retrieve its user metadata.
+   * @return A buffer that contains the user metadata of the blob that corresponds to the blob id provided.
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
+   */
+  ByteBuffer getBlobUserMetadata(String blobId) throws CoordinatorException;
+
+  /**
+   * Gets the blob that corresponds to the specified blob id.
+   *
+   * @param blobId The id of the blob for which to retrieve its content.
+   * @return The data of  of the blob that corresponds to the blob id provided.
+   * @throws CoordinatorException If the operation experienced an error
+   * @throws InterruptedException if the operation is interrupted
+   */
+  BlobOutput getBlob(String blobId) throws CoordinatorException;
+
+  /**
+   * Starts the coordinator.
+   */
+  void start();
 
   /**
    * Shutdown the coordinator. Any freeing of resources will be done here on shutdown
    */
   void shutdown();
-
 }

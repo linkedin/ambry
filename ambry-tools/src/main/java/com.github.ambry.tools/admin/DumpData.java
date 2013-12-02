@@ -4,12 +4,9 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobPropertySerDe;
 import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.BlobIndexValue;
-import com.github.ambry.store.StoreKeyFactory;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -129,7 +126,7 @@ public class DumpData {
             BlobProperties props = MessageFormat.deserializeBlobProperties(stream);
             System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
                     " serviceId " + props.getServiceId());
-            ByteBuffer metadata = MessageFormat.deserializeMetadata(stream);
+            ByteBuffer metadata = MessageFormat.deserializeUserMetadata(stream);
             System.out.println(" Metadata - size " + metadata.capacity());
             BlobOutput output = MessageFormat.deserializeData(stream);
             System.out.println("Blob - size " + output.getSize());

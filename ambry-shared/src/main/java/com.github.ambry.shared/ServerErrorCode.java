@@ -9,6 +9,7 @@ public enum ServerErrorCode {
   Blob_Not_Found,
   Blob_Deleted,
   Blob_Expired,
+  Blob_Already_Exists,
   Data_Corrupt,
   Unknown_Error
 }

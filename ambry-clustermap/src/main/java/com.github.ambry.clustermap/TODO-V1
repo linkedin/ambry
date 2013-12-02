@@ -1,5 +1,4 @@
 For initial clustermap:
-TODO: Add simplest config to config directory
 TODO: Run with test coverage to assess how much more testing is required.
 TODO: More unit tests; separate unit tests for public interface from detailed interface (i.e., replicaId vs replica)
 

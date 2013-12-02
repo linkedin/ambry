@@ -75,7 +75,7 @@ public class MessageFormatInputStreamTest {
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
+    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize + userMetadataSize + dataSize, headerBuf.getLong());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(headerSize + key.sizeInBytes() + systemMetadataSize, headerBuf.getInt());
@@ -144,7 +144,7 @@ public class MessageFormatInputStreamTest {
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
+    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
@@ -186,7 +186,7 @@ public class MessageFormatInputStreamTest {
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
+    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());

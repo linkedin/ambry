@@ -28,6 +28,9 @@ project(':ambry-utils') {
   apply plugin: 'java'
 
   dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-clustermap')
+    compile project(':ambry-shared')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.json:json:$jsonVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
@@ -59,6 +62,7 @@ project(':ambry-shared') {
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "commons-codec:commons-codec:1.8"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -141,9 +145,10 @@ project(':ambry-clustermap') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile "org.json:json:$jsonVersion"
+    compile "log4j:log4j:$log4jVersion"
+    compile "org.json:json:20090211"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -152,15 +157,16 @@ project(':ambry-coordinator') {
   apply plugin: 'java'
 
   dependencies {
-    compile project(':ambry-api')
+    compile project(':ambry-clustermap')
     compile project(':ambry-utils')
     compile project(':ambry-shared')
     compile project(':ambry-messageformat')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     compile "log4j:log4j:$log4jVersion"
-    testCompile project(':ambry-clustermap').sourceSets.test.output
+    compile "org.apache.commons:commons-math3:3.2"
     testCompile "junit:junit:$junitVersion"
+    testCompile project(':ambry-clustermap').sourceSets.test.output
   }
 }
 

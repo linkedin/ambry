@@ -203,7 +203,6 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
-  /*
   @Test
   public void validateSimpleConfig() throws JSONException, IOException {
     String configDir = System.getProperty("user.dir");
@@ -220,7 +219,5 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManager.getFreeCapacityGB(), 10);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }
-  */
-
 }
 
