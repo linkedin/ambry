@@ -50,6 +50,7 @@ public class HardwareLayout {
 
   /**
    * Find DataNode by hostname and port
+   *
    * @param hostname
    * @param port
    * @return DataNode or null if not found.
@@ -67,6 +68,7 @@ public class HardwareLayout {
 
   /**
    * Find Disk by hostname, port, and mount path.
+   *
    * @param hostname
    * @param port
    * @param mountPath
@@ -75,7 +77,7 @@ public class HardwareLayout {
   public Disk findDisk(String hostname, int port, String mountPath) {
     DataNode dataNode = findDataNode(hostname, port);
     if (dataNode != null) {
-      for(Disk disk : dataNode.getDisks()) {
+      for (Disk disk : dataNode.getDisks()) {
         if (disk.getMountPath().equals(mountPath)) {
           return disk;
         }
@@ -87,7 +89,8 @@ public class HardwareLayout {
   protected void validateClusterName() {
     if (clusterName == null) {
       throw new IllegalStateException("HardwareLayout clusterName cannot be null.");
-    } else if (clusterName.length() == 0) {
+    }
+    else if (clusterName.length() == 0) {
       throw new IllegalStateException("HardwareLayout clusterName cannot be zero length.");
     }
   }
@@ -95,7 +98,7 @@ public class HardwareLayout {
   // Validate each hardware component (Datacenter, DataNode, and Disk) are unique
   protected void validateUniqueness() throws IllegalStateException {
     logger.trace("begin validateUniqueness.");
-    HashSet<Datacenter> datacenterSet= new HashSet<Datacenter>();
+    HashSet<Datacenter> datacenterSet = new HashSet<Datacenter>();
     HashSet<DataNode> dataNodeSet = new HashSet<DataNode>();
     HashSet<Disk> diskSet = new HashSet<Disk>();
 
@@ -137,9 +140,10 @@ public class HardwareLayout {
   @Override
   public String toString() {
     try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
+      return toJSONObject().toString(2);
+    }
+    catch (JSONException e) {
+      logger.error("JSONException caught in toString: {}", e.getCause());
     }
     return null;
   }
@@ -149,7 +153,7 @@ public class HardwareLayout {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    HardwareLayout that = (HardwareLayout) o;
+    HardwareLayout that = (HardwareLayout)o;
 
     if (!clusterName.equals(that.clusterName)) return false;
     if (!datacenters.equals(that.datacenters)) return false;

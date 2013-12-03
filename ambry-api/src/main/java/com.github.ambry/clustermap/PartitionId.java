@@ -18,7 +18,7 @@ public interface PartitionId {
    *
    * @return list of the Replicas that comprise this PartitionId.
    */
-  public List<? extends ReplicaId> getReplicaIds();
+  public List<ReplicaId> getReplicaIds();
 
   /**
    * Gets the state of this PartitionId.

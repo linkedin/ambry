@@ -20,7 +20,7 @@ import java.util.Set;
 public class Partition implements PartitionId {
 
   private static final long MinReplicaCapacityGB = 1;
-  private static final long MaxReplicaCapacityGB = 1024*10; // 10 TB
+  private static final long MaxReplicaCapacityGB = 1024 * 10; // 10 TB
 
   private long id;
   PartitionState partitionState;
@@ -64,8 +64,9 @@ public class Partition implements PartitionId {
   }
 
   @Override
-  public List<? extends ReplicaId> getReplicaIds() {
-    return getReplicas();
+  public List<ReplicaId> getReplicaIds() {
+    List<Replica> replicas = getReplicas();
+    return new ArrayList<ReplicaId>(replicas);
   }
 
   @Override
@@ -104,10 +105,11 @@ public class Partition implements PartitionId {
   protected void validateReplicaCapacityGB() {
     if (replicaCapacityGB < MinReplicaCapacityGB) {
       throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
-              + " is less than " + MinReplicaCapacityGB);
-    } else if(replicaCapacityGB > MaxReplicaCapacityGB) {
+                                      + " is less than " + MinReplicaCapacityGB);
+    }
+    else if (replicaCapacityGB > MaxReplicaCapacityGB) {
       throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
-              + " is more than " + MaxReplicaCapacityGB);
+                                      + " is more than " + MaxReplicaCapacityGB);
     }
   }
 
@@ -119,11 +121,11 @@ public class Partition implements PartitionId {
     for (Replica replica : replicas) {
       if (!diskSet.add(replica.getDisk())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same Disk: "
-                + toString());
+                                        + toString());
       }
       if (!dataNodeSet.add(replica.getDisk().getDataNode())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same DataNode: "
-                + toString());
+                                        + toString());
       }
     }
   }
@@ -149,12 +151,7 @@ public class Partition implements PartitionId {
 
   @Override
   public String toString() {
-    try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}", e.getCause());
-    }
-    return null;
+    return "Partition: " + toPathString();
   }
 
   @Override
@@ -162,7 +159,7 @@ public class Partition implements PartitionId {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    Partition partition = (Partition) o;
+    Partition partition = (Partition)o;
 
     if (id != partition.id) return false;
 
@@ -171,6 +168,6 @@ public class Partition implements PartitionId {
 
   @Override
   public int hashCode() {
-    return (int) (id ^ (id >>> 32));
+    return (int)(id ^ (id >>> 32));
   }
 }

@@ -10,10 +10,10 @@ import org.slf4j.LoggerFactory;
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-public class Disk  {
+public class Disk {
   // Hard-code disk capacity limits in GB for validation
   private static final long MinCapacityGB = 10;
-  private static final long MaxCapacityGB = 1024*1024; // 1 PB
+  private static final long MaxCapacityGB = 1024 * 1024; // 1 PB
 
   private DataNode dataNode;
   private String mountPath;
@@ -43,9 +43,9 @@ public class Disk  {
     return hardwareState;
   }
 
-  public HardwareState getOverallHardwareState() {
+  public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
-    if (dataNode.getHardwareState() == HardwareState.UNAVAILABLE) {
+    if (dataNode.getState() == HardwareState.UNAVAILABLE) {
       return HardwareState.UNAVAILABLE;
     }
     return hardwareState;
@@ -73,7 +73,8 @@ public class Disk  {
   protected void validateCapacity() {
     if (capacityGB < MinCapacityGB) {
       throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is less than " + MinCapacityGB);
-    } else if(capacityGB > MaxCapacityGB) {
+    }
+    else if (capacityGB > MaxCapacityGB) {
       throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is more than " + MaxCapacityGB);
     }
   }
@@ -95,12 +96,7 @@ public class Disk  {
 
   @Override
   public String toString() {
-    try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
-    }
-    return null;
+    return "Disk: " + dataNode.getHostname() + ":" + dataNode.getPort() + getMountPath();
   }
 
   @Override
@@ -108,7 +104,7 @@ public class Disk  {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    Disk disk = (Disk) o;
+    Disk disk = (Disk)o;
 
     if (!dataNode.equals(disk.dataNode)) return false;
     if (!mountPath.equals(disk.mountPath)) return false;

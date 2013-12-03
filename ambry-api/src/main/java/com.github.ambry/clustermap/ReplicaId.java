@@ -3,13 +3,10 @@ package com.github.ambry.clustermap;
 import java.util.List;
 
 /**
- * A ReplicaId is part of some {@link PartitionId}. The durable state of a ReplicaId is stored in a specific path ("replica
- * path") on a specific device (identified by its "mount path") on a {@link DataNodeId}.
+ * A ReplicaId is part of some {@link PartitionId}. The durable state of a ReplicaId is stored in a specific path
+ * ("replica path") on a specific device (identified by its "mount path") on a {@link DataNodeId}.
  */
 public interface ReplicaId {
-  // TODO: Does ReplicaId need a getHardwareState() and/or getPartitionState() method? Should ReplicaId extend
-  // PartitionId interface?
-
   /**
    * Gets the PartitionId of which this ReplicaId is a member.
    *
@@ -25,17 +22,17 @@ public interface ReplicaId {
   public DataNodeId getDataNodeId();
 
   /**
-   * Gets the mount path to the device that stores this ReplicaId.
+   * Gets the absolute path to the mounted device that stores this ReplicaId.
    *
-   * @return mount path on the DataNodeId to the device that stores this ReplicaId.
+   * @return absolute mount path.
    */
   public String getMountPath();
 
   /**
-   * Gets the path to the data for this ReplicaId on the DataNodeId. This path consists of the mount path to the device that
-   * stores this ReplicaId followed by a unique path on that device for this ReplicaId.
+   * Gets the absolute path to the directory in which this ReplicaId's files are stored on this DataNodeId. The replica
+   * path is the mount path followed by a unique path for this ReplicaId.
    *
-   * @return replica path to this ReplicaId's state on the DataNodeId.
+   * @return absolute replica path.
    */
   public String getReplicaPath();
 
@@ -45,7 +42,5 @@ public interface ReplicaId {
    *
    * @return list of the peers of this ReplicaId.
    */
-  public List<? extends ReplicaId> getPeerReplicaIds();
-
-
+  public List<ReplicaId> getPeerReplicaIds();
 }

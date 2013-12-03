@@ -45,15 +45,17 @@ public class DataNode implements DataNodeId {
   protected String getFullyQualifiedDomainName(String unqualifiedHostname) {
     if (unqualifiedHostname == null) {
       throw new IllegalStateException("Hostname cannot be null.");
-    } else if (unqualifiedHostname.length() == 0) {
+    }
+    else if (unqualifiedHostname.length() == 0) {
       throw new IllegalStateException("Hostname cannot be zero length.");
     }
 
     try {
       return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName();
-    } catch (UnknownHostException e) {
+    }
+    catch (UnknownHostException e) {
       throw new IllegalStateException("Host (" + unqualifiedHostname
-              + ") is unknown so cannot determine fully qualified domain name.");
+                                      + ") is unknown so cannot determine fully qualified domain name.");
     }
   }
 
@@ -72,7 +74,7 @@ public class DataNode implements DataNodeId {
   }
 
   @Override
-  public HardwareState getHardwareState() {
+  public HardwareState getState() {
     return hardwareState;
   }
 
@@ -97,15 +99,16 @@ public class DataNode implements DataNodeId {
   protected void validateHostname() {
     String fqdn = getFullyQualifiedDomainName(hostname);
     if (!fqdn.equals(hostname)) {
-      throw new IllegalStateException("Hostname for DataNode ("+hostname
-              + ") does not match its fully qualified domain name: " + fqdn + ".");
+      throw new IllegalStateException("Hostname for DataNode (" + hostname
+                                      + ") does not match its fully qualified domain name: " + fqdn + ".");
     }
   }
 
   protected void validatePort() {
     if (port < MinPort) {
       throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
-    } else if(port > MaxPort) {
+    }
+    else if (port > MaxPort) {
       throw new IllegalStateException("Invalid port: " + port + " is less than " + MaxPort);
     }
   }
@@ -135,12 +138,7 @@ public class DataNode implements DataNodeId {
 
   @Override
   public String toString() {
-    try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
-    }
-    return null;
+    return "DataNode: " + getHostname() + ":" + getPort();
   }
 
   @Override
@@ -148,7 +146,7 @@ public class DataNode implements DataNodeId {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    DataNode dataNode = (DataNode) o;
+    DataNode dataNode = (DataNode)o;
 
     if (port != dataNode.port) return false;
     if (!hostname.equals(dataNode.hostname)) return false;

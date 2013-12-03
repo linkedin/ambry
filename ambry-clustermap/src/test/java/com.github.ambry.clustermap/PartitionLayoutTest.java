@@ -36,12 +36,5 @@ public class PartitionLayoutTest {
     } catch (IllegalStateException e) {
       // Expected.
     }
-
-    try {
-      TestUtils.TestPartitionLayout tpl = new TestUtils.TestPartitionLayoutWithBadPartitionIds(testHardwareLayout);
-      fail("Should have failed validation:" + tpl.getPartitionLayout().toString());
-    } catch (IllegalStateException e) {
-      // Expected.
-    }
   }
 }

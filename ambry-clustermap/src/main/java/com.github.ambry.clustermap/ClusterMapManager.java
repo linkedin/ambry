@@ -5,16 +5,13 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import static com.github.ambry.utils.Utils.readStringFromFile;
+import static com.github.ambry.utils.Utils.writeJsonToFile;
 
 /**
  * ClusterMapManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
@@ -34,38 +31,6 @@ public class ClusterMapManager implements ClusterMap {
   public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
     this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
-  }
-
-  // TODO: Move to utils after re-based.
-  private static void writeStringToFile(String string, String path) throws IOException {
-    FileWriter fileWriter = null;
-    try {
-      File clusterFile = new File(path);
-      fileWriter = new FileWriter(clusterFile);
-      fileWriter.write(string);
-    } finally {
-      if (fileWriter != null) {
-        fileWriter.close();
-      }
-    }
-  }
-
-  // TODO: Move to utils after re-based.
-  private static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
-    writeStringToFile(jsonObject.toString(2), path);
-  }
-
-  // TODO: Move to utils after re-based.
-  private static String readStringFromFile(String path) throws IOException {
-    // Code cribbed from StackOverflow and is similar to IO Commons and Guava
-    // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
-    byte[] encoded = Files.readAllBytes(Paths.get(path));
-    return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
-  }
-
-  // TODO: Move to utils after re-based.
-  private static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
-    return new JSONObject(readStringFromFile(path));
   }
 
   public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
@@ -92,9 +57,6 @@ public class ClusterMapManager implements ClusterMap {
 
   @Override
   public PartitionId getWritablePartitionIdAt(long index) {
-    // TODO: Ints.checkedCast(index) seems much better to me. Why not use Guava? Should we implement checkedCast in
-    // utils if we don't import Guava?
-    // return partitionLayout.getWritablePartitionIds().get(Ints.checkedCast(index));
     return partitionLayout.getWritablePartitions().get((int)index);
   }
 
@@ -104,8 +66,9 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   @Override
-  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
-    return getReplicas(dataNodeId);
+  public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+    List<Replica> replicas = getReplicas(dataNodeId);
+    return new ArrayList<ReplicaId>(replicas);
   }
 
   public List<Replica> getReplicas(DataNodeId dataNodeId) {
@@ -188,11 +151,12 @@ public class ClusterMapManager implements ClusterMap {
     return partitionLayout.addNewPartition(disks, replicaCapacityGB);
   }
 
-  // Determine if there is enough capacity to allocate a PartitionId
+  // Determine if there is enough capacity to allocate a PartitionId.
   private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       if (getFreeCapacityGB(datacenter) < replicaCountPerDatacenter * replicaCapacityGB) {
-        logger.warn("Insufficient free space in datacenter {} ({} GB free)", datacenter.getName(), getFreeCapacityGB(datacenter));
+        logger.warn("Insufficient free space in datacenter {} ({} GB free)", datacenter.getName(),
+                    getFreeCapacityGB(datacenter));
         return false;
       }
 
@@ -206,7 +170,8 @@ public class ClusterMapManager implements ClusterMap {
         }
       }
       if (rcpd > 0) {
-        logger.warn("Insufficient DataNodes ({}) with free space in datacenter {} for {} Replicas)", rcpd, datacenter.getName(), replicaCountPerDatacenter);
+        logger.warn("Insufficient DataNodes ({}) with free space in datacenter {} for {} Replicas)", rcpd,
+                    datacenter.getName(), replicaCountPerDatacenter);
         return false;
       }
     }
@@ -214,7 +179,8 @@ public class ClusterMapManager implements ClusterMap {
     return true;
   }
 
-  // Allocate unique datanode.disks for each replica in each datacenter up to replicaCountPerDatacenter
+  // Allocate unique datanode.disks for each replica in each datacenter up to replicaCountPerDatacenter (hard-code all
+  // datacenters to have same number of replicas for now).
   private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityGB) {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
@@ -228,7 +194,7 @@ public class ClusterMapManager implements ClusterMap {
         Collections.shuffle(shuffledDisks);
 
         for (Disk disk : shuffledDisks) {
-          if (disk.getCapacityGB() > replicaCapacityGB) {
+          if (getFreeCapacityGB(disk) >= replicaCapacityGB) {
             allocatedDisks.add(disk);
             rcpd--;
             break; // Only one replica per DataNodeId.
@@ -245,12 +211,18 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
-  // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient.
-  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter, long replicaCapacityGB) {
+  // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient. All cluster map
+  // operations are performed by a single thread in some tool.
+  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
+                                              long replicaCapacityGB) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityGB) && numPartitions > 0) {
       List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityGB);
+      if (disks.size() == 0) {
+        System.err.println("numPartitions: " + numPartitions);
+        break;
+      }
       partitions.add(partitionLayout.addNewPartition(disks, replicaCapacityGB));
       numPartitions--;
     }
@@ -263,7 +235,7 @@ public class ClusterMapManager implements ClusterMap {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    ClusterMapManager that = (ClusterMapManager) o;
+    ClusterMapManager that = (ClusterMapManager)o;
 
     if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null)
       return false;

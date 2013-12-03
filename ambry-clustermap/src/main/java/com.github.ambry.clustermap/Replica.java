@@ -31,7 +31,7 @@ public class Replica implements ReplicaId {
     this.partition = partition;
 
     this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"),
-            jsonObject.getInt("port"), jsonObject.getString("mountPath"));
+                                        jsonObject.getInt("port"), jsonObject.getString("mountPath"));
 
     validate();
   }
@@ -57,8 +57,9 @@ public class Replica implements ReplicaId {
   }
 
   @Override
-  public List<? extends ReplicaId> getPeerReplicaIds() {
-    return getPeerReplicas();
+  public List<ReplicaId> getPeerReplicaIds() {
+    List<Replica> peerReplicas = getPeerReplicas();
+    return new ArrayList<ReplicaId>(peerReplicas);
   }
 
   public Partition getPartition() {
@@ -112,12 +113,7 @@ public class Replica implements ReplicaId {
 
   @Override
   public String toString() {
-    try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
-    }
-    return null;
+    return "Replica: " + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + getReplicaPath();
   }
 
 

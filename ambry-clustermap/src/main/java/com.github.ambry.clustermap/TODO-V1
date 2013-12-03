@@ -1,17 +1,22 @@
 For initial clustermap:
-TODO: Get code format / style from Ram so we have same automagic code formatting
-TODO: Move helper methods to utils (after re-based with master)
-TODO: Fix './gradlew build' which is broken by MessageFormat currently.
-TODO: Fix SLF4J issue ("Failed to load class "org.slf4j.impl.StaticLoggerBinder") upon build.
+TODO: Add simplest config to config directory
 TODO: Run with test coverage to assess how much more testing is required.
+TODO: More unit tests; separate unit tests for public interface from detailed interface (i.e., replicaId vs replica)
 
 For hardening & clean up
-TODO: might make sense to have an abstract class called JsonStringifier that has a protected JsonObject and a toString
-      method implemented. All your class can then extend from this to get this functionality for free.
 TODO: Add version number and/or timestamp to hardwareLayout and partitionLayout?
-TODO: More unit tests
 TODO: More logging
 
+For tools:
+TODO: Better partition allocation tool. Currently, simple hacks included as ClusterMapManager.allocatePartitions
+
 For V1
-TODO: Document JSON format once V1 is mostly stable.
+TODO: Implement Ints.checkedCast(index) or depend on Guava. See ClusterMapManager.getWritablePartitionIdAt
+TODO: Document JSON format by defining json schema for HardwareLayout and PartitionLayout.
+
+Beyond V1
+TODO: Support for lists larger than int. See ClusterMapManager.getWritablePartitionIdAt
+
+
+
 

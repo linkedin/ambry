@@ -24,5 +24,5 @@ public interface DataNodeId {
    *
    * @return state of the DataNodeId.
    */
-  public HardwareState getHardwareState();
+  public HardwareState getState();
 }

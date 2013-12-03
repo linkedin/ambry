@@ -23,7 +23,7 @@ public class PartitionLayout {
 
   private HardwareLayout hardwareLayout;
   private String clusterName;
-  private long partitionIdFactory;
+  private long maxPartitionId;
   private Map<ByteBuffer, Partition> partitionMap;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -32,7 +32,6 @@ public class PartitionLayout {
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = jsonObject.getString("clusterName");
-    this.partitionIdFactory = jsonObject.getLong("partitionIdFactory");
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
 
     for (int i = 0; i < jsonObject.getJSONArray("partitions").length(); ++i) {
@@ -47,7 +46,7 @@ public class PartitionLayout {
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = hardwareLayout.getClusterName();
-    this.partitionIdFactory = MinPartitionId;
+    this.maxPartitionId = MinPartitionId;
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
 
     validate();
@@ -89,8 +88,12 @@ public class PartitionLayout {
    * Adds Partition to and validates Partition is unique. A duplicate Partition results in an exception.
    */
   private void addPartition(Partition partition) {
-    if(partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition) != null ) {
+    if (partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition) != null) {
       throw new IllegalStateException("Duplicate Partition detected: " + partition.toString());
+    }
+    long id = ByteBuffer.wrap(partition.getBytes()).getLong();
+    if (id >= maxPartitionId) {
+      maxPartitionId = id + 1;
     }
   }
 
@@ -100,31 +103,24 @@ public class PartitionLayout {
     }
     if (!hardwareLayout.getClusterName().equals(clusterName)) {
       throw new IllegalStateException("PartitionLayout cluster name does not match that of HardwareLayout: "
-              + clusterName + " != " + hardwareLayout.getClusterName());
-    }
-  }
-
-  protected void validatePartitionIdFactory() {
-    if(partitionIdFactory < MinPartitionId) {
-      throw new IllegalStateException("Partition ID factory is " + partitionIdFactory
-              + " and should not be less than " + MinPartitionId);
+                                      + clusterName + " != " + hardwareLayout.getClusterName());
     }
   }
 
   protected void validatePartitionIds() {
     for (Partition partition : partitionMap.values()) {
       long partitionId = ByteBuffer.wrap(partition.getBytes()).getLong();
-      if(partitionId < MinPartitionId) {
+      if (partitionId < MinPartitionId) {
         throw new IllegalStateException("Partition has invalid ID: Less than " + MinPartitionId);
       }
-      if(partitionId >= partitionIdFactory) {
-        throw new IllegalStateException("Partition has invalid ID: Greater than or equal to " + partitionIdFactory);
+      if (partitionId >= maxPartitionId) {
+        throw new IllegalStateException("Partition has invalid ID: Greater than or equal to " + maxPartitionId);
       }
     }
   }
 
   protected void validateUniqueness() {
-    // Validate uniqueness of each logical component. Partition uniqueness is validated by method  addPartition.
+    // Validate uniqueness of each logical component. Partition uniqueness is validated by method addPartition.
     Set<Replica> replicaSet = new HashSet<Replica>();
 
     for (Partition partition : partitionMap.values()) {
@@ -139,15 +135,14 @@ public class PartitionLayout {
   protected void validate() {
     logger.trace("begin validate.");
     validateClusterName();
-    validatePartitionIdFactory();
     validatePartitionIds();
     validateUniqueness();
     logger.trace("complete validate.");
   }
 
   protected long getNewPartitionId() {
-    long currentPartitionId = partitionIdFactory;
-    partitionIdFactory++;
+    long currentPartitionId = maxPartitionId;
+    maxPartitionId++;
     return currentPartitionId;
   }
 
@@ -158,7 +153,7 @@ public class PartitionLayout {
     }
 
     Partition partition = new Partition(getNewPartitionId(), PartitionState.READ_WRITE, replicaCapacityGB);
-    for(Disk disk : disks) {
+    for (Disk disk : disks) {
       partition.addReplica(new Replica(partition, disk));
     }
     addPartition(partition);
@@ -180,7 +175,6 @@ public class PartitionLayout {
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
             .put("clusterName", hardwareLayout.getClusterName())
-            .put("partitionIdFactory", partitionIdFactory)
             .put("partitions", new JSONArray());
     for (Partition partition : partitionMap.values()) {
       jsonObject.accumulate("partitions", partition.toJSONObject());
@@ -192,8 +186,9 @@ public class PartitionLayout {
   public String toString() {
     try {
       return toJSONObject().toString(2);
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
+    }
+    catch (JSONException e) {
+      logger.error("JSONException caught in toString: {}", e.getCause());
     }
     return null;
   }
@@ -203,9 +198,8 @@ public class PartitionLayout {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    PartitionLayout that = (PartitionLayout) o;
+    PartitionLayout that = (PartitionLayout)o;
 
-    if (partitionIdFactory != that.partitionIdFactory) return false;
     if (!clusterName.equals(that.clusterName)) return false;
     if (!hardwareLayout.equals(that.hardwareLayout)) return false;
 

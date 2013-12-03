@@ -28,7 +28,7 @@ class TestDataNode extends DataNode {
 
     if (!getHostname().equals(testDataNode.getHostname())) return false;
     if (getPort() != testDataNode.getPort()) return false;
-    if (getHardwareState() != testDataNode.getHardwareState()) return false;
+    if (getState() != testDataNode.getState()) return false;
     if (getCapacityGB() != testDataNode.getCapacityGB()) return false;
 
     return true;
@@ -54,7 +54,7 @@ public class DataNodeTest {
 
     assertEquals(dataNode.getHostname(), "localhost");
     assertEquals(dataNode.getPort(), 6666);
-    assertEquals(dataNode.getHardwareState(), HardwareState.AVAILABLE);
+    assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
     assertEquals(dataNode.getDisks().size(), diskCount);
     assertEquals(dataNode.getCapacityGB(), diskCount * diskCapacityGB);

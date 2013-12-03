@@ -61,7 +61,8 @@ public class Datacenter {
   protected void validateName() {
     if (name == null) {
       throw new IllegalStateException("Datacenter name cannot be null.");
-    } else if (name.length() == 0) {
+    }
+    else if (name.length() == 0) {
       throw new IllegalStateException("Datacenter name cannot be zero length.");
     }
   }
@@ -85,12 +86,7 @@ public class Datacenter {
 
   @Override
   public String toString() {
-    try {
-      return toJSONObject().toString();
-    } catch (JSONException e) {
-      logger.error("JSONException caught in toString: {}",  e.getCause());
-    }
-    return null;
+    return "Datacenter: " + getName();
   }
 
   @Override
@@ -98,7 +94,7 @@ public class Datacenter {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    Datacenter that = (Datacenter) o;
+    Datacenter that = (Datacenter)o;
 
     if (!name.equals(that.name)) return false;
 

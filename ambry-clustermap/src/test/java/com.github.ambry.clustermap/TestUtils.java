@@ -391,18 +391,6 @@ public class TestUtils {
     }
   }
 
-  public static class TestPartitionLayoutWithBadPartitionIds  extends TestPartitionLayout {
-    protected JSONObject makeJsonPartitionLayout() throws JSONException {
-      JSONArray jsonPartitions = getJsonPartitionsWithBadIds(partitionCount, partitionState, replicaCapacityGB, replicaCount, testHardwareLayout);
-      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), partitionCount, jsonPartitions);
-    }
-
-    public TestPartitionLayoutWithBadPartitionIds(TestHardwareLayout testHardwareLayout) throws JSONException {
-      super(testHardwareLayout);
-    }
-  }
-
-
   public static ClusterMapManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter, long replicaCapacityGB) throws JSONException {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");

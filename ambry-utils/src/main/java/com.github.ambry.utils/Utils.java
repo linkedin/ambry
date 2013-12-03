@@ -1,9 +1,22 @@
 package com.github.ambry.utils;
 
 
-import java.io.*;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Properties;
 
 /**
@@ -202,5 +215,63 @@ public class Utils {
    */
   public static int getNullableStringLength(String value) {
     return value == null ? 0 : value.length();
+  }
+
+  /**
+   * Writes specified string to specified file path.
+   *
+   * @param string to write
+   * @param path file path
+   * @throws IOException
+   */
+  public static void writeStringToFile(String string, String path) throws IOException {
+    FileWriter fileWriter = null;
+    try {
+      File clusterFile = new File(path);
+      fileWriter = new FileWriter(clusterFile);
+      fileWriter.write(string);
+    } finally {
+      if (fileWriter != null) {
+        fileWriter.close();
+      }
+    }
+  }
+
+  /**
+   * Pretty prints specified jsonObject to specified file path.
+   *
+   * @param jsonObject to pretty print
+   * @param path file path
+   * @throws IOException
+   * @throws JSONException
+   */
+  public static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
+    writeStringToFile(jsonObject.toString(2), path);
+  }
+
+  /**
+   * Reads entire contents of specified file as a string.
+   *
+   * @param path file path to read
+   * @return string read from specified file
+   * @throws IOException
+   */
+  public static String readStringFromFile(String path) throws IOException {
+    // Code cribbed from StackOverflow and is similar to IO Commons and Guava
+    // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
+    byte[] encoded = Files.readAllBytes(Paths.get(path));
+    return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
+  }
+
+  /**
+   * Reads JSON object (in string format) from specified file.
+   *
+   * @param path file path to read
+   * @return JSONObject read from specified file
+   * @throws IOException
+   * @throws JSONException
+   */
+  public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
+    return new JSONObject(readStringFromFile(path));
   }
 }

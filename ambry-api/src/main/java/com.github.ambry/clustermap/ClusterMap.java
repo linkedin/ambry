@@ -16,8 +16,7 @@ public interface ClusterMap {
   public PartitionId getPartitionIdFromBytes(byte[] bytes);
 
   /**
-   * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such
-   * PartitionId.
+   * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such PartitionId.
    *
    * @return count of writable PartitionIds.
    */
@@ -35,7 +34,7 @@ public interface ClusterMap {
    * Gets a specific DataNodeId by its hostname and port.
    *
    * @param hostname of the DataNodeId
-   * @param port of the DataNodeId
+   * @param port     of the DataNodeId
    * @return DataNodeId for this hostname and port.
    */
   public DataNodeId getDataNodeId(String hostname, int port);
@@ -46,5 +45,5 @@ public interface ClusterMap {
    * @param dataNodeId
    * @return list of ReplicaIds on the specified dataNodeId
    */
-  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId);
+  public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId);
 }

@@ -9,17 +9,36 @@ import java.io.IOException;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
  * Tests {@link ClusterMapManager} class.
  */
 public class ClusterMapManagerTest {
-  // TODO: Add separate ClusterMap test that just exercises clustermap API. Consider doing same for DataNodeId,
-  // PartitionId, and ReplicaId?
-
   @Rule
   public org.junit.rules.TemporaryFolder folder = new TemporaryFolder();
+
+  // Useful for understanding partition layout affect on free capacity across all hardware.
+  public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Free space dump for cluster.").append(System.lineSeparator());
+    sb.append(hardwareLayout.getClusterName()).append(" : "). append(clusterMapManager.getFreeCapacityGB())
+            .append(System.lineSeparator());
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityGB(datacenter)).append
+              (System.lineSeparator());
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getFreeCapacityGB(dataNode)).append
+                (System.lineSeparator());
+        for (Disk disk : dataNode.getDisks()) {
+          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getFreeCapacityGB(disk)).append
+                  (System.lineSeparator());
+        }
+      }
+    }
+    return sb.toString();
+  }
 
   @Test
   public void clusterMapInterface() throws JSONException {
@@ -30,8 +49,8 @@ public class ClusterMapManagerTest {
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(testPartitionLayout.getPartitionLayout());
 
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(),testPartitionLayout.getPartitionCount());
-    for(int i=0; i < clusterMapManager.getWritablePartitionIdsCount(); i++) {
+    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), testPartitionLayout.getPartitionCount());
+    for (int i = 0; i < clusterMapManager.getWritablePartitionIdsCount(); i++) {
       PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(i);
       assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getReplicaCount());
 
@@ -57,7 +76,7 @@ public class ClusterMapManagerTest {
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
 
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(),0);
+    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 0);
     clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100);
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
     PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(0);
@@ -65,7 +84,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void bestEffortAllocation() throws JSONException  {
+  public void bestEffortAllocation() throws JSONException, IOException {
     int replicaCountPerDataCenter = 2;
     long replicaCapacityGB = 100;
 
@@ -80,10 +99,12 @@ public class ClusterMapManagerTest {
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 5);
 
-    // Allocate "too many" partitions (1M) to exhaust capacity.
-    allocatedPartitions = clusterMapManager.allocatePartitions(1000*1000, replicaCountPerDataCenter, replicaCapacityGB);
+    // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
+    // "free" but unusable capacity may be left after trying to allocate these partitions.
+    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter,
+                                                               replicaCapacityGB);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
-    assertEquals(clusterMapManager.getFreeCapacityGB(), 0);
+    System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
 
     // Capacity is already exhausted...
     allocatedPartitions = clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityGB);
@@ -105,11 +126,11 @@ public class ClusterMapManagerTest {
     assertEquals(free, raw);
     assertEquals(allocated, 0);
 
-    for(Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
-      for(DataNode dataNode : datacenter.getDataNodes()) {
+    for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
         long dataNodeFree = clusterMapManager.getFreeCapacityGB(dataNode);
         assertEquals(dataNodeFree, testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount());
-        for(Disk disk : dataNode.getDisks()) {
+        for (Disk disk : dataNode.getDisks()) {
           long diskFree = clusterMapManager.getFreeCapacityGB(disk);
           assertEquals(diskFree, testHardwareLayout.getDiskCapacityGB());
         }
@@ -121,14 +142,14 @@ public class ClusterMapManagerTest {
     // Confirm 100GB has been used on 6 distinct DataNodes / Disks.
     assertEquals(clusterMapManager.getRawCapacityGB(), raw);
     assertEquals(clusterMapManager.getAllocatedCapacityGB(), 6 * 100);
-    assertEquals(clusterMapManager.getFreeCapacityGB(), free - (6*100));
+    assertEquals(clusterMapManager.getFreeCapacityGB(), free - (6 * 100));
 
-    for(Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
-      for(DataNode dataNode : datacenter.getDataNodes()) {
+    for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
         long dataNodeFree = clusterMapManager.getFreeCapacityGB(dataNode);
         assertTrue(dataNodeFree <= testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount());
         assertTrue(dataNodeFree >= testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount() - 100);
-        for(Disk disk : dataNode.getDisks()) {
+        for (Disk disk : dataNode.getDisks()) {
           long diskFree = clusterMapManager.getFreeCapacityGB(disk);
           assertTrue(diskFree <= testHardwareLayout.getDiskCapacityGB());
           assertTrue(diskFree >= testHardwareLayout.getDiskCapacityGB() - 100);
@@ -138,10 +159,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void persistAndReadBack() throws JSONException, IOException{
+  public void persistAndReadBack() throws JSONException, IOException {
     String tmpDir = folder.getRoot().getPath();
-    // TODO: Confirm that TemporaryFolder is doing what we want for all devs.
-    System.err.println("TODO: CONFIRM THIS DIRECTORY IS DELETED = " + tmpDir);
 
     String hardwareLayoutSer = tmpDir + "/hardwareLayoutSer.json";
     String partitionLayoutSer = tmpDir + "/partitionLayoutSer.json";
@@ -158,5 +177,17 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe);
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
+
+  @Test
+  public void validateSimpleConfig() throws JSONException, IOException {
+    String configDir = System.getProperty("user.dir") + "/config";
+    String hardwareLayoutSer = configDir + "/HardwareLayout.json";
+    String partitionLayoutSer = configDir + "/PartitionLayout.json";
+    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
+    assertEquals(clusterMapManager.getWritablePartitionIdsCount(),1);
+    assertEquals(clusterMapManager.getFreeCapacityGB(),10);
+    assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
+  }
+
 }
 
