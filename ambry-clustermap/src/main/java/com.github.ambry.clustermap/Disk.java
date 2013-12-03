@@ -96,7 +96,7 @@ public class Disk {
 
   @Override
   public String toString() {
-    return "Disk: " + dataNode.getHostname() + ":" + dataNode.getPort() + getMountPath();
+    return "Disk: " + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath();
   }
 
   @Override

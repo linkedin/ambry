@@ -49,7 +49,22 @@ public class HardwareLayout {
   }
 
   /**
-   * Find DataNode by hostname and port
+   * Finds Datacenter by name
+   *
+   * @param datacenterName name of datacenter to be found
+   * @return Datacenter or null if not found.
+   */
+  public Datacenter findDatacenter(String datacenterName) {
+    for (Datacenter datacenter : datacenters) {
+        if (datacenter.getName().equals(datacenterName)) {
+          return datacenter;
+        }
+    }
+    return null;
+  }
+
+  /**
+   * Finds DataNode by hostname and port
    *
    * @param hostname
    * @param port
@@ -67,7 +82,7 @@ public class HardwareLayout {
   }
 
   /**
-   * Find Disk by hostname, port, and mount path.
+   * Finds Disk by hostname, port, and mount path.
    *
    * @param hostname
    * @param port
