@@ -1,0 +1,22 @@
+{
+  "clusterName": "OneDiskOneReplica",
+  "datacenters": [
+    {
+      "dataNodes": [
+        {
+          "disks": [
+            {
+              "capacityGB": 20,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/mnt0"
+            }
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 6667
+        }
+      ],
+      "name": "Datacenter"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "clusterName": "OneDiskOneReplica",
+  "partitions": [
+    {
+      "id": 0,
+      "partitionState": "READ_WRITE",
+      "replicaCapacityGB": 10,
+      "replicas": [
+        {
+          "hostname": "localhost",
+          "mountPath": "/mnt0",
+          "port": 6667
+        }
+      ]
+    }
+  ]
+}
