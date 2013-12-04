@@ -8,6 +8,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.IOException;
 import java.util.List;
 
+import static junit.framework.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -23,7 +24,7 @@ public class ClusterMapManagerTest {
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
     StringBuilder sb = new StringBuilder();
     sb.append("Free space dump for cluster.").append(System.lineSeparator());
-    sb.append(hardwareLayout.getClusterName()).append(" : "). append(clusterMapManager.getFreeCapacityGB())
+    sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager.getFreeCapacityGB())
             .append(System.lineSeparator());
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityGB(datacenter)).append
@@ -193,17 +194,19 @@ public class ClusterMapManagerTest {
 
   @Test
   public void validateSimpleConfig() throws JSONException, IOException {
-    // TODO: Fix this test to run in both intelliJ and in gradle build.
-    /*
-    String configDir = System.getProperty("user.dir") + "/config";
-    System.err.println("XXXXXXX  " + configDir);
+    String configDir = System.getProperty("user.dir");
+    // intelliJ and gradle return different values for user.dir: gradle includes the sub-project directory. To handle
+    // this, we check the string suffix for the sub-project directory and append ".." to correctly set configDir.
+    if (configDir.endsWith("ambry-clustermap")) {
+      configDir += "/..";
+    }
+    configDir += "/config";
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
     ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(),1);
-    assertEquals(clusterMapManager.getFreeCapacityGB(),10);
+    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
+    assertEquals(clusterMapManager.getFreeCapacityGB(), 10);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
-    */
   }
 
 }

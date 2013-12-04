@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -83,7 +82,7 @@ public class Partition implements PartitionId {
   }
 
   public List<Replica> getReplicas() {
-    return Collections.unmodifiableList(replicas);
+    return replicas;
   }
 
   /**
