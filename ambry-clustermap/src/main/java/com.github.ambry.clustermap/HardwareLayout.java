@@ -55,7 +55,7 @@ public class HardwareLayout {
    */
   public Datacenter findDatacenter(String datacenterName) {
     for (Datacenter datacenter : datacenters) {
-        if (datacenter.getName().equals(datacenterName)) {
+        if (datacenter.getName().compareToIgnoreCase(datacenterName) == 0) {
           return datacenter;
         }
     }
@@ -63,16 +63,17 @@ public class HardwareLayout {
   }
 
   /**
-   * Finds DataNode by hostname and port
+   * Finds DataNode by hostname and port. Note that hostname is converted to canonical hostname for comparison.
    *
    * @param hostname
    * @param port
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
+    String canonicalHostname = DataNode.getFullyQualifiedDomainName(hostname);
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        if (dataNode.getHostname().equals(hostname) && dataNode.getPort() == port) {
+        if (dataNode.getHostname().equals(canonicalHostname) && (dataNode.getPort() == port)) {
           return dataNode;
         }
       }

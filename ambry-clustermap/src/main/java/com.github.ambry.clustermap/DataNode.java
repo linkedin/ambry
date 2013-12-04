@@ -42,7 +42,13 @@ public class DataNode implements DataNodeId {
     validate();
   }
 
-  protected String getFullyQualifiedDomainName(String unqualifiedHostname) {
+  /**
+   * Converts a hostname into a canonical hostname.
+   *
+   * @param unqualifiedHostname
+   * @return canonical hostname that can be compared with DataNode.getHostname()
+   */
+  public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
     if (unqualifiedHostname == null) {
       throw new IllegalStateException("Hostname cannot be null.");
     }
@@ -51,7 +57,7 @@ public class DataNode implements DataNodeId {
     }
 
     try {
-      return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName();
+      return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName().toLowerCase();
     }
     catch (UnknownHostException e) {
       throw new IllegalStateException("Host (" + unqualifiedHostname
