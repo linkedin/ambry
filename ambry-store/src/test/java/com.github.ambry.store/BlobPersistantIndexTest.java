@@ -148,12 +148,13 @@ public class BlobPersistantIndexTest {
   public void testIndexBasic() throws IOException {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "0_index");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
@@ -168,9 +169,9 @@ public class BlobPersistantIndexTest {
               new BlobIndexValue(200, 2000, flags, 12567));
       BlobIndexEntry entry3 = new BlobIndexEntry(new BlobId(blobId3),
               new BlobIndexValue(300, 3000, flags, 12567));
-      index.AddToIndex(entry1, 3000);
-      index.AddToIndex(entry2, 4000);
-      index.AddToIndex(entry3, 5000);
+      index.addToIndex(entry1, 3000);
+      index.addToIndex(entry2, 4000);
+      index.addToIndex(entry3, 5000);
       BlobIndexValue value1 = index.getValue(new BlobId(blobId1));
       BlobIndexValue value2 = index.getValue(new BlobId(blobId2));
       BlobIndexValue value3 = index.getValue(new BlobId(blobId3));
@@ -191,12 +192,13 @@ public class BlobPersistantIndexTest {
   public void testIndexRestore() throws IOException {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "0_index");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
@@ -212,9 +214,9 @@ public class BlobPersistantIndexTest {
               new BlobIndexValue(200, 1000, flags, 12567));
       BlobIndexEntry entry3 = new BlobIndexEntry(new BlobId(blobId3),
               new BlobIndexValue(300, 2000, flags, 12567));
-      index.AddToIndex(entry1, 3000);
-      index.AddToIndex(entry2, 4000);
-      index.AddToIndex(entry3, 5000);
+      index.addToIndex(entry1, 3000);
+      index.addToIndex(entry2, 4000);
+      index.addToIndex(entry3, 5000);
       index.close();
 
       // create a new index and ensure the index is restored
@@ -281,12 +283,13 @@ public class BlobPersistantIndexTest {
   public void testIndexBatch() throws IOException {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "0_index");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
@@ -306,7 +309,7 @@ public class BlobPersistantIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       BlobIndexValue value1 = index.getValue(new BlobId(blobId1));
       BlobIndexValue value2 = index.getValue(new BlobId(blobId2));
       BlobIndexValue value3 = index.getValue(new BlobId(blobId3));
@@ -316,7 +319,7 @@ public class BlobPersistantIndexTest {
 
       BlobIndexValue value4 = index.getValue(new BlobId("id4"));
       try {
-        index.AddToIndex(new BlobIndexEntry(new BlobId("id4"), value4), 4000);
+        index.addToIndex(new BlobIndexEntry(new BlobId("id4"), value4), 4000);
         org.junit.Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -332,12 +335,13 @@ public class BlobPersistantIndexTest {
   public void testIndexRead() throws IOException {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "0_index");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
@@ -356,7 +360,7 @@ public class BlobPersistantIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       // simple read
       BlobReadOptions readOptions = index.getBlobReadInfo(new BlobId(blobId1));
       org.junit.Assert.assertEquals(readOptions.getOffset(), 1000);
@@ -417,12 +421,13 @@ public class BlobPersistantIndexTest {
   public void testMissingEntries() throws IOException {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "index_current");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
@@ -441,7 +446,7 @@ public class BlobPersistantIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       StoreKey key1 = new BlobId("id4");
       StoreKey key2 = new BlobId(blobId1);
@@ -462,20 +467,45 @@ public class BlobPersistantIndexTest {
   public void testRollingIndex() {
     try {
       String logFile = tempFile().getParent();
-      File indexFile = new File(logFile, "index_current");
-      indexFile.delete();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles())
+        c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       Properties props = new Properties();
-      props.setProperty("store.index.memory.size.bytes", "500");
+      props.setProperty("store.index.memory.size.bytes", "200");
+      props.setProperty("store.data.flush.interval.seconds", "1");
+      props.setProperty("store.data.flush.delay.seconds", "1");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      String blobId1 = "id1";
-      String blobId2 = "id2";
-      String blobId3 = "id3";
+      String blobId1 = "id01";
+      String blobId2 = "id02";
+      String blobId3 = "id03";
+      String blobId4 = "id04";
+      String blobId5 = "id05";
+      String blobId6 = "id06";
+      String blobId7 = "id07";
+      String blobId8 = "id08";
+      String blobId9 = "id09";
+      String blobId10 = "id10";
+      String blobId11 = "id11";
+      String blobId12 = "id12";
+
+      String blobId13 = "id13";
+      String blobId14 = "id14";
+      String blobId15 = "id15";
+      String blobId16 = "id16";
+      String blobId17 = "id17";
+      String blobId18 = "id18";
+      String blobId19 = "id19";
+      String blobId20 = "id20";
+      String blobId21 = "id21";
+      String blobId22 = "id22";
+      String blobId23 = "id23";
+      String blobId24 = "id24";
 
       BlobIndexEntry entry1 = new BlobIndexEntry(new BlobId(blobId1),
               new BlobIndexValue(100, 1000));
@@ -483,21 +513,101 @@ public class BlobPersistantIndexTest {
               new BlobIndexValue(200, 2000));
       BlobIndexEntry entry3 = new BlobIndexEntry(new BlobId(blobId3),
               new BlobIndexValue(300, 3000));
+      BlobIndexEntry entry4 = new BlobIndexEntry(new BlobId(blobId4),
+              new BlobIndexValue(300, 4000));
+      BlobIndexEntry entry5 = new BlobIndexEntry(new BlobId(blobId5),
+              new BlobIndexValue(300, 5000));
+
+      BlobIndexEntry entry6 = new BlobIndexEntry(new BlobId(blobId6),
+              new BlobIndexValue(300, 6000));
+      BlobIndexEntry entry7 = new BlobIndexEntry(new BlobId(blobId7),
+              new BlobIndexValue(300, 7000));
+      BlobIndexEntry entry8 = new BlobIndexEntry(new BlobId(blobId8),
+              new BlobIndexValue(300, 8000));
+      BlobIndexEntry entry9 = new BlobIndexEntry(new BlobId(blobId9),
+              new BlobIndexValue(300, 9000));
+      BlobIndexEntry entry10 = new BlobIndexEntry(new BlobId(blobId10),
+              new BlobIndexValue(300, 10000));
+      BlobIndexEntry entry11 = new BlobIndexEntry(new BlobId(blobId11),
+              new BlobIndexValue(300, 11000));
+      BlobIndexEntry entry12 = new BlobIndexEntry(new BlobId(blobId12),
+              new BlobIndexValue(300, 12000));
+
+      BlobIndexEntry entry13 = new BlobIndexEntry(new BlobId(blobId13),
+              new BlobIndexValue(300, 13000));
+      BlobIndexEntry entry14 = new BlobIndexEntry(new BlobId(blobId14),
+              new BlobIndexValue(300, 14000));
+      BlobIndexEntry entry15 = new BlobIndexEntry(new BlobId(blobId15),
+              new BlobIndexValue(300, 15000));
+      BlobIndexEntry entry16 = new BlobIndexEntry(new BlobId(blobId16),
+              new BlobIndexValue(300, 16000));
+      BlobIndexEntry entry17 = new BlobIndexEntry(new BlobId(blobId17),
+              new BlobIndexValue(300, 17000));
+      BlobIndexEntry entry18 = new BlobIndexEntry(new BlobId(blobId18),
+              new BlobIndexValue(300, 18000));
+      BlobIndexEntry entry19 = new BlobIndexEntry(new BlobId(blobId19),
+              new BlobIndexValue(300, 19000));
+
+      BlobIndexEntry entry20 = new BlobIndexEntry(new BlobId(blobId20),
+              new BlobIndexValue(300, 20000));
+      BlobIndexEntry entry21 = new BlobIndexEntry(new BlobId(blobId21),
+              new BlobIndexValue(300, 21000));
+      BlobIndexEntry entry22 = new BlobIndexEntry(new BlobId(blobId22),
+              new BlobIndexValue(300, 22000));
+      BlobIndexEntry entry23 = new BlobIndexEntry(new BlobId(blobId23),
+              new BlobIndexValue(300, 23000));
+      BlobIndexEntry entry24 = new BlobIndexEntry(new BlobId(blobId24),
+              new BlobIndexValue(300, 24000));
+
       ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>();
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
-      ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      StoreKey key1 = new BlobId("id4");
-      StoreKey key2 = new BlobId(blobId1);
-      StoreKey key3 = new BlobId(blobId2);
-      keys.add(key1);
-      keys.add(key2);
-      keys.add(key3);
-      List<StoreKey> missing = index.findMissingEntries(keys);
-      org.junit.Assert.assertEquals(missing.size(), 1);
-      org.junit.Assert.assertArrayEquals(missing.get(0).toBytes(), new BlobId("id4").toBytes());
+      index.addToIndex(list, 3000);
+      list.clear();
+      list.add(entry4);
+      list.add(entry5);
+      list.add(entry6);
+      list.add(entry7);
+      list.add(entry8);
+      index.addToIndex(list, 8000);
+      list.clear();
+      list.add(entry9);
+      list.add(entry10);
+      list.add(entry11);
+      list.add(entry12);
+      index.addToIndex(list, 12000);
+      list.clear();
+      list.add(entry13);
+      list.add(entry14);
+      list.add(entry15);
+      list.add(entry16);
+      index.addToIndex(list, 16000);
+      list.clear();
+      list.add(entry17);
+      list.add(entry18);
+      list.add(entry19);
+      index.addToIndex(list, 19000);
+      list.clear();
+      list.add(entry20);
+      list.add(entry21);
+      list.add(entry22);
+      list.add(entry23);
+      list.add(entry24);
+      index.addToIndex(list, 24000);
+
+      // search
+      Assert.assertEquals(index.findKey(new BlobId(blobId20)).getOffset(), 20000);
+      Assert.assertEquals(index.findKey(new BlobId(blobId21)).getOffset(), 21000);
+      Thread.sleep(3000);
+
+      Assert.assertEquals(index.findKey(new BlobId(blobId1)).getOffset(), 1000);
+      Assert.assertEquals(index.findKey(new BlobId(blobId2)).getOffset(), 2000);
+
+      index.close();
+      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config);
+      Assert.assertEquals(indexNew.findKey(new BlobId(blobId1)).getOffset(), 1000);
+      Assert.assertEquals(indexNew.findKey(new BlobId(blobId2)).getOffset(), 2000);
     }
     catch (Exception e) {
       org.junit.Assert.assertTrue(false);

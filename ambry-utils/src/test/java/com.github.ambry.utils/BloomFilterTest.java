@@ -22,7 +22,7 @@ public class BloomFilterTest
 
   public BloomFilterTest()
   {
-    bf = FilterFactory.getFilter(1000L, FilterTestHelper.MAX_FAILURE_RATE);
+    bf = FilterFactory.getFilter(10000L, FilterTestHelper.MAX_FAILURE_RATE);
   }
 
   public static IFilter testSerialize(IFilter f) throws IOException
@@ -37,7 +37,7 @@ public class BloomFilterTest
     IFilter f2 = FilterFactory.deserialize(input);
 
     assert f2.isPresent(ByteBuffer.wrap("a".getBytes()));
-    assert !f2.isPresent(ByteBuffer.wrap("a".getBytes()));
+    assert !f2.isPresent(ByteBuffer.wrap("b".getBytes()));
     return f2;
   }
 
@@ -66,7 +66,7 @@ public class BloomFilterTest
   {
     bf.add(ByteBuffer.wrap("a".getBytes()));
     assert bf.isPresent(ByteBuffer.wrap("a".getBytes()));
-    assert !bf.isPresent(ByteBuffer.wrap("a".getBytes()));
+    assert !bf.isPresent(ByteBuffer.wrap("b".getBytes()));
   }
 
   @Test
@@ -127,7 +127,6 @@ public class BloomFilterTest
   }
 
   @Test
-  @Ignore
   public void testHugeBFSerialization() throws IOException
   {
     ByteBuffer test = ByteBuffer.wrap(new byte[] {0, 1});
@@ -135,7 +134,7 @@ public class BloomFilterTest
     File f = File.createTempFile("bloomFilterTest-", ".dat");
     f.deleteOnExit();
 
-    BloomFilter filter = (BloomFilter) FilterFactory.getFilter(((long)1000000 / 8) + 1, 0.01d);
+    BloomFilter filter = (BloomFilter) FilterFactory.getFilter(((long)100000 / 8) + 1, 0.01d);
     filter.add(test);
     DataOutputStream out = new DataOutputStream(new FileOutputStream(f));
     FilterFactory.serialize(filter, out);

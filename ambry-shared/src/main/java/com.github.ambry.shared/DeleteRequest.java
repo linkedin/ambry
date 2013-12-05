@@ -46,7 +46,6 @@ public class DeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putLong(partitionId);
-      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
     }

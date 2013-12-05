@@ -139,11 +139,11 @@ public class MessageFormat {
       case UserMetadata_Version_V1:
         return UserMetadata_Format_V1.deserializeUserMetadata(crcStream);
       default:
-        throw new DataCorruptException("ttl record version not supported");
+        throw new DataCorruptException("metadata version not supported");
     }
   }
 
-  public static ByteBufferInputStream deserializeData(InputStream stream) throws IOException, DataCorruptException {
+  public static BlobOutput deserializeData(InputStream stream) throws IOException, DataCorruptException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -151,15 +151,12 @@ public class MessageFormat {
       case Data_Version_V1:
         return Data_Format_V1.deserializeData(crcStream);
       default:
-        throw new DataCorruptException("ttl record version not supported");
+        throw new DataCorruptException("data version not supported");
     }
   }
 
-
-
-
   public static class MessageHeader_Format_V1 {
-    ByteBuffer buffer;
+    private ByteBuffer buffer;
 
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
 
@@ -202,6 +199,11 @@ public class MessageFormat {
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
+      Logger logger = LoggerFactory.getLogger("MessageHeader_Format_V1");
+      logger.trace("serializing header : version {} size {} systemmetadatarelativeoffset {} " +
+              "usermetadatarelativeoffset {} datarelativeoffset {} crc {}",
+              Message_Header_Version_V1, totalSize, systemMetadataRelativeOffset, userMetadataRelativeOffset,
+              dataRelativeOffset, crc.getValue());
     }
 
 
@@ -231,6 +233,13 @@ public class MessageFormat {
 
     public long getCrc() {
       return buffer.getLong(Crc_Field_Offset_In_Bytes);
+    }
+
+    public void verifyCrc() throws DataCorruptException {
+      Crc32 crc = new Crc32();
+      crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
+      if (crc.getValue() != getCrc())
+        throw new DataCorruptException("Message header is corrupt");
     }
   }
 
@@ -329,8 +338,8 @@ public class MessageFormat {
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
       long crc = crcStream.getValue();
       if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing blob properties");
-        throw new DataCorruptException("Blob property data is corrupt");
+        logger.error("corrupt data while parsing delete record");
+        throw new DataCorruptException("delete record data is corrupt");
       }
       return isDeleted;
     }
@@ -345,8 +354,8 @@ public class MessageFormat {
       long ttl = dataStream.readLong();
       long crc = crcStream.getValue();
       if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing blob properties");
-        throw new DataCorruptException("Blob property data is corrupt");
+        logger.error("corrupt data while parsing ttl record");
+        throw new DataCorruptException("ttl record data is corrupt");
       }
       return ttl;
     }
@@ -399,21 +408,22 @@ public class MessageFormat {
     }
 
     public static void serializePartialData(ByteBuffer outputBuffer, long dataSize) {
-      outputBuffer.putShort(UserMetadata_Version_V1);
+      outputBuffer.putShort(Data_Version_V1);
       outputBuffer.putLong(dataSize);
     }
 
-    public static ByteBufferInputStream deserializeData(CrcInputStream crcStream) throws IOException, DataCorruptException {
+    public static BlobOutput deserializeData(CrcInputStream crcStream) throws IOException, DataCorruptException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
       // we only support data of max size = MAX_INT for now
-      ByteBufferInputStream output = new ByteBufferInputStream(dataStream, (int)dataSize);
+      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int)dataSize);
       long crc = crcStream.getValue();
-      if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing user metadata");
-        throw new DataCorruptException("User metadata is corrupt");
+      long streamCrc = dataStream.readLong();
+      if (crc != streamCrc) {
+        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
+        throw new DataCorruptException("corrupt data while parsing blob content");
       }
-      return output;
+      return new BlobOutput(dataSize, output);
     }
   }
 }

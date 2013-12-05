@@ -92,7 +92,6 @@ public class PutRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
       bufferToSend.putLong(partitionId);
-      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       BlobPropertySerDe.putBlobPropertyToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());

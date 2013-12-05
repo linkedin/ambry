@@ -1,6 +1,10 @@
 package com.github.ambry.server;
 
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.coordinator.AmbryCoordinator;
+import com.github.ambry.coordinator.BlobNotFoundException;
+import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.DataCorruptException;
 import com.github.ambry.messageformat.MessageFormat;
@@ -14,7 +18,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.*;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Properties;
@@ -35,11 +38,14 @@ public class ServerTest {
 
   public ServerTest() throws InterruptedException, IOException, StoreException {
     File tempFile = tempFile();
-    RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
+    File indexFile = new File(tempFile.getParent());
+    for (File c : indexFile.listFiles())
+      c.delete();
+    File logFile = new File(tempFile.getParent(), "log_current");
+    RandomAccessFile randomFile = new RandomAccessFile(logFile, "rw");
     // preallocate file
-    randomFile.setLength(5000);
-    File indexFile = new File(tempFile.getParent(), "index_current");
-    indexFile.delete();
+    randomFile.setLength(100000);
+
     Properties props = new Properties();
     props.setProperty("store.data.dir", tempFile.getParent());
     VerifiableProperties propverify = new VerifiableProperties(props);
@@ -53,14 +59,14 @@ public class ServerTest {
   }
 
   @Test
-  public void EndToEndTest() throws SocketException, InterruptedException, IOException {
+  public void EndToEndTest() throws InterruptedException, IOException {
 
     byte[] usermetadata = new byte[1000];
-    byte[] data = new byte[2000];
-    BlobProperties properties = new BlobProperties(2000, "serviceid1");
+    byte[] data = new byte[31870];
+    BlobProperties properties = new BlobProperties(31870, "serviceid1");
     new Random().nextBytes(usermetadata);
     new Random().nextBytes(data);
-    // put blob
+    // put blob 1
     PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId("id1"), ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
     BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
@@ -69,7 +75,20 @@ public class ServerTest {
     InputStream putResponseStream = channel.receive();
     PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
 
-    // get blob
+    PutRequest putRequest2 = new PutRequest(1, 1, "client1", new BlobId("id2"), ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
+    channel.send(putRequest2);
+    putResponseStream = channel.receive();
+    PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+
+    PutRequest putRequest3 = new PutRequest(1, 1, "client1", new BlobId("id3"), ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
+    channel.send(putRequest3);
+    putResponseStream = channel.receive();
+    PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+
+
+    // get blob properties
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
     ids.add(new BlobId("id1"));
     GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, 1, ids);
@@ -78,13 +97,14 @@ public class ServerTest {
     GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream));
     try {
       BlobProperties propertyOutput = MessageFormat.deserializeBlobProperties(resp1.getInputStream());
-      Assert.assertEquals(propertyOutput.getBlobSize(), 2000);
+      Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
       Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
     }
     catch (DataCorruptException e) {
       Assert.assertEquals(false, true);
     }
 
+    // get user metadata
     GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.UserMetadata, 1, ids);
     channel.send(getRequest2);
     stream = channel.receive();
@@ -96,19 +116,23 @@ public class ServerTest {
     catch (DataCorruptException e) {
       Assert.assertEquals(false, true);
     }
+    channel.disconnect();
 
-    GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Data, 1, ids);
-    channel.send(getRequest3);
-    stream = channel.receive();
-    GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream));
+
     try {
-      ByteBufferInputStream dataOutput = MessageFormat.deserializeData(resp3.getInputStream());
-      byte[] dataOutputStream = new byte[2000];
-      dataOutput.read(dataOutputStream);
+      // get blob data
+      // Use coordinator to get the blob
+      Coordinator coordinator = new AmbryCoordinator("localhost", 6667);
+      BlobOutput output = coordinator.getBlob("id1");
+      Assert.assertEquals(output.getSize(), 31870);
+      byte[] dataOutputStream = new byte[(int)output.getSize()];
+      output.getStream().read(dataOutputStream);
       Assert.assertArrayEquals(dataOutputStream, data);
+      coordinator.shutdown();
     }
-    catch (DataCorruptException e) {
+    catch (BlobNotFoundException e) {
       Assert.assertEquals(false, true);
     }
+
   }
 }

@@ -21,7 +21,6 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
             headerSize + idSize,
             MessageFormat.Message_Header_Invalid_Relative_Offset,
             MessageFormat.Message_Header_Invalid_Relative_Offset);
-    buffer.putInt(key.sizeInBytes());
     buffer.put(key.toBytes());
     // set the message as deleted
     MessageFormat.serializeCurrentVersionDeleteRecord(buffer, true);

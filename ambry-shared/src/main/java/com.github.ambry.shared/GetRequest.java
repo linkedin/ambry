@@ -77,7 +77,6 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend.putLong(partitionId);
       bufferToSend.putInt(ids.size());
       for (BlobId id : ids) {
-        bufferToSend.putShort(id.sizeInBytes());
         bufferToSend.put(id.toBytes());
       }
       bufferToSend.flip();

@@ -62,7 +62,7 @@ public class SocketServerTest {
     Assert.assertEquals(0, requestFromNetwork.getPartitionId());
     Assert.assertEquals(correlationId, requestFromNetwork.getCorrelationId());
     Assert.assertEquals("test", requestFromNetwork.getClientId());
-    Assert.assertEquals("1234", new String(requestFromNetwork.getBlobId().toBytes().array()));
+    Assert.assertEquals("1234", requestFromNetwork.getBlobId().toString());
     Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getUsermetadata().array());
     Assert.assertEquals(10, requestFromNetwork.getDataSize());
     Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());

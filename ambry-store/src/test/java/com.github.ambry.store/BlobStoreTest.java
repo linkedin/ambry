@@ -56,12 +56,14 @@ public class BlobStoreTest {
   public void storePutTest() throws IOException {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
       File tempFile = tempFile();
+      File indexFile = new File(tempFile.getParent());
+      for (File c : indexFile.listFiles())
+        c.delete();
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
-      File indexFile = new File(tempFile.getParent(), "index_current");
-      indexFile.delete();
       Properties props = new Properties();
       props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -124,12 +126,14 @@ public class BlobStoreTest {
   public void storeGetTest() throws IOException {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
       File tempFile = tempFile();
+      File indexFile = new File(tempFile.getParent());
+      for (File c : indexFile.listFiles())
+        c.delete();
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
-      File indexFile = new File(tempFile.getParent(), "index_current");
-      indexFile.delete();
       Properties props = new Properties();
       props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -178,12 +182,14 @@ public class BlobStoreTest {
   public void storeDeleteTest() throws IOException {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
       File tempFile = tempFile();
+      File indexFile = new File(tempFile.getParent());
+      for (File c : indexFile.listFiles())
+        c.delete();
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
-      File indexFile = new File(tempFile.getParent(), "index_current");
-      indexFile.delete();
       Properties props = new Properties();
       props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -254,12 +260,14 @@ public class BlobStoreTest {
   public void storeUpdateTTLTest() throws IOException {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
       File tempFile = tempFile();
+      File indexFile = new File(tempFile.getParent());
+      for (File c : indexFile.listFiles())
+        c.delete();
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
-      File indexFile = new File(tempFile.getParent(), "index_current");
-      indexFile.delete();
       Properties props = new Properties();
       props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -320,12 +328,14 @@ public class BlobStoreTest {
   public void storeShutdownTest() throws IOException {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
       File tempFile = tempFile();
+      File indexFile = new File(tempFile.getParent());
+      for (File c : indexFile.listFiles())
+        c.delete();
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
-      File indexFile = new File(tempFile.getParent(), "index_current");
-      indexFile.delete();
       Properties props = new Properties();
       props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);

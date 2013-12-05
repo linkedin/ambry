@@ -20,11 +20,13 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long offset;
   private final Long size;
   private final Long ttl;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   BlobReadOptions(long offset, long size, long ttl) {
     this.offset = offset;
     this.size = size;
     this.ttl = ttl;
+    logger.trace("BlobReadOption offset {} size {} ttl {}",offset, size, ttl);
   }
 
   public long getOffset() {
@@ -79,6 +81,8 @@ public class BlobMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index out of the messageset");
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
+    logger.trace("Blob Message Read Set position {} count {}",
+                 startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
     long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
     logger.trace("Written {} bytes to the write channel from the file channel : ", written, file.getAbsolutePath());
     return written;

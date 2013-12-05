@@ -25,7 +25,6 @@ public class TTLMessageFormatInputStream extends MessageFormatInputStream {
                                                 headerSize + idSize,
                                                 MessageFormat.Message_Header_Invalid_Relative_Offset,
                                                 MessageFormat.Message_Header_Invalid_Relative_Offset);
-    buffer.putInt(key.sizeInBytes());
     buffer.put(key.toBytes());
     MessageFormat.serializeCurrentVersionTTLRecord(buffer, timeToLiveInMs);
     messageLength = buffer.capacity();

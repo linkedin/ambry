@@ -55,13 +55,13 @@ public class BlobIndex {
     }
   }
 
-  public void AddToIndex(BlobIndexEntry entry, long fileEndOffset) {
+  public void addToIndex(BlobIndexEntry entry, long fileEndOffset) {
     verifyFileEndOffset(fileEndOffset);
     index.put(entry.getKey(), entry.getValue());
     this.logEndOffset.set(fileEndOffset);
   }
 
-  public void AddToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
+  public void addToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
     verifyFileEndOffset(fileEndOffset);
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());

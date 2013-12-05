@@ -16,19 +16,21 @@ import java.io.IOException;
 public class BlobStore implements Store {
 
   private Log log;
-  private BlobIndex index;
+  private BlobPersistantIndex index;
   private final String dataDir;
   private final Scheduler scheduler;
   private Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
   private Object lock = new Object();
-  private final Metrics metrics;
+  private final StoreMetrics metrics;
   private boolean started;
+  private StoreConfig config;
 
   public BlobStore(StoreConfig config, Scheduler scheduler, ReadableMetricsRegistry registry) {
     this.dataDir = config.storeDataDir;
     this.scheduler = scheduler;
-    metrics = new Metrics(this.dataDir, registry);
+    metrics = new StoreMetrics(this.dataDir, registry);
+    this.config = config;
   }
 
   @Override
@@ -37,7 +39,7 @@ public class BlobStore implements Store {
       throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
     try {
       log = new Log(dataDir, metrics);
-      index = new BlobIndex(dataDir, scheduler, log);
+      index = new BlobPersistantIndex(dataDir, scheduler, log, config);
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(index.getCurrentEndOffset());
       started = true;
@@ -91,7 +93,7 @@ public class BlobStore implements Store {
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
         }
-        index.AddToIndex(indexEntries, log.getLogEndOffset());
+        index.addToIndex(indexEntries, log.getLogEndOffset());
         metrics.writes.inc(1);
       }
       catch (IOException e) {

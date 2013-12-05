@@ -57,7 +57,6 @@ public class TTLRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putLong(partitionId);
-      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       bufferToSend.putLong(newTTL);
       bufferToSend.flip();

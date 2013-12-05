@@ -57,7 +57,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
@@ -72,9 +72,9 @@ public class BlobIndexTest {
               new BlobIndexValue(200, 2000, flags, 12567));
       BlobIndexEntry entry3 = new BlobIndexEntry(new BlobId(blobId3),
               new BlobIndexValue(300, 3000, flags, 12567));
-      index.AddToIndex(entry1, 3000);
-      index.AddToIndex(entry2, 4000);
-      index.AddToIndex(entry3, 5000);
+      index.addToIndex(entry1, 3000);
+      index.addToIndex(entry2, 4000);
+      index.addToIndex(entry3, 5000);
       BlobIndexValue value1 = index.getValue(new BlobId(blobId1));
       BlobIndexValue value2 = index.getValue(new BlobId(blobId2));
       BlobIndexValue value3 = index.getValue(new BlobId(blobId3));
@@ -100,7 +100,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
@@ -115,9 +115,9 @@ public class BlobIndexTest {
               new BlobIndexValue(200, 2000, flags, 12567));
       BlobIndexEntry entry3 = new BlobIndexEntry(new BlobId(blobId3),
               new BlobIndexValue(300, 3000, flags, 12567));
-      index.AddToIndex(entry1, 3000);
-      index.AddToIndex(entry2, 4000);
-      index.AddToIndex(entry3, 5000);
+      index.addToIndex(entry1, 3000);
+      index.addToIndex(entry2, 4000);
+      index.addToIndex(entry3, 5000);
       index.close();
 
       // create a new index and ensure the index is restored
@@ -178,7 +178,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
@@ -197,7 +197,7 @@ public class BlobIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       BlobIndexValue value1 = index.getValue(new BlobId(blobId1));
       BlobIndexValue value2 = index.getValue(new BlobId(blobId2));
       BlobIndexValue value3 = index.getValue(new BlobId(blobId3));
@@ -207,7 +207,7 @@ public class BlobIndexTest {
 
       BlobIndexValue value4 = index.getValue(new BlobId("id4"));
       try {
-        index.AddToIndex(new BlobIndexEntry(new BlobId("id4"), value4), 4000);
+        index.addToIndex(new BlobIndexEntry(new BlobId("id4"), value4), 4000);
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -228,7 +228,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
@@ -246,7 +246,7 @@ public class BlobIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       // simple read
       BlobReadOptions readOptions = index.getBlobReadInfo(new BlobId(blobId1));
       Assert.assertEquals(readOptions.getOffset(), 1000);
@@ -312,7 +312,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Metrics metrics = new Metrics("test", registry);
+      StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics);
       MockIndex index = new MockIndex(logFile, scheduler, log);
       String blobId1 = "id1";
@@ -330,7 +330,7 @@ public class BlobIndexTest {
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.AddToIndex(list, 5000);
+      index.addToIndex(list, 5000);
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       StoreKey key1 = new BlobId("id4");
       StoreKey key2 = new BlobId(blobId1);

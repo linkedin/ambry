@@ -8,6 +8,8 @@ import com.github.ambry.shared.*;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.Send;
 import com.github.ambry.store.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,6 +23,7 @@ public class AmbryRequests {
 
   private Store blobStore;
   private final RequestResponseChannel requestResponseChannel;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AmbryRequests(Store blobStore, RequestResponseChannel requestResponseChannel) {
     this.blobStore = blobStore;
@@ -71,10 +74,10 @@ public class AmbryRequests {
       requestResponseChannel.sendResponse(response, request);
     }
     catch (StoreException e) {
-
+      logger.error("Error on doing a put {}", e);
     }
     catch (Exception e) {
-
+      logger.error("Error on doing a put {}", e);
     }
   }
 
@@ -88,7 +91,7 @@ public class AmbryRequests {
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
-      // send error response
+      logger.error("Error while doing get request {}", e);
     }
   }
 

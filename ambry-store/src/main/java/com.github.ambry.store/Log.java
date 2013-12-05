@@ -23,11 +23,11 @@ public class Log implements Write, Read {
   private AtomicLong currentWriteOffset;
   private final FileChannel fileChannel;
   private final File file;
-  private final Metrics metrics;
+  private final StoreMetrics metrics;
   private static final String logFileName = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Log(String dataDir, Metrics metrics) throws IOException {
+  public Log(String dataDir, StoreMetrics metrics) throws IOException {
     file = new File(dataDir, logFileName);
     fileChannel = Utils.openChannel(file, true);
     currentWriteOffset = new AtomicLong(0);
@@ -92,7 +92,6 @@ public class Log implements Write, Read {
    * Close this log
    */
   void close() throws IOException {
-    flush();
     fileChannel.close();
   }
 
