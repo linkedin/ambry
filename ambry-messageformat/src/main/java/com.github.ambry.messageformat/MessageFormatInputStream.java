@@ -21,7 +21,7 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected CrcInputStream stream = null;
   protected long streamLength = 0;
   protected long streamRead = 0;
-  protected static int StoreKey_Size_Field_Size_In_Bytes = 4;
+  protected static int StoreKey_Size_Field_Size_In_Bytes = 2;
   ByteBuffer crc = ByteBuffer.allocate(MessageFormat.Crc_Size);
   protected long messageLength;
   protected Logger logger = LoggerFactory.getLogger(getClass());

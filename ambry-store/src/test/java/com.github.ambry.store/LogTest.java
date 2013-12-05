@@ -31,7 +31,7 @@ public class LogTest {
     // preallocate file
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
-    Metrics metrics = new Metrics("test", registry);
+    StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics);
     byte[] testbuf = new byte[1000];
     new Random().nextBytes(testbuf);
@@ -81,7 +81,7 @@ public class LogTest {
     // preallocate file
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
-    Metrics metrics = new Metrics("test", registry);
+    StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);
@@ -131,7 +131,7 @@ public class LogTest {
     // preallocate file
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
-    Metrics metrics = new Metrics("test", registry);
+    StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);
@@ -173,7 +173,7 @@ public class LogTest {
     // preallocate file
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
-    Metrics metrics = new Metrics("test", registry);
+    StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);

@@ -15,7 +15,7 @@ import java.util.Random;
 
 public class MessageFormatInputStreamTest {
 
-  private static final int Key_Size = 4;
+  private static final int Key_Size = 2;
 
   public static class MockId extends StoreKey {
 
@@ -27,7 +27,10 @@ public class MessageFormatInputStreamTest {
 
     @Override
     public byte[] toBytes() {
-      return id.getBytes();
+      ByteBuffer idBuf = ByteBuffer.allocate(2 + id.getBytes().length);
+      idBuf.putShort(sizeInBytes());
+      idBuf.put(id.getBytes());
+      return idBuf.array();
     }
 
     @Override
@@ -41,6 +44,11 @@ public class MessageFormatInputStreamTest {
         throw new NullPointerException("input argument null");
       MockId other = (MockId) o;
       return id.compareTo(other.id);
+    }
+
+    @Override
+    public String toString() {
+      return id;
     }
   }
 
@@ -83,10 +91,10 @@ public class MessageFormatInputStreamTest {
     byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getInt(), key.sizeInBytes());
+    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toBytes());
+    Assert.assertArrayEquals(dest, key.toString().getBytes());
 
     // verify system metadata
     byte[] systemMetadataOutput = new byte[systemMetadataSize];
@@ -152,10 +160,10 @@ public class MessageFormatInputStreamTest {
     byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getInt(), key.sizeInBytes());
+    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toBytes());
+    Assert.assertArrayEquals(dest, key.toString().getBytes());
 
 
     // check system metadata record
@@ -195,11 +203,10 @@ public class MessageFormatInputStreamTest {
     byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getInt(), key.sizeInBytes());
+    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toBytes());
-
+    Assert.assertArrayEquals(dest, key.toString().getBytes());
 
     // check system metadata record
     byte[] systemMetadataOutput = new byte[systemMetadataSize];

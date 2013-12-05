@@ -40,7 +40,6 @@ public class GetResponse extends RequestOrResponse {
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
     outputBuffer.putInt(messageInfoList.size());
     for (MessageInfo messageInfo : messageInfoList) {
-      outputBuffer.putShort(messageInfo.getStoreKey().sizeInBytes());
       outputBuffer.put(messageInfo.getStoreKey().toBytes());
       outputBuffer.putLong(messageInfo.getSize());
       outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
@@ -82,7 +81,8 @@ public class GetResponse extends RequestOrResponse {
   }
 
   public static GetResponse readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
+    short typeval = stream.readShort();
+    RequestResponseType type = RequestResponseType.values()[typeval];
     if (type != RequestResponseType.GetResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }

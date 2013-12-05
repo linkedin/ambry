@@ -4,7 +4,7 @@ import java.io.OutputStream;
 import java.io.IOException;
 
 /**
- * An inputstream that calculates Crc on the fly
+ * An outputstream that calculates Crc on the fly
  */
 public class CrcOutputStream extends OutputStream {
   private Crc32 crc;
@@ -39,6 +39,11 @@ public class CrcOutputStream extends OutputStream {
   public void write(byte b[], int off, int len) throws IOException {
     stream.write(b, off, len);
     crc.update(b, off, len);
+  }
+
+  @Override
+  public void close() throws IOException {
+    stream.close();
   }
 
   public long getValue() {

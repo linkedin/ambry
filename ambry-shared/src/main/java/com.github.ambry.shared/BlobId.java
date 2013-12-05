@@ -24,7 +24,7 @@ public class BlobId extends StoreKey{
   }
 
   public short sizeInBytes() {
-    return (short)id.length();
+    return (short)(id.length());
   }
 
   @Override

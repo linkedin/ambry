@@ -15,13 +15,14 @@ public class BlobProperties {
   protected String serviceId;
   protected long creationTimeInMs;
 
+  public static final long Infinite_TTL = -1;
+
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
    */
   public BlobProperties(long blobSize, String serviceId) {
-    // default set to 1 hour
-    timeToLiveInMs = SystemTime.getInstance().milliseconds() + (SystemTime.MsPerSec * SystemTime.SecsPerHour);
+    timeToLiveInMs = Infinite_TTL;
     isPrivate = false;
     this.blobSize = blobSize;
     this.creationTimeInMs = SystemTime.getInstance().milliseconds();

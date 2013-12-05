@@ -1,33 +1,51 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.DataCorruptException;
 import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.*;
-import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.store.MessageInfo;
 
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.UUID;
+import java.util.List;
 
 public class AmbryCoordinator implements Coordinator {
+
+  private String host;
+  private int port;
+  BlockingChannel channel;
+
+  public AmbryCoordinator(String host, int port) {
+    this.host = host;
+    this.port = port;
+    channel = new BlockingChannel(host, port, 10000, 10000, 10000);
+    try {
+      channel.connect();
+    }
+    catch (Exception e) {
+
+    }
+  }
 
   @Override
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) {
     try {
       // put blob
-      PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId("id1"), userMetadata, blob, blobProperties);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      channel.connect();
+      String id = UUID.randomUUID().toString();
+      PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId(id), userMetadata, blob, blobProperties);
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      return "id1";
+      return id;
     }
     catch (Exception e) {
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
+      System.out.println("error " + e);
     }
     return null; // this will not happen in the actual implementation
   }
@@ -37,7 +55,7 @@ public class AmbryCoordinator implements Coordinator {
     try {
       // delete blob
       DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", new BlobId("id1"));
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
       channel.connect();
       channel.send(deleteRequest);
       InputStream deleteResponseStream = channel.receive();
@@ -53,7 +71,7 @@ public class AmbryCoordinator implements Coordinator {
     try {
       // update ttl of the blob
       TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", new BlobId("id1"), newTTL);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
       channel.connect();
       channel.send(ttlRequest);
       InputStream ttlResponseStream = channel.receive();
@@ -65,14 +83,14 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   @Override
-  public InputStream getBlob(String blobId) throws BlobNotFoundException {
+  public BlobOutput getBlob(String blobId) throws BlobNotFoundException {
     // get blob
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.Data);
-      InputStream data = MessageFormat.deserializeData(response.getInputStream());
-      return data;
+      GetResponse response = doGetResponse(blobId, MessageFormatFlags.Data, channel);
+      return MessageFormat.deserializeData(channel.readChannel);
     }
     catch (Exception e) {
+      System.out.println("error " + e);
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
     }
     return null; // this will never happen once Ambry Exception is defined
@@ -81,8 +99,11 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public ByteBuffer getUserMetadata(String blobId) throws BlobNotFoundException {
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.UserMetadata);
+      BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
+      channel.connect();
+      GetResponse response = doGetResponse(blobId, MessageFormatFlags.UserMetadata, channel);
       ByteBuffer userMetadata = MessageFormat.deserializeMetadata(response.getInputStream());
+      channel.disconnect();
       return userMetadata;
     }
     catch (Exception e) {
@@ -94,8 +115,11 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public BlobProperties getBlobProperties(String blobId) throws BlobNotFoundException {
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.BlobProperties);
+      BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
+      channel.connect();
+      GetResponse response = doGetResponse(blobId, MessageFormatFlags.BlobProperties, channel);
       BlobProperties properties = MessageFormat.deserializeBlobProperties(response.getInputStream());
+      channel.disconnect();
       return properties;
     }
     catch (Exception e) {
@@ -104,20 +128,26 @@ public class AmbryCoordinator implements Coordinator {
     return null; // this will never happen once Ambry Exception is defined
   }
 
-  private GetResponse doGetResponse(String blobId, MessageFormatFlags flag) {
+  private GetResponse doGetResponse(String blobId, MessageFormatFlags flag, BlockingChannel channel) {
     try {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       ids.add(new BlobId(blobId));
-      GetRequest getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, 1, ids);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      GetRequest getRequest = new GetRequest(1, "clientid2", flag, 1, ids);
       channel.send(getRequest);
       InputStream stream = channel.receive();
       GetResponse response = GetResponse.readFrom(new DataInputStream(stream));
       return response;
     }
     catch (Exception e) {
+      System.out.println("error " + e);
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
     }
     return null; // this will never happen once Ambry Exception is defined
+  }
+
+  public void shutdown() {
+    if (channel != null) {
+      channel.disconnect();
+    }
   }
 }

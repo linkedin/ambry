@@ -33,7 +33,6 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
             headerSize + idSize,
             headerSize + idSize + systemMetadataSize,
             headerSize + idSize + systemMetadataSize + userMetadataSize);
-    buffer.putInt(key.sizeInBytes());
     buffer.put(key.toBytes());
     MessageFormat.serializeCurrentVersionBlobPropertyRecord(buffer, blobProperty);
     MessageFormat.serializeCurrentVersionUserMetadata(buffer, userMetadata);

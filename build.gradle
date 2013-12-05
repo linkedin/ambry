@@ -30,6 +30,8 @@ project(':ambry-utils') {
   dependencies {
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.json:json:20090211"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -40,6 +42,8 @@ project(':ambry-api') {
   dependencies {
     compile project(':ambry-utils')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -51,6 +55,8 @@ project(':ambry-shared') {
     compile project(':ambry-utils')
     compile project(':ambry-api')
     compile project(':ambry-messageformat')
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
@@ -63,6 +69,8 @@ project(':ambry-network') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile project(':ambry-shared')
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
@@ -78,6 +86,9 @@ project(':ambry-server') {
     compile project(':ambry-store')
     compile project(':ambry-messageformat')
     compile project(':ambry-metrics')
+    compile project(':ambry-coordinator')
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
@@ -91,7 +102,9 @@ project(':ambry-store') {
     compile project(':ambry-utils')
     compile project(':ambry-shared')
     compile project(':ambry-metrics')
-    compile "org.slf4j:slf4j-api:$slf4jVersion"   
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"   
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -103,6 +116,8 @@ project(':ambry-messageformat') {
     compile project(':ambry-api')
     compile project(':ambry-utils')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -125,6 +140,9 @@ project(':ambry-coordinator') {
     compile project(':ambry-utils')
     compile project(':ambry-shared')
     compile project(':ambry-messageformat')
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -147,7 +165,11 @@ project(':ambry-tools') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-store')
+    compile project(':ambry-coordinator')
     compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
   }
 }
 
@@ -157,6 +179,8 @@ project(':ambry-metrics') {
   dependencies {
     compile project(':ambry-api')
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "log4j:log4j:$log4jVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }

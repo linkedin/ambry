@@ -20,7 +20,7 @@ public class BlockingChannel {
   private final int readTimeoutMs;
   private boolean connected = false;
   private SocketChannel channel = null;
-  private InputStream readChannel = null;
+  public InputStream readChannel = null;
   private GatheringByteChannel writeChannel = null;
   private Object lock = new Object();
   private Logger logger = LoggerFactory.getLogger(getClass());

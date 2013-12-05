@@ -63,20 +63,26 @@ class SocketServerResponse implements Response {
   }
 }
 
+interface ResponseListener {
+  public void onResponse(int processorId);
+}
+
 /**
  * RequestResponse channel for socket server
  */
-public class SocketRequestResponseChannel implements RequestResponseChannel{
+public class SocketRequestResponseChannel implements RequestResponseChannel {
   private final int numProcessors;
   private final int queueSize;
   private final ArrayBlockingQueue<Request> requestQueue;
   private final ArrayList<BlockingQueue<Response>> responseQueues;
+  private final ArrayList<ResponseListener> responseListeners;
 
   public SocketRequestResponseChannel(int numProcessors, int queueSize) {
     this.numProcessors = numProcessors;
     this.queueSize = queueSize;
     this.requestQueue = new ArrayBlockingQueue<Request>(this.queueSize);
     responseQueues = new ArrayList<BlockingQueue<Response>>(this.numProcessors);
+    responseListeners = new ArrayList<ResponseListener>();
 
     for(int i = 0; i < this.numProcessors; i++)
       responseQueues.add(i, new LinkedBlockingQueue<Response>());
@@ -92,6 +98,8 @@ public class SocketRequestResponseChannel implements RequestResponseChannel{
   public void sendResponse(Send payloadToSend, Request originalRequest) throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend);
     responseQueues.get(response.getProcessor()).put(response);
+    for(ResponseListener listener : responseListeners)
+      listener.onResponse(response.getProcessor());
   }
 
   /** Get the next request or block until there is one */
@@ -102,6 +110,10 @@ public class SocketRequestResponseChannel implements RequestResponseChannel{
   /** Get a response for the given processor if there is one */
   public Response receiveResponse(int processor) throws InterruptedException {
     return responseQueues.get(processor).poll();
+  }
+
+  public void addResponseListener(ResponseListener listener) {
+    responseListeners.add(listener);
   }
 
   public void shutdown() {

@@ -1,14 +1,19 @@
 package com.github.ambry.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ByteBufferInputStream extends InputStream {
   private ByteBuffer byteBuffer;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ByteBufferInputStream(ByteBuffer byteBuffer) {
     this.byteBuffer = byteBuffer;
@@ -16,7 +21,11 @@ public class ByteBufferInputStream extends InputStream {
 
   public ByteBufferInputStream(InputStream stream, int size) throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
-    stream.read(byteBuffer.array());
+    int read = 0;
+    while (read < size) {
+      read += Channels.newChannel(stream).read(byteBuffer);
+    }
+    byteBuffer.flip();
   }
 
   @Override
