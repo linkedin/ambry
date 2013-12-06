@@ -27,8 +27,20 @@ public class Log implements Write, Read {
   private static final String logFileName = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Log(String dataDir, StoreMetrics metrics) throws IOException {
+  public Log(String dataDir, StoreMetrics metrics, long capacityGB) throws IOException {
     file = new File(dataDir, logFileName);
+    if (!Utils.checkFileExistWithGivenSize(file, capacityGB)) {
+      if (file.exists())
+        throw new IllegalArgumentException("file exist but size " + capacityGB +
+                                           " does not match input capacity " + capacityGB);
+      // if the file does not exist, preallocate it
+      Utils.preAllocateFile(file, capacityGB);
+      // check again to ensure it is created correctly
+      if (!Utils.checkFileExistWithGivenSize(file, capacityGB)) {
+        throw new IllegalArgumentException("Existing file size on disk " + file.length() +
+                                           "does not match capacityGB " + capacityGB);
+      }
+    }
     fileChannel = Utils.openChannel(file, true);
     currentWriteOffset = new AtomicLong(0);
     this.metrics = metrics;

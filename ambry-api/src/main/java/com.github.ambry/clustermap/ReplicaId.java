@@ -43,4 +43,10 @@ public interface ReplicaId {
    * @return list of the peers of this ReplicaId.
    */
   public List<ReplicaId> getPeerReplicaIds();
+
+  /**
+   * Gets the capacity in GB for this ReplicaId.
+   * @return the capacity in GB
+   */
+  public long getCapacityGB();
 }

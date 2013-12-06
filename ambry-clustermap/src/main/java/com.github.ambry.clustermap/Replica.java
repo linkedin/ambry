@@ -62,16 +62,17 @@ public class Replica implements ReplicaId {
     return new ArrayList<ReplicaId>(peerReplicas);
   }
 
+  @Override
+  public long getCapacityGB() {
+    return partition.getReplicaCapacityGB();
+  }
+
   public Partition getPartition() {
     return partition;
   }
 
   public Disk getDisk() {
     return disk;
-  }
-
-  public long getCapacityGB() {
-    return partition.getReplicaCapacityGB();
   }
 
   public List<Replica> getPeerReplicas() {

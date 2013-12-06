@@ -5,6 +5,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,8 +48,8 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromBytes(byte[] bytes) {
-    return partitionLayout.getPartition(bytes);
+  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+    return partitionLayout.getPartition(stream);
   }
 
   @Override

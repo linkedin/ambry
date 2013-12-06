@@ -1,5 +1,8 @@
 package com.github.ambry.server;
 
+import com.github.ambry.MockSharedUtils;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.BlobNotFoundException;
@@ -26,36 +29,21 @@ import java.util.Random;
 public class ServerTest {
 
   private AmbryServer server = null;
-
-  /**
-   * Create a temporary file
-   */
-  File tempFile() throws IOException {
-    File f = File.createTempFile("ambry", ".tmp");
-    f.deleteOnExit();
-    return f;
-  }
+  private MockClusterMap clusterMap = null;
 
   public ServerTest() throws InterruptedException, IOException, StoreException {
-    File tempFile = tempFile();
-    File indexFile = new File(tempFile.getParent());
-    for (File c : indexFile.listFiles())
-      c.delete();
-    File logFile = new File(tempFile.getParent(), "log_current");
-    RandomAccessFile randomFile = new RandomAccessFile(logFile, "rw");
-    // preallocate file
-    randomFile.setLength(100000);
 
+    clusterMap = MockSharedUtils.getMockClusterMap();
     Properties props = new Properties();
-    props.setProperty("store.data.dir", tempFile.getParent());
     VerifiableProperties propverify = new VerifiableProperties(props);
-    server = new AmbryServer(propverify);
+    server = new AmbryServer(propverify, clusterMap);
     server.startup();
   }
 
   @After
   public void cleanup() {
     server.shutdown();
+    clusterMap.shutdown();
   }
 
   @Test
@@ -67,22 +55,34 @@ public class ServerTest {
     new Random().nextBytes(usermetadata);
     new Random().nextBytes(data);
     // put blob 1
-    PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId("id1"), ByteBuffer.wrap(usermetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
+    PutRequest putRequest = new PutRequest(1,
+                                           "client1",
+                                           new BlobId(MockSharedUtils.getMockPartitionId()),
+                                           ByteBuffer.wrap(usermetadata),
+                                           new ByteBufferInputStream(ByteBuffer.wrap(data)),
+                                           properties);
     BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
     channel.connect();
     channel.send(putRequest);
     InputStream putResponseStream = channel.receive();
     PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
 
-    PutRequest putRequest2 = new PutRequest(1, 1, "client1", new BlobId("id2"), ByteBuffer.wrap(usermetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
+    PutRequest putRequest2 = new PutRequest(1,
+                                            "client1",
+                                            new BlobId(MockSharedUtils.getMockPartitionId()),
+                                            ByteBuffer.wrap(usermetadata),
+                                            new ByteBufferInputStream(ByteBuffer.wrap(data)),
+                                            properties);
     channel.send(putRequest2);
     putResponseStream = channel.receive();
     PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
 
-    PutRequest putRequest3 = new PutRequest(1, 1, "client1", new BlobId("id3"), ByteBuffer.wrap(usermetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(data)), properties);
+    PutRequest putRequest3 = new PutRequest(1,
+                                            "client1",
+                                            new BlobId(MockSharedUtils.getMockPartitionId()),
+                                            ByteBuffer.wrap(usermetadata),
+                                            new ByteBufferInputStream(ByteBuffer.wrap(data)),
+                                            properties);
     channel.send(putRequest3);
     putResponseStream = channel.receive();
     PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -90,11 +90,12 @@ public class ServerTest {
 
     // get blob properties
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
-    ids.add(new BlobId("id1"));
-    GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, 1, ids);
+    PartitionId partition = MockSharedUtils.getMockPartitionId();
+    ids.add(new BlobId(partition));
+    GetRequest getRequest1 = new GetRequest(partition, 1, "clientid2", MessageFormatFlags.BlobProperties, ids);
     channel.send(getRequest1);
     InputStream stream = channel.receive();
-    GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream));
+    GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     try {
       BlobProperties propertyOutput = MessageFormat.deserializeBlobProperties(resp1.getInputStream());
       Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
@@ -105,10 +106,10 @@ public class ServerTest {
     }
 
     // get user metadata
-    GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.UserMetadata, 1, ids);
+    GetRequest getRequest2 = new GetRequest(partition, 1, "clientid2", MessageFormatFlags.UserMetadata, ids);
     channel.send(getRequest2);
     stream = channel.receive();
-    GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream));
+    GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     try {
       ByteBuffer userMetadataOutput = MessageFormat.deserializeMetadata(resp2.getInputStream());
       Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
@@ -122,7 +123,7 @@ public class ServerTest {
     try {
       // get blob data
       // Use coordinator to get the blob
-      Coordinator coordinator = new AmbryCoordinator("localhost", 6667);
+      Coordinator coordinator = new AmbryCoordinator("localhost", 6667, clusterMap);
       BlobOutput output = coordinator.getBlob("id1");
       Assert.assertEquals(output.getSize(), 31870);
       byte[] dataOutputStream = new byte[(int)output.getSize()];

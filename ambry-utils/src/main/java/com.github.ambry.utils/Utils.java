@@ -12,6 +12,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -139,9 +141,12 @@ public class Utils {
   /**
    * Instantiate a class instance from a given className.
    */
-   public static <T> T getObj(String className) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-        return (T)Class.forName(className)
-                .newInstance();
+   public static <T> T getObj(String className, Object[] args)
+           throws ClassNotFoundException, InstantiationException,
+           IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+     Class<?> clazz = Class.forName(className);
+     Constructor<?> ctor = clazz.getConstructor(String.class);
+     return (T)ctor.newInstance(args);
    }
 
   /**
@@ -273,5 +278,40 @@ public class Utils {
    */
   public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
     return new JSONObject(readStringFromFile(path));
+  }
+
+  public static void preAllocateFile(File file, long capacityGB) throws IOException {
+    Runtime runtime = Runtime.getRuntime();
+    if (System.getProperty("os.name").toLowerCase().startsWith("nux")) {
+      Process process = runtime.exec("fallocate -l " + getBytesFromGB(capacityGB) + " " + file.getAbsolutePath());
+      try {
+        process.waitFor();
+      }
+      catch (InterruptedException e) {
+        // ignore the interruption and check the exit value to be sure
+      }
+      if (process.exitValue() != 0)
+        throw new IOException("error while trying to preallocate file " + file.getAbsolutePath());
+    }
+    else {
+      RandomAccessFile rfile = null;
+      try {
+        rfile = new RandomAccessFile(file, "rw");
+        rfile.setLength(capacityGB);
+      }
+      finally {
+        if (rfile != null)
+          rfile.close();
+      }
+    }
+  }
+
+  public static boolean checkFileExistWithGivenSize(File file, long size) {
+    // if the file exist, check size is equal to capacity
+    return file.exists() && file.length() == size;
+  }
+
+  public static long getBytesFromGB(long sizeInGB) {
+    return sizeInGB * 1024 * 1024 * 1024;
   }
 }

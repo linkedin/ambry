@@ -1,43 +1,58 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
 
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
 /**
  * The Id used to represent a blob uniquely
  */
-public class BlobId extends StoreKey{
+public class BlobId extends StoreKey {
 
-  private String id;
-  private static int Id_Size_In_Bytes = 2;
+  private PartitionId partitionId;
+  private String uuid;
+  private static int UUId_Size_In_Bytes = 4;
+  private Short version = 1;
+  private static short Version_Size_In_Bytes = 2;
 
-  public BlobId(String id) {
-    this.id = id;
+  public BlobId(PartitionId partitionId) {
+    this.partitionId = partitionId;
+    this.uuid = UUID.randomUUID().toString();
   }
 
-  public BlobId(DataInputStream stream) throws IOException {
-    this.id = Utils.readShortString(stream);
+  public BlobId(DataInputStream stream, ClusterMap map) throws IOException {
+    this.version = stream.readShort();
+    this.partitionId = map.getPartitionIdFromStream(stream);
+    uuid = Utils.readIntString(stream);
   }
 
   public short sizeInBytes() {
-    return (short)(id.length());
+    return (short)(Version_Size_In_Bytes + partitionId.getBytes().length + UUId_Size_In_Bytes + uuid.length());
+  }
+
+  public PartitionId getPartition() {
+    return partitionId;
   }
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer idBuf = ByteBuffer.allocate(Id_Size_In_Bytes + id.getBytes().length);
-    idBuf.putShort(sizeInBytes());
-    idBuf.put(id.getBytes());
+    ByteBuffer idBuf = ByteBuffer.allocate(sizeInBytes());
+    idBuf.putShort(version);
+    idBuf.put(partitionId.getBytes());
+    idBuf.putInt(uuid.getBytes().length);
+    idBuf.put(uuid.getBytes());
     return idBuf.array();
   }
 
   @Override
   public int hashCode() {
-    return Utils.hashcode(new Object[]{id});
+    return Utils.hashcode(new Object[]{version, partitionId, uuid});
   }
 
   @Override
@@ -49,18 +64,26 @@ public class BlobId extends StoreKey{
     if (getClass() != obj.getClass())
       return false;
     BlobId other = (BlobId) obj;
-    if (id  == null) {
-      if (other.id != null)
+    if (version != other.version)
+      return false;
+    if  (partitionId == null) {
+      if (other.partitionId != null)
         return false;
     }
-    else if (!id.equals(other.id))
+    if (uuid == null) {
+      if (other.uuid != null)
+        return false;
+    }
+    else if (!partitionId.equals(other.partitionId))
+      return false;
+    else if (!uuid.equals(other.uuid))
       return false;
     return true;
   }
 
   @Override
   public String toString() {
-    return id;
+    return version + "-" + partitionId.toString() + "-" + uuid;
   }
 
   @Override
@@ -68,6 +91,15 @@ public class BlobId extends StoreKey{
     if (o == null)
       throw new NullPointerException("input argument null");
     BlobId other = (BlobId) o;
-    return id.compareTo(other.id);
+
+    int result = version.compareTo(other.version);
+    if (result == 0) {
+      result = partitionId.compareTo(other.partitionId);
+      if (result == 0)
+      {
+        result = uuid.compareTo(other.uuid);
+      }
+    }
+    return result;
   }
 }

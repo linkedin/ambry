@@ -38,7 +38,7 @@ class BlobIndexMetrics extends BlobPersistantIndex {
 
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
-      BlobId id = new BlobId("1" + UUID.randomUUID());
+      BlobId id = new BlobId();
       long size = new Random().nextInt(10000);
       if (size < 0)
         size = size * -1;

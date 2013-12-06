@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 
@@ -11,8 +12,14 @@ import java.io.DataInputStream;
  */
 public class BlobIdFactory implements StoreKeyFactory {
 
+  private ClusterMap clusterMap;
+
+  public BlobIdFactory(ClusterMap clusterMap) {
+    this.clusterMap = clusterMap;
+  }
+
   @Override
   public StoreKey getStoreKey(DataInputStream value) throws IOException {
-    return new BlobId(value);
+    return new BlobId(value, clusterMap);
   }
 }

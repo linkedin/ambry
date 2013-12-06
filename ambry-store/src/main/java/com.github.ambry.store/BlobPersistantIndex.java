@@ -411,13 +411,17 @@ public class BlobPersistantIndex {
     }
   }
 
-  public BlobPersistantIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config) throws StoreException {
+  public BlobPersistantIndex(String datadir,
+                             Scheduler scheduler,
+                             Log log,
+                             StoreConfig config,
+                             StoreKeyFactory factory) throws StoreException {
     try {
       this.scheduler = scheduler;
       this.log = log;
       File indexDir = new File(datadir);
       File[] indexFiles = indexDir.listFiles(new IndexFilter());
-      this.factory = Utils.getObj(config.storeKeyFactory);
+      this.factory = factory;
       persistor = new IndexPersistor();
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override

@@ -1,6 +1,9 @@
 package com.github.ambry.shared;
 
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertySerDe;
@@ -13,7 +16,6 @@ import java.nio.channels.WritableByteChannel;
  */
 public class PutRequest extends RequestOrResponse {
 
-  private long partitionId;
   private ByteBuffer usermetadata;
   private InputStream data;
   private BlobId blobId;
@@ -23,34 +25,28 @@ public class PutRequest extends RequestOrResponse {
   private static final int UserMetadata_Size_InBytes = 4;
 
 
-  public PutRequest(long partitionId, int correlationId, String clientId,
+  public PutRequest(int correlationId, String clientId,
                     BlobId blobId, ByteBuffer usermetadata,
                     InputStream data, BlobProperties properties) {
     super(RequestResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
 
     this.blobId = blobId;
-    this.partitionId = partitionId;
     this.usermetadata = usermetadata;
     this.data = data;
     this.properties = properties;
   }
 
-  public static PutRequest readFrom(DataInputStream stream) throws IOException {
+  public static PutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     RequestResponseType type = RequestResponseType.PutRequest;
     short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    long partitionId = stream.readLong();
-    BlobId id = new BlobId(stream);
+    BlobId id = new BlobId(stream, map);
     BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
     InputStream data = stream;
     // ignore version for now
-    return new PutRequest(partitionId, correlationId, clientId, id, metadata, data, properties);
-  }
-
-  public long getPartitionId() {
-    return partitionId;
+    return new PutRequest(correlationId, clientId, id, metadata, data, properties);
   }
 
   public BlobId getBlobId() {
@@ -81,8 +77,8 @@ public class PutRequest extends RequestOrResponse {
 
   private int sizeExcludingData() {
     // header + partitionId + blobId size + blobId + metadata size + metadata + blob property size
-    return  (int)super.sizeInBytes() + PartitionId_Size_In_Bytes + Blob_Id_Size_In_Bytes +
-            blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
+    return  (int)super.sizeInBytes() + blobId.sizeInBytes() +
+            UserMetadata_Size_InBytes + usermetadata.capacity() +
             BlobPropertySerDe.getBlobPropertySize(properties);
   }
 
@@ -91,7 +87,6 @@ public class PutRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
-      bufferToSend.putLong(partitionId);
       bufferToSend.put(blobId.toBytes());
       BlobPropertySerDe.putBlobPropertyToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());

@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 
+import com.github.ambry.MockSharedUtils;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -70,12 +71,14 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap);
+      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      MessageInfo info1 = new MessageInfo(new BlobId("id1"), 1000);
-      MessageInfo info2 = new MessageInfo(new BlobId("id2"), 1000);
+      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MessageInfo info1 = new MessageInfo(blobId1, 1000);
+      MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
@@ -85,8 +88,8 @@ public class BlobStoreTest {
 
       // verify existance
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      keys.add(new BlobId("id1"));
-      keys.add(new BlobId("id2"));
+      keys.add(blobId1);
+      keys.add(blobId2);
       StoreInfo info = store.get(keys);
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
@@ -104,7 +107,7 @@ public class BlobStoreTest {
 
       // put a blob that already exist
       new Random().nextBytes(bufToWrite);
-      info1 = new MessageInfo(new BlobId("id1"), 1000);
+      info1 = new MessageInfo(blobId1, 1000);
       listInfo = new ArrayList<MessageInfo>(1);
       listInfo.add(info1);
 
@@ -140,12 +143,14 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap);
+      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      MessageInfo info1 = new MessageInfo(new BlobId("id1"), 1000);
-      MessageInfo info2 = new MessageInfo(new BlobId("id2"), 1000);
+      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MessageInfo info1 = new MessageInfo(blobId1, 1000);
+      MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
@@ -155,8 +160,8 @@ public class BlobStoreTest {
 
       // verify existance
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      keys.add(new BlobId("id1"));
-      keys.add(new BlobId("id2"));
+      keys.add(blobId1);
+      keys.add(blobId2);
       StoreInfo info = store.get(keys);
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
@@ -196,12 +201,14 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap);
+      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      MessageInfo info1 = new MessageInfo(new BlobId("id1"), 1000);
-      MessageInfo info2 = new MessageInfo(new BlobId("id2"), 1000);
+      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MessageInfo info1 = new MessageInfo(blobId1, 1000);
+      MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
@@ -211,8 +218,8 @@ public class BlobStoreTest {
 
       // verify existance
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      keys.add(new BlobId("id1"));
-      keys.add(new BlobId("id2"));
+      keys.add(blobId1);
+      keys.add(blobId2);
       StoreInfo info = store.get(keys);
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
@@ -232,13 +239,13 @@ public class BlobStoreTest {
       byte[] bufToDelete = new byte[1000];
       new Random().nextBytes(bufToDelete);
 
-      MessageInfo info3 = new MessageInfo(new BlobId("id1"), 1000, 1234);
+      MessageInfo info3 = new MessageInfo(blobId1, 1000, 1234);
       ArrayList<MessageInfo> listInfo1 = new ArrayList<MessageInfo>(1);
       listInfo1.add(info3);
       MessageWriteSet setToDelete = new MockMessageWriteSet(ByteBuffer.wrap(bufToDelete), listInfo1);
       store.delete(setToDelete);
       ArrayList<StoreKey> keysDeleted = new ArrayList<StoreKey>();
-      keysDeleted.add(new BlobId("id1"));
+      keysDeleted.add(blobId1);
       try {
         store.get(keysDeleted);
         Assert.assertEquals(false, true);
@@ -247,7 +254,7 @@ public class BlobStoreTest {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       keysDeleted.clear();
-      keysDeleted.add(new BlobId("id2"));
+      keysDeleted.add(blobId2);
       store.get(keysDeleted);
       Assert.assertEquals(true, true);
     }
@@ -274,12 +281,14 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap);
+      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      MessageInfo info1 = new MessageInfo(new BlobId("id1"), 1000);
-      MessageInfo info2 = new MessageInfo(new BlobId("id2"), 1000);
+      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MessageInfo info1 = new MessageInfo(blobId1, 1000);
+      MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
@@ -289,8 +298,8 @@ public class BlobStoreTest {
 
       // verify existance
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      keys.add(new BlobId("id1"));
-      keys.add(new BlobId("id2"));
+      keys.add(blobId1);
+      keys.add(blobId2);
       StoreInfo info = store.get(keys);
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
@@ -299,13 +308,13 @@ public class BlobStoreTest {
       byte[] bufToUpdateTTL = new byte[1000];
       new Random().nextBytes(bufToUpdateTTL);
 
-      MessageInfo info3 = new MessageInfo(new BlobId("id1"), 1000, 1234);
+      MessageInfo info3 = new MessageInfo(blobId1, 1000, 1234);
       ArrayList<MessageInfo> listInfo1 = new ArrayList<MessageInfo>(1);
       listInfo1.add(info3);
       MessageWriteSet setToUpdateTTL = new MockMessageWriteSet(ByteBuffer.wrap(bufToUpdateTTL), listInfo1);
       store.updateTTL(setToUpdateTTL);
       ArrayList<StoreKey> keysUpdated = new ArrayList<StoreKey>();
-      keysUpdated.add(new BlobId("id1"));
+      keysUpdated.add(blobId1);
       try {
         store.get(keysUpdated);
         Assert.assertEquals(false, true);
@@ -314,7 +323,7 @@ public class BlobStoreTest {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
       }
       keysUpdated.clear();
-      keysUpdated.add(new BlobId("id2"));
+      keysUpdated.add(blobId2);
       store.get(keysUpdated);
       Assert.assertEquals(true, true);
 
@@ -342,12 +351,14 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap);
+      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      MessageInfo info1 = new MessageInfo(new BlobId("id1"), 1000);
-      MessageInfo info2 = new MessageInfo(new BlobId("id2"), 1000);
+      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MessageInfo info1 = new MessageInfo(blobId1, 1000);
+      MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
@@ -357,8 +368,8 @@ public class BlobStoreTest {
 
       // verify existance
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      keys.add(new BlobId("id1"));
-      keys.add(new BlobId("id2"));
+      keys.add(blobId1);
+      keys.add(blobId2);
       StoreInfo info = store.get(keys);
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);

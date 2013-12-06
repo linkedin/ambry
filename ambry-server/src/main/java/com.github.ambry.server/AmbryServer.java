@@ -1,5 +1,8 @@
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNode;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.MetricsConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.StoreConfig;
@@ -11,11 +14,11 @@ import com.github.ambry.metrics.MetricsReporterFactory;
 import com.github.ambry.metrics.MetricsReporter;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
-import com.github.ambry.store.BlobStore;
+import com.github.ambry.shared.BlobIdFactory;
+import com.github.ambry.store.*;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
+import com.sun.jdi.InternalException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,67 +38,82 @@ public class AmbryServer {
   private AmbryRequests requests = null;
   private RequestHandlerPool requestHandlerPool = null;
   private Scheduler scheduler = new Scheduler(4, false);
-  private Store store = null;
+  private StoreManager storeManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final JmxServer jmxServer;
   private final JvmMetrics jvmMetrics;
+  private final ClusterMap clusterMap;
   private MetricsRegistryMap registryMap;
   private final Map<String, MetricsReporter> reporters;
 
-  public AmbryServer(VerifiableProperties properties) throws IOException {
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap) throws IOException {
     this.properties = properties;
     // start jmx server
     jmxServer = new JmxServer();
     reporters = new HashMap<String, MetricsReporter>();
     registryMap = new MetricsRegistryMap("Data Node");
     jvmMetrics = new JvmMetrics(registryMap);
+    this.clusterMap = clusterMap;
   }
 
-  public void startup() throws IOException, InterruptedException, StoreException {
-    logger.info("starting");
-    logger.info("Setting up JVM metrics.");
-
-    jvmMetrics.start();
-
-    // create the configs
-    NetworkConfig networkConfig = new NetworkConfig(properties);
-    StoreConfig storeConfig = new StoreConfig(properties);
-    MetricsConfig metricsConfig = new MetricsConfig(properties);
-    // verify the configs
-    properties.verify();
-
-    logger.info("Setting up metrics reporters.");
-
-    List<String> reporterFactoryNames = metricsConfig.getMetricsReporterFactoryClassNames();
-
+  public void startup() throws InstantiationException {
     try {
+      logger.info("starting");
+      logger.info("Setting up JVM metrics.");
 
-      for (String factoryClass : reporterFactoryNames) {
-        MetricsReporterFactory factory = Utils.getObj(factoryClass);
-        MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Data Node", metricsConfig);
-        reporters.put(factoryClass, reporter);
+      jvmMetrics.start();
+
+      // create the configs
+      NetworkConfig networkConfig = new NetworkConfig(properties);
+      StoreConfig storeConfig = new StoreConfig(properties);
+      MetricsConfig metricsConfig = new MetricsConfig(properties);
+      // verify the configs
+      properties.verify();
+
+      logger.info("Setting up metrics reporters.");
+
+      List<String> reporterFactoryNames = metricsConfig.getMetricsReporterFactoryClassNames();
+
+      try {
+
+        for (String factoryClass : reporterFactoryNames) {
+          MetricsReporterFactory factory = Utils.getObj(factoryClass, new Object[]{});
+          MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Data Node", metricsConfig);
+          reporters.put(factoryClass, reporter);
+        }
+        logger.info("Got metrics reporters: {}", reporters.keySet());
       }
-      logger.info("Got metrics reporters: {}", reporters.keySet());
+      catch (Exception e) {
+        logger.error("Error while creating reporters. Logging and proceeding " + e);
+      }
+
+      // check if node exist in clustermap
+      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+      if (nodeId == null)
+        throw new IllegalArgumentException("The node is not present in the clustermap. Failing to start the datanode");
+
+
+      StoreKeyFactory factory = Utils.getObj(storeConfig.storeKeyFactory, new Object[]{clusterMap});
+      scheduler.startup();
+      networkServer = new SocketServer(networkConfig);
+      networkServer.start();
+      storeManager = new StoreManager(storeConfig, scheduler, registryMap, clusterMap.getReplicaIds(nodeId), factory);
+      storeManager.start();
+      requests = new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap);
+      requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
+
+      logger.info("Starting all the metrics reporters");
+      for (Map.Entry<String, MetricsReporter> reporterEntry : reporters.entrySet()) {
+        reporterEntry.getValue().register("data node", registryMap);
+        reporterEntry.getValue().start();
+      }
+      logger.info("started");
     }
     catch (Exception e) {
-      logger.error("Error while creating reporters. Logging and proceeding " + e);
+      logger.error("Error during startup {}", e);
+      throw new InstantiationException("failure during startup " + e);
     }
-
-    scheduler.startup();
-    networkServer = new SocketServer(networkConfig);
-    networkServer.start();
-    store = new BlobStore(storeConfig, scheduler, registryMap);
-    store.start();
-    requests = new AmbryRequests(store, networkServer.getRequestResponseChannel());
-    requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
-
-    logger.info("Starting all the metrics reporters");
-    for (Map.Entry<String, MetricsReporter> reporterEntry : reporters.entrySet()) {
-      reporterEntry.getValue().register("data node", registryMap);
-      reporterEntry.getValue().start();
-    }
-    logger.info("started");
   }
 
   public void shutdown() {
@@ -115,8 +133,8 @@ public class AmbryServer {
       if (scheduler != null) {
         scheduler.shutdown();
       }
-      if (store != null) {
-        store.shutdown();
+      if (storeManager != null) {
+        storeManager.shutdown();
       }
       shutdownLatch.countDown();
       logger.info("shutdown completed");

@@ -1,11 +1,14 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.utils.ByteBufferInputStream;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -54,8 +57,16 @@ public class ClusterMapManagerTest {
       PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(i);
       assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getReplicaCount());
 
-      PartitionId fetchedPartitionId = clusterMapManager.getPartitionIdFromBytes(partitionId.getBytes());
-      assertEquals(partitionId, fetchedPartitionId);
+      DataInputStream partitionStream =
+              new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionId.getBytes())));
+
+      try {
+        PartitionId fetchedPartitionId = clusterMapManager.getPartitionIdFromStream(partitionStream);
+        assertEquals(partitionId, fetchedPartitionId);
+      }
+      catch (IOException e) {
+        assertEquals(true, false);
+      }
     }
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
@@ -178,6 +189,7 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
+  /*
   @Test
   public void validateSimpleConfig() throws JSONException, IOException {
     String configDir = System.getProperty("user.dir") + "/config";
@@ -188,6 +200,7 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManager.getFreeCapacityGB(),10);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }
+  */
 
 }
 
