@@ -1,5 +1,7 @@
 package com.github.ambry.clustermap;
 
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -9,11 +11,10 @@ public interface ClusterMap {
 
   /**
    * Gets PartitionId based on serialized bytes.
-   *
-   * @param bytes byte-serialized PartitionId.
-   * @return deserialized PartitionId.
+   * @param stream data input stream that contains the serialized partition bytes
+   * @return deserialized PartitionId
    */
-  public PartitionId getPartitionIdFromBytes(byte[] bytes);
+  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException;
 
   /**
    * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such PartitionId.

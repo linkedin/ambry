@@ -6,6 +6,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -16,12 +18,13 @@ import java.util.Set;
  * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
  * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
  */
-public class Partition implements PartitionId {
+public class Partition extends PartitionId {
 
   private static final long MinReplicaCapacityGB = 1;
   private static final long MaxReplicaCapacityGB = 1024 * 10; // 10 TB
+  private static final int Partition_Size_In_Bytes = 8;
 
-  private long id;
+  private Long id;
   PartitionState partitionState;
   long replicaCapacityGB;
   List<Replica> replicas;
@@ -55,9 +58,15 @@ public class Partition implements PartitionId {
     validate();
   }
 
+  public static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
+    byte[] partitionBytes = new byte[Partition_Size_In_Bytes];
+    stream.read(partitionBytes);
+    return partitionBytes;
+  }
+
   @Override
   public byte[] getBytes() {
-    ByteBuffer buffer = ByteBuffer.allocate(8);
+    ByteBuffer buffer = ByteBuffer.allocate(Partition_Size_In_Bytes);
     buffer.putLong(id);
     return buffer.array();
   }
@@ -168,5 +177,14 @@ public class Partition implements PartitionId {
   @Override
   public int hashCode() {
     return (int)(id ^ (id >>> 32));
+  }
+
+  @Override
+  public int compareTo(PartitionId o) {
+    if (o == null)
+      throw new NullPointerException("input argument null");
+
+    Partition other = (Partition)o;
+    return id.compareTo(other.id);
   }
 }

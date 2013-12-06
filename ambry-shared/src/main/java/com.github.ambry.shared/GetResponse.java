@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.network.Send;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Utils;
@@ -46,11 +47,11 @@ public class GetResponse extends RequestOrResponse {
     }
   }
 
-  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream) throws IOException {
+  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map) throws IOException {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
-      BlobId id = new BlobId(stream);
+      BlobId id = new BlobId(stream, map);
       long size = stream.readLong();
       long ttl = stream.readLong();
       messageListInfo.add(new MessageInfo(id, size, ttl));
@@ -80,7 +81,7 @@ public class GetResponse extends RequestOrResponse {
     return messageInfoList;
   }
 
-  public static GetResponse readFrom(DataInputStream stream) throws IOException {
+  public static GetResponse readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short typeval = stream.readShort();
     RequestResponseType type = RequestResponseType.values()[typeval];
     if (type != RequestResponseType.GetResponse) {
@@ -89,7 +90,7 @@ public class GetResponse extends RequestOrResponse {
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream);
+    List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream, map);
     // ignoring version for now
     return new GetResponse(correlationId, clientId, messageInfoList, stream);
   }

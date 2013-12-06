@@ -2,10 +2,12 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.IOException;
@@ -25,12 +27,23 @@ public class BlobStore implements Store {
   private final StoreMetrics metrics;
   private boolean started;
   private StoreConfig config;
+  private long capacityGB;
+  private static String LockFile = ".lock";
+  private FileLock fileLock;
+  private StoreKeyFactory factory;
 
-  public BlobStore(StoreConfig config, Scheduler scheduler, ReadableMetricsRegistry registry) {
-    this.dataDir = config.storeDataDir;
+  public BlobStore(StoreConfig config,
+                   Scheduler scheduler,
+                   ReadableMetricsRegistry registry,
+                   String dataDir,
+                   long capacityGB,
+                   StoreKeyFactory factory) {
+    this.dataDir = dataDir;
     this.scheduler = scheduler;
     metrics = new StoreMetrics(this.dataDir, registry);
     this.config = config;
+    this.capacityGB = capacityGB;
+    this.factory = factory;
   }
 
   @Override
@@ -38,8 +51,27 @@ public class BlobStore implements Store {
     if (started)
       throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
     try {
-      log = new Log(dataDir, metrics);
-      index = new BlobPersistantIndex(dataDir, scheduler, log, config);
+      // Check if the data dir exist. If it does not exist, create it
+      File dataFile = new File(dataDir);
+      if (!dataFile.exists()) {
+        logger.info("data directory {} not found. creating it",  dataDir);
+        boolean created = dataFile.mkdir();
+        if (!created)
+          throw new StoreException("Failed to create directory for data dir " + dataDir,
+                                   StoreErrorCodes.Initialization_Error);
+      }
+      if(!dataFile.isDirectory() || !dataFile.canRead())
+        throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
+                                 StoreErrorCodes.Initialization_Error);
+
+      // lock the directory
+      fileLock = new FileLock(new File(dataDir, LockFile));
+      if(!fileLock.tryLock())
+        throw new StoreException("Failed to acquire lock on file " + dataDir +
+                                 ". Another process or thread is using this directory.",
+                                 StoreErrorCodes.Initialization_Error);
+      log = new Log(dataDir, metrics, capacityGB);
+      index = new BlobPersistantIndex(dataDir, scheduler, log, config, factory);
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(index.getCurrentEndOffset());
       started = true;
@@ -148,6 +180,14 @@ public class BlobStore implements Store {
       }
       catch (Exception e) {
         logger.error("Shutdown of store failed for directory {}", dataDir);
+      }
+      finally {
+        try {
+          fileLock.destroy();
+        }
+        catch (IOException e) {
+          logger.error("IO Exception while trying to close the file lock {}", e);
+        }
       }
     }
   }

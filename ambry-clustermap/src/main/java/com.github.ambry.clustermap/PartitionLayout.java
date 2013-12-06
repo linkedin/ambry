@@ -7,6 +7,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -165,11 +167,12 @@ public class PartitionLayout {
   /**
    * Gets Partition with specified byte-serialized ID.
    *
-   * @param bytes byte-serialized partition ID
+   * @param stream byte-serialized partition ID
    * @return requested Partition else null.
    */
-  public Partition getPartition(byte[] bytes) {
-    return partitionMap.get(ByteBuffer.wrap(bytes));
+  public Partition getPartition(DataInputStream stream) throws IOException {
+    byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
+    return partitionMap.get(ByteBuffer.wrap(partitionBytes));
   }
 
   public JSONObject toJSONObject() throws JSONException {

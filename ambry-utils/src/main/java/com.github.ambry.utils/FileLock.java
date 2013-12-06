@@ -15,7 +15,7 @@ public class FileLock {
   private final FileChannel channel;
   private java.nio.channels.FileLock flock = null;
 
-  FileLock(File file) throws FileNotFoundException, IOException{
+  public FileLock(File file) throws FileNotFoundException, IOException{
     this.file = file;
     file.createNewFile();
     channel = new RandomAccessFile(file, "rw").getChannel();

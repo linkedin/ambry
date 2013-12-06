@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -11,29 +12,22 @@ import java.nio.channels.WritableByteChannel;
  */
 public class DeleteRequest extends RequestOrResponse {
   private BlobId blobId;
-  private long partitionId;
   private int sizeSent;
 
-  public DeleteRequest(long partition, int correlationId, String clientId, BlobId blobId) {
+  public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
     super(RequestResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
     this.blobId = blobId;
-    this.partitionId = partition;
     sizeSent = 0;
   }
 
-  public static DeleteRequest readFrom(DataInputStream stream) throws IOException {
+  public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     RequestResponseType type = RequestResponseType.DeleteRequest;
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    long partition = stream.readLong();
-    BlobId id = new BlobId(stream);
+    BlobId id = new BlobId(stream, map);
     // ignore version for now
-    return new DeleteRequest(partition, correlationId, clientId, id);
-  }
-
-  public long getPartitionId() {
-    return partitionId;
+    return new DeleteRequest(correlationId, clientId, id);
   }
 
   public BlobId getBlobId() {
@@ -45,7 +39,6 @@ public class DeleteRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putLong(partitionId);
       bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
     }
@@ -62,8 +55,7 @@ public class DeleteRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + partition + blobId
-    return super.sizeInBytes() + PartitionId_Size_In_Bytes +
-            Blob_Id_Size_In_Bytes + blobId.sizeInBytes();
+    // header + blobId
+    return super.sizeInBytes() + blobId.sizeInBytes();
   }
 }

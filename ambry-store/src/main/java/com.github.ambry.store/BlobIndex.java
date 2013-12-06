@@ -26,14 +26,16 @@ public class BlobIndex {
   private static final String indexFileName = "index_current";
   private static final int TTL_Infinite = -1;
   private IndexPersistor persistor;
+  private StoreKeyFactory factory;
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BlobIndex(String datadir, Scheduler scheduler, Log log) throws StoreException  {
+  public BlobIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory) throws StoreException  {
     try {
       logEndOffset = new AtomicLong(0);
       indexJournal = new BlobJournal();
       this.log = log;
+      this.factory = factory;
       // check if file exist and recover from it
       indexFile = new File(datadir, indexFileName);
       persistor = new IndexPersistor(indexFile);
@@ -153,7 +155,6 @@ public class BlobIndex {
     private Object lock = new Object();
     private final File file;
     private Short version = 0;
-    private StoreKeyFactory factory;
     private int Crc_Size = 8;
     private int Log_End_Offset_Size = 8;
 
@@ -162,7 +163,6 @@ public class BlobIndex {
       new File(file + ".tmp").delete();
       this.file = file;
       file.createNewFile();
-      factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
     }
 
     public void write() throws StoreException, IOException {

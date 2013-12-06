@@ -1,5 +1,7 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormat;
@@ -19,6 +21,7 @@ import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Random;
 import java.util.UUID;
 import java.util.List;
 
@@ -27,10 +30,13 @@ public class AmbryCoordinator implements Coordinator {
   private String host;
   private int port;
   BlockingChannel channel;
+  ClusterMap map;
+  Random r = new Random();
 
-  public AmbryCoordinator(String host, int port) {
+  public AmbryCoordinator(String host, int port, ClusterMap map) {
     this.host = host;
     this.port = port;
+    this.map = map;
     channel = new BlockingChannel(host, port, 10000, 10000, 10000);
     try {
       channel.connect();
@@ -45,7 +51,7 @@ public class AmbryCoordinator implements Coordinator {
     try {
       // put blob
       String id = UUID.randomUUID().toString();
-      PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId(id), userMetadata, blob, blobProperties);
+      PutRequest putRequest = new PutRequest(1, "client1", new BlobId(getRandomPartition()), userMetadata, blob, blobProperties);
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -62,7 +68,7 @@ public class AmbryCoordinator implements Coordinator {
   public void deleteBlob(String id) throws BlobNotFoundException {
     try {
       // delete blob
-      DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", new BlobId("id1"));
+      DeleteRequest deleteRequest = new DeleteRequest(1, "client1", new BlobId(getRandomPartition()));
       BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
       channel.connect();
       channel.send(deleteRequest);
@@ -78,7 +84,7 @@ public class AmbryCoordinator implements Coordinator {
   public void updateTTL(String id, long newTTL) throws BlobNotFoundException {
     try {
       // update ttl of the blob
-      TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", new BlobId("id1"), newTTL);
+      TTLRequest ttlRequest = new TTLRequest(1, "client1", new BlobId(getRandomPartition()), newTTL);
       BlockingChannel channel = new BlockingChannel(host, port, 10000, 10000, 10000);
       channel.connect();
       channel.send(ttlRequest);
@@ -139,11 +145,12 @@ public class AmbryCoordinator implements Coordinator {
   private GetResponse doGetResponse(String blobId, MessageFormatFlags flag, BlockingChannel channel) {
     try {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      ids.add(new BlobId(blobId));
-      GetRequest getRequest = new GetRequest(1, "clientid2", flag, 1, ids);
+      PartitionId partitionId = getRandomPartition();
+      ids.add(new BlobId(partitionId));
+      GetRequest getRequest = new GetRequest(partitionId, 1, "clientid2", flag, ids);
       channel.send(getRequest);
       InputStream stream = channel.receive();
-      GetResponse response = GetResponse.readFrom(new DataInputStream(stream));
+      GetResponse response = GetResponse.readFrom(new DataInputStream(stream), map);
       return response;
     }
     catch (Exception e) {
@@ -157,5 +164,12 @@ public class AmbryCoordinator implements Coordinator {
     if (channel != null) {
       channel.disconnect();
     }
+  }
+
+  // Temporary method to generate random partition
+  private PartitionId getRandomPartition() {
+    long count = map.getWritablePartitionIdsCount();
+    int index = r.nextInt((int)count);
+    return map.getWritablePartitionIdAt(index);
   }
 }

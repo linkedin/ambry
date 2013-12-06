@@ -32,7 +32,7 @@ public class LogTest {
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
-    Log logTest = new Log(tempFile.getParent(), metrics);
+    Log logTest = new Log(tempFile.getParent(), metrics, 5000);
     byte[] testbuf = new byte[1000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer
@@ -82,7 +82,7 @@ public class LogTest {
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
-    Log logTest = new Log(tempFile.getParent(), metrics);
+    Log logTest = new Log(tempFile.getParent(), metrics, 5000);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer
@@ -132,7 +132,7 @@ public class LogTest {
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
-    Log logTest = new Log(tempFile.getParent(), metrics);
+    Log logTest = new Log(tempFile.getParent(), metrics, 5000);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer
@@ -174,7 +174,7 @@ public class LogTest {
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
-    Log logTest = new Log(tempFile.getParent(), metrics);
+    Log logTest = new Log(tempFile.getParent(), metrics, 5000);
     byte[] testbuf = new byte[2000];
     new Random().nextBytes(testbuf);
     // append to log from byte buffer
