@@ -1,10 +1,7 @@
 package com.github.ambry.store;
 
-import com.github.ambry.MockSharedUtils;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
 import org.junit.Assert;
@@ -32,9 +29,9 @@ public class BlobIndexTest {
   }
 
   public BlobIndexTest() throws InstantiationException {
-    map = MockSharedUtils.getMockClusterMap();
+    map = new MockClusterMap();
     try {
-      factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", new Object[]{map});
+      factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     }
     catch (Exception e) {
       throw new InstantiationException();
@@ -63,10 +60,6 @@ public class BlobIndexTest {
     }
   }
 
-  public void shutdown() {
-    map.shutdown();
-  }
-
   @Test
   public void testIndexBasic() throws IOException {
     try {
@@ -77,11 +70,11 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
@@ -116,11 +109,11 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
@@ -190,11 +183,11 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
@@ -212,9 +205,9 @@ public class BlobIndexTest {
       Assert.assertEquals(value2.getOffset(), 2000);
       Assert.assertEquals(value3.getOffset(), 3000);
 
-      BlobIndexValue value4 = index.getValue(new BlobId(MockSharedUtils.getMockPartitionId()));
+      BlobIndexValue value4 = index.getValue(new MockId("id4"));
       try {
-        index.addToIndex(new BlobIndexEntry(new BlobId(MockSharedUtils.getMockPartitionId()), value4), 4000);
+        index.addToIndex(new BlobIndexEntry(new MockId("id5"), value4), 4000);
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -236,11 +229,11 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
@@ -258,7 +251,7 @@ public class BlobIndexTest {
 
       // read missing item
       try {
-        index.getBlobReadInfo(new BlobId(MockSharedUtils.getMockPartitionId()));
+        index.getBlobReadInfo(new MockId("id4"));
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -286,7 +279,7 @@ public class BlobIndexTest {
 
       // try to delete or update a missing blob
       try {
-        index.markAsDeleted(new BlobId(MockSharedUtils.getMockPartitionId()), 8000);
+        index.markAsDeleted(new MockId("id5"), 8000);
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -294,7 +287,7 @@ public class BlobIndexTest {
 
       }
       try {
-        index.updateTTL(new BlobId(MockSharedUtils.getMockPartitionId()), 1234, 9000);
+        index.updateTTL(new MockId("id6"), 1234, 9000);
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -316,11 +309,11 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
@@ -331,7 +324,7 @@ public class BlobIndexTest {
       list.add(entry3);
       index.addToIndex(list, 5000);
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      BlobId missingId = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId missingId = new MockId("id4");
       keys.add(missingId);
       keys.add(blobId1);
       keys.add(blobId2);

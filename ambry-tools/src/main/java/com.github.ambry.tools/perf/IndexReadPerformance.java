@@ -1,12 +1,17 @@
 package com.github.ambry.tools.perf;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.Log;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreMetrics;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -16,7 +21,9 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 import java.io.BufferedReader;
+import java.io.DataInputStream;
 import java.io.FileReader;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +62,18 @@ public class IndexReadPerformance {
                     .describedAs("log_to_read")
                     .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                      .withRequiredArg()
+                      .describedAs("hardware_layout")
+                      .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                      .withRequiredArg()
+                      .describedAs("partition_layout")
+                      .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<Integer> numberOfReadersOpt =
               parser.accepts("numberOfReaders", "The number of readers that read to a random index concurrently")
                     .withRequiredArg()
@@ -80,6 +99,8 @@ public class IndexReadPerformance {
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(logToReadOpt);
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -95,6 +116,10 @@ public class IndexReadPerformance {
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      StoreKeyFactory factory = new BlobIdFactory(map);
 
 
       // Read the log and get the index directories and create the indexes
@@ -103,7 +128,7 @@ public class IndexReadPerformance {
       String line;
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(System.getProperty("user.dir"), metrics);
+      Log log = new Log(System.getProperty("user.dir"), metrics,1000);
       Scheduler s = new Scheduler(numberOfReaders, "index", true);
       s.startup();
 
@@ -137,7 +162,7 @@ public class IndexReadPerformance {
           String[] logdirs = line.split("-");
           BlobIndexMetrics metricIndex = new BlobIndexMetrics(logdirs[1], s, log, enableVerboseLogging,
                                                               totalReads, totalTimeTaken, totalReads,
-                                                              config, null);
+                                                              config, null, factory);
           hashes.put(logdirs[1], new IndexPayload(metricIndex, new HashSet<String>()));
         }
         else {
@@ -156,7 +181,7 @@ public class IndexReadPerformance {
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfReaders];
       for (int i = 0; i < numberOfReaders; i++) {
-        threadIndexPerf[i] = new Thread(new IndexReadPerfRun(hashes, throttler, shutdown, latch));
+        threadIndexPerf[i] = new Thread(new IndexReadPerfRun(hashes, throttler, shutdown, latch, map));
         threadIndexPerf[i].start();
       }
 
@@ -205,13 +230,15 @@ public class IndexReadPerformance {
     private Throttler throttler;
     private AtomicBoolean isShutdown;
     private CountDownLatch latch;
+    private ClusterMap map;
 
     public IndexReadPerfRun(HashMap<String, IndexPayload> hashes, Throttler throttler,
-                            AtomicBoolean isShutdown, CountDownLatch latch) {
+                            AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
       this.hashes = hashes;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
+      this.map = map;
     }
     public void run() {
       try {
@@ -228,7 +255,7 @@ public class IndexReadPerformance {
             int idToUse = new Random().nextInt(index.getIds().size());
             String idToLookup = (String)index.getIds().toArray()[idToUse];
 
-            if (!index.getIndex().exist(new BlobId(idToLookup)))
+            if (!index.getIndex().exist(new BlobId(idToLookup, map)))
               System.out.println("Error id not found in index " + idToLookup);
             else
               System.out.println("found id " + idToLookup);

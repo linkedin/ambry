@@ -13,7 +13,7 @@ public abstract class StoreKey implements Comparable<StoreKey> {
   public abstract byte[] toBytes();
 
   /**
-   * The size of the key
+   * The size of the serialized version of the key
    * @return The size of the key
    */
   public abstract short sizeInBytes();

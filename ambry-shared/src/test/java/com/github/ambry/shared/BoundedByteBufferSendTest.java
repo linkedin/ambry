@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.shared;
 
 public class BoundedByteBufferSendTest {
 }

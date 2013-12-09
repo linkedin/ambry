@@ -18,11 +18,10 @@ public class TTLMessageFormatInputStream extends MessageFormatInputStream {
 
     int headerSize = MessageFormat.getCurrentVersionHeaderSize();
     int systemMetadataSize = MessageFormat.getCurrentVersionTTLRecordSize();
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
-    buffer = ByteBuffer.allocate(headerSize + idSize + systemMetadataSize);
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + systemMetadataSize);
     MessageFormat.serializeCurrentVersionHeader(buffer,
                                                 systemMetadataSize,
-                                                headerSize + idSize,
+                                                headerSize + key.sizeInBytes(),
                                                 MessageFormat.Message_Header_Invalid_Relative_Offset,
                                                 MessageFormat.Message_Header_Invalid_Relative_Offset);
     buffer.put(key.toBytes());

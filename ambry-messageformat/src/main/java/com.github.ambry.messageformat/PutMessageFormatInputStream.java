@@ -21,18 +21,17 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int systemMetadataSize = MessageFormat.getCurrentVersionBlobPropertyRecordSize(blobProperty);
     int userMetadataSize = MessageFormat.getCurrentVersionUserMetadataSize(userMetadata);
     long dataSize = MessageFormat.getCurrentVersionDataSize(streamSize);
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
     buffer = ByteBuffer.allocate(headerSize +
-            idSize +
+            key.sizeInBytes() +
             systemMetadataSize +
             userMetadataSize +
             (int)(dataSize - streamSize - MessageFormat.Crc_Size));
 
     MessageFormat.serializeCurrentVersionHeader(buffer,
             systemMetadataSize + userMetadataSize + dataSize,
-            headerSize + idSize,
-            headerSize + idSize + systemMetadataSize,
-            headerSize + idSize + systemMetadataSize + userMetadataSize);
+            headerSize + key.sizeInBytes(),
+            headerSize + key.sizeInBytes() + systemMetadataSize,
+            headerSize + key.sizeInBytes() + systemMetadataSize + userMetadataSize);
     buffer.put(key.toBytes());
     MessageFormat.serializeCurrentVersionBlobPropertyRecord(buffer, blobProperty);
     MessageFormat.serializeCurrentVersionUserMetadata(buffer, userMetadata);

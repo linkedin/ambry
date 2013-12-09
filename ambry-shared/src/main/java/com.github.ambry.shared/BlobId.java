@@ -3,8 +3,9 @@ package com.github.ambry.shared;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-
+import javax.xml.bind.DatatypeConverter;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,6 +25,11 @@ public class BlobId extends StoreKey {
   public BlobId(PartitionId partitionId) {
     this.partitionId = partitionId;
     this.uuid = UUID.randomUUID().toString();
+  }
+
+  public BlobId(String id, ClusterMap map)  throws IOException {
+    //this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseBase64Binary(id)))), map);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseHexBinary(id)))), map);
   }
 
   public BlobId(DataInputStream stream, ClusterMap map) throws IOException {
@@ -83,7 +89,8 @@ public class BlobId extends StoreKey {
 
   @Override
   public String toString() {
-    return version + "-" + partitionId.toString() + "-" + uuid;
+    //return DatatypeConverter.printBase64Binary(toBytes());
+    return DatatypeConverter.printHexBinary(toBytes());
   }
 
   @Override

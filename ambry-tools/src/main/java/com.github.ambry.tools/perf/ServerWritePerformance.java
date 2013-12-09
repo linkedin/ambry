@@ -1,17 +1,24 @@
 package com.github.ambry.tools.perf;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.BlobIdFactory;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,6 +32,19 @@ public class ServerWritePerformance {
     FileWriter writer = null;
     try {
       OptionParser parser = new OptionParser();
+
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                      .withRequiredArg()
+                      .describedAs("hardware_layout")
+                      .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                      .withRequiredArg()
+                      .describedAs("partition_layout")
+                      .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
               parser.accepts("numberOfWriters", "The number of writers that issue put request")
                       .withRequiredArg()
@@ -62,6 +82,18 @@ public class ServerWritePerformance {
 
       OptionSet options = parser.parse(args);
 
+      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
+
+      for(OptionSpec opt : listOpt) {
+        if(!options.has(opt)) {
+          System.err.println("Missing required argument \"" + opt + "\"");
+          parser.printHelpOn(System.err);
+          System.exit(1);
+        }
+      }
+
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
@@ -71,6 +103,9 @@ public class ServerWritePerformance {
         System.out.println("Enabled verbose logging");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalWrites = new AtomicLong(0);
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
@@ -99,7 +134,7 @@ public class ServerWritePerformance {
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(new ServerWritePerfRun(throttler, shutdown, latch,
                                                                minBlobSize, maxBlobSize, writer,
-                                                               totalTimeTaken, totalWrites, enableVerboseLogging));
+                                                               totalTimeTaken, totalWrites, enableVerboseLogging, map));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -134,16 +169,17 @@ public class ServerWritePerformance {
     private AtomicLong totalTimeTaken;
     private AtomicLong totalWrites;
     private boolean enableVerboseLogging;
+    private ClusterMap map;
 
     public ServerWritePerfRun(Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
                               int minBlobSize, int maxBlobSize, FileWriter writer,
                               AtomicLong totalTimeTaken, AtomicLong totalWrites,
-                              boolean enableVerboseLogging) {
+                              boolean enableVerboseLogging, ClusterMap map) {
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
-      // TODO use cluster map
-      this.coordinator = new AmbryCoordinator("localhost", 6667);
+      this.map = map;
+      this.coordinator = new AmbryCoordinator(this.map);
       this.minBlobSize = minBlobSize;
       this.maxBlobSize = maxBlobSize;
       this.writer = writer;

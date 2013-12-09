@@ -13,7 +13,7 @@ public class MetricsConfig {
    * classes
    */
   @Config("metrics.reporters.factory.classes")
-  @Default("com.github.ambry.metrics.JmxReporter")
+  @Default("com.github.ambry.metrics.JmxReporterFactory")
   public final String metricsFactoryClasses;
 
   /**
@@ -32,6 +32,6 @@ public class MetricsConfig {
 
   public MetricsConfig(VerifiableProperties verifiableProperties) {
     metricsFactoryClasses = verifiableProperties.getString(
-            "metrics.reporters.factory.classes", "com.github.ambry.metrics.JmxReporter");
+            "metrics.reporters.factory.classes", "com.github.ambry.metrics.JmxReporterFactory");
   }
 }

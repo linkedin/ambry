@@ -1,5 +1,7 @@
 package com.github.ambry.tools.perf;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.coordinator.Coordinator;
@@ -35,6 +37,18 @@ public class ServerReadPerformance {
                       .describedAs("log_to_read")
                       .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                      .withRequiredArg()
+                      .describedAs("hardware_layout")
+                      .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                      .withRequiredArg()
+                      .describedAs("partition_layout")
+                      .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
               parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
                       .withRequiredArg()
@@ -49,22 +63,12 @@ public class ServerReadPerformance {
                       .ofType(Boolean.class)
                       .defaultsTo(false);
 
-      ArgumentAcceptingOptionSpec<String> ambryHostOpt = parser.accepts("ambryHost", "The host to communicate")
-              .withRequiredArg()
-              .describedAs("ambry_host")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<Integer> ambryPortOpt = parser.accepts("ambryPort", "The port to communicate")
-              .withRequiredArg()
-              .describedAs("ambry_port")
-              .ofType(Integer.class);
-
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(logToReadOpt);
-      listOpt.add(ambryHostOpt);
-      listOpt.add(ambryPortOpt);
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -75,17 +79,17 @@ public class ServerReadPerformance {
       }
 
       String logToRead = options.valueOf(logToReadOpt);
-      String host = options.valueOf(ambryHostOpt);
-      int port = options.valueOf(ambryPortOpt);
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
 
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
-      final CountDownLatch latch = new CountDownLatch(4);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -105,7 +109,7 @@ public class ServerReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       String line;
-      Coordinator coordinator = new AmbryCoordinator(host, port);
+      Coordinator coordinator = new AmbryCoordinator(map);
       while ((line = br.readLine()) != null) {
         String[] id = line.split("\\|");
         System.out.println("calling get on " + id[1]);

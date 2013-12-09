@@ -15,8 +15,6 @@ import java.util.Random;
 
 public class MessageFormatInputStreamTest {
 
-  private static final int Key_Size = 2;
-
   public static class MockId extends StoreKey {
 
     String id;
@@ -35,7 +33,7 @@ public class MessageFormatInputStreamTest {
 
     @Override
     public short sizeInBytes() {
-      return (short)id.length();
+      return (short)(2 + id.length());
     }
 
     @Override
@@ -71,7 +69,7 @@ public class MessageFormatInputStreamTest {
     long dataSize = MessageFormat.getCurrentVersionDataSize(2000);
 
     Assert.assertEquals(messageFormatStream.getSize(), headerSize + systemMetadataSize +
-                        userMetadataSize + dataSize + Key_Size + key.sizeInBytes());
+                        userMetadataSize + dataSize + key.sizeInBytes());
 
     // verify header
     byte[] headerOutput = new byte[headerSize];
@@ -79,22 +77,21 @@ public class MessageFormatInputStreamTest {
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
     Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize + userMetadataSize + dataSize, headerBuf.getLong());
-    Assert.assertEquals(headerSize + Key_Size + key.sizeInBytes(), headerBuf.getInt());
-    Assert.assertEquals(headerSize + Key_Size + key.sizeInBytes() + systemMetadataSize, headerBuf.getInt());
-    Assert.assertEquals(headerSize + Key_Size + key.sizeInBytes() + systemMetadataSize + userMetadataSize, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + systemMetadataSize, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + systemMetadataSize + userMetadataSize, headerBuf.getInt());
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormat.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
 
     // verify handle
-    byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
+    byte[] handleOutput = new byte[key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
-    messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
+    messageFormatStream.read(handleOutput);;
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toString().getBytes());
+    Assert.assertArrayEquals(dest, key.toBytes());
 
     // verify system metadata
     byte[] systemMetadataOutput = new byte[systemMetadataSize];
@@ -141,7 +138,7 @@ public class MessageFormatInputStreamTest {
     MessageFormatInputStream messageFormatStream = new DeleteMessageFormatInputStream(key);
     int headerSize = MessageFormat.getCurrentVersionHeaderSize();
     int systemMetadataSize = MessageFormat.getCurrentVersionDeleteRecordSize();
-    Assert.assertEquals(headerSize + systemMetadataSize + Key_Size + key.sizeInBytes(), messageFormatStream.getSize());
+    Assert.assertEquals(headerSize + systemMetadataSize + key.sizeInBytes(), messageFormatStream.getSize());
 
     // check header
     byte[] headerOutput = new byte[headerSize];
@@ -149,7 +146,7 @@ public class MessageFormatInputStreamTest {
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
     Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
-    Assert.assertEquals(headerSize + Key_Size + key.sizeInBytes(), headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Crc32 crc = new Crc32();
@@ -157,13 +154,12 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
     // verify handle
-    byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
+    byte[] handleOutput = new byte[key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toString().getBytes());
+    Assert.assertArrayEquals(dest, key.toBytes());
 
 
     // check system metadata record
@@ -184,7 +180,7 @@ public class MessageFormatInputStreamTest {
     MessageFormatInputStream messageFormatStream = new TTLMessageFormatInputStream(key, 1124);
     int headerSize = MessageFormat.getCurrentVersionHeaderSize();
     int systemMetadataSize = MessageFormat.getCurrentVersionTTLRecordSize();
-    Assert.assertEquals(headerSize + systemMetadataSize + Key_Size + key.sizeInBytes(), messageFormatStream.getSize());
+    Assert.assertEquals(headerSize + systemMetadataSize + key.sizeInBytes(), messageFormatStream.getSize());
 
     // check header
     byte[] headerOutput = new byte[headerSize];
@@ -192,7 +188,7 @@ public class MessageFormatInputStreamTest {
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
     Assert.assertEquals(MessageFormat.Header_Current_Version, headerBuf.getShort());
     Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
-    Assert.assertEquals(headerSize + Key_Size + key.sizeInBytes(), headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Crc32 crc = new Crc32();
@@ -200,13 +196,12 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
     // verify handle
-    byte[] handleOutput = new byte[Key_Size + key.sizeInBytes()];
+    byte[] handleOutput = new byte[key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    Assert.assertEquals(handleOutputBuf.getShort(), key.sizeInBytes());
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toString().getBytes());
+    Assert.assertArrayEquals(dest, key.toBytes());
 
     // check system metadata record
     byte[] systemMetadataOutput = new byte[systemMetadataSize];

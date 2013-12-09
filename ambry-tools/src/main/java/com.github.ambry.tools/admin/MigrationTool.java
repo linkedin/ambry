@@ -1,5 +1,7 @@
 package com.github.ambry.tools.admin;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobProperties;
@@ -71,40 +73,44 @@ public class MigrationTool {
     FileWriter writer = null;
     try {
       OptionParser parser = new OptionParser();
-      ArgumentAcceptingOptionSpec<String> rootDirectoryOpt = parser.accepts("rootDirectory", "The root folder from which all the files will be migrated")
-              .withRequiredArg()
-              .describedAs("root_directory")
-              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
+              parser.accepts("rootDirectory", "The root folder from which all the files will be migrated")
+                    .withRequiredArg()
+                    .describedAs("root_directory")
+                    .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> folderPrefixInRootOpt = parser.accepts("folderPrefixInRoot", "The prefix of the folders in the root path that needs to be moved")
-              .withRequiredArg()
-              .describedAs("folder_prefix_in_root")
-              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> folderPrefixInRootOpt =
+              parser.accepts("folderPrefixInRoot", "The prefix of the folders in the root path that needs to be moved")
+                    .withRequiredArg()
+                    .describedAs("folder_prefix_in_root")
+                    .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt = parser.accepts("enableVerboseLogging", "Enables verbose logging")
-              .withOptionalArg()
-              .describedAs("Enable verbose logging")
-              .ofType(Boolean.class)
-              .defaultsTo(false);
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                    .withRequiredArg()
+                    .describedAs("hardware_layout")
+                    .ofType(String.class);
 
-      //TODO need to make this a cluster map file path
-      ArgumentAcceptingOptionSpec<String> ambryHostOpt = parser.accepts("ambryHost", "The host to communicate")
-              .withRequiredArg()
-              .describedAs("ambry_host")
-              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                    .withRequiredArg()
+                    .describedAs("partition_layout")
+                    .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<Integer> ambryPortOpt = parser.accepts("ambryPort", "The port to communicate")
-              .withRequiredArg()
-              .describedAs("ambry_port")
-              .ofType(Integer.class);
+      ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
+              parser.accepts("enableVerboseLogging", "Enables verbose logging")
+                    .withOptionalArg()
+                    .describedAs("Enable verbose logging")
+                    .ofType(Boolean.class)
+                    .defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(rootDirectoryOpt);
       listOpt.add(folderPrefixInRootOpt);
-      listOpt.add(ambryHostOpt);
-      listOpt.add(ambryPortOpt);
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -116,14 +122,15 @@ public class MigrationTool {
 
       String rootDirectory = options.valueOf(rootDirectoryOpt);
       String folderPrefixInRoot = options.valueOf(folderPrefixInRootOpt);
-      String host = options.valueOf(ambryHostOpt);
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
       writer = new FileWriter(logFile);
-      int port = options.valueOf(ambryPortOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
-      Coordinator coordinator = new AmbryCoordinator(host, port);
+      Coordinator coordinator = new AmbryCoordinator(map);
       directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
     }
     catch (Exception e) {

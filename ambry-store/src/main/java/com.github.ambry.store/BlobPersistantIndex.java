@@ -283,8 +283,7 @@ class IndexInfo {
         int numOfEntries = 0;
         // write the entries
         for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
-          byte[] idBytes = entry.getKey().toBytes();
-          writer.write(idBytes);
+          writer.write(entry.getKey().toBytes());
           writer.write(entry.getValue().getBytes().array());
           numOfEntries++;
         }
@@ -470,7 +469,7 @@ public class BlobPersistantIndex {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollIndex(entry)) {
       IndexInfo info = new IndexInfo(dataDir, entry.getValue().getOffset(),
-                                     factory, entry.getKey().toBytes().length,
+                                     factory, entry.getKey().sizeInBytes(),
                                      BlobIndexValue.Index_Value_Size_In_Bytes);
       info.AddEntry(entry, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
@@ -484,7 +483,7 @@ public class BlobPersistantIndex {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollIndex(entries.get(0))) {
       IndexInfo info = new IndexInfo(dataDir, entries.get(0).getValue().getOffset(),
-                                     factory, entries.get(0).getKey().toBytes().length,
+                                     factory, entries.get(0).getKey().sizeInBytes(),
                                      BlobIndexValue.Index_Value_Size_In_Bytes);
       info.AddEntries(entries, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
@@ -498,7 +497,7 @@ public class BlobPersistantIndex {
     return  indexes.size() == 0 ||
             indexes.lastEntry().getValue().getSizeWritten() >= maxInMemoryIndexSizeInBytes ||
             indexes.lastEntry().getValue().getNumberOfItems() >= 100000 || //TODO config
-            indexes.lastEntry().getValue().getKeySize() != entry.getKey().toBytes().length ||
+            indexes.lastEntry().getValue().getKeySize() != entry.getKey().sizeInBytes() ||
             indexes.lastEntry().getValue().getValueSize() != BlobIndexValue.Index_Value_Size_In_Bytes;
   }
 

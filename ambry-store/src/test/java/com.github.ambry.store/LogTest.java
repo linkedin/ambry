@@ -1,7 +1,5 @@
 package com.github.ambry.store;
 
-import com.github.ambry.metrics.MetricsRegistryMap;
-import com.github.ambry.metrics.ReadableMetricsRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.File;
@@ -12,6 +10,8 @@ import java.nio.channels.Channels;
 import java.nio.channels.ClosedChannelException;
 import java.util.Random;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.metrics.MetricsRegistryMap;
+import com.github.ambry.metrics.ReadableMetricsRegistry;
 
 public class LogTest {
 
@@ -30,6 +30,8 @@ public class LogTest {
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file
     randomFile.setLength(5000);
+    File logFile = new File(tempFile.getParent(), "log_current");
+    logFile.deleteOnExit();
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics, 5000);
@@ -78,6 +80,8 @@ public class LogTest {
   public void logAppendTest() throws IOException {
     File tempFile = tempFile();
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
+    File logFile = new File(tempFile.getParent(), "log_current");
+    logFile.deleteOnExit();
     // preallocate file
     randomFile.setLength(5000);
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
@@ -130,6 +134,8 @@ public class LogTest {
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file
     randomFile.setLength(5000);
+    File logFile = new File(tempFile.getParent(), "log_current");
+    logFile.deleteOnExit();
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics, 5000);
@@ -172,6 +178,8 @@ public class LogTest {
     RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
     // preallocate file
     randomFile.setLength(5000);
+    File logFile = new File(tempFile.getParent(), "log_current");
+    logFile.deleteOnExit();
     ReadableMetricsRegistry registry = new MetricsRegistryMap();
     StoreMetrics metrics = new StoreMetrics("test", registry);
     Log logTest = new Log(tempFile.getParent(), metrics, 5000);

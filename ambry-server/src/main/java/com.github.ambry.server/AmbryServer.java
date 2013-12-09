@@ -1,7 +1,6 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNode;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.MetricsConfig;
 import com.github.ambry.config.NetworkConfig;
@@ -14,11 +13,9 @@ import com.github.ambry.metrics.MetricsReporterFactory;
 import com.github.ambry.metrics.MetricsReporter;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.*;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import com.sun.jdi.InternalException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,7 +75,7 @@ public class AmbryServer {
       try {
 
         for (String factoryClass : reporterFactoryNames) {
-          MetricsReporterFactory factory = Utils.getObj(factoryClass, new Object[]{});
+          MetricsReporterFactory factory = Utils.getObj(factoryClass);
           MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Data Node", metricsConfig);
           reporters.put(factoryClass, reporter);
         }
@@ -87,15 +84,13 @@ public class AmbryServer {
       catch (Exception e) {
         logger.error("Error while creating reporters. Logging and proceeding " + e);
       }
-
+      scheduler.startup();
       // check if node exist in clustermap
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null)
         throw new IllegalArgumentException("The node is not present in the clustermap. Failing to start the datanode");
 
-
-      StoreKeyFactory factory = Utils.getObj(storeConfig.storeKeyFactory, new Object[]{clusterMap});
-      scheduler.startup();
+      StoreKeyFactory factory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       networkServer = new SocketServer(networkConfig);
       networkServer.start();
       storeManager = new StoreManager(storeConfig, scheduler, registryMap, clusterMap.getReplicaIds(nodeId), factory);
