@@ -1,11 +1,15 @@
 package com.github.ambry.tools.admin;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertySerDe;
 import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.BlobIndexValue;
+import com.github.ambry.store.StoreKeyFactory;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -26,21 +30,35 @@ public class DumpData {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> fileToReadOpt =
               parser.accepts("fileToRead", "The file that needs to be dumped")
-                      .withRequiredArg()
-                      .describedAs("file_to_read")
-                      .ofType(String.class);
+                    .withRequiredArg()
+                    .describedAs("file_to_read")
+                    .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                    .withRequiredArg()
+                    .describedAs("hardware_layout")
+                    .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                    .withRequiredArg()
+                    .describedAs("partition_layout")
+                    .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfFileOpt =
               parser.accepts("typeOfFile", "The type of file to read - log or index")
-                      .withRequiredArg()
-                      .describedAs("The type of file")
-                      .ofType(String.class)
-                      .defaultsTo("log");
+                    .withRequiredArg()
+                    .describedAs("The type of file")
+                    .ofType(String.class)
+                    .defaultsTo("log");
 
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(fileToReadOpt);
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -50,6 +68,9 @@ public class DumpData {
         }
       }
 
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       String fileToRead = options.valueOf(fileToReadOpt);
       String typeOfFile = options.valueOf(typeOfFileOpt);
 
@@ -103,7 +124,7 @@ public class DumpData {
                     " dataRelativeOffset " + header.getDataRelativeOffset() +
                     " crc " + header.getCrc());
             // read blob id
-            BlobId id = new BlobId(stream);
+            BlobId id = new BlobId(stream, map);
             System.out.println("Id - " + id.toString());
             BlobProperties props = MessageFormat.deserializeBlobProperties(stream);
             System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +

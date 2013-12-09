@@ -31,7 +31,7 @@ public class Log implements Write, Read {
     file = new File(dataDir, logFileName);
     if (!Utils.checkFileExistWithGivenSize(file, capacityGB)) {
       if (file.exists())
-        throw new IllegalArgumentException("file exist but size " + capacityGB +
+        throw new IllegalArgumentException("file exist but size " + file.length() +
                                            " does not match input capacity " + capacityGB);
       // if the file does not exist, preallocate it
       Utils.preAllocateFile(file, capacityGB);

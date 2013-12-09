@@ -1,9 +1,14 @@
 package com.github.ambry.tools.perf;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.*;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
@@ -38,6 +43,18 @@ public class IndexWritePerformance {
                     .describedAs("number_of_indexes")
                     .ofType(Integer.class);
 
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
+              parser.accepts("hardwareLayout", "The path of the hardware layout file")
+                    .withRequiredArg()
+                    .describedAs("hardware_layout")
+                    .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
+              parser.accepts("partitionLayout", "The path of the partition layout file")
+                      .withRequiredArg()
+                      .describedAs("partition_layout")
+                      .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
               parser.accepts("numberOfWriters", "The number of writers that write to a random index concurrently")
                     .withRequiredArg()
@@ -63,6 +80,8 @@ public class IndexWritePerformance {
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(numberOfIndexesOpt);
+      listOpt.add(hardwareLayoutOpt);
+      listOpt.add(partitionLayoutOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -80,13 +99,18 @@ public class IndexWritePerformance {
         System.out.println("Enabled verbose logging");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalWrites = new AtomicLong(0);
+      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
+      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      StoreKeyFactory factory = new BlobIdFactory(map);
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(System.getProperty("user.dir"), metrics);
+      Log log = new Log(System.getProperty("user.dir"), metrics, 1000);
       Scheduler s = new Scheduler(numberOfWriters, "index", false);
       s.startup();
 
@@ -105,7 +129,8 @@ public class IndexWritePerformance {
         System.out.println("Creating index folder " + indexFile.getAbsolutePath());
         writer.write("logdir-" + indexFile.getAbsolutePath() + "\n");
         indexWithMetrics.add(new BlobIndexMetrics(indexFile.getAbsolutePath(), s, log, enableVerboseLogging,
-                                                  totalWrites, totalTimeTaken, totalWrites, config, writer));
+                                                  totalWrites, totalTimeTaken, totalWrites, config, writer,
+                                                  factory));
       }
 
       final CountDownLatch latch = new CountDownLatch(4);
@@ -130,7 +155,7 @@ public class IndexWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       for (int i = 0; i < numberOfWriters; i++) {
-        threadIndexPerf[i] = new Thread(new IndexWritePerfRun(indexWithMetrics, throttler, shutdown, latch));
+        threadIndexPerf[i] = new Thread(new IndexWritePerfRun(indexWithMetrics, throttler, shutdown, latch, map));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -160,13 +185,15 @@ public class IndexWritePerformance {
     private Throttler throttler;
     private AtomicBoolean isShutdown;
     private CountDownLatch latch;
+    private ClusterMap map;
 
     public IndexWritePerfRun(ArrayList<BlobIndexMetrics> indexesWithMetrics, Throttler throttler,
-                        AtomicBoolean isShutdown, CountDownLatch latch) {
+                             AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
       this.indexesWithMetrics = indexesWithMetrics;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
+      this.map = map;
     }
     public void run() {
       try {
@@ -176,7 +203,9 @@ public class IndexWritePerformance {
 
           // choose a random index
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
-          indexesWithMetrics.get(indexToUse).AddToIndexRandomData();
+          // Does not matter what partition we use
+          PartitionId partition = map.getWritablePartitionIdAt(0);
+          indexesWithMetrics.get(indexToUse).AddToIndexRandomData(new BlobId(partition));
           throttler.maybeThrottle(1);
         }
       }

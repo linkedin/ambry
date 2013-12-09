@@ -1,11 +1,12 @@
-package com.github.ambry.clustermap;
+package com.github.ambry.store;
 
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.github.ambry.clustermap.*;
 
 /**
  * Mock cluster map for unit tests
@@ -50,8 +51,12 @@ public class MockClusterMap implements ClusterMap {
     return replicaIds;
   }
 
-  public void shutdown() {
-    replicaId.shutdown();
+  public void cleanup() {
+    File replicaDir = new File(replicaId.getReplicaPath());
+    for (File replica : replicaDir.listFiles()) {
+      replica.delete();
+    }
+    replicaDir.delete();
   }
 }
 
@@ -86,6 +91,7 @@ class MockReplicaId implements ReplicaId {
       File mountFile = new File(mountPath);
       File replicaFile = new File(mountFile, "replica");
       replicaFile.mkdir();
+      replicaFile.deleteOnExit();
       replicaPath = replicaFile.getAbsolutePath();
     }
     catch (IOException e) {
@@ -123,13 +129,6 @@ class MockReplicaId implements ReplicaId {
 
   @Override
   public long getCapacityGB() {
-    return 10000; // This is really in bytes
-  }
-
-  public void shutdown() {
-    File file = new File(replicaPath);
-    for (File inFiles : file.listFiles())
-      inFiles.delete();
-    file.delete();
+    return 100000; // TODO This is really in bytes for now
   }
 }

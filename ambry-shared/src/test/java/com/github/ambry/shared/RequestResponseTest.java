@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.shared;
 
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.PutRequest;

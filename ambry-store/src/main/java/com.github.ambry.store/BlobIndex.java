@@ -38,7 +38,7 @@ public class BlobIndex {
       this.factory = factory;
       // check if file exist and recover from it
       indexFile = new File(datadir, indexFileName);
-      persistor = new IndexPersistor(indexFile);
+      persistor = new IndexPersistor();
       persistor.read();
       logger.info("read index from file {}", datadir);
 
@@ -153,22 +153,14 @@ public class BlobIndex {
   class IndexPersistor implements Runnable {
 
     private Object lock = new Object();
-    private final File file;
     private Short version = 0;
     private int Crc_Size = 8;
     private int Log_End_Offset_Size = 8;
 
-    public IndexPersistor(File file)
-            throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException {
-      new File(file + ".tmp").delete();
-      this.file = file;
-      file.createNewFile();
-    }
-
     public void write() throws StoreException, IOException {
       logger.info("writing index to disk for {}", indexFile.getPath());
       // write to temp file and then swap with the existing file
-      File temp = new File(file.getAbsolutePath() + ".tmp");
+      File temp = new File(indexFile.getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
       DataOutputStream writer = new DataOutputStream(crc);
@@ -186,8 +178,7 @@ public class BlobIndex {
 
           // write the entries
           for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
-            byte[] idBytes = entry.getKey().toBytes();
-            writer.write(idBytes);
+            writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
           }
           writer.writeLong(fileEndPointer);
@@ -197,7 +188,7 @@ public class BlobIndex {
           // flush and overwrite old file
           fileStream.getChannel().force(true);
           // swap temp file with the original file
-          temp.renameTo(file);
+          temp.renameTo(indexFile);
         }
         catch (IOException e) {
           logger.error("IO error while persisting index to disk {}", indexFile.getAbsoluteFile());
@@ -223,7 +214,8 @@ public class BlobIndex {
     public void read() throws IOException, StoreException {
       logger.info("Reading index from file {}", indexFile.getPath());
       synchronized(lock) {
-        CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
+        indexFile.createNewFile();
+        CrcInputStream crcStream = new CrcInputStream(new FileInputStream(indexFile));
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();

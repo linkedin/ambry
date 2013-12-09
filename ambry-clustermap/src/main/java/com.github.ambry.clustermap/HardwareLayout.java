@@ -56,8 +56,11 @@ public class HardwareLayout {
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
+    logger.info("host to find host {} port {}", hostname, port);
     for (Datacenter datacenter : datacenters) {
+      logger.info("datacenter {}", datacenter.getName());
       for (DataNode dataNode : datacenter.getDataNodes()) {
+        logger.info("host {} port {}", dataNode.getHostname(), dataNode.getPort());
         if (dataNode.getHostname().equals(hostname) && dataNode.getPort() == port) {
           return dataNode;
         }

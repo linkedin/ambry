@@ -8,7 +8,7 @@
             {
               "capacityGB": 20,
               "hardwareState": "AVAILABLE",
-              "mountPath": "/mnt0"
+              "mountPath": "/tmp"
             }
           ],
           "hardwareState": "AVAILABLE",

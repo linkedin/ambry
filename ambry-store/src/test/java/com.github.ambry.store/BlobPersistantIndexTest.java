@@ -1,15 +1,12 @@
 package com.github.ambry.store;
 
-
-import com.github.ambry.MockSharedUtils;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -37,8 +34,8 @@ public class BlobPersistantIndexTest {
   }
 
   class MockIndex extends BlobPersistantIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config) throws StoreException {
-      super(datadir, scheduler, log, config);
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory) throws StoreException {
+      super(datadir, scheduler, log, config, factory);
     }
 
     BlobIndexValue getValue(StoreKey key) throws StoreException {
@@ -60,20 +57,22 @@ public class BlobPersistantIndexTest {
 
   @Test
   public void testIndexInfo() throws IOException {
+    MockClusterMap map = null;
     try {
       // create a new index
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId4 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId5 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId6 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId7 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId8 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId9 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
+      MockId blobId4 = new MockId("id4");
+      MockId blobId5 = new MockId("id5");
+      MockId blobId6 = new MockId("id6");
+      MockId blobId7 = new MockId("id7");
+      MockId blobId8 = new MockId("id8");
+      MockId blobId9 = new MockId("id9");
 
-      StoreKeyFactory factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
-      IndexInfo info = new IndexInfo(tempFile().getParent(), 0, factory, 5, BlobIndexValue.Index_Value_Size_In_Bytes);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      IndexInfo info = new IndexInfo(tempFile().getParent(), 0, factory, blobId1.sizeInBytes(), BlobIndexValue.Index_Value_Size_In_Bytes);
       BlobIndexValue value = new BlobIndexValue(1000, 0, (byte)0);
       info.AddEntry(new BlobIndexEntry(blobId1, value), 1000);
       value = new BlobIndexValue(1000, 1000, (byte)0);
@@ -108,7 +107,7 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(info.find(blobId7).getSize(), 1000);
       Assert.assertEquals(info.find(blobId7).getOffset(), 6000);
       Assert.assertEquals(info.find(blobId8).getSize(), 1000);
-      Assert.assertEquals(info.find(blobId9).getOffset(), 7000);
+      Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
 
       info.writeIndexToFile(3000);
       IndexInfo infonew = new IndexInfo(info.getFile(), false, factory);
@@ -147,16 +146,21 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(info.find(blobId8).getSize(), 1000);
       Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
       // check invalid cases
-      Assert.assertNull(info.find(new BlobId(MockSharedUtils.getMockPartitionId())));
-      Assert.assertNull(info.find(new BlobId(MockSharedUtils.getMockPartitionId())));
+      Assert.assertNull(info.find(new MockId("id10")));
+      Assert.assertNull(info.find(new MockId("id11")));
     }
     catch (Exception e) {
       Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void testIndexBasic() throws IOException {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -168,10 +172,12 @@ public class BlobPersistantIndexTest {
       StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics, 10000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
@@ -183,9 +189,9 @@ public class BlobPersistantIndexTest {
       BlobIndexValue value1 = index.getValue(blobId1);
       BlobIndexValue value2 = index.getValue(blobId2);
       BlobIndexValue value3 = index.getValue(blobId3);
-      org.junit.Assert.assertEquals(value1.getOffset(), 1000);
-      org.junit.Assert.assertEquals(value2.getOffset(), 2000);
-      org.junit.Assert.assertEquals(value3.getOffset(), 3000);
+      Assert.assertEquals(value1.getOffset(), 1000);
+      Assert.assertEquals(value2.getOffset(), 2000);
+      Assert.assertEquals(value3.getOffset(), 3000);
       indexFile.delete();
       scheduler.shutdown();
       log.close();
@@ -193,11 +199,16 @@ public class BlobPersistantIndexTest {
     catch (Exception e) {
       org.junit.Assert.assertEquals(false, true);
     }
+    finally {
+      if (map != null)
+        map.cleanup();
+    }
   }
 
 
   @Test
   public void testIndexRestore() throws IOException {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -207,13 +218,14 @@ public class BlobPersistantIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 0);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0, flags, 12345));
@@ -225,14 +237,14 @@ public class BlobPersistantIndexTest {
       index.close();
 
       // create a new index and ensure the index is restored
-      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config);
+      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config, factory);
 
       BlobIndexValue value1 = indexNew.getValue(blobId1);
       BlobIndexValue value2 = indexNew.getValue(blobId2);
       BlobIndexValue value3 = indexNew.getValue(blobId3);
-      org.junit.Assert.assertEquals(value1.getOffset(), 0);
-      org.junit.Assert.assertEquals(value2.getOffset(), 1000);
-      org.junit.Assert.assertEquals(value3.getOffset(), 2000);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 1000);
+      Assert.assertEquals(value3.getOffset(), 2000);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();
@@ -244,7 +256,7 @@ public class BlobPersistantIndexTest {
       scheduler.startup();
 
       try {
-        MockIndex indexFail = new MockIndex(logFile, scheduler, log, config);
+        MockIndex indexFail = new MockIndex(logFile, scheduler, log, config, factory);
         Assert.assertFalse(true);
       }
       catch (StoreException e) {
@@ -256,7 +268,7 @@ public class BlobPersistantIndexTest {
       channelToModify.write(ByteBuffer.wrap(salt));  // write version 1
 
       try {
-        MockIndex indexReadFail = new MockIndex(logFile, scheduler, log, config);
+        MockIndex indexReadFail = new MockIndex(logFile, scheduler, log, config, factory);
         Assert.assertFalse(true);
       }
       catch (StoreException e) {
@@ -269,7 +281,7 @@ public class BlobPersistantIndexTest {
       channelToModify.write(ByteBuffer.wrap(addOnlyVersion));
 
       try {
-        MockIndex indexEmptyLine = new MockIndex(logFile, scheduler, log, config);
+        MockIndex indexEmptyLine = new MockIndex(logFile, scheduler, log, config, factory);
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -280,12 +292,17 @@ public class BlobPersistantIndexTest {
       scheduler.shutdown();
     }
     catch (Exception e) {
-      org.junit.Assert.assertEquals(false, true);
+      Assert.assertEquals(false, true);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void testIndexBatch() throws IOException {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -297,11 +314,12 @@ public class BlobPersistantIndexTest {
       StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics, 10000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
@@ -315,28 +333,33 @@ public class BlobPersistantIndexTest {
       BlobIndexValue value1 = index.getValue(blobId1);
       BlobIndexValue value2 = index.getValue(blobId2);
       BlobIndexValue value3 = index.getValue(blobId3);
-      org.junit.Assert.assertEquals(value1.getOffset(), 1000);
-      org.junit.Assert.assertEquals(value2.getOffset(), 2000);
-      org.junit.Assert.assertEquals(value3.getOffset(), 3000);
+      Assert.assertEquals(value1.getOffset(), 1000);
+      Assert.assertEquals(value2.getOffset(), 2000);
+      Assert.assertEquals(value3.getOffset(), 3000);
 
-      BlobId blobId4 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId4 = new MockId("id4");
 
       BlobIndexValue value4 = index.getValue(blobId4);
       try {
         index.addToIndex(new BlobIndexEntry(blobId4, value4), 4000);
-        org.junit.Assert.assertTrue(false);
+        Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
-        org.junit.Assert.assertTrue(true);
+        Assert.assertTrue(true);
       }
     }
     catch (Exception e) {
-      org.junit.Assert.assertEquals(false, true);
+      Assert.assertEquals(false, true);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void testIndexRead() throws IOException {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -348,11 +371,12 @@ public class BlobPersistantIndexTest {
       StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics, 10000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
@@ -364,62 +388,67 @@ public class BlobPersistantIndexTest {
       index.addToIndex(list, 5000);
       // simple read
       BlobReadOptions readOptions = index.getBlobReadInfo(blobId1);
-      org.junit.Assert.assertEquals(readOptions.getOffset(), 1000);
-      org.junit.Assert.assertEquals(readOptions.getSize(), 100);
-      org.junit.Assert.assertEquals(readOptions.getTTL(), -1);
+      Assert.assertEquals(readOptions.getOffset(), 1000);
+      Assert.assertEquals(readOptions.getSize(), 100);
+      Assert.assertEquals(readOptions.getTTL(), -1);
 
       // read missing item
       try {
-        index.getBlobReadInfo(new BlobId(MockSharedUtils.getMockPartitionId()));
-        org.junit.Assert.assertTrue(false);
+        index.getBlobReadInfo(new MockId("id4"));
+        Assert.assertTrue(false);
       }
       catch (StoreException e) {
-        org.junit.Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
       }
 
       // read deleted item
       index.markAsDeleted(blobId2, 6000);
       try {
         index.getBlobReadInfo(blobId2);
-        org.junit.Assert.assertTrue(false);
+        Assert.assertTrue(false);
       }
       catch (StoreException e) {
-        org.junit.Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       // read ttl expired item
       index.updateTTL(blobId1, 1234, 7000);
       try {
         index.getBlobReadInfo(blobId1);
-        org.junit.Assert.assertTrue(false);
+        Assert.assertTrue(false);
       }
       catch (StoreException e) {
-        org.junit.Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
       }
 
       // try to delete or update a missing blob
       try {
-        index.markAsDeleted(new BlobId(MockSharedUtils.getMockPartitionId()), 8000);
-        org.junit.Assert.assertTrue(false);
+        index.markAsDeleted(new MockId("id5"), 8000);
+        Assert.assertTrue(false);
       }
       catch (StoreException e) {
-        org.junit.Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
 
       }
       try {
-        index.updateTTL(new BlobId(MockSharedUtils.getMockPartitionId()), 1234, 9000);
-        org.junit.Assert.assertTrue(false);
+        index.updateTTL(new MockId("id6"), 1234, 9000);
+        Assert.assertTrue(false);
       }
       catch (StoreException e) {
-        org.junit.Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
       }
     }
     catch (Exception e) {
-      org.junit.Assert.assertTrue(false);
+      Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void testMissingEntries() throws IOException {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -431,11 +460,12 @@ public class BlobPersistantIndexTest {
       StoreMetrics metrics = new StoreMetrics("test", registry);
       Log log = new Log(logFile, metrics, 10000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      StoreKeyFactory  factory = Utils.getObj("com.github.ambry.shared.BlobIdFactory");
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
 
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
@@ -446,21 +476,26 @@ public class BlobPersistantIndexTest {
       list.add(entry3);
       index.addToIndex(list, 5000);
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
-      StoreKey key1 = new BlobId(MockSharedUtils.getMockPartitionId());
+      StoreKey key1 = new MockId("id4");
       keys.add(key1);
       keys.add(blobId1);
       keys.add(blobId2);
       List<StoreKey> missing = index.findMissingEntries(keys);
-      org.junit.Assert.assertEquals(missing.size(), 1);
-      org.junit.Assert.assertArrayEquals(missing.get(0).toBytes(), key1.toBytes());
+      Assert.assertEquals(missing.size(), 1);
+      Assert.assertArrayEquals(missing.get(0).toBytes(), key1.toBytes());
     }
     catch (Exception e) {
-      org.junit.Assert.assertTrue(false);
+      Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void testRollingIndex() {
+    MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
       File indexFile = new File(logFile);
@@ -476,31 +511,33 @@ public class BlobPersistantIndexTest {
       props.setProperty("store.data.flush.interval.seconds", "1");
       props.setProperty("store.data.flush.delay.seconds", "1");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      MockIndex index = new MockIndex(logFile, scheduler, log, config);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId3 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId4 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId5 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId6 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId7 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId8 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId9 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId10 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId11 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId12 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId13 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId14 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId15 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId16 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId17 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId18 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId19 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId20 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId21 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId22 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId23 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId24 = new BlobId(MockSharedUtils.getMockPartitionId());
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+      MockId blobId6 = new MockId("id06");
+      MockId blobId7 = new MockId("id07");
+      MockId blobId8 = new MockId("id08");
+      MockId blobId9 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
+      MockId blobId16 = new MockId("id16");
+      MockId blobId17 = new MockId("id17");
+      MockId blobId18 = new MockId("id18");
+      MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+      MockId blobId21 = new MockId("id21");
+      MockId blobId22 = new MockId("id22");
+      MockId blobId23 = new MockId("id23");
+      MockId blobId24 = new MockId("id24");
 
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
@@ -576,12 +613,16 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(index.findKey(blobId2).getOffset(), 2000);
 
       index.close();
-      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config);
+      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config, factory);
       Assert.assertEquals(indexNew.findKey(blobId1).getOffset(), 1000);
       Assert.assertEquals(indexNew.findKey(blobId2).getOffset(), 2000);
     }
     catch (Exception e) {
       org.junit.Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 }

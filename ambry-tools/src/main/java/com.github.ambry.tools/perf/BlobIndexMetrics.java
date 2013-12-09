@@ -7,6 +7,7 @@ import com.github.ambry.utils.Scheduler;
 
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,8 +24,8 @@ class BlobIndexMetrics extends BlobPersistantIndex {
 
   public BlobIndexMetrics(String datadir, Scheduler scheduler, Log log, boolean enableVerboseLogging,
                           AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads,
-                          StoreConfig config, FileWriter writer)  throws StoreException {
-    super(datadir, scheduler, log, config);
+                          StoreConfig config, FileWriter writer, StoreKeyFactory factory)  throws StoreException {
+    super(datadir, scheduler, log, config, factory);
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;
@@ -34,11 +35,10 @@ class BlobIndexMetrics extends BlobPersistantIndex {
     this.datadir = datadir;
   }
 
-  public void AddToIndexRandomData() throws StoreException {
+  public void AddToIndexRandomData(BlobId id) throws StoreException {
 
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
-      BlobId id = new BlobId();
       long size = new Random().nextInt(10000);
       if (size < 0)
         size = size * -1;
@@ -66,15 +66,14 @@ class BlobIndexMetrics extends BlobPersistantIndex {
       System.out.println("number of indexes created " + indexes.size());
   }
 
-  public void AddToIndexRandomData(int count) throws StoreException {
-    ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>(count);
+  public void AddToIndexRandomData(List<BlobId> ids) throws StoreException {
+    ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>(ids.size());
     for (int i = 0; i < list.size(); i++) {
-      BlobId id = new BlobId("1" + UUID.randomUUID());
-      BlobIndexEntry entry = new BlobIndexEntry(id, new BlobIndexValue(1000, 1000, (byte)1, 1000));
+      BlobIndexEntry entry = new BlobIndexEntry(ids.get(i), new BlobIndexValue(1000, 1000, (byte)1, 1000));
       list.add(entry);
       try {
         if (writer != null)
-          writer.write("blobid-" + datadir + "-" + id + "\n");
+          writer.write("blobid-" + datadir + "-" + ids.get(i) + "\n");
       }
       catch (Exception e) {
         System.out.println("error while logging");

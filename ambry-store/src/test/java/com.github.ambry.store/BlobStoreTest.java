@@ -1,19 +1,18 @@
 package com.github.ambry.store;
 
 
-import com.github.ambry.MockSharedUtils;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.Utils;
 import junit.framework.Assert;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
@@ -55,28 +54,25 @@ public class BlobStoreTest {
 
   @Test
   public void storePutTest() throws IOException {
+    MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
-      File tempFile = tempFile();
-      File indexFile = new File(tempFile.getParent());
-      for (File c : indexFile.listFiles())
-        c.delete();
-      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-      // preallocate file
-      randomFile.setLength(5000);
       Properties props = new Properties();
-      props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
+                                  replicaIds.get(0).getCapacityGB(), factory);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
       MessageInfo info1 = new MessageInfo(blobId1, 1000);
       MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
@@ -120,35 +116,37 @@ public class BlobStoreTest {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Already_Exist);
       }
     }
-    catch (StoreException e) {
+    catch (Exception e) {
       Assert.assertEquals(false, true);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void storeGetTest() throws IOException {
+    MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
       File tempFile = tempFile();
-      File indexFile = new File(tempFile.getParent());
-      for (File c : indexFile.listFiles())
-        c.delete();
-      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-      // preallocate file
-      randomFile.setLength(5000);
       Properties props = new Properties();
-      props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
+                                  replicaIds.get(0).getCapacityGB(), factory);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
       MessageInfo info1 = new MessageInfo(blobId1, 1000);
       MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
@@ -177,36 +175,38 @@ public class BlobStoreTest {
         Assert.assertEquals(bufToWrite[i], output[i - 1000]);
       }
     }
-    catch (StoreException e) {
+    catch (Exception e) {
       Assert.assertEquals(false, true);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
 
   }
 
   @Test
   public void storeDeleteTest() throws IOException {
+    MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
       File tempFile = tempFile();
-      File indexFile = new File(tempFile.getParent());
-      for (File c : indexFile.listFiles())
-        c.delete();
-      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-      // preallocate file
-      randomFile.setLength(5000);
       Properties props = new Properties();
-      props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
+                                  replicaIds.get(0).getCapacityGB(), factory);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
       MessageInfo info1 = new MessageInfo(blobId1, 1000);
       MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
@@ -258,35 +258,37 @@ public class BlobStoreTest {
       store.get(keysDeleted);
       Assert.assertEquals(true, true);
     }
-    catch (StoreException e) {
+    catch (Exception e) {
       Assert.assertEquals(false, true);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void storeUpdateTTLTest() throws IOException {
+    MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
       File tempFile = tempFile();
-      File indexFile = new File(tempFile.getParent());
-      for (File c : indexFile.listFiles())
-        c.delete();
-      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-      // preallocate file
-      randomFile.setLength(5000);
       Properties props = new Properties();
-      props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
+                                  replicaIds.get(0).getCapacityGB(), factory);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
       MessageInfo info1 = new MessageInfo(blobId1, 1000);
       MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
@@ -328,35 +330,37 @@ public class BlobStoreTest {
       Assert.assertEquals(true, true);
 
     }
-    catch (StoreException e) {
+    catch (Exception e) {
       Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 
   @Test
   public void storeShutdownTest() throws IOException {
+    MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
       File tempFile = tempFile();
-      File indexFile = new File(tempFile.getParent());
-      for (File c : indexFile.listFiles())
-        c.delete();
-      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-      // preallocate file
-      randomFile.setLength(5000);
       Properties props = new Properties();
-      props.setProperty("store.data.dir", tempFile.getParent());
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      Store store = new BlobStore(config, scheduler, registryMap, tempFile.getParent(), 5000);
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
+                                  replicaIds.get(0).getCapacityGB(), factory);
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
-      BlobId blobId1 = new BlobId(MockSharedUtils.getMockPartitionId());
-      BlobId blobId2 = new BlobId(MockSharedUtils.getMockPartitionId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
       MessageInfo info1 = new MessageInfo(blobId1, 1000);
       MessageInfo info2 = new MessageInfo(blobId2, 1000);
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
@@ -386,8 +390,12 @@ public class BlobStoreTest {
       }
 
     }
-    catch (StoreException e) {
+    catch (Exception e) {
       Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null)
+        map.cleanup();
     }
   }
 }
