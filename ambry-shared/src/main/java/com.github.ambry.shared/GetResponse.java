@@ -22,6 +22,8 @@ public class GetResponse extends RequestOrResponse {
   private Send toSend = null;
   private InputStream stream = null;
   private final int messageInfoListSize;
+  private ServerErrorCode error;
+  private static final int Error_Size_InBytes = 2;
 
   private int getMessageInfoListSize() {
     int size = 0;
@@ -59,18 +61,41 @@ public class GetResponse extends RequestOrResponse {
     return messageListInfo;
   }
 
-  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send) {
+  public GetResponse(int correlationId,
+                     String clientId,
+                     List<MessageInfo> messageInfoList,
+                     Send send,
+                     ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.toSend = send;
+    this.error = error;
   }
 
-  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream) {
+  public GetResponse(int correlationId,
+                     String clientId,
+                     List<MessageInfo> messageInfoList,
+                     InputStream stream,
+                     ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.stream = stream;
+    this.error = error;
+  }
+
+  public GetResponse(int correlationId,
+                     String clientId,
+                     ServerErrorCode error) {
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
+    this.error = error;
+    this.messageInfoList = null;
+    this.messageInfoListSize = 0;
+  }
+
+  public ServerErrorCode getError() {
+    return error;
   }
 
   public InputStream getInputStream() {
@@ -90,34 +115,40 @@ public class GetResponse extends RequestOrResponse {
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
+    ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream, map);
-    // ignoring version for now
-    return new GetResponse(correlationId, clientId, messageInfoList, stream);
+    if (error != ServerErrorCode.No_Error)
+      return new GetResponse(correlationId, clientId, error);
+    else
+      // ignoring version for now
+      return new GetResponse(correlationId, clientId, messageInfoList, stream, error);
   }
 
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + messageInfoListSize);
+      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize);
       writeHeader();
+
+      bufferToSend.putShort((short)error.ordinal());
       serializeMessageInfoList(bufferToSend, messageInfoList);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
       channel.write(bufferToSend);
     }
-    if (bufferToSend.remaining() == 0 && !toSend.isSendComplete()) {
+    if (bufferToSend.remaining() == 0 && toSend != null && !toSend.isSendComplete()) {
       toSend.writeTo(channel);
     }
   }
 
   @Override
   public boolean isSendComplete() {
-    return bufferToSend.remaining() == 0 && toSend.isSendComplete();
+    return bufferToSend.remaining() == 0 && (toSend == null || toSend.isSendComplete());
   }
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + messageInfoListSize + toSend.sizeInBytes();
+    return super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize + toSend.sizeInBytes();
   }
 }

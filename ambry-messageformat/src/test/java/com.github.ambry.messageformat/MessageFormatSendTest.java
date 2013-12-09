@@ -44,7 +44,7 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTest() throws IOException, UnknownMessageFormatException {
+  public void sendWriteTest() throws IOException, MessageFormatException {
 
     try {
       // create one buffer of size 1004
@@ -150,7 +150,7 @@ public class MessageFormatSendTest {
       Assert.assertEquals(1, bufresult.get());
       Assert.assertEquals(456, bufresult.getInt());
     }
-    catch (DataCorruptException e) {
+    catch (MessageFormatException e) {
       Assert.assertEquals(true, false);
     }
   }

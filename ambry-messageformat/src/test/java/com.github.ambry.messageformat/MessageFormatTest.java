@@ -31,8 +31,8 @@ public class MessageFormatTest {
         BlobProperties resultCorrupt = MessageFormat.deserializeBlobProperties(new ByteBufferInputStream(stream));
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormat.getCurrentVersionDeleteRecordSize());
@@ -48,8 +48,8 @@ public class MessageFormatTest {
         boolean corruptDeleted = MessageFormat.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       ByteBuffer header = ByteBuffer.allocate(MessageFormat.getCurrentVersionHeaderSize());
@@ -68,8 +68,8 @@ public class MessageFormatTest {
         format.verifyCrc();
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       ByteBuffer ttl = ByteBuffer.allocate(MessageFormat.getCurrentVersionTTLRecordSize());
@@ -85,8 +85,8 @@ public class MessageFormatTest {
         ttlValue = MessageFormat.deserializeTTLRecord(new ByteBufferInputStream(ttl));
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       ByteBuffer usermetadata = ByteBuffer.allocate(1000);
@@ -104,8 +104,8 @@ public class MessageFormatTest {
         MessageFormat.deserializeMetadata(new ByteBufferInputStream(output));
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       ByteBuffer data = ByteBuffer.allocate(2000);
@@ -131,8 +131,8 @@ public class MessageFormatTest {
         MessageFormat.deserializeData(new ByteBufferInputStream(sData));
         Assert.assertEquals(true, false);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(true, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
     }
     catch (Exception e) {
