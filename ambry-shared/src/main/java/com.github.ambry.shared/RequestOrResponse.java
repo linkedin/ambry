@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

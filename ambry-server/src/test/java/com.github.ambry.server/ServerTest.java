@@ -4,11 +4,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.BlobNotFoundException;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.messageformat.BlobOutput;
-import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.DataCorruptException;
-import com.github.ambry.messageformat.MessageFormat;
-import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.*;
 import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.PutRequest;
@@ -109,8 +105,8 @@ public class ServerTest {
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(false, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       // get user metadata
@@ -122,8 +118,8 @@ public class ServerTest {
         ByteBuffer userMetadataOutput = MessageFormat.deserializeMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       }
-      catch (DataCorruptException e) {
-        Assert.assertEquals(false, true);
+      catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
       channel.disconnect();
 

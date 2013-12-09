@@ -36,7 +36,7 @@ public class AmbryRequests {
     this.clusterMap = clusterMap;
   }
 
-  public void handleRequests(Request request) {
+  public void handleRequests(Request request) throws InterruptedException {
     try {
       // log
       DataInputStream stream = new DataInputStream(request.getInputStream());
@@ -54,16 +54,17 @@ public class AmbryRequests {
         case TTLRequest:
           handleTTLRequest(request);
           break;
-        default: // throw exception
+        default: throw new UnsupportedOperationException("Request type not supported");
       }
-    } catch (Exception e) {
-      // log and measure time
+    }
+    catch (Exception e) {
+      requestResponseChannel.closeConnection(request);
     }
   }
 
-  private void handlePutRequest(Request request) throws IOException {
+  private void handlePutRequest(Request request) throws IOException, InterruptedException {
+    PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     try {
-      PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
       MessageFormatInputStream stream = new PutMessageFormatInputStream(putRequest.getBlobId(),
                                                                         putRequest.getBlobProperties(),
                                                                         putRequest.getUsermetadata(),
@@ -77,35 +78,66 @@ public class AmbryRequests {
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
       Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
       storeToPut.put(writeset);
-      PutResponse response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), (short)0);
+      PutResponse response = new PutResponse(putRequest.getCorrelationId(),
+                                             putRequest.getClientId(),
+                                             ServerErrorCode.No_Error);
       requestResponseChannel.sendResponse(response, request);
     }
     catch (StoreException e) {
-      logger.error("Error on doing a put {}", e);
-    }
-    catch (Exception e) {
-      logger.error("Error on doing a put {}", e);
-    }
-  }
-
-  private void handleGetRequest(Request request) {
-    try {
-      GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-      Store storeToGet = storeManager.getStore(getRequest.getPartition());
-      StoreInfo info = storeToGet.get(getRequest.getBlobIds());
-      Send blobsToSend = new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag());
-      GetResponse response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-              info.getMessageReadSetInfo(), blobsToSend);
+      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      PutResponse response = new PutResponse(putRequest.getCorrelationId(),
+                                             putRequest.getClientId(),
+                                             ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
-      logger.error("Error while doing get request {}", e);
+      logger.error("Unknown exception on a put {} ", e);
+      PutResponse response = new PutResponse(putRequest.getCorrelationId(),
+                                             putRequest.getClientId(),
+                                             ServerErrorCode.Unknown_Error);
+      requestResponseChannel.sendResponse(response, request);
     }
   }
 
-  private void handleDeleteRequest(Request request) {
+  private void handleGetRequest(Request request) throws IOException, InterruptedException {
+    GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     try {
-      DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+      Store storeToGet = storeManager.getStore(getRequest.getPartition());
+      StoreInfo info = storeToGet.get(getRequest.getBlobIds());
+      Send blobsToSend = new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag());
+      GetResponse response = new GetResponse(getRequest.getCorrelationId(),
+                                             getRequest.getClientId(),
+                                             info.getMessageReadSetInfo(),
+                                             blobsToSend,
+                                             ServerErrorCode.No_Error);
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (StoreException e) {
+      logger.error("Store exception on a get with error code {} and exception {}", e.getErrorCode(), e);
+      GetResponse response = new GetResponse(getRequest.getCorrelationId(),
+                                             getRequest.getClientId(),
+                                             ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (MessageFormatException e) {
+      logger.error("Message format exception on a get with error code {} and exception {}", e.getErrorCode(), e);
+      GetResponse response = new GetResponse(getRequest.getCorrelationId(),
+                                             getRequest.getClientId(),
+                                             ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (Exception e) {
+      logger.error("Unknown exception on a get {}", e);
+      GetResponse response = new GetResponse(getRequest.getCorrelationId(),
+                                             getRequest.getClientId(),
+                                             ServerErrorCode.Unknown_Error);
+      requestResponseChannel.sendResponse(response, request);
+    }
+  }
+
+  private void handleDeleteRequest(Request request) throws IOException, InterruptedException {
+    DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    try {
       MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
       MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
@@ -115,17 +147,28 @@ public class AmbryRequests {
       storeToDelete.delete(writeset);
       DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(),
                                                    deleteRequest.getClientId(),
-                                                   (short)0);
+                                                   ServerErrorCode.No_Error);
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (StoreException e) {
+      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(),
+                                                   deleteRequest.getClientId(),
+                                                   ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
-
+      logger.error("Unknown exception on delete {}", e);
+      DeleteResponse response = new DeleteResponse(deleteRequest.getCorrelationId(),
+                                                   deleteRequest.getClientId(),
+                                                   ServerErrorCode.Unknown_Error);
+      requestResponseChannel.sendResponse(response, request);
     }
   }
 
-  private void handleTTLRequest(Request request) {
+  private void handleTTLRequest(Request request) throws IOException, InterruptedException {
+    TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     try {
-      TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
       MessageFormatInputStream stream = new TTLMessageFormatInputStream(ttlRequest.getBlobId(), ttlRequest.getNewTTL());
       MessageInfo info = new MessageInfo(ttlRequest.getBlobId(), stream.getSize(), ttlRequest.getNewTTL());
       ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
@@ -133,11 +176,24 @@ public class AmbryRequests {
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
       Store storeToUpdateTTL = storeManager.getStore(ttlRequest.getBlobId().getPartition());
       storeToUpdateTTL.updateTTL(writeset);
-      TTLResponse response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), (short)0);
+      TTLResponse response = new TTLResponse(ttlRequest.getCorrelationId(),
+                                             ttlRequest.getClientId(),
+                                             ServerErrorCode.No_Error);
+      requestResponseChannel.sendResponse(response, request);
+    }
+    catch (StoreException e) {
+      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      TTLResponse response = new TTLResponse(ttlRequest.getCorrelationId(),
+                                             ttlRequest.getClientId(),
+                                             ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
       requestResponseChannel.sendResponse(response, request);
     }
     catch (Exception e) {
-
+      logger.error("Unknown exception on ttl {}", e);
+      TTLResponse response = new TTLResponse(ttlRequest.getCorrelationId(),
+                                             ttlRequest.getClientId(),
+                                             ServerErrorCode.Unknown_Error);
+      requestResponseChannel.sendResponse(response, request);
     }
   }
 }

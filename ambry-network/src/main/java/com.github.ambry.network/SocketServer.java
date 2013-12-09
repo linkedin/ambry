@@ -358,13 +358,10 @@ class Processor extends AbstractServerThread {
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {
         if(curr.getPayload() == null) {
-          // a null response send object indicates that there is no response to send to the client.
-          // In this case, we just want to turn the interest ops to READ to be able to read more pipelined requests
-          // that are sitting in the server's socket buffer
-          logger.trace("Socket server received response and there is nothing to send to the client ");
-          // to trace
-          key.interestOps(SelectionKey.OP_READ);
-          key.attach(null);
+          // We should never need to send an empty response. If the payload is empty, we will assume error
+          // and close the connection
+          logger.trace("Socket server received no response and hence closing the connection");
+          close(key);
         }
         else {
           logger.trace("Socket server received response to send, registering for write: {}", curr);

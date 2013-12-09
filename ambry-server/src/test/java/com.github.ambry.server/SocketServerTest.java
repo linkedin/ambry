@@ -7,10 +7,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
+import com.github.ambry.shared.*;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.After;
 import org.junit.Test;
@@ -91,13 +88,13 @@ public class SocketServerTest {
     }
 
     // send response back and ensure response is received
-    PutResponse response = new PutResponse(1, "clientid1", (short)2);
+    PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);
     requestResponseChannel.sendResponse(response, request);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);
     Assert.assertEquals(responseReplay.getVersionId(), 1);
-    Assert.assertEquals(responseReplay.getError(), 2);
+    Assert.assertEquals(responseReplay.getError(), ServerErrorCode.IO_Error);
   }
 
   /**

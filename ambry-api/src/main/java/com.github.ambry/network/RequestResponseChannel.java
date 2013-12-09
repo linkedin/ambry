@@ -29,6 +29,13 @@ public interface RequestResponseChannel {
   public void sendRequest(Request request) throws InterruptedException;
 
   /**
+   * Closes the connection on which the original request came
+   * @param request The request whose connection needs to be closed
+   * @throws InterruptedException
+   */
+  public void closeConnection(Request request) throws InterruptedException;
+
+  /**
    * Shuts down the request response channel
    */
   public void shutdown();

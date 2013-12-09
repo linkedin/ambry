@@ -3,6 +3,8 @@ package com.github.ambry.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -88,6 +90,21 @@ public class VerifiableProperties {
       return v;
     else
       throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+  }
+
+  Double getDoubleInRange(String name, Double defaultVal, Double start, Double end) {
+    Double v = 0.0;
+    if (containsKey(name))
+      v = Double.parseDouble(getProperty(name));
+    else
+      v = defaultVal;
+    BigDecimal startDecimal = new BigDecimal(start);
+    BigDecimal endDecimal = new BigDecimal(end);
+    BigDecimal value = new BigDecimal(v);
+    if (value.compareTo(startDecimal) >= 0 && value.compareTo(endDecimal) <= 0)
+      return v;
+    else
+      throw new IllegalArgumentException(name + " has value " + v + " which is not in range " + start + "-" + end + ".");
   }
 
   /**

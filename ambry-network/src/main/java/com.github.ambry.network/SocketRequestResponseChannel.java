@@ -88,13 +88,14 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
       responseQueues.add(i, new LinkedBlockingQueue<Response>());
   }
 
-  @Override
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
+  @Override
   public void sendRequest(Request request) throws InterruptedException {
     requestQueue.put(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
+  @Override
   public void sendResponse(Send payloadToSend, Request originalRequest) throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend);
     responseQueues.get(response.getProcessor()).put(response);
@@ -102,7 +103,19 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
       listener.onResponse(response.getProcessor());
   }
 
+  /**
+   * Closes the connection and does not send any response
+   */
+  @Override
+  public void closeConnection(Request originalRequest) throws InterruptedException {
+    SocketServerResponse response = new SocketServerResponse(originalRequest, null);
+    responseQueues.get(response.getProcessor()).put(response);
+    for(ResponseListener listener : responseListeners)
+      listener.onResponse(response.getProcessor());
+  }
+
   /** Get the next request or block until there is one */
+  @Override
   public Request receiveRequest() throws InterruptedException {
     return requestQueue.take();
   }

@@ -13,15 +13,15 @@ import java.nio.*;
  */
 public class PutResponse extends RequestOrResponse {
 
-  private short error;
+  private ServerErrorCode error;
   private static final int Error_Size_InBytes = 2;
 
-  public PutResponse(int correlationId, String clientId, short error) {
+  public PutResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestResponseType.PutResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
   }
 
-  public short getError() {
+  public ServerErrorCode getError() {
     return error;
   }
 
@@ -33,7 +33,7 @@ public class PutResponse extends RequestOrResponse {
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    Short error = stream.readShort();
+    ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     // ignore version for now
     return new PutResponse(correlationId, clientId, error);
   }
@@ -43,7 +43,7 @@ public class PutResponse extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
       writeHeader();
-      bufferToSend.putShort(error);
+      bufferToSend.putShort((short)error.ordinal());
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {

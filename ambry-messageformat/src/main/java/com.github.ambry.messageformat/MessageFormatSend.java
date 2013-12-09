@@ -46,8 +46,7 @@ public class MessageFormatSend implements Send {
     }
   }
 
-  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag)
-          throws IOException, UnknownMessageFormatException, DataCorruptException {
+  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag) throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
     totalSizeToWrite = 0;
@@ -59,7 +58,7 @@ public class MessageFormatSend implements Send {
 
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
   // based on the type of data requested as indicated by the flags
-  private void calculateOffsets() throws IOException, UnknownMessageFormatException, DataCorruptException {
+  private void calculateOffsets() throws IOException, MessageFormatException {
     // get size
     int messageCount = readSet.count();
     // for each message, determine the offset and size that needs to be sent based on the flag
@@ -125,7 +124,8 @@ public class MessageFormatSend implements Send {
             }
             break;
           default:
-            throw new UnknownMessageFormatException("Version not known while reading message - " + headerVersion.getShort());
+            throw new MessageFormatException("Version not known while reading message - " + headerVersion.getShort(),
+                                             MessageFormatErrorCodes.Unknown_Format_Version);
         }
       }
     }

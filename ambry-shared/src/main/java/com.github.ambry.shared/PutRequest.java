@@ -2,6 +2,7 @@ package com.github.ambry.shared;
 
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertySerDe;

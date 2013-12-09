@@ -45,7 +45,12 @@ class IndexInfo {
 
   protected ConcurrentSkipListMap<StoreKey, BlobIndexValue> index = null;
 
-  public IndexInfo(String dataDir, long startOffset, StoreKeyFactory factory, int keySize, int valueSize) {
+  public IndexInfo(String dataDir,
+                   long startOffset,
+                   StoreKeyFactory factory,
+                   int keySize,
+                   int valueSize,
+                   StoreConfig config) {
     // create a new file with the start offset
     indexFile = new File(dataDir, startOffset + "_" + BlobPersistantIndex.Index_File_Name_Suffix);
     bloomFile = new File(dataDir, startOffset + "_" + BlobPersistantIndex.Bloom_File_Name_Suffix);
@@ -58,12 +63,12 @@ class IndexInfo {
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
-    // TODO make it config
-    bloomFilter = FilterFactory.getFilter(100000, 0.01);
+    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfElements,
+                                          config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
   }
 
-  public IndexInfo(File indexFile, boolean map, StoreKeyFactory factory)
+  public IndexInfo(File indexFile, boolean map, StoreKeyFactory factory, StoreConfig config)
           throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -95,7 +100,8 @@ class IndexInfo {
       }
       else {
         index = new ConcurrentSkipListMap<StoreKey, BlobIndexValue>();
-        bloomFilter = FilterFactory.getFilter(100000, 0.01);
+        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfElements,
+                                              config.storeIndexBloomMaxFalsePositiveProbability);
         bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistantIndex.Bloom_File_Name_Suffix);
         try {
           readFromFile(indexFile);
@@ -391,12 +397,14 @@ public class BlobPersistantIndex {
 
   private BlobJournal indexJournal;
   private long maxInMemoryIndexSizeInBytes;
+  private int maxInMemoryNumElements;
   private Log log;
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
   private static final int TTL_Infinite = -1;
+  private StoreConfig config;
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexInfo> indexes = new ConcurrentSkipListMap<Long, IndexInfo>();
   public static final String Index_File_Name_Suffix = "index";
@@ -421,6 +429,7 @@ public class BlobPersistantIndex {
       File indexDir = new File(datadir);
       File[] indexFiles = indexDir.listFiles(new IndexFilter());
       this.factory = factory;
+      this.config = config;
       persistor = new IndexPersistor();
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
@@ -444,7 +453,7 @@ public class BlobPersistantIndex {
         boolean map = false;
         if (i < indexFiles.length - 2)
           map = true;
-        IndexInfo info = new IndexInfo(indexFiles[i], map, factory);
+        IndexInfo info = new IndexInfo(indexFiles[i], map, factory, config);
         logger.info("Loaded index {}", indexFiles[i]);
         indexes.put(info.getStartOffset(), info);
       }
@@ -457,7 +466,8 @@ public class BlobPersistantIndex {
                               config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
                               config.storeDataFlushIntervalSeconds,
                               TimeUnit.SECONDS);
-      this.maxInMemoryIndexSizeInBytes = config.storeIndexMemorySizeBytes;
+      this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
+      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfElements;
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
@@ -468,9 +478,12 @@ public class BlobPersistantIndex {
   public void addToIndex(BlobIndexEntry entry, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollIndex(entry)) {
-      IndexInfo info = new IndexInfo(dataDir, entry.getValue().getOffset(),
-                                     factory, entry.getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes);
+      IndexInfo info = new IndexInfo(dataDir,
+                                     entry.getValue().getOffset(),
+                                     factory,
+                                     entry.getKey().sizeInBytes(),
+                                     BlobIndexValue.Index_Value_Size_In_Bytes,
+                                     config);
       info.AddEntry(entry, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
@@ -482,9 +495,12 @@ public class BlobPersistantIndex {
   public void addToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollIndex(entries.get(0))) {
-      IndexInfo info = new IndexInfo(dataDir, entries.get(0).getValue().getOffset(),
-                                     factory, entries.get(0).getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes);
+      IndexInfo info = new IndexInfo(dataDir,
+                                     entries.get(0).getValue().getOffset(),
+                                     factory,
+                                     entries.get(0).getKey().sizeInBytes(),
+                                     BlobIndexValue.Index_Value_Size_In_Bytes,
+                                     config);
       info.AddEntries(entries, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
@@ -496,7 +512,7 @@ public class BlobPersistantIndex {
   private boolean needToRollIndex(BlobIndexEntry entry) {
     return  indexes.size() == 0 ||
             indexes.lastEntry().getValue().getSizeWritten() >= maxInMemoryIndexSizeInBytes ||
-            indexes.lastEntry().getValue().getNumberOfItems() >= 100000 || //TODO config
+            indexes.lastEntry().getValue().getNumberOfItems() >= maxInMemoryNumElements ||
             indexes.lastEntry().getValue().getKeySize() != entry.getKey().sizeInBytes() ||
             indexes.lastEntry().getValue().getValueSize() != BlobIndexValue.Index_Value_Size_In_Bytes;
   }
@@ -568,7 +584,7 @@ public class BlobPersistantIndex {
     return missingEntries;
   }
 
-  // TODO need to fix this
+  // TODO need to implement this
   public ArrayList<BlobIndexValue> getIndexEntrySince(long offset) {
     // check journal
     // return complete index
