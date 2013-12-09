@@ -61,6 +61,14 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   @Override
+  public boolean hasDatacenter(String datacenterName) {
+    if(hardwareLayout.findDatacenter(datacenterName) != null) {
+      return true;
+    }
+    return false;
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return hardwareLayout.findDataNode(hostname, port);
   }

@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -37,7 +36,7 @@ public class HardwareLayout {
   }
 
   public List<Datacenter> getDatacenters() {
-    return Collections.unmodifiableList(datacenters);
+    return datacenters;
   }
 
   public long getCapacityGB() {
@@ -49,16 +48,32 @@ public class HardwareLayout {
   }
 
   /**
-   * Find DataNode by hostname and port
+   * Finds Datacenter by name
+   *
+   * @param datacenterName name of datacenter to be found
+   * @return Datacenter or null if not found.
+   */
+  public Datacenter findDatacenter(String datacenterName) {
+    for (Datacenter datacenter : datacenters) {
+        if (datacenter.getName().compareToIgnoreCase(datacenterName) == 0) {
+          return datacenter;
+        }
+    }
+    return null;
+  }
+
+  /**
+   * Finds DataNode by hostname and port. Note that hostname is converted to canonical hostname for comparison.
    *
    * @param hostname
    * @param port
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
+    String canonicalHostname = DataNode.getFullyQualifiedDomainName(hostname);
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        if (dataNode.getHostname().equals(hostname) && dataNode.getPort() == port) {
+        if (dataNode.getHostname().equals(canonicalHostname) && (dataNode.getPort() == port)) {
           return dataNode;
         }
       }
@@ -67,7 +82,7 @@ public class HardwareLayout {
   }
 
   /**
-   * Find Disk by hostname, port, and mount path.
+   * Finds Disk by hostname, port, and mount path.
    *
    * @param hostname
    * @param port

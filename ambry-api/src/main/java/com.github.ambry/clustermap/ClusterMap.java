@@ -31,10 +31,18 @@ public interface ClusterMap {
   public PartitionId getWritablePartitionIdAt(long index);
 
   /**
+   * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.
+   *
+   * @param datacenterName name of datacenter
+   * @return true if datacenter with datacenterName is in the hardware layout of this cluster map.
+   */
+  public boolean hasDatacenter(String datacenterName);
+
+  /**
    * Gets a specific DataNodeId by its hostname and port.
    *
    * @param hostname of the DataNodeId
-   * @param port     of the DataNodeId
+   * @param port of the DataNodeId
    * @return DataNodeId for this hostname and port.
    */
   public DataNodeId getDataNodeId(String hostname, int port);

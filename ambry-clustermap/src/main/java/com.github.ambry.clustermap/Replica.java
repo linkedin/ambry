@@ -113,7 +113,7 @@ public class Replica implements ReplicaId {
 
   @Override
   public String toString() {
-    return "Replica: " + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + getReplicaPath();
+    return "Replica: " + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath();
   }
 
 
