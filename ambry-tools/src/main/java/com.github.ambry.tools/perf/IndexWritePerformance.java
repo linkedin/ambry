@@ -110,7 +110,7 @@ public class IndexWritePerformance {
 
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(System.getProperty("user.dir"), metrics, 1000);
+      Log log = new Log(System.getProperty("user.dir"), metrics, 10);
       Scheduler s = new Scheduler(numberOfWriters, "index", false);
       s.startup();
 
