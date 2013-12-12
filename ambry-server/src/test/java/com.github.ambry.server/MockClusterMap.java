@@ -38,6 +38,11 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public boolean hasDatacenter(String datacenterName) {
+    return true;
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return new MockDataNodeId();
   }
