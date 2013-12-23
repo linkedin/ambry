@@ -37,9 +37,9 @@ public class StoreConfig {
   /**
    * The max number of the elements in the index that can be in memory for a single store
    */
-  @Config("store.index.max.number.of.elements")
+  @Config("store.index.max.number.of.inmem.elements")
   @Default("10000")
-  public final int storeIndexMaxNumberOfElements;
+  public final int storeIndexMaxNumberOfInmemElements;
 
 
   /**
@@ -54,9 +54,9 @@ public class StoreConfig {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.shared.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
-    storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20971520);
+    storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20*1024*1024);
     storeDataFlushDelaySeconds = verifiableProperties.getInt("store.data.flush.delay.seconds", 5);
-    storeIndexMaxNumberOfElements = verifiableProperties.getInt("store.index.max.number.of.elements", 10000);
+    storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability = verifiableProperties.getDoubleInRange(
             "store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
   }

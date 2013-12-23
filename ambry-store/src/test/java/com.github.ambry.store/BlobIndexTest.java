@@ -1,5 +1,7 @@
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
@@ -13,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 public class BlobIndexTest {
 
@@ -40,7 +43,7 @@ public class BlobIndexTest {
 
   class MockIndex extends BlobIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, factory);
+      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory);
     }
 
     BlobIndexValue getValue(StoreKey key) {

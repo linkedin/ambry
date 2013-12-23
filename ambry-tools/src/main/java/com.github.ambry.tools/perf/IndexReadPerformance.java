@@ -137,7 +137,7 @@ public class IndexReadPerformance {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
-      final CountDownLatch latch = new CountDownLatch(4);
+      final CountDownLatch latch = new CountDownLatch(numberOfReaders);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -255,7 +255,7 @@ public class IndexReadPerformance {
             int idToUse = new Random().nextInt(index.getIds().size());
             String idToLookup = (String)index.getIds().toArray()[idToUse];
 
-            if (!index.getIndex().exist(new BlobId(idToLookup, map)))
+            if (!index.getIndex().exists(new BlobId(idToLookup, map)))
               System.out.println("Error id not found in index " + idToLookup);
             else
               System.out.println("found id " + idToLookup);

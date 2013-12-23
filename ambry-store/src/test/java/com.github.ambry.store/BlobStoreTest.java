@@ -65,7 +65,7 @@ public class BlobStoreTest {
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
+      List<ReplicaId> replicaIds = map.getReplicaIds(null);
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
                                   replicaIds.get(0).getCapacityGB(), factory);
       store.start();

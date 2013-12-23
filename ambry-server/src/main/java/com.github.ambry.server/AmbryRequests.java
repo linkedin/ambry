@@ -58,6 +58,7 @@ public class AmbryRequests {
       }
     }
     catch (Exception e) {
+      logger.error("Error while handling request {}. Closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
   }

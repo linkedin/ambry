@@ -33,7 +33,7 @@ public class BlobPersistantIndexTest {
     return f;
   }
 
-  class MockIndex extends BlobPersistantIndex {
+  class MockIndex extends BlobPersistentIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory) throws StoreException {
       super(datadir, scheduler, log, config, factory);
     }
@@ -80,23 +80,23 @@ public class BlobPersistantIndexTest {
                                      BlobIndexValue.Index_Value_Size_In_Bytes,
                                      config);
       BlobIndexValue value = new BlobIndexValue(1000, 0, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId1, value), 1000);
+      info.addEntry(new BlobIndexEntry(blobId1, value), 1000);
       value = new BlobIndexValue(1000, 1000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId2, value), 2000);
+      info.addEntry(new BlobIndexEntry(blobId2, value), 2000);
       value = new BlobIndexValue(1000, 2000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId3, value), 3000);
+      info.addEntry(new BlobIndexEntry(blobId3, value), 3000);
       value = new BlobIndexValue(1000, 3000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId4, value), 4000);
+      info.addEntry(new BlobIndexEntry(blobId4, value), 4000);
       value = new BlobIndexValue(1000, 4000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId5, value), 5000);
+      info.addEntry(new BlobIndexEntry(blobId5, value), 5000);
       value = new BlobIndexValue(1000, 5000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId6, value), 6000);
+      info.addEntry(new BlobIndexEntry(blobId6, value), 6000);
       value = new BlobIndexValue(1000, 6000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId7, value), 7000);
+      info.addEntry(new BlobIndexEntry(blobId7, value), 7000);
       value = new BlobIndexValue(1000, 7000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId8, value), 8000);
+      info.addEntry(new BlobIndexEntry(blobId8, value), 8000);
       value = new BlobIndexValue(1000, 8000, (byte)0);
-      info.AddEntry(new BlobIndexEntry(blobId9, value), 9000);
+      info.addEntry(new BlobIndexEntry(blobId9, value), 9000);
 
       Assert.assertEquals(info.find(blobId1).getSize(), 1000);
       Assert.assertEquals(info.find(blobId1).getOffset(), 0);

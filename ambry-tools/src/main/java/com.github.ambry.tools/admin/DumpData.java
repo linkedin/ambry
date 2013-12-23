@@ -136,6 +136,8 @@ public class DumpData {
           }
         }
       }
+      else
+        System.out.println("Unknown file to read option");
     }
     catch (Exception e) {
       System.out.println("Closed with error " + e);

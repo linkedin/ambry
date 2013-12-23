@@ -27,6 +27,7 @@ public class Gauge<T> implements Metric {
     return name;
   }
 
+  @Override
   public void visit(MetricsVisitor visitor) {
     visitor.gauge(this);
   }

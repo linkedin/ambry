@@ -23,10 +23,11 @@ import java.io.IOException;
  */
 public class MigrationTool {
 
-  public static void directoryWalk( String path , String prefix,
-                                    boolean ignorePrefix, Coordinator coordinator,
-                                    FileWriter writer) {
-
+  public static void directoryWalk(String path ,
+                                   String prefix,
+                                   boolean ignorePrefix,
+                                   Coordinator coordinator,
+                                   FileWriter migrationLogger) {
     File root = new File( path );
     File[] list = root.listFiles();
 
@@ -35,11 +36,11 @@ public class MigrationTool {
     for ( File f : list ) {
       if ( f.isDirectory()) {
         if (ignorePrefix || f.getName().startsWith(prefix)) {
-          directoryWalk(f.getAbsolutePath(), prefix, true, coordinator, writer);
+          directoryWalk(f.getAbsolutePath(), prefix, true, coordinator, migrationLogger);
         }
       }
       else {
-        System.out.println( "File:" + f.getAbsoluteFile() );
+        System.out.println( "File: " + f.getAbsoluteFile() );
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
@@ -48,7 +49,7 @@ public class MigrationTool {
           long startMs = System.currentTimeMillis();
           String id = coordinator.putBlob(props, ByteBuffer.wrap(usermetadata), stream);
           System.out.println("Time taken to put " + (System.currentTimeMillis() - startMs));
-          writer.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
+          migrationLogger.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
         }
         catch (FileNotFoundException e) {
           System.out.println("File not found path : " + f.getAbsolutePath() + " exception : " + e);
@@ -70,7 +71,7 @@ public class MigrationTool {
   }
 
   public static void main(String args[]) {
-    FileWriter writer = null;
+    FileWriter migrationLogger = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
@@ -126,20 +127,20 @@ public class MigrationTool {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
-      writer = new FileWriter(logFile);
+      migrationLogger = new FileWriter(logFile);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
       Coordinator coordinator = new AmbryCoordinator(map);
-      directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
+      directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, migrationLogger);
     }
     catch (Exception e) {
       System.err.println("Error on exit " + e);
     }
     finally {
-      if (writer != null) {
+      if (migrationLogger != null) {
         try {
-          writer.close();
+          migrationLogger.close();
         }
         catch (Exception e) {
           System.out.println("Error when closing the writer");

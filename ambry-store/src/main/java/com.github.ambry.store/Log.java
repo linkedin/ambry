@@ -24,11 +24,11 @@ public class Log implements Write, Read {
   private final FileChannel fileChannel;
   private final File file;
   private final StoreMetrics metrics;
-  private static final String logFileName = "log_current";
+  private static final String Log_File_Name = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Log(String dataDir, StoreMetrics metrics, long capacityGB) throws IOException {
-    file = new File(dataDir, logFileName);
+    file = new File(dataDir, Log_File_Name);
     if (!Utils.checkFileExistWithGivenSize(file, capacityGB)) {
       if (file.exists())
         throw new IllegalArgumentException("file exist but size " + file.length() +
@@ -42,6 +42,8 @@ public class Log implements Write, Read {
       }
     }
     fileChannel = Utils.openChannel(file, true);
+    // A log's write offset will always be set to the start of the log.
+    // External components is responsible for setting it the right value
     currentWriteOffset = new AtomicLong(0);
     this.metrics = metrics;
   }
