@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-class IndexInfo {
+class IndexSegmentInfo {
   private AtomicLong startOffset;
   private AtomicLong endOffset;
   private File indexFile;
@@ -45,12 +45,12 @@ class IndexInfo {
 
   protected ConcurrentSkipListMap<StoreKey, BlobIndexValue> index = null;
 
-  public IndexInfo(String dataDir,
-                   long startOffset,
-                   StoreKeyFactory factory,
-                   int keySize,
-                   int valueSize,
-                   StoreConfig config) {
+  public IndexSegmentInfo(String dataDir,
+                          long startOffset,
+                          StoreKeyFactory factory,
+                          int keySize,
+                          int valueSize,
+                          StoreConfig config) {
     // create a new file with the start offset
     indexFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Index_File_Name_Suffix);
     bloomFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
@@ -68,7 +68,7 @@ class IndexInfo {
     numberOfItems = new AtomicInteger(0);
   }
 
-  public IndexInfo(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config)
+  public IndexSegmentInfo(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config)
           throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -407,7 +407,7 @@ public class BlobPersistentIndex {
   private StoreKeyFactory factory;
   private StoreConfig config;
   protected Scheduler scheduler;
-  protected ConcurrentSkipListMap<Long, IndexInfo> indexes = new ConcurrentSkipListMap<Long, IndexInfo>();
+  protected ConcurrentSkipListMap<Long, IndexSegmentInfo> indexes = new ConcurrentSkipListMap<Long, IndexSegmentInfo>();
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   public static final Short version = 0;
@@ -459,7 +459,7 @@ public class BlobPersistentIndex {
         // read into memory
         if (i < indexFiles.length - 2)
           map = true;
-        IndexInfo info = new IndexInfo(indexFiles[i], map, factory, config);
+        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config);
         logger.info("Loaded index {}", indexFiles[i]);
         indexes.put(info.getStartOffset(), info);
       }
@@ -484,12 +484,12 @@ public class BlobPersistentIndex {
   public void addToIndex(BlobIndexEntry entry, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollOverIndex(entry)) {
-      IndexInfo info = new IndexInfo(dataDir,
-                                     entry.getValue().getOffset(),
-                                     factory,
-                                     entry.getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes,
-                                     config);
+      IndexSegmentInfo info = new IndexSegmentInfo(dataDir,
+                                                   entry.getValue().getOffset(),
+                                                   factory,
+                                                   entry.getKey().sizeInBytes(),
+                                                   BlobIndexValue.Index_Value_Size_In_Bytes,
+                                                   config);
       info.addEntry(entry, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
@@ -501,12 +501,12 @@ public class BlobPersistentIndex {
   public void addToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
     if (needToRollOverIndex(entries.get(0))) {
-      IndexInfo info = new IndexInfo(dataDir,
-                                     entries.get(0).getValue().getOffset(),
-                                     factory,
-                                     entries.get(0).getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes,
-                                     config);
+      IndexSegmentInfo info = new IndexSegmentInfo(dataDir,
+                                                   entries.get(0).getValue().getOffset(),
+                                                   factory,
+                                                   entries.get(0).getKey().sizeInBytes(),
+                                                   BlobIndexValue.Index_Value_Size_In_Bytes,
+                                                   config);
       info.addEntries(entries, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
@@ -528,8 +528,8 @@ public class BlobPersistentIndex {
   }
 
   protected BlobIndexValue findKey(StoreKey key) throws StoreException {
-    ConcurrentNavigableMap<Long, IndexInfo> descendMap = indexes.descendingMap();
-    for (Map.Entry<Long, IndexInfo> entry : descendMap.entrySet()) {
+    ConcurrentNavigableMap<Long, IndexSegmentInfo> descendMap = indexes.descendingMap();
+    for (Map.Entry<Long, IndexSegmentInfo> entry : descendMap.entrySet()) {
       logger.trace("Searching index with start offset {}", entry.getKey());
       BlobIndexValue value = entry.getValue().find(key);
       if (value != null) {
@@ -620,18 +620,18 @@ public class BlobPersistentIndex {
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
-          IndexInfo currentInfo = indexes.lastEntry().getValue();
+          IndexSegmentInfo currentInfo = indexes.lastEntry().getValue();
           long fileEndPointer = currentInfo.getEndOffset();
 
           // flush the log to ensure everything till the fileEndPointer is flushed
           log.flush();
 
           long lastOffset = indexes.lastEntry().getKey();
-          IndexInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
+          IndexSegmentInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
           while (prevInfo != null && !prevInfo.isMapped()) {
             prevInfo.writeIndexToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
-            Map.Entry<Long, IndexInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
+            Map.Entry<Long, IndexSegmentInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
           currentInfo.writeIndexToFile(fileEndPointer);

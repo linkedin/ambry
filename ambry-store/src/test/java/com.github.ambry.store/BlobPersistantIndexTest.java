@@ -73,12 +73,12 @@ public class BlobPersistantIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      IndexInfo info = new IndexInfo(tempFile().getParent(),
-                                     0,
-                                     factory,
-                                     blobId1.sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes,
-                                     config);
+      IndexSegmentInfo info = new IndexSegmentInfo(tempFile().getParent(),
+                                                   0,
+                                                   factory,
+                                                   blobId1.sizeInBytes(),
+                                                   BlobIndexValue.Index_Value_Size_In_Bytes,
+                                                   config);
       BlobIndexValue value = new BlobIndexValue(1000, 0, (byte)0);
       info.addEntry(new BlobIndexEntry(blobId1, value), 1000);
       value = new BlobIndexValue(1000, 1000, (byte)0);
@@ -116,7 +116,7 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
 
       info.writeIndexToFile(3000);
-      IndexInfo infonew = new IndexInfo(info.getFile(), false, factory, config);
+      IndexSegmentInfo infonew = new IndexSegmentInfo(info.getFile(), false, factory, config);
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
       Assert.assertEquals(infonew.find(blobId1).getOffset(), 0);
       Assert.assertEquals(infonew.find(blobId2).getSize(), 1000);
