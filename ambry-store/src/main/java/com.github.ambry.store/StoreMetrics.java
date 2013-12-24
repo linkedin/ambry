@@ -19,6 +19,6 @@ public class StoreMetrics extends MetricsHelper {
     writes = newCounter(storeName + "-Writes");
     reads = newCounter(storeName + "-Reads");
     deletes = newCounter(storeName + "-Deletes");
-    overflowWriteError = new Counter(storeName + "-OverflowWriteError");
+    overflowWriteError = newCounter(storeName + "-OverflowWriteError");
   }
 }

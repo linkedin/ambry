@@ -41,6 +41,7 @@ public class StoreManager {
   }
 
   public void start() throws StoreException {
+    logger.info("Starting store manager");
     // iterate through the replicas for this node and create the stores
     for (ReplicaId replica : replicas) {
       // check if mount path exist
@@ -52,6 +53,7 @@ public class StoreManager {
       store.start();
       stores.put(replica.getPartitionId(), store);
     }
+    logger.info("Starting store manager complete");
   }
 
   public Store getStore(PartitionId id) {

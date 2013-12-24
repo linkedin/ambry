@@ -46,6 +46,7 @@ public class Counter implements Metric {
     return name;
   }
 
+  @Override
   public void visit(MetricsVisitor visitor) {
     visitor.counter(this);
   }

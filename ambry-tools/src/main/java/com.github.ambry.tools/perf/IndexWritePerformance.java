@@ -97,7 +97,7 @@ public class IndexWritePerformance {
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
-      final AtomicLong totalTimeTaken = new AtomicLong(0);
+      final AtomicLong totalTimeTakenInNs = new AtomicLong(0);
       final AtomicLong totalWrites = new AtomicLong(0);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
@@ -130,11 +130,11 @@ public class IndexWritePerformance {
         System.out.println("Creating index folder " + indexFile.getAbsolutePath());
         writer.write("logdir-" + indexFile.getAbsolutePath() + "\n");
         indexWithMetrics.add(new BlobIndexMetrics(indexFile.getAbsolutePath(), s, log, enableVerboseLogging,
-                                                  totalWrites, totalTimeTaken, totalWrites, config, writer,
+                                                  totalWrites, totalTimeTakenInNs, totalWrites, config, writer,
                                                   factory));
       }
 
-      final CountDownLatch latch = new CountDownLatch(4);
+      final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -143,9 +143,9 @@ public class IndexWritePerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             latch.await();
-            System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get() +
+            System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get() +
                     " Nano Seconds  Average time taken per write " +
-                    ((double)totalWrites.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+                    ((double)totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
           }
           catch (Exception e) {
             System.out.println("Error while shutting down " + e);
@@ -206,7 +206,7 @@ public class IndexWritePerformance {
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
           // Does not matter what partition we use
           PartitionId partition = map.getWritablePartitionIdAt(0);
-          indexesWithMetrics.get(indexToUse).AddToIndexRandomData(new BlobId(partition));
+          indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobId(partition));
           throttler.maybeThrottle(1);
         }
       }

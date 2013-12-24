@@ -98,6 +98,7 @@ public class VerifiableProperties {
       v = Double.parseDouble(getProperty(name));
     else
       v = defaultVal;
+    // use big decimal for double comparison
     BigDecimal startDecimal = new BigDecimal(start);
     BigDecimal endDecimal = new BigDecimal(end);
     BigDecimal value = new BigDecimal(v);

@@ -110,7 +110,7 @@ public class ServerWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
-      final CountDownLatch latch = new CountDownLatch(4);
+      final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {

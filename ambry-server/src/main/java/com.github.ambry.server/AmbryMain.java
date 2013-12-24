@@ -23,7 +23,6 @@ public class AmbryMain {
     }
 
     try {
-      // need to create config
       Properties props = Utils.loadProps(args[0]);
       VerifiableProperties vprops = new VerifiableProperties(props);
       ClusterMap clusterMap = new ClusterMapManager(args[1], args[2]);

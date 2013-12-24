@@ -19,6 +19,8 @@ public class BlobIndexValue {
   public static int Index_Value_Size_In_Bytes = Blob_Size_In_Bytes + Offset_Size_In_Bytes +
                                                 Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes;
 
+  public static final int TTL_Infinite = -1;
+
   private ByteBuffer value;
 
   public BlobIndexValue(ByteBuffer value) {
@@ -41,7 +43,7 @@ public class BlobIndexValue {
   }
 
   public BlobIndexValue(long size, long offset) {
-    this(size, offset, (byte)0, -1);
+    this(size, offset, (byte)0, TTL_Infinite);
   }
 
   public long getSize() {

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-class IndexInfo {
+class IndexSegmentInfo {
   private AtomicLong startOffset;
   private AtomicLong endOffset;
   private File indexFile;
@@ -45,15 +45,15 @@ class IndexInfo {
 
   protected ConcurrentSkipListMap<StoreKey, BlobIndexValue> index = null;
 
-  public IndexInfo(String dataDir,
-                   long startOffset,
-                   StoreKeyFactory factory,
-                   int keySize,
-                   int valueSize,
-                   StoreConfig config) {
+  public IndexSegmentInfo(String dataDir,
+                          long startOffset,
+                          StoreKeyFactory factory,
+                          int keySize,
+                          int valueSize,
+                          StoreConfig config) {
     // create a new file with the start offset
-    indexFile = new File(dataDir, startOffset + "_" + BlobPersistantIndex.Index_File_Name_Suffix);
-    bloomFile = new File(dataDir, startOffset + "_" + BlobPersistantIndex.Bloom_File_Name_Suffix);
+    indexFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Index_File_Name_Suffix);
+    bloomFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
     this.rwLock = new ReentrantReadWriteLock();
     this.startOffset = new AtomicLong(startOffset);
     this.endOffset = new AtomicLong(-1);
@@ -63,12 +63,12 @@ class IndexInfo {
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
-    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfElements,
+    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
                                           config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
   }
 
-  public IndexInfo(File indexFile, boolean map, StoreKeyFactory factory, StoreConfig config)
+  public IndexSegmentInfo(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config)
           throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -81,11 +81,11 @@ class IndexInfo {
       sizeWritten = new AtomicLong(0);
       numberOfItems = new AtomicInteger(0);
       mapped = new AtomicBoolean(false);
-      if (map) {
+      if (isMapped) {
         map(false);
         // Load the bloom filter for this index
         // We need to load the bloom filter only for mapped indexes
-        bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistantIndex.Bloom_File_Name_Suffix);
+        bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
         CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
         DataInputStream stream = new DataInputStream(crcBloom);
         bloomFilter = FilterFactory.deserialize(stream);
@@ -100,9 +100,9 @@ class IndexInfo {
       }
       else {
         index = new ConcurrentSkipListMap<StoreKey, BlobIndexValue>();
-        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfElements,
+        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
                                               config.storeIndexBloomMaxFalsePositiveProbability);
-        bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistantIndex.Bloom_File_Name_Suffix);
+        bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
         try {
           readFromFile(indexFile);
         }
@@ -155,7 +155,11 @@ class IndexInfo {
       else {
         // check bloom filter first
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
-          logger.trace("Found in bloom filter for index with start offset {} and for key {} ", startOffset.get(), keyToFind);
+          logger.trace(bloomFilter == null ?
+                       "Bloom filter empty. Searching file with start offset {} and for key {} " :
+                       "Found in bloom filter for index with start offset {} and for key {} ",
+                       startOffset.get(),
+                       keyToFind);
           // binary search on the mapped file
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
@@ -199,7 +203,7 @@ class IndexInfo {
     return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
   }
 
-  public void AddEntry(BlobIndexEntry entry, long fileEndOffset) throws StoreException {
+  public void addEntry(BlobIndexEntry entry, long fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
       if (mapped.get())
@@ -222,7 +226,7 @@ class IndexInfo {
     }
   }
 
-  public void AddEntries(ArrayList<BlobIndexEntry> entries, long fileEndOffset) throws StoreException {
+  public void addEntries(ArrayList<BlobIndexEntry> entries, long fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
       if (mapped.get())
@@ -281,7 +285,7 @@ class IndexInfo {
         rwLock.readLock().lock();
 
         // write the current version
-        writer.writeShort(BlobPersistantIndex.version);
+        writer.writeShort(BlobPersistentIndex.version);
         // write key and value size for this index
         writer.writeInt(this.keySize);
         writer.writeInt(this.valueSize);
@@ -353,7 +357,6 @@ class IndexInfo {
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
     DataInputStream stream = new DataInputStream(crcStream);
-    BlobIndexValue prevValue = null;
     try {
       short version = stream.readShort();
       switch (version) {
@@ -368,7 +371,6 @@ class IndexInfo {
             index.put(key, blobValue);
             // regenerate the bloom filter for in memory indexes
             bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
-            prevValue = blobValue;
           }
           long endOffset = stream.readLong();
           this.endOffset.set(endOffset);
@@ -391,9 +393,11 @@ class IndexInfo {
 }
 
 /**
- * A persistant version of the index
- */
-public class BlobPersistantIndex {
+ * A persistent index implementation that is responsible for adding and modifying index entries,
+ * recovering an index from the log and commit and recover index to disk . This class
+ * is not thread safe and expects the caller to do appropriate synchronization.
+ **/
+public class BlobPersistentIndex {
 
   private BlobJournal indexJournal;
   private long maxInMemoryIndexSizeInBytes;
@@ -403,10 +407,9 @@ public class BlobPersistantIndex {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
-  private static final int TTL_Infinite = -1;
   private StoreConfig config;
   protected Scheduler scheduler;
-  protected ConcurrentSkipListMap<Long, IndexInfo> indexes = new ConcurrentSkipListMap<Long, IndexInfo>();
+  protected ConcurrentSkipListMap<Long, IndexSegmentInfo> indexes = new ConcurrentSkipListMap<Long, IndexSegmentInfo>();
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   public static final Short version = 0;
@@ -418,7 +421,7 @@ public class BlobPersistantIndex {
     }
   }
 
-  public BlobPersistantIndex(String datadir,
+  public BlobPersistentIndex(String datadir,
                              Scheduler scheduler,
                              Log log,
                              StoreConfig config,
@@ -436,6 +439,8 @@ public class BlobPersistantIndex {
         public int compare(File o1, File o2) {
           if (o1 == null || o2 == null)
             throw new NullPointerException("arguments to compare two files is null");
+          // File name pattern for index is offset_name. We extract the offset from
+          // name to compare
           int o1Index = o1.getName().indexOf("_", 0);
           long o1Offset = Long.parseLong(o1.getName().substring(0, o1Index));
           int o2Index = o2.getName().indexOf("_", 0);
@@ -451,9 +456,12 @@ public class BlobPersistantIndex {
 
       for (int i = 0; i < indexFiles.length; i++) {
         boolean map = false;
+        // We map all the indexes except the most recent two indexes.
+        // The recent indexes would go through recovery after they have been
+        // read into memory
         if (i < indexFiles.length - 2)
           map = true;
-        IndexInfo info = new IndexInfo(indexFiles[i], map, factory, config);
+        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config);
         logger.info("Loaded index {}", indexFiles[i]);
         indexes.put(info.getStartOffset(), info);
       }
@@ -467,7 +475,7 @@ public class BlobPersistantIndex {
                               config.storeDataFlushIntervalSeconds,
                               TimeUnit.SECONDS);
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
-      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfElements;
+      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
@@ -477,39 +485,39 @@ public class BlobPersistantIndex {
 
   public void addToIndex(BlobIndexEntry entry, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
-    if (needToRollIndex(entry)) {
-      IndexInfo info = new IndexInfo(dataDir,
-                                     entry.getValue().getOffset(),
-                                     factory,
-                                     entry.getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes,
-                                     config);
-      info.AddEntry(entry, fileEndOffset);
+    if (needToRollOverIndex(entry)) {
+      IndexSegmentInfo info = new IndexSegmentInfo(dataDir,
+                                                   entry.getValue().getOffset(),
+                                                   factory,
+                                                   entry.getKey().sizeInBytes(),
+                                                   BlobIndexValue.Index_Value_Size_In_Bytes,
+                                                   config);
+      info.addEntry(entry, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
     else {
-      indexes.lastEntry().getValue().AddEntry(entry, fileEndOffset);
+      indexes.lastEntry().getValue().addEntry(entry, fileEndOffset);
     }
   }
 
   public void addToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) throws StoreException {
     verifyFileEndOffset(fileEndOffset);
-    if (needToRollIndex(entries.get(0))) {
-      IndexInfo info = new IndexInfo(dataDir,
-                                     entries.get(0).getValue().getOffset(),
-                                     factory,
-                                     entries.get(0).getKey().sizeInBytes(),
-                                     BlobIndexValue.Index_Value_Size_In_Bytes,
-                                     config);
-      info.AddEntries(entries, fileEndOffset);
+    if (needToRollOverIndex(entries.get(0))) {
+      IndexSegmentInfo info = new IndexSegmentInfo(dataDir,
+                                                   entries.get(0).getValue().getOffset(),
+                                                   factory,
+                                                   entries.get(0).getKey().sizeInBytes(),
+                                                   BlobIndexValue.Index_Value_Size_In_Bytes,
+                                                   config);
+      info.addEntries(entries, fileEndOffset);
       indexes.put(info.getStartOffset(), info);
     }
     else {
-      indexes.lastEntry().getValue().AddEntries(entries, fileEndOffset);
+      indexes.lastEntry().getValue().addEntries(entries, fileEndOffset);
     }
   }
 
-  private boolean needToRollIndex(BlobIndexEntry entry) {
+  private boolean needToRollOverIndex(BlobIndexEntry entry) {
     return  indexes.size() == 0 ||
             indexes.lastEntry().getValue().getSizeWritten() >= maxInMemoryIndexSizeInBytes ||
             indexes.lastEntry().getValue().getNumberOfItems() >= maxInMemoryNumElements ||
@@ -517,13 +525,13 @@ public class BlobPersistantIndex {
             indexes.lastEntry().getValue().getValueSize() != BlobIndexValue.Index_Value_Size_In_Bytes;
   }
 
-  public boolean exist(StoreKey key) throws StoreException {
+  public boolean exists(StoreKey key) throws StoreException {
     return findKey(key) != null;
   }
 
   protected BlobIndexValue findKey(StoreKey key) throws StoreException {
-    ConcurrentNavigableMap<Long, IndexInfo> descendMap = indexes.descendingMap();
-    for (Map.Entry<Long, IndexInfo> entry : descendMap.entrySet()) {
+    ConcurrentNavigableMap<Long, IndexSegmentInfo> descendMap = indexes.descendingMap();
+    for (Map.Entry<Long, IndexSegmentInfo> entry : descendMap.entrySet()) {
       logger.trace("Searching index with start offset {}", entry.getKey());
       BlobIndexValue value = entry.getValue().find(key);
       if (value != null) {
@@ -543,7 +551,7 @@ public class BlobPersistantIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
-    indexes.lastEntry().getValue().AddEntry(new BlobIndexEntry(id, value), fileEndOffset);
+    indexes.lastEntry().getValue().addEntry(new BlobIndexEntry(id, value), fileEndOffset);
   }
 
   public void updateTTL(StoreKey id, long ttl, long fileEndOffset) throws StoreException {
@@ -554,7 +562,7 @@ public class BlobPersistantIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setTimeToLive(ttl);
-    indexes.lastEntry().getValue().AddEntry(new BlobIndexEntry(id, value), fileEndOffset);
+    indexes.lastEntry().getValue().addEntry(new BlobIndexEntry(id, value), fileEndOffset);
   }
 
   public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
@@ -567,7 +575,7 @@ public class BlobPersistantIndex {
       logger.error("id {} has been deleted", id);
       throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
     }
-    else if (value.getTimeToLiveInMs() != TTL_Infinite &&
+    else if (value.getTimeToLiveInMs() != BlobIndexValue.TTL_Infinite &&
             SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
@@ -578,7 +586,7 @@ public class BlobPersistantIndex {
   public List<StoreKey> findMissingEntries(List<StoreKey> keys) throws StoreException {
     List<StoreKey> missingEntries = new ArrayList<StoreKey>();
     for (StoreKey key : keys) {
-      if (!exist(key))
+      if (!exists(key))
         missingEntries.add(key);
     }
     return missingEntries;
@@ -614,18 +622,18 @@ public class BlobPersistantIndex {
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
-          IndexInfo currentInfo = indexes.lastEntry().getValue();
+          IndexSegmentInfo currentInfo = indexes.lastEntry().getValue();
           long fileEndPointer = currentInfo.getEndOffset();
 
           // flush the log to ensure everything till the fileEndPointer is flushed
           log.flush();
 
           long lastOffset = indexes.lastEntry().getKey();
-          IndexInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
+          IndexSegmentInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
           while (prevInfo != null && !prevInfo.isMapped()) {
             prevInfo.writeIndexToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
-            Map.Entry<Long, IndexInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
+            Map.Entry<Long, IndexSegmentInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
           currentInfo.writeIndexToFile(fileEndPointer);

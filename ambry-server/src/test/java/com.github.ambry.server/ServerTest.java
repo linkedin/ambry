@@ -106,7 +106,7 @@ public class ServerTest {
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
       catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(false, true);
       }
 
       // get user metadata
@@ -119,7 +119,7 @@ public class ServerTest {
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       }
       catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        Assert.assertEquals(false, true);
       }
       channel.disconnect();
 

@@ -25,7 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- *
+ * Tests the server read performance. Currently only tests
+ * get blob. This feeds of any file that has all the entries
+ * for the blob ids that needs to be queried. Optionally, it
+ * can also check the content from another source and validate
+ * the contents in the server
  */
 public class ServerReadPerformance {
   public static void main(String args[]) {
@@ -91,12 +95,14 @@ public class ServerReadPerformance {
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
+      final CountDownLatch latch = new CountDownLatch(1);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
           try {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
+            latch.await();
             System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
                     " Nano Seconds  Average time taken per read " +
                     ((double)totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
@@ -107,53 +113,59 @@ public class ServerReadPerformance {
         }
       });
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
-      Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
-      String line;
-      Coordinator coordinator = new AmbryCoordinator(map);
-      while ((line = br.readLine()) != null) {
-        String[] id = line.split("\\|");
-        System.out.println("calling get on " + id[1]);
-        long startTime = System.currentTimeMillis();
-        BlobOutput output = coordinator.getBlob(id[1]);
-        System.out.println("Time taken to get " + (System.currentTimeMillis() - startTime));
-        if (output != null) {
-          long sizeRead = 0;
-          byte[] outputBuffer = new byte[(int)output.getSize()];
-          ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-          while (sizeRead < output.getSize()) {
-            streamOut.write(output.getStream().read());
-            sizeRead++;
-          }
-          // compare from source if present
-          if (id.length == 4) {
-            System.out.println("Comparing with source " + id[3]);
-            File fileSource = new File(id[3]);
-            FileInputStream fileInputStream = null;
-            try {
-              fileInputStream = new FileInputStream(fileSource);
-              int sourceSize = (int)output.getSize();
-              byte [] sourceBuffer = new byte[sourceSize];
-              fileInputStream.read(sourceBuffer);
-              if (Arrays.equals(sourceBuffer, outputBuffer)) {
-                System.out.println("Equals");
+      try {
+        Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
+        String line;
+        Coordinator coordinator = new AmbryCoordinator(map);
+        while ((line = br.readLine()) != null && shutdown.get() != true) {
+          String[] id = line.split("\\|");
+          System.out.println("calling get on " + id[1]);
+          long startTime = System.currentTimeMillis();
+          BlobOutput output = coordinator.getBlob(id[1]);
+          System.out.println("Time taken to get " + (System.currentTimeMillis() - startTime));
+          if (output != null) {
+            long sizeRead = 0;
+            byte[] outputBuffer = new byte[(int)output.getSize()];
+            ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
+            while (sizeRead < output.getSize()) {
+              streamOut.write(output.getStream().read());
+              sizeRead++;
+            }
+            // compare from source if present
+            if (id.length == 4) {
+              System.out.println("Comparing with source " + id[3]);
+              File fileSource = new File(id[3]);
+              FileInputStream fileInputStream = null;
+              try {
+                fileInputStream = new FileInputStream(fileSource);
+                int sourceSize = (int)output.getSize();
+                byte [] sourceBuffer = new byte[sourceSize];
+                fileInputStream.read(sourceBuffer);
+                if (Arrays.equals(sourceBuffer, outputBuffer)) {
+                  System.out.println("Equals");
+                }
+                else {
+                  System.out.println("Not equals");
+                }
+
               }
-              else {
-                System.out.println("Not equals");
+              catch (Exception e) {
+                System.out.println("Error while reading from source file " + e);
+              }
+              finally {
+                if (fileInputStream != null) {
+                  fileInputStream.close();
+                }
               }
 
             }
-            catch (Exception e) {
-              System.out.println("Error while reading from source file " + e);
-            }
-            finally {
-              if (fileInputStream != null) {
-                fileInputStream.close();
-              }
-            }
-
+            throttler.maybeThrottle(1);
           }
-          throttler.maybeThrottle(1);
         }
+        latch.countDown();
+      }
+      finally {
+        br.close();
       }
     }
     catch (Exception e) {

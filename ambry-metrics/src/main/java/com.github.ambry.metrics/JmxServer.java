@@ -71,7 +71,7 @@ public class JmxServer {
   }
 
   public JmxServer() throws RemoteException, MalformedURLException, IOException {
-    this(0);
+    this(0); // use default registry port
   }
 
   // Check if the system property has been set and, if not, set it to what we need. Warn otherwise.

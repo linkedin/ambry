@@ -28,8 +28,7 @@ public class BlobId extends StoreKey {
   }
 
   public BlobId(String id, ClusterMap map)  throws IOException {
-    //this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseBase64Binary(id)))), map);
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseHexBinary(id)))), map);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseBase64Binary(id)))), map);
   }
 
   public BlobId(DataInputStream stream, ClusterMap map) throws IOException {
@@ -89,8 +88,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public String toString() {
-    //return DatatypeConverter.printBase64Binary(toBytes());
-    return DatatypeConverter.printHexBinary(toBytes());
+    return DatatypeConverter.printBase64Binary(toBytes());
   }
 
   @Override

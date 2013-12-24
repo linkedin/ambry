@@ -18,7 +18,7 @@ import java.io.IOException;
 public class BlobStore implements Store {
 
   private Log log;
-  private BlobPersistantIndex index;
+  private BlobPersistentIndex index;
   private final String dataDir;
   private final Scheduler scheduler;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -48,42 +48,45 @@ public class BlobStore implements Store {
 
   @Override
   public void start() throws StoreException {
-    if (started)
-      throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
-    try {
-      // Check if the data dir exist. If it does not exist, create it
-      File dataFile = new File(dataDir);
-      if (!dataFile.exists()) {
-        logger.info("data directory {} not found. creating it",  dataDir);
-        boolean created = dataFile.mkdir();
-        if (!created)
-          throw new StoreException("Failed to create directory for data dir " + dataDir,
+    synchronized (lock) {
+      if (started)
+        throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
+      try {
+        // Check if the data dir exist. If it does not exist, create it
+        File dataFile = new File(dataDir);
+        if (!dataFile.exists()) {
+          logger.info("data directory {} not found. creating it",  dataDir);
+          boolean created = dataFile.mkdir();
+          if (!created)
+            throw new StoreException("Failed to create directory for data dir " + dataDir,
+                                     StoreErrorCodes.Initialization_Error);
+        }
+        if(!dataFile.isDirectory() || !dataFile.canRead())
+          throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
                                    StoreErrorCodes.Initialization_Error);
-      }
-      if(!dataFile.isDirectory() || !dataFile.canRead())
-        throw new StoreException(dataFile.getAbsolutePath() + " is either not a directory or is not readable",
-                                 StoreErrorCodes.Initialization_Error);
 
-      // lock the directory
-      fileLock = new FileLock(new File(dataDir, LockFile));
-      if(!fileLock.tryLock())
-        throw new StoreException("Failed to acquire lock on file " + dataDir +
-                                 ". Another process or thread is using this directory.",
-                                 StoreErrorCodes.Initialization_Error);
-      log = new Log(dataDir, metrics, capacityGB);
-      index = new BlobPersistantIndex(dataDir, scheduler, log, config, factory);
-      // set the log end offset to the recovered offset from the index after initializing it
-      log.setLogEndOffset(index.getCurrentEndOffset());
-      started = true;
-    }
-    catch (Exception e) {
-      logger.error("Error while starting store for directory {} with exception {}",dataDir, e);
-      throw new StoreException("Error while starting store for dir " + dataDir, StoreErrorCodes.Initialization_Error);
+        // lock the directory
+        fileLock = new FileLock(new File(dataDir, LockFile));
+        if(!fileLock.tryLock())
+          throw new StoreException("Failed to acquire lock on file " + dataDir +
+                                   ". Another process or thread is using this directory.",
+                                   StoreErrorCodes.Initialization_Error);
+        log = new Log(dataDir, metrics, capacityGB);
+        index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory);
+        // set the log end offset to the recovered offset from the index after initializing it
+        log.setLogEndOffset(index.getCurrentEndOffset());
+        started = true;
+      }
+      catch (Exception e) {
+        logger.error("Error while starting store for directory {} with exception {}",dataDir, e);
+        throw new StoreException("Error while starting store for dir " + dataDir, StoreErrorCodes.Initialization_Error);
+      }
     }
   }
 
   @Override
   public StoreInfo get(List<? extends StoreKey> ids) throws StoreException {
+    // allows concurrent gets
     try {
       checkStarted();
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
@@ -109,7 +112,7 @@ public class BlobStore implements Store {
       try {
         // if any of the keys alreadys exist in the store, we fail
         for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-          if (index.exist(info.getStoreKey())) {
+          if (index.exists(info.getStoreKey())) {
             throw new StoreException("key {} already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
           }
         }
@@ -119,8 +122,9 @@ public class BlobStore implements Store {
         ArrayList<BlobIndexEntry> indexEntries = new ArrayList<BlobIndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
           BlobIndexValue value = new BlobIndexValue(info.getSize(),
-                                                                        writeStartOffset,
-                                                                        (byte)0, info.getTimeToLiveInMs());
+                                                    writeStartOffset,
+                                                    (byte)0,
+                                                    info.getTimeToLiveInMs());
           BlobIndexEntry entry = new BlobIndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();

@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Reads from a file and populates the indexes and issues
- * random read requests and tracks performance
+ * random read requests and tracks performance . This test reads 10000 ids
+ * at a time from the index write performance log and does random reads from that list.
+ * After 2 minutes it replaces the input with the next 10000 set.
  */
 public class IndexReadPerformance {
 
@@ -137,7 +139,7 @@ public class IndexReadPerformance {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
-      final CountDownLatch latch = new CountDownLatch(4);
+      final CountDownLatch latch = new CountDownLatch(numberOfReaders);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -176,7 +178,7 @@ public class IndexReadPerformance {
         public void run() {
           populateIds(br, hashes);
         }
-      }, 0, 420, TimeUnit.SECONDS);
+      }, 0, 120, TimeUnit.SECONDS);
 
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfReaders];
@@ -255,7 +257,7 @@ public class IndexReadPerformance {
             int idToUse = new Random().nextInt(index.getIds().size());
             String idToLookup = (String)index.getIds().toArray()[idToUse];
 
-            if (!index.getIndex().exist(new BlobId(idToLookup, map)))
+            if (!index.getIndex().exists(new BlobId(idToLookup, map)))
               System.out.println("Error id not found in index " + idToLookup);
             else
               System.out.println("found id " + idToLookup);

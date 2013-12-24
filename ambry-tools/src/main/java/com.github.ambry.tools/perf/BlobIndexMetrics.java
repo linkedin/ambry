@@ -12,7 +12,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
-class BlobIndexMetrics extends BlobPersistantIndex {
+class BlobIndexMetrics extends BlobPersistentIndex {
   private Object lock = new Object();
   private boolean enableVerboseLogging;
   private AtomicLong totalWrites;
@@ -35,13 +35,11 @@ class BlobIndexMetrics extends BlobPersistantIndex {
     this.datadir = datadir;
   }
 
-  public void AddToIndexRandomData(BlobId id) throws StoreException {
+  public void addToIndexRandomData(BlobId id) throws StoreException {
 
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
       long size = new Random().nextInt(10000);
-      if (size < 0)
-        size = size * -1;
       BlobIndexEntry entry = new BlobIndexEntry(id, new BlobIndexValue(size, lastOffsetUsed.get(), (byte)1, 1000));
       lastOffsetUsed.addAndGet(size);
       long offset = getCurrentEndOffset();
@@ -66,7 +64,7 @@ class BlobIndexMetrics extends BlobPersistantIndex {
       System.out.println("number of indexes created " + indexes.size());
   }
 
-  public void AddToIndexRandomData(List<BlobId> ids) throws StoreException {
+  public void addToIndexRandomData(List<BlobId> ids) throws StoreException {
     ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>(ids.size());
     for (int i = 0; i < list.size(); i++) {
       BlobIndexEntry entry = new BlobIndexEntry(ids.get(i), new BlobIndexValue(1000, 1000, (byte)1, 1000));
@@ -88,10 +86,10 @@ class BlobIndexMetrics extends BlobPersistantIndex {
 
   }
 
-  public boolean exist(StoreKey key) throws StoreException {
+  public boolean exists(StoreKey key) throws StoreException {
     System.out.println("data dir " + datadir + " searching id " + key.toString());
     long startTimeMs = System.currentTimeMillis();
-    boolean exist = super.exist(key);
+    boolean exist = super.exists(key);
     long endTimeMs = System.currentTimeMillis();
     System.out.println("Time to find an entry exist - " + (endTimeMs - startTimeMs));
     totalTimeTaken.addAndGet(endTimeMs - startTimeMs);

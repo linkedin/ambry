@@ -61,7 +61,7 @@ public class AmbryServer {
 
       jvmMetrics.start();
 
-      // create the configs
+      logger.info("creating configs");
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
       MetricsConfig metricsConfig = new MetricsConfig(properties);
@@ -73,7 +73,6 @@ public class AmbryServer {
       List<String> reporterFactoryNames = metricsConfig.getMetricsReporterFactoryClassNames();
 
       try {
-
         for (String factoryClass : reporterFactoryNames) {
           MetricsReporterFactory factory = Utils.getObj(factoryClass);
           MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Data Node", metricsConfig);
@@ -85,7 +84,7 @@ public class AmbryServer {
         logger.error("Error while creating reporters. Logging and proceeding " + e);
       }
       scheduler.startup();
-      // check if node exist in clustermap
+      logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null)
         throw new IllegalArgumentException("The node is not present in the clustermap. Failing to start the datanode");
@@ -131,11 +130,13 @@ public class AmbryServer {
       if (storeManager != null) {
         storeManager.shutdown();
       }
-      shutdownLatch.countDown();
       logger.info("shutdown completed");
     }
     catch (Exception e) {
       logger.error("Error while shutting down server {}", e);
+    }
+    finally {
+      shutdownLatch.countDown();
     }
   }
 
