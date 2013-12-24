@@ -12,16 +12,12 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
   public DeleteMessageFormatInputStream(StoreKey key) {
     int headerSize = MessageFormat.getCurrentVersionHeaderSize();
     int systemMetadataSize = MessageFormat.getCurrentVersionDeleteRecordSize();
-    int idSize = StoreKey_Size_Field_Size_In_Bytes + key.sizeInBytes();
-    buffer = ByteBuffer.allocate(headerSize +
-            idSize +
-            systemMetadataSize);
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + systemMetadataSize);
     MessageFormat.serializeCurrentVersionHeader(buffer,
-            systemMetadataSize,
-            headerSize + idSize,
-            MessageFormat.Message_Header_Invalid_Relative_Offset,
-            MessageFormat.Message_Header_Invalid_Relative_Offset);
-    buffer.putInt(key.sizeInBytes());
+                                                systemMetadataSize,
+                                                headerSize + key.sizeInBytes(),
+                                                MessageFormat.Message_Header_Invalid_Relative_Offset,
+                                                MessageFormat.Message_Header_Invalid_Relative_Offset);
     buffer.put(key.toBytes());
     // set the message as deleted
     MessageFormat.serializeCurrentVersionDeleteRecord(buffer, true);

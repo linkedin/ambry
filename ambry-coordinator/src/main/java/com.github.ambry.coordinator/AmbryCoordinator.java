@@ -1,5 +1,9 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -13,28 +17,84 @@ import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.shared.TTLResponse;
+import java.io.IOException;
 
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.*;
+
+class ConnectionPool {
+  String host;
+  int port;
+  Object lock;
+  Queue<BlockingChannel> channel = new LinkedList<BlockingChannel>();
+
+  public ConnectionPool(String host, int port) {
+    this.host = host;
+    this.port = port;
+    this.lock = new Object();
+  }
+
+  public BlockingChannel getConnection() throws IOException {
+    synchronized (lock) {
+      if (channel.size() > 0)
+        return channel.remove();
+      else {
+        BlockingChannel resource = new BlockingChannel(host, port, 10000, 10000, 10000);
+        resource.connect();
+        return resource;
+      }
+    }
+  }
+
+  public void returnConnection(BlockingChannel connection) {
+    synchronized (lock) {
+      channel.add(connection);
+    }
+  }
+
+  public void clean() {
+    for (BlockingChannel ch : channel) {
+      ch.disconnect();
+    }
+  }
+}
 
 public class AmbryCoordinator implements Coordinator {
+
+  ClusterMap map;
+  Random r = new Random();
+  HashMap<String, ConnectionPool> pool;
+
+  public AmbryCoordinator( ClusterMap map) {
+    this.map = map;
+    pool = new HashMap<String, ConnectionPool>();
+  }
 
   @Override
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) {
     try {
       // put blob
-      PutRequest putRequest = new PutRequest(1, 1, "client1", new BlobId("id1"), userMetadata, blob, blobProperties);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      channel.connect();
+      PartitionId partition = getRandomPartition();
+      System.out.println("here1");
+      DataNodeId node = partition.getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
+      PutRequest putRequest = new PutRequest(1, "client1", new BlobId(partition), userMetadata, blob, blobProperties);
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      return "id1";
+      resource.returnConnection(channel);
+      return putRequest.getBlobId().toString();
     }
     catch (Exception e) {
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
+      System.out.println("error " + e);
     }
     return null; // this will not happen in the actual implementation
   }
@@ -43,12 +103,19 @@ public class AmbryCoordinator implements Coordinator {
   public void deleteBlob(String id) throws BlobNotFoundException {
     try {
       // delete blob
-      DeleteRequest deleteRequest = new DeleteRequest(1, 1, "client1", new BlobId("id1"));
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      channel.connect();
+      BlobId blobId = new BlobId(id, map);
+      DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobId);
+      DataNodeId node = blobId.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
       channel.send(deleteRequest);
       InputStream deleteResponseStream = channel.receive();
       DeleteResponse response = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
+      resource.returnConnection(channel);
     }
     catch (Exception e) {
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
@@ -59,12 +126,19 @@ public class AmbryCoordinator implements Coordinator {
   public void updateTTL(String id, long newTTL) throws BlobNotFoundException {
     try {
       // update ttl of the blob
-      TTLRequest ttlRequest = new TTLRequest(1, 1, "client1", new BlobId("id1"), newTTL);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      channel.connect();
+      BlobId blobId = new BlobId(id, map);
+      TTLRequest ttlRequest = new TTLRequest(1, "client1", blobId, newTTL);
+      DataNodeId node = blobId.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
       channel.send(ttlRequest);
       InputStream ttlResponseStream = channel.receive();
       TTLResponse response = TTLResponse.readFrom(new DataInputStream(ttlResponseStream));
+      resource.returnConnection(channel);
     }
     catch (Exception e) {
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
@@ -72,14 +146,24 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   @Override
-  public InputStream getBlob(String blobId) throws BlobNotFoundException {
+  public BlobOutput getBlob(String blobId) throws BlobNotFoundException {
     // get blob
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.Data);
-      InputStream data = MessageFormat.deserializeData(response.getInputStream());
-      return data;
+      BlobId id = new BlobId(blobId, map);
+      DataNodeId node = id.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
+      GetResponse response = doGetResponse(id, MessageFormatFlags.Data, channel);
+      BlobOutput output = MessageFormat.deserializeData(response.getInputStream());
+      resource.returnConnection(channel);
+      return output;
     }
     catch (Exception e) {
+      System.out.println("error " + e);
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
     }
     return null; // this will never happen once Ambry Exception is defined
@@ -88,8 +172,17 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public ByteBuffer getUserMetadata(String blobId) throws BlobNotFoundException {
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.UserMetadata);
+      BlobId id = new BlobId(blobId, map);
+      DataNodeId node = id.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
+      GetResponse response = doGetResponse(id, MessageFormatFlags.UserMetadata, channel);
       ByteBuffer userMetadata = MessageFormat.deserializeMetadata(response.getInputStream());
+      resource.returnConnection(channel);
       return userMetadata;
     }
     catch (Exception e) {
@@ -101,8 +194,17 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public BlobProperties getBlobProperties(String blobId) throws BlobNotFoundException {
     try {
-      GetResponse response = doGetResponse(blobId, MessageFormatFlags.BlobProperties);
+      BlobId id = new BlobId(blobId, map);
+      DataNodeId node = id.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
+      GetResponse response = doGetResponse(id, MessageFormatFlags.BlobProperties, channel);
       BlobProperties properties = MessageFormat.deserializeBlobProperties(response.getInputStream());
+      resource.returnConnection(channel);
       return properties;
     }
     catch (Exception e) {
@@ -111,20 +213,33 @@ public class AmbryCoordinator implements Coordinator {
     return null; // this will never happen once Ambry Exception is defined
   }
 
-  private GetResponse doGetResponse(String blobId, MessageFormatFlags flag) {
+  private GetResponse doGetResponse(BlobId blobId, MessageFormatFlags flag, BlockingChannel channel) {
     try {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      ids.add(new BlobId(blobId));
-      GetRequest getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, 1, ids);
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      ids.add(blobId);
+      GetRequest getRequest = new GetRequest(blobId.getPartition(), 1, "clientid2", flag, ids);
       channel.send(getRequest);
       InputStream stream = channel.receive();
-      GetResponse response = GetResponse.readFrom(new DataInputStream(stream));
+      GetResponse response = GetResponse.readFrom(new DataInputStream(stream), map);
       return response;
     }
     catch (Exception e) {
+      System.out.println("error " + e);
       // need to retry on errors by choosing another partition. If it still fails, throw AmbryException
     }
     return null; // this will never happen once Ambry Exception is defined
+  }
+
+  public void shutdown() {
+    for (Map.Entry<String, ConnectionPool> entry : pool.entrySet()) {
+      entry.getValue().clean();
+    }
+  }
+
+  // Temporary method to generate random partition
+  private PartitionId getRandomPartition() {
+    long count = map.getWritablePartitionIdsCount();
+    int index = r.nextInt((int)count);
+    return map.getWritablePartitionIdAt(index);
   }
 }

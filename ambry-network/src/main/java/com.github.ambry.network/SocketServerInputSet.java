@@ -18,6 +18,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
 
   private ByteBuffer buffer = null;
   private ByteBufferInputStream stream;
+  private ByteBuffer sizeBuffer;
   private int sizeToRead;        // need to change to long
   private int sizeRead;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -25,6 +26,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
   public SocketServerInputSet() {
     sizeToRead = 0;
     sizeRead = 0;
+    sizeBuffer = ByteBuffer.allocate(8);
   }
 
   @Override
@@ -40,18 +42,16 @@ public class SocketServerInputSet extends InputStream implements Receive {
   @Override
   public void readFrom(ReadableByteChannel channel) throws IOException {
     if (buffer == null) {
-      ByteBuffer sizeBuffer = ByteBuffer.allocate(8);
-      int read = 0;
-      while (read < 8) {
-        read += channel.read(sizeBuffer);
+      channel.read(sizeBuffer);
+      if (sizeBuffer.position() == sizeBuffer.capacity()) {
+        sizeBuffer.flip();
+        // for now we support only intmax size. We need to extend it to streaming
+        sizeToRead = (int)sizeBuffer.getLong();
+        buffer = ByteBuffer.allocate(sizeToRead - 8);
+        sizeRead += 8;
       }
-      sizeBuffer.flip();
-      // for now we support only intmax size. We need to extend it to streaming
-      sizeToRead = (int)sizeBuffer.getLong();
-      buffer = ByteBuffer.allocate(sizeToRead - 8);
-      sizeRead += 8;
     }
-    if (sizeRead < sizeToRead) {
+    if (buffer != null && sizeRead < sizeToRead) {
       sizeRead += channel.read(buffer);
       if (sizeRead == sizeToRead) {
         buffer.flip();

@@ -46,7 +46,7 @@ public class MessageFormatSend implements Send {
     }
   }
 
-  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag) throws IOException, UnknownMessageFormatException {
+  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag) throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
     totalSizeToWrite = 0;
@@ -58,7 +58,7 @@ public class MessageFormatSend implements Send {
 
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
   // based on the type of data requested as indicated by the flags
-  private void calculateOffsets() throws IOException, UnknownMessageFormatException {
+  private void calculateOffsets() throws IOException, MessageFormatException {
     // get size
     int messageCount = readSet.count();
     // for each message, determine the offset and size that needs to be sent based on the flag
@@ -90,6 +90,7 @@ public class MessageFormatSend implements Send {
                             MessageFormat.MessageHeader_Format_V1.getHeaderSize() - MessageFormat.Version_Field_Size_In_Bytes);
             header.flip();
             MessageFormat.MessageHeader_Format_V1 headerFormat = new MessageFormat.MessageHeader_Format_V1(header);
+            headerFormat.verifyCrc();
 
             if (flag == MessageFormatFlags.BlobProperties) {
               int systemMetadataSize = headerFormat.getUserMetadataRelativeOffset() - headerFormat.getSystemMetadataRelativeOffset();
@@ -123,7 +124,8 @@ public class MessageFormatSend implements Send {
             }
             break;
           default:
-            throw new UnknownMessageFormatException("Version not known while reading message - " + headerVersion.getShort());
+            throw new MessageFormatException("Version not known while reading message - " + headerVersion.getShort(),
+                                             MessageFormatErrorCodes.Unknown_Format_Version);
         }
       }
     }
@@ -135,6 +137,10 @@ public class MessageFormatSend implements Send {
       long written = readSet.writeTo(currentWriteIndex, channel,
                                      infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
                                      infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
+      logger.trace("writeindex {} relativeOffset {} maxSize {} written {}",
+                   currentWriteIndex,
+                   infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
+                   infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex, written);
       sizeWritten += written;
       sizeWrittenFromCurrentIndex += written;
       logger.trace("size written in this loop : {} size written till now : {}", written, sizeWritten);

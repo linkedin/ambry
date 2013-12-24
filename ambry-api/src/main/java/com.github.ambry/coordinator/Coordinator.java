@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 
+import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 
 import java.io.InputStream;
@@ -43,7 +44,7 @@ public interface Coordinator {
    * @throws
    * BlobNotFoundException If the blob is not found for the given id
    */
-  InputStream getBlob(String blobId) throws BlobNotFoundException;
+  BlobOutput getBlob(String blobId) throws BlobNotFoundException;
 
   /**
    * Gets the user metadata that was associated with a given blob during a put.
@@ -62,5 +63,10 @@ public interface Coordinator {
    * BlobNotFoundException If the blob is not found for the given id
    */
   BlobProperties getBlobProperties(String blobId) throws BlobNotFoundException;
+
+  /**
+   * Shutdown the coordinator. Any freeing of resources will be done here on shutdown
+   */
+  void shutdown();
 
 }

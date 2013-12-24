@@ -90,7 +90,13 @@ public class SocketServer implements NetworkServer {
       processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
-    // TODO register the processor threads for notification of responses
+
+    requestResponseChannel.addResponseListener(new ResponseListener() {
+      @Override
+      public void onResponse(int processorId) {
+        processors.get(processorId).wakeup();
+      }
+    });
 
     // start accepting connections
     logger.info("Starting acceptor thread");
@@ -109,7 +115,7 @@ public class SocketServer implements NetworkServer {
         processor.shutdown();
       logger.info("Shutdown completed");
     } catch (Exception e) {
-      // log here
+      logger.error("Error shutting down socket server {}", e);
     }
   }
 }
@@ -237,7 +243,7 @@ class Acceptor extends AbstractServerThread {
       selector.close();
       shutdownComplete();
     } catch (Exception e) {
-      // log
+      logger.error("Error during shutdown of acceptor thread {}", e);
     }
   }
 
@@ -267,8 +273,8 @@ class Acceptor extends AbstractServerThread {
      socketChannel.configureBlocking(false);
      socketChannel.socket().setTcpNoDelay(true);
      socketChannel.socket().setSendBufferSize(sendBufferSize);
-     logger.debug("Accepted connection from {} on {}. sendBufferSize " +
-             "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
+     logger.trace("Accepted connection from {} on {}. sendBufferSize " +
+                  "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
              socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
              socketChannel.socket().getSendBufferSize(), sendBufferSize,
              socketChannel.socket().getReceiveBufferSize(),recvBufferSize);
@@ -329,7 +335,8 @@ class Processor extends AbstractServerThread {
               // handle InvalidRequestException
             }
             catch (Throwable e) {
-              logger.error("closing key on exception {}", e);
+              logger.error("closing key on exception remote host {} exception {}",
+                           ((SocketChannel) key.channel()).getRemoteAddress(), e);
               close(key);
             }
           }
@@ -339,7 +346,7 @@ class Processor extends AbstractServerThread {
       selector.close();
       shutdownComplete();
     } catch (Exception e) {
-      logger.error("Error while shutting down server {}", e);
+      logger.error("Error while shutting down processor thread {}", e);
     }
   }
 
@@ -351,13 +358,10 @@ class Processor extends AbstractServerThread {
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {
         if(curr.getPayload() == null) {
-          // a null response send object indicates that there is no response to send to the client.
-          // In this case, we just want to turn the interest ops to READ to be able to read more pipelined requests
-          // that are sitting in the server's socket buffer
-          logger.trace("Socket server received response and there is nothing to send to the client ");
-          // to trace
-          key.interestOps(SelectionKey.OP_READ);
-          key.attach(null);
+          // We should never need to send an empty response. If the payload is empty, we will assume error
+          // and close the connection
+          logger.trace("Socket server received no response and hence closing the connection");
+          close(key);
         }
         else {
           logger.trace("Socket server received response to send, registering for write: {}", curr);
@@ -429,6 +433,7 @@ class Processor extends AbstractServerThread {
       key.attach(null);
       // explicitly reset interest ops to not READ, no need to wake up the selector just yet
       key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
+      logger.trace("resetting read interest for key for {}", ((SocketChannel) key.channel()).getRemoteAddress());
     }
     else {
       // more reading to be done
@@ -454,7 +459,7 @@ class Processor extends AbstractServerThread {
 
     if(responseSend.isSendComplete()) {
       logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
-      // update metrics
+      // TODO update metrics
       key.attach(null);
       // log trace
       key.interestOps(SelectionKey.OP_READ);

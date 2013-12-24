@@ -1,7 +1,9 @@
 package com.github.ambry.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.InputStream;
-import com.github.ambry.utils.Crc32;
 import java.io.IOException;
 
 /**
@@ -10,6 +12,7 @@ import java.io.IOException;
 public class CrcInputStream extends InputStream {
   private Crc32 crc;
   private InputStream stream;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Create a CrcInputStream using the specified CRC generator
@@ -41,6 +44,18 @@ public class CrcInputStream extends InputStream {
     int ret = stream.read(b, off, len);
     crc.update(b, off, ret);
     return ret;
+  }
+
+  @Override
+  public int available() throws IOException {
+    int available = stream.available();
+    logger.trace("remaining bytes {}", available);
+    return available;
+  }
+
+  @Override
+  public void close() throws IOException {
+    stream.close();
   }
 
   public long getValue() {

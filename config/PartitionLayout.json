@@ -8,7 +8,7 @@
       "replicas": [
         {
           "hostname": "localhost",
-          "mountPath": "/mnt0",
+          "mountPath": "/tmp",
           "port": 6667
         }
       ]

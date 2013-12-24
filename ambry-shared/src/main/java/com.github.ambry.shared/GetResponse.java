@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.network.Send;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Utils;
@@ -21,6 +22,8 @@ public class GetResponse extends RequestOrResponse {
   private Send toSend = null;
   private InputStream stream = null;
   private final int messageInfoListSize;
+  private ServerErrorCode error;
+  private static final int Error_Size_InBytes = 2;
 
   private int getMessageInfoListSize() {
     int size = 0;
@@ -40,18 +43,17 @@ public class GetResponse extends RequestOrResponse {
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
     outputBuffer.putInt(messageInfoList.size());
     for (MessageInfo messageInfo : messageInfoList) {
-      outputBuffer.putShort(messageInfo.getStoreKey().sizeInBytes());
       outputBuffer.put(messageInfo.getStoreKey().toBytes());
       outputBuffer.putLong(messageInfo.getSize());
       outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
     }
   }
 
-  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream) throws IOException {
+  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map) throws IOException {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
-      BlobId id = new BlobId(Utils.readShortBuffer(stream));
+      BlobId id = new BlobId(stream, map);
       long size = stream.readLong();
       long ttl = stream.readLong();
       messageListInfo.add(new MessageInfo(id, size, ttl));
@@ -59,18 +61,41 @@ public class GetResponse extends RequestOrResponse {
     return messageListInfo;
   }
 
-  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send) {
+  public GetResponse(int correlationId,
+                     String clientId,
+                     List<MessageInfo> messageInfoList,
+                     Send send,
+                     ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.toSend = send;
+    this.error = error;
   }
 
-  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream) {
+  public GetResponse(int correlationId,
+                     String clientId,
+                     List<MessageInfo> messageInfoList,
+                     InputStream stream,
+                     ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.stream = stream;
+    this.error = error;
+  }
+
+  public GetResponse(int correlationId,
+                     String clientId,
+                     ServerErrorCode error) {
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
+    this.error = error;
+    this.messageInfoList = null;
+    this.messageInfoListSize = 0;
+  }
+
+  public ServerErrorCode getError() {
+    return error;
   }
 
   public InputStream getInputStream() {
@@ -81,42 +106,49 @@ public class GetResponse extends RequestOrResponse {
     return messageInfoList;
   }
 
-  public static GetResponse readFrom(DataInputStream stream) throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
+  public static GetResponse readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+    short typeval = stream.readShort();
+    RequestResponseType type = RequestResponseType.values()[typeval];
     if (type != RequestResponseType.GetResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream);
-    // ignoring version for now
-    return new GetResponse(correlationId, clientId, messageInfoList, stream);
+    ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
+    List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream, map);
+    if (error != ServerErrorCode.No_Error)
+      return new GetResponse(correlationId, clientId, error);
+    else
+      // ignoring version for now
+      return new GetResponse(correlationId, clientId, messageInfoList, stream, error);
   }
 
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + messageInfoListSize);
+      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize);
       writeHeader();
+
+      bufferToSend.putShort((short)error.ordinal());
       serializeMessageInfoList(bufferToSend, messageInfoList);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
       channel.write(bufferToSend);
     }
-    if (bufferToSend.remaining() == 0 && !toSend.isSendComplete()) {
+    if (bufferToSend.remaining() == 0 && toSend != null && !toSend.isSendComplete()) {
       toSend.writeTo(channel);
     }
   }
 
   @Override
   public boolean isSendComplete() {
-    return bufferToSend.remaining() == 0 && toSend.isSendComplete();
+    return bufferToSend.remaining() == 0 && (toSend == null || toSend.isSendComplete());
   }
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + messageInfoListSize + toSend.sizeInBytes();
+    return super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize + toSend.sizeInBytes();
   }
 }

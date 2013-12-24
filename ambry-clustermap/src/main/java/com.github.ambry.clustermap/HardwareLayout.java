@@ -71,7 +71,9 @@ public class HardwareLayout {
    */
   public DataNode findDataNode(String hostname, int port) {
     String canonicalHostname = DataNode.getFullyQualifiedDomainName(hostname);
+    logger.info("host to find host {} port {}", canonicalHostname, port);
     for (Datacenter datacenter : datacenters) {
+      logger.info("datacenter {}", datacenter.getName());
       for (DataNode dataNode : datacenter.getDataNodes()) {
         if (dataNode.getHostname().equals(canonicalHostname) && (dataNode.getPort() == port)) {
           return dataNode;

@@ -1,8 +1,10 @@
 package com.github.ambry.store;
 
+import com.github.ambry.metrics.MetricsRegistryMap;
+import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import org.junit.Assert;
 import org.junit.Test;
-import com.github.ambry.utils.ByteBufferOutputStream;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,52 +28,92 @@ public class BlobMessageReadSetTest {
 
   @Test
   public void testMessageRead() throws IOException {
-    BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1);
-    BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1);
-    BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1);
-    List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
-    options.add(0, readOptions1);
-    options.add(1, readOptions2);
-    options.add(2, readOptions3);
     File tempFile = tempFile();
-    RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
-    // preallocate file
-    randomFile.setLength(5000);
-    Log logTest = new Log(tempFile.getParent());
-    byte[] testbuf = new byte[3000];
-    new Random().nextBytes(testbuf);
-    // append to log from byte buffer
-    int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
-    Assert.assertEquals(written, 3000);
-    MessageReadSet readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.sizeInBytes());
-    Assert.assertEquals(readSet.count(), 3);
-    Assert.assertEquals(readSet.sizeInBytes(0), 15);
-    Assert.assertEquals(readSet.sizeInBytes(1), 100);
-    Assert.assertEquals(readSet.sizeInBytes(2), 30);
-    ByteBuffer buf = ByteBuffer.allocate(3000);
-    ByteBufferOutputStream stream = new ByteBufferOutputStream(buf);
-    readSet.writeTo(0, Channels.newChannel(stream), 0, 15);
-    Assert.assertEquals(buf.position(), 15);
-    buf.flip();
-    for (int i = 100; i < 115; i++) {
-      Assert.assertEquals(buf.get(), testbuf[i]);
-    }
+    try {
+      BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1);
+      BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1);
+      BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1);
+      List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
+      options.add(0, readOptions1);
+      options.add(1, readOptions2);
+      options.add(2, readOptions3);
+      RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
+      // preallocate file
+      randomFile.setLength(5000);
+      ReadableMetricsRegistry registry = new MetricsRegistryMap();
+      StoreMetrics metrics = new StoreMetrics("test", registry);
+      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      byte[] testbuf = new byte[3000];
+      new Random().nextBytes(testbuf);
+      // append to log from byte buffer
+      int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
+      Assert.assertEquals(written, 3000);
+      MessageReadSet readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.sizeInBytes());
+      Assert.assertEquals(readSet.count(), 3);
+      Assert.assertEquals(readSet.sizeInBytes(0), 15);
+      Assert.assertEquals(readSet.sizeInBytes(1), 100);
+      Assert.assertEquals(readSet.sizeInBytes(2), 30);
+      ByteBuffer buf = ByteBuffer.allocate(3000);
+      ByteBufferOutputStream stream = new ByteBufferOutputStream(buf);
+      readSet.writeTo(0, Channels.newChannel(stream), 0, 15);
+      Assert.assertEquals(buf.position(), 15);
+      buf.flip();
+      for (int i = 100; i < 115; i++) {
+        Assert.assertEquals(buf.get(), testbuf[i]);
+      }
 
-    buf.flip();
-    readSet.writeTo(0, Channels.newChannel(stream), 5, 1000);
-    Assert.assertEquals(buf.position(), 10);
-    buf.flip();
-    for (int i = 105; i < 115; i++) {
-      Assert.assertEquals(buf.get(), testbuf[i]);
-    }
+      buf.flip();
+      readSet.writeTo(0, Channels.newChannel(stream), 5, 1000);
+      Assert.assertEquals(buf.position(), 10);
+      buf.flip();
+      for (int i = 105; i < 115; i++) {
+        Assert.assertEquals(buf.get(), testbuf[i]);
+      }
 
-    // do similarly for index 2
-    buf.clear();
-    readSet.writeTo(1, Channels.newChannel(stream), 0, 100);
-    Assert.assertEquals(buf.position(), 100);
-    buf.flip();
-    for (int i = 200; i < 300; i++) {
-      Assert.assertEquals(buf.get(), testbuf[i]);
+      // do similarly for index 2
+      buf.clear();
+      readSet.writeTo(1, Channels.newChannel(stream), 0, 100);
+      Assert.assertEquals(buf.position(), 100);
+      buf.flip();
+      for (int i = 200; i < 300; i++) {
+        Assert.assertEquals(buf.get(), testbuf[i]);
+      }
+
+      // verify args
+      readOptions1 = new BlobReadOptions(500, 30, 1);
+      readOptions2 = new BlobReadOptions(100, 15, 1);
+      readOptions3 = new BlobReadOptions(200, 100, 1);
+      options = new ArrayList<BlobReadOptions>(3);
+      options.add(0, readOptions1);
+      options.add(1, readOptions2);
+      options.add(2, readOptions3);
+      try {
+        readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 10);
+        Assert.assertTrue(false);
+      }
+      catch (IllegalArgumentException e) {
+        Assert.assertTrue(true);
+      }
+      readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 1000);
+      try {
+        readSet.sizeInBytes(4);
+        Assert.assertTrue(false);
+      }
+      catch (IndexOutOfBoundsException e) {
+        Assert.assertTrue(true);
+      }
+      try {
+        readSet.writeTo(4, randomFile.getChannel(), 100, 100);
+        Assert.assertTrue(false);
+      }
+      catch (IndexOutOfBoundsException e) {
+        Assert.assertTrue(true);
+      }
+    }
+    finally {
+      tempFile.delete();
+      File logFile = new File(tempFile.getParent(), "log_current");
+      logFile.delete();
     }
   }
 }

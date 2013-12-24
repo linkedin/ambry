@@ -1,12 +1,13 @@
-package com.github.ambry.network;
+package com.github.ambry.server;
+
 
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
+import com.github.ambry.network.Request;
+import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.network.SocketServer;
+import com.github.ambry.shared.*;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.After;
 import org.junit.Test;
@@ -39,7 +40,8 @@ public class SocketServerTest {
   }
 
   @Test
-  public void simpleRequest() throws UnknownHostException, IOException, InterruptedException {
+  public void simpleRequest() throws IOException, InterruptedException {
+    MockClusterMap map = null;
     int correlationId = 1;
     byte [] bufdata = new byte[10];
     new Random().nextBytes(bufdata);
@@ -49,7 +51,11 @@ public class SocketServerTest {
     new Random().nextBytes(bufmetadata);
 
     PutRequest emptyRequest =
-            new PutRequest(0, correlationId, "test", new BlobId("1234"), ByteBuffer.wrap(bufmetadata), stream, new BlobProperties(10, "id"));
+            new PutRequest(correlationId,
+                           "test",
+                           new BlobId(new MockPartitionId()),
+                           ByteBuffer.wrap(bufmetadata), stream,
+                           new BlobProperties(10, "id"));
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
     channel.send(emptyRequest);
@@ -57,12 +63,14 @@ public class SocketServerTest {
     Request request = requestResponseChannel.receiveRequest();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
     Assert.assertEquals(requestStream.readShort(), 0); // read type
-    PutRequest requestFromNetwork = PutRequest.readFrom(requestStream);
+    map = new MockClusterMap();
+    PutRequest requestFromNetwork = PutRequest.readFrom(requestStream, map);
     Assert.assertEquals(1, requestFromNetwork.getVersionId());
-    Assert.assertEquals(0, requestFromNetwork.getPartitionId());
     Assert.assertEquals(correlationId, requestFromNetwork.getCorrelationId());
     Assert.assertEquals("test", requestFromNetwork.getClientId());
-    Assert.assertEquals("1234", new String(requestFromNetwork.getBlobId().toBytes().array()));
+    ByteBuffer partition = ByteBuffer.allocate(8);
+    partition.putLong(1);
+    Assert.assertArrayEquals(partition.array(), requestFromNetwork.getBlobId().getPartition().getBytes());
     Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getUsermetadata().array());
     Assert.assertEquals(10, requestFromNetwork.getDataSize());
     Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());
@@ -80,13 +88,13 @@ public class SocketServerTest {
     }
 
     // send response back and ensure response is received
-    PutResponse response = new PutResponse(1, "clientid1", (short)2);
+    PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);
     requestResponseChannel.sendResponse(response, request);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);
     Assert.assertEquals(responseReplay.getVersionId(), 1);
-    Assert.assertEquals(responseReplay.getError(), 2);
+    Assert.assertEquals(responseReplay.getError(), ServerErrorCode.IO_Error);
   }
 
   /**

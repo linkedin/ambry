@@ -1,5 +1,8 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.Partition;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
@@ -20,21 +23,21 @@ public class GetRequest extends RequestOrResponse {
   private ArrayList<BlobId> ids;
   private int sizeSent;
   private long totalIdSize;
-  private long partitionId;
+  private PartitionId partition;
 
   private static final int MessageFormat_Size_InBytes = 2;
   private static final int Blob_Id_Count_Size_InBytes = 4;
 
-  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, long partitionId, ArrayList<BlobId> ids) {
+  public GetRequest(PartitionId partition, int correlationId, String clientId, MessageFormatFlags flags, ArrayList<BlobId> ids) {
     super(RequestResponseType.GetRequest, Request_Response_Version, correlationId,clientId);
 
     this.flags = flags;
     this.ids = ids;
     this.sizeSent = 0;
-    this.partitionId = partitionId;
+    this.partition = partition;
     totalIdSize = 0;
     for (BlobId id : ids) {
-      totalIdSize += Blob_Id_Size_In_Bytes + id.sizeInBytes();
+      totalIdSize += id.sizeInBytes();
     }
   }
 
@@ -46,27 +49,26 @@ public class GetRequest extends RequestOrResponse {
     return ids;
   }
 
-  public long getPartitionId() {
-    return partitionId;
+  public PartitionId getPartition() {
+    return partition;
   }
 
-  public static GetRequest readFrom(DataInputStream stream) throws IOException {
+  public static GetRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     RequestResponseType type = RequestResponseType.GetRequest;
     Short versionId  = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     MessageFormatFlags messageType = MessageFormatFlags.values()[stream.readShort()];
-    long partition = stream.readLong();
+    PartitionId partitionId = map.getPartitionIdFromStream(stream);
     int blobCount = stream.readInt();
     ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
     while (blobCount > 0) {
-      ByteBuffer blobIdBytes = Utils.readShortBuffer(stream);
-      BlobId id = new BlobId(blobIdBytes);
+      BlobId id = new BlobId(stream, map);
       ids.add(id);
       blobCount--;
     }
     // ignore version for now
-    return new GetRequest(correlationId, clientId, messageType, partition, ids);
+    return new GetRequest(partitionId, correlationId, clientId, messageType, ids);
   }
 
   @Override
@@ -75,12 +77,10 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putShort((short) flags.ordinal());
-      bufferToSend.putLong(partitionId);
+      bufferToSend.put(partition.getBytes());
       bufferToSend.putInt(ids.size());
       for (BlobId id : ids) {
-        ByteBuffer buf = id.toBytes();
-        bufferToSend.putShort(id.sizeInBytes());
-        bufferToSend.put(buf.array());
+        bufferToSend.put(id.toBytes());
       }
       bufferToSend.flip();
     }
@@ -97,8 +97,8 @@ public class GetRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + error
-    return super.sizeInBytes() + MessageFormat_Size_InBytes + PartitionId_Size_In_Bytes +
+    // header + messageformat type + partitionId + blobids
+    return super.sizeInBytes() + MessageFormat_Size_InBytes + partition.getBytes().length +
            Blob_Id_Count_Size_InBytes + totalIdSize;
   }
 }

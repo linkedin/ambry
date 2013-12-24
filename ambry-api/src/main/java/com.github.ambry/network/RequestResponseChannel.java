@@ -2,7 +2,9 @@ package com.github.ambry.network;
 
 /**
  * RequestResponse Channel used by the network layer to queue new requests and
- * send responses over the network from the channel
+ * send responses over the network from the channel. This is used by the server
+ * and hence cannot be used to receive response or open a connection as they would
+ * be client related operations.
  */
 public interface RequestResponseChannel {
 
@@ -27,6 +29,13 @@ public interface RequestResponseChannel {
    * @throws InterruptedException
    */
   public void sendRequest(Request request) throws InterruptedException;
+
+  /**
+   * Closes the connection on which the original request came
+   * @param request The request whose connection needs to be closed
+   * @throws InterruptedException
+   */
+  public void closeConnection(Request request) throws InterruptedException;
 
   /**
    * Shuts down the request response channel

@@ -20,7 +20,7 @@ public class BlockingChannel {
   private final int readTimeoutMs;
   private boolean connected = false;
   private SocketChannel channel = null;
-  private InputStream readChannel = null;
+  public InputStream readChannel = null;
   private GatheringByteChannel writeChannel = null;
   private Object lock = new Object();
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -86,7 +86,7 @@ public class BlockingChannel {
     return connected;
   }
 
-  public void send(Send request) throws ClosedChannelException, IOException {
+  public void send(Send request) throws IOException {
     if(!connected)
       throw new ClosedChannelException();
     while (!request.isSendComplete()) {
@@ -94,7 +94,7 @@ public class BlockingChannel {
     }
   }
 
-  public InputStream receive() throws ClosedChannelException, IOException {
+  public InputStream receive() throws IOException {
     if(!connected)
       throw new ClosedChannelException();
 
