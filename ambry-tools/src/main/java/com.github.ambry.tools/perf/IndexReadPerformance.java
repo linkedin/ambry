@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Reads from a file and populates the indexes and issues
- * random read requests and tracks performance
+ * random read requests and tracks performance . This test reads 10000 ids
+ * at a time from the index write performance log and does random reads from that list.
+ * After 2 minutes it replaces the input with the next 10000 set.
  */
 public class IndexReadPerformance {
 
@@ -176,7 +178,7 @@ public class IndexReadPerformance {
         public void run() {
           populateIds(br, hashes);
         }
-      }, 0, 420, TimeUnit.SECONDS);
+      }, 0, 120, TimeUnit.SECONDS);
 
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfReaders];

@@ -393,8 +393,10 @@ class IndexSegmentInfo {
 }
 
 /**
- * A persistant version of the index
- */
+ * A persistent index implementation that is responsible for adding and modifying index entries,
+ * recovering an index from the log and commit and recover index to disk . This class
+ * is not thread safe and expects the caller to do appropriate synchronization.
+ **/
 public class BlobPersistentIndex {
 
   private BlobJournal indexJournal;

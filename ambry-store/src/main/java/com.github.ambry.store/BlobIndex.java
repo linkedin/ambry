@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The index implementation that is responsible for adding and modifying index entries,
- * recovering an index from the log and commit and recover index to disk
+ * recovering an index from the log and commit and recover index to disk . This class
+ * is not thread safe and expects the caller to do appropriate synchronization.
  */
 public class BlobIndex {
   protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
