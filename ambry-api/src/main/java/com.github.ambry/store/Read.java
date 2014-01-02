@@ -15,4 +15,10 @@ public interface Read {
    * @throws IOException
    */
   void readInto(ByteBuffer buffer , long position) throws IOException;
+
+  /**
+   * Specifies the complete length of the underlying store
+   * @return The complete length of the store represented by this read interface
+   */
+  long totalLength() throws IOException;
 }

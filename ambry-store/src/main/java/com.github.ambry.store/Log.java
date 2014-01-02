@@ -123,5 +123,10 @@ public class Log implements Write, Read {
     }
     fileChannel.read(buffer, position);
   }
+
+  @Override
+  public long totalLength() throws IOException {
+    return fileChannel.size();
+  }
 }
 

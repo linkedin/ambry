@@ -7,6 +7,8 @@ import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelPool;
 import com.github.ambry.shared.BlockingChannelPoolFactory;
@@ -129,7 +131,18 @@ public class AmbryCoordinator implements Coordinator {
 
     BlobId blobId;
     try {
-      blobId = new BlobId(blobIdString, clusterMap);
+      BlobId id = new BlobId(blobId, map);
+      DataNodeId node = id.getPartition().getReplicaIds().get(0).getDataNodeId();
+      ConnectionPool resource = pool.get(node.getHostname() + node.getPort());
+      if (resource == null) {
+        resource = new ConnectionPool(node.getHostname(), node.getPort());
+        pool.put(node.getHostname() + node.getPort(), resource);
+      }
+      BlockingChannel channel = resource.getConnection();
+      GetResponse response = doGetResponse(id, MessageFormatFlags.Blob, channel);
+      BlobOutput output = MessageFormatRecord.deserializeBlob(response.getInputStream());
+      resource.returnConnection(channel);
+      return output;
     }
     catch (IOException e) {
       logger.info("Caller passed in invalid BlobId.");

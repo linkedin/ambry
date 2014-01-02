@@ -5,5 +5,6 @@ package com.github.ambry.messageformat;
  */
 public enum  MessageFormatErrorCodes {
   Data_Corrupt,
+  Header_Constraint_Error,
   Unknown_Format_Version
 }
