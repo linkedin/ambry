@@ -5,8 +5,8 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.DeleteRequest;
@@ -157,8 +157,8 @@ public class AmbryCoordinator implements Coordinator {
         pool.put(node.getHostname() + node.getPort(), resource);
       }
       BlockingChannel channel = resource.getConnection();
-      GetResponse response = doGetResponse(id, MessageFormatFlags.Data, channel);
-      BlobOutput output = MessageFormat.deserializeData(response.getInputStream());
+      GetResponse response = doGetResponse(id, MessageFormatFlags.Blob, channel);
+      BlobOutput output = MessageFormatRecord.deserializeBlob(response.getInputStream());
       resource.returnConnection(channel);
       return output;
     }
@@ -181,7 +181,7 @@ public class AmbryCoordinator implements Coordinator {
       }
       BlockingChannel channel = resource.getConnection();
       GetResponse response = doGetResponse(id, MessageFormatFlags.UserMetadata, channel);
-      ByteBuffer userMetadata = MessageFormat.deserializeMetadata(response.getInputStream());
+      ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(response.getInputStream());
       resource.returnConnection(channel);
       return userMetadata;
     }
@@ -203,7 +203,7 @@ public class AmbryCoordinator implements Coordinator {
       }
       BlockingChannel channel = resource.getConnection();
       GetResponse response = doGetResponse(id, MessageFormatFlags.BlobProperties, channel);
-      BlobProperties properties = MessageFormat.deserializeBlobProperties(response.getInputStream());
+      BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(response.getInputStream());
       resource.returnConnection(channel);
       return properties;
     }

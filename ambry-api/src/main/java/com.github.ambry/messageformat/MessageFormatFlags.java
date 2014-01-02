@@ -6,6 +6,6 @@ package com.github.ambry.messageformat;
 public enum MessageFormatFlags {
   BlobProperties,
   UserMetadata,
-  Data,
+  Blob,
   All
 }

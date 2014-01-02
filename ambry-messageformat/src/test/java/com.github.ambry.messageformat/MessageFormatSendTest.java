@@ -50,14 +50,16 @@ public class MessageFormatSendTest {
       // create one buffer of size 1004
 
       // add header,system metadata, user metadata and data to the buffers
-      ByteBuffer buf1 = ByteBuffer.allocate(1008);
+      ByteBuffer buf1 = ByteBuffer.allocate(1016);
       // fill header
       buf1.putShort((short)1);                    // version
       buf1.putLong(950);                          // total size
       // put relative offsets
-      buf1.putInt(58);                           // system metadata relative offset
-      buf1.putInt(79);                           // user metadata relative offset
-      buf1.putInt(189);                          // data relative offset
+      buf1.putInt(66);                           // blob property relative offset
+      buf1.putInt(-1);
+      buf1.putInt(-1);
+      buf1.putInt(87);                           // user metadata relative offset
+      buf1.putInt(197);                          // data relative offset
       Crc32 crc = new Crc32();
       crc.update(buf1.array(), 0, buf1.position());
       buf1.putLong(crc.getValue());                          // crc
@@ -65,7 +67,7 @@ public class MessageFormatSendTest {
       buf1.putInt(id.length());
       buf1.put(id.getBytes());
 
-      buf1.putShort((short)1); // system metadata version
+      buf1.putShort((short)1); // blob property version
       String attribute1 = "ttl";
       String attribute2 = "del";
       buf1.put(attribute1.getBytes()); // ttl name
@@ -82,12 +84,12 @@ public class MessageFormatSendTest {
       buf1.put(usermetadata);
       buf1.putInt(123);
 
-      buf1.putShort((short)0); // data version
-      buf1.putLong(805);       // data size
-      byte[] data = new byte[805];         // data
+      buf1.putShort((short)0); // blob version
+      buf1.putLong(805);       // blob size
+      byte[] data = new byte[805];         // blob
       new Random().nextBytes(data);
       buf1.put(data);
-      buf1.putInt(123);                    // data crc
+      buf1.putInt(123);                    // blob crc
       buf1.flip();
 
       ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
@@ -96,16 +98,16 @@ public class MessageFormatSendTest {
 
       // get all
       MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All);
-      Assert.assertEquals(send.sizeInBytes(), 1008);
-      ByteBuffer bufresult = ByteBuffer.allocate(1008);
+      Assert.assertEquals(send.sizeInBytes(), 1016);
+      ByteBuffer bufresult = ByteBuffer.allocate(1016);
       WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
       while (!send.isSendComplete()) {
         send.writeTo(channel1);
       }
       Assert.assertArrayEquals(buf1.array(), bufresult.array());
 
-      // get data
-      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Data);
+      // get blob
+      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob);
       Assert.assertEquals(send1.sizeInBytes(), 819);
       bufresult.clear();
       WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -130,7 +132,7 @@ public class MessageFormatSendTest {
         Assert.assertEquals(usermetadata[i - 6], bufresult.array()[i]);
       }
 
-      // get system metadata
+      // get blob properties
       MessageFormatSend send3 = new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties);
       Assert.assertEquals(send3.sizeInBytes(), 21);
       bufresult.clear();

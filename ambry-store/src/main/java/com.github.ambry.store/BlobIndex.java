@@ -44,7 +44,7 @@ public class BlobIndex {
                    StoreKeyFactory factory) throws StoreException  {
     try {
       logEndOffset = new AtomicLong(0);
-      indexJournal = new BlobJournal();
+      //indexJournal = new BlobJournal();
       this.log = log;
       this.factory = factory;
       // check if file exist and recover from it

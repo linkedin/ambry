@@ -101,7 +101,7 @@ public class ServerTest {
       InputStream stream = channel.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        BlobProperties propertyOutput = MessageFormat.deserializeBlobProperties(resp1.getInputStream());
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
@@ -115,7 +115,7 @@ public class ServerTest {
       stream = channel.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        ByteBuffer userMetadataOutput = MessageFormat.deserializeMetadata(resp2.getInputStream());
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       }
       catch (MessageFormatException e) {

@@ -4,12 +4,9 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobPropertySerDe;
-import com.github.ambry.messageformat.MessageFormat;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.BlobIndexValue;
-import com.github.ambry.store.StoreKeyFactory;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -113,25 +110,25 @@ public class DumpData {
         while (true) {
           short version = stream.readShort();
           if (version == 1) {
-            ByteBuffer buffer = ByteBuffer.allocate(MessageFormat.MessageHeader_Format_V1.getHeaderSize());
+            ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             buffer.putShort(version);
             stream.read(buffer.array(), 2, buffer.capacity() - 2);
             buffer.clear();
-            MessageFormat.MessageHeader_Format_V1 header = new MessageFormat.MessageHeader_Format_V1(buffer);
+            MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
             System.out.println(" Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-                    " systemMetadataRelativeOffset " + header.getSystemMetadataRelativeOffset() +
-                    " userMetadataRelativeOffset " + header.getUserMetadataRelativeOffset() +
-                    " dataRelativeOffset " + header.getDataRelativeOffset() +
+                    " blobPropertyRelativeOffset " + header.getBlobPropertyRecordRelativeOffset() +
+                    " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
+                    " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
                     " crc " + header.getCrc());
             // read blob id
             BlobId id = new BlobId(stream, map);
             System.out.println("Id - " + id.toString());
-            BlobProperties props = MessageFormat.deserializeBlobProperties(stream);
+            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
             System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
                     " serviceId " + props.getServiceId());
-            ByteBuffer metadata = MessageFormat.deserializeMetadata(stream);
+            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(stream);
             System.out.println(" Metadata - size " + metadata.capacity());
-            BlobOutput output = MessageFormat.deserializeData(stream);
+            BlobOutput output = MessageFormatRecord.deserializeBlob(stream);
             System.out.println("Blob - size " + output.getSize());
           }
         }
