@@ -34,11 +34,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
     long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
 
-    buffer = ByteBuffer.allocate(headerSize +
-                                 key.sizeInBytes() +
-                                 blobPropertyRecordSize +
-                                 userMetadataSize +
-                                 (int)(blobSize - streamSize - MessageFormatRecord.Crc_Size));
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize +
+                                (int)(blobSize - streamSize - MessageFormatRecord.Crc_Size));
 
     MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer,
                                                                 blobPropertyRecordSize + userMetadataSize + blobSize,

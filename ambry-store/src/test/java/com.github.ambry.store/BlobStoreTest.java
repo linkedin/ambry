@@ -8,8 +8,8 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import junit.framework.Assert;
 import org.junit.Test;
+import org.junit.Assert;
 
 import java.io.File;
 import java.io.IOException;
@@ -67,7 +67,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(null);
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory);
+                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -141,7 +141,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory);
+                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -201,7 +201,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory);
+                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -283,7 +283,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory);
+                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -345,7 +345,6 @@ public class BlobStoreTest {
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
       scheduler.startup();
-      File tempFile = tempFile();
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
@@ -355,7 +354,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory);
+                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -378,6 +377,7 @@ public class BlobStoreTest {
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
 
+
       // close store
       store.shutdown();
 
@@ -397,5 +397,10 @@ public class BlobStoreTest {
       if (map != null)
         map.cleanup();
     }
+  }
+
+  @Test
+  public void storeRecoverTest() {
+
   }
 }

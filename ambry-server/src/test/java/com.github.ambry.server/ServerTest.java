@@ -73,6 +73,7 @@ public class ServerTest {
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
 
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1,
@@ -84,6 +85,7 @@ public class ServerTest {
       channel.send(putRequest2);
       putResponseStream = channel.receive();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1,
@@ -95,7 +97,7 @@ public class ServerTest {
       channel.send(putRequest3);
       putResponseStream = channel.receive();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-
+      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -126,7 +128,6 @@ public class ServerTest {
       catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
-      channel.disconnect();
 
       try {
         // get blob data
@@ -145,6 +146,17 @@ public class ServerTest {
         Assert.assertEquals(false, true);
       }
 
+      // fetch blob that does not exist
+      // get blob properties
+      ids = new ArrayList<BlobId>();
+      partition = new MockPartitionId();
+      ids.add(new BlobId(partition));
+      GetRequest getRequest4 = new GetRequest(partition, 1, "clientid2", MessageFormatFlags.BlobProperties, ids);
+      channel.send(getRequest4);
+      stream = channel.receive();
+      GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      Assert.assertEquals(resp4.getError(), ServerErrorCode.Blob_Not_Found);
+      channel.disconnect();
     }
     catch (Exception e) {
       e.printStackTrace();

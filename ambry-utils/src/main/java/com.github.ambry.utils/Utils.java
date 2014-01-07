@@ -296,10 +296,10 @@ public class Utils {
     return new JSONObject(readStringFromFile(path));
   }
 
-  public static void preAllocateFile(File file, long capacityGB) throws IOException {
+  public static void preAllocateFileIfNeeded(File file, long capacityGB) throws IOException {
     Runtime runtime = Runtime.getRuntime();
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
-      Process process = runtime.exec("fallocate -l " + getBytesFromGB(capacityGB) + " " + file.getAbsolutePath());
+      Process process = runtime.exec("fallocate --keep-size -l " + getBytesFromGB(capacityGB) + " " + file.getAbsolutePath());
       try {
         process.waitFor();
       }
@@ -313,21 +313,12 @@ public class Utils {
       RandomAccessFile rfile = null;
       try {
         rfile = new RandomAccessFile(file, "rw");
-        rfile.setLength(capacityGB);
-      }
+     }
       finally {
         if (rfile != null)
           rfile.close();
       }
     }
-  }
-
-  public static boolean checkFileExistWithGivenSize(File file, long size) {
-    // TODO temporary conversion for linux till we fix capacityGB to bytes
-    if (System.getProperty("os.name").toLowerCase().startsWith("linux"))
-      size = getBytesFromGB(size);
-    // if the file exist, check size is equal to capacity
-    return file.exists() && file.length() == size;
   }
 
   public static long getBytesFromGB(long sizeInGB) {

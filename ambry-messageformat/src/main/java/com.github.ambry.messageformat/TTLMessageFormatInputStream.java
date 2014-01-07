@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
 public class TTLMessageFormatInputStream extends MessageFormatInputStream {
 
   public TTLMessageFormatInputStream(StoreKey key, long timeToLiveInMs) throws MessageFormatException {
-    if (timeToLiveInMs < 0) {
+    if (timeToLiveInMs < BlobProperties.Infinite_TTL) {
       logger.error("Invalid TTL {}", timeToLiveInMs);
       throw new IllegalArgumentException("Invalid TTL " + timeToLiveInMs);
     }
