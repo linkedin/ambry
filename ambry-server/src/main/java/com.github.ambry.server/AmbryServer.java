@@ -6,6 +6,7 @@ import com.github.ambry.config.MetricsConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobRecovery;
 import com.github.ambry.metrics.JmxServer;
 import com.github.ambry.metrics.JvmMetrics;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -92,7 +93,7 @@ public class AmbryServer {
       StoreKeyFactory factory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       networkServer = new SocketServer(networkConfig);
       networkServer.start();
-      storeManager = new StoreManager(storeConfig, scheduler, registryMap, clusterMap.getReplicaIds(nodeId), factory);
+      storeManager = new StoreManager(storeConfig, scheduler, registryMap, clusterMap.getReplicaIds(nodeId), factory, new BlobRecovery());
       storeManager.start();
       requests = new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap);
       requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);

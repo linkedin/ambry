@@ -48,7 +48,7 @@ public class BlobMessageReadSetTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 3000);
-      MessageReadSet readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.sizeInBytes());
+      MessageReadSet readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getLogEndOffset());
       Assert.assertEquals(readSet.count(), 3);
       Assert.assertEquals(readSet.sizeInBytes(0), 15);
       Assert.assertEquals(readSet.sizeInBytes(1), 100);

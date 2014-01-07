@@ -31,21 +31,25 @@ public class GetResponse extends RequestOrResponse {
     int fieldSize = 8;
     int listcountSize = 4;
     size += listcountSize;
-    for (MessageInfo messageInfo : messageInfoList) {
-      size += keySize;
-      size += messageInfo.getStoreKey().sizeInBytes();
-      size += fieldSize;
-      size += fieldSize;
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        size += keySize;
+        size += messageInfo.getStoreKey().sizeInBytes();
+        size += fieldSize;
+        size += fieldSize;
+      }
     }
     return size;
   }
 
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
-    outputBuffer.putInt(messageInfoList.size());
-    for (MessageInfo messageInfo : messageInfoList) {
-      outputBuffer.put(messageInfo.getStoreKey().toBytes());
-      outputBuffer.putLong(messageInfo.getSize());
-      outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
+    outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        outputBuffer.put(messageInfo.getStoreKey().toBytes());
+        outputBuffer.putLong(messageInfo.getSize());
+        outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
+      }
     }
   }
 
@@ -91,7 +95,7 @@ public class GetResponse extends RequestOrResponse {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
     this.error = error;
     this.messageInfoList = null;
-    this.messageInfoListSize = 0;
+    this.messageInfoListSize = getMessageInfoListSize();
   }
 
   public ServerErrorCode getError() {
@@ -149,6 +153,6 @@ public class GetResponse extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize + toSend.sizeInBytes();
+    return super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize + (toSend == null ? 0 : toSend.sizeInBytes());
   }
 }

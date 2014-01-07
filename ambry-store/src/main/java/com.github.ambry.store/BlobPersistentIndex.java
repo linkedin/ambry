@@ -92,7 +92,8 @@ class IndexSegmentInfo {
         long crcValue = crcBloom.getValue();
         if (crcValue != stream.readLong()) {
           // TODO metrics
-          // TODO recreate the filter part of recovery
+          // we don't recover the filter. we just by pass the filter. Crc corrections will be done
+          // by the scrubber
           bloomFilter = null;
           logger.error("Error validating crc for bloom filter for {}", bloomFile.getAbsolutePath());
         }
@@ -107,9 +108,11 @@ class IndexSegmentInfo {
           readFromFile(indexFile);
         }
         catch (StoreException e) {
-          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure) {
+          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure ||
+              e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
+            // we just log the error here and retain the index so far created.
+            // subsequent recovery process will add the missed out entries
             logger.error("Error while reading from index {}", e);
-            // do recovery
           }
           else
             throw e;
@@ -199,7 +202,7 @@ class IndexSegmentInfo {
   }
 
   private StoreKey getKeyAt(ByteBuffer mmap, int index) throws IOException {
-    mmap.position(Version_Size + Key_Size + Value_Size + (index * (keySize + valueSize)));
+    mmap.position(Version_Size + Key_Size + Value_Size + Log_End_Offset_Size + (index * (keySize + valueSize)));
     return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
   }
 
@@ -286,9 +289,10 @@ class IndexSegmentInfo {
 
         // write the current version
         writer.writeShort(BlobPersistentIndex.version);
-        // write key and value size for this index
+        // write key, value size and file end pointer for this index
         writer.writeInt(this.keySize);
         writer.writeInt(this.valueSize);
+        writer.writeLong(fileEndPointer);
 
         int numOfEntries = 0;
         // write the entries
@@ -298,7 +302,6 @@ class IndexSegmentInfo {
           numOfEntries++;
         }
         prevNumOfEntriesWritten = numOfEntries;
-        writer.writeLong(fileEndPointer);
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
 
@@ -331,6 +334,7 @@ class IndexSegmentInfo {
         case 0:
           this.keySize = mmap.getInt();
           this.valueSize = mmap.getInt();
+          this.endOffset.set(mmap.getLong());
           break;
         default:
           throw new StoreException("Unknown version in index file", StoreErrorCodes.Index_Version_Error);
@@ -363,17 +367,19 @@ class IndexSegmentInfo {
         case 0:
           this.keySize = stream.readInt();
           this.valueSize = stream.readInt();
-          while (stream.available() > (Crc_Size + Log_End_Offset_Size)) {
+          this.endOffset.set(stream.readLong());
+          while (stream.available() > Crc_Size) {
             StoreKey key = factory.getStoreKey(stream);
             byte[] value = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
             stream.read(value);
             BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
-            index.put(key, blobValue);
-            // regenerate the bloom filter for in memory indexes
-            bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+            // ignore entries that have offsets outside the log end offset that this index represents
+            if (blobValue.getOffset() < endOffset.get()) {
+              index.put(key, blobValue);
+              // regenerate the bloom filter for in memory indexes
+              bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+            }
           }
-          long endOffset = stream.readLong();
-          this.endOffset.set(endOffset);
           long crc = crcStream.getValue();
           if (crc != stream.readLong())
             throw new StoreException("Crc check does not match", StoreErrorCodes.Index_Creation_Failure);
@@ -425,7 +431,8 @@ public class BlobPersistentIndex {
                              Scheduler scheduler,
                              Log log,
                              StoreConfig config,
-                             StoreKeyFactory factory) throws StoreException {
+                             StoreKeyFactory factory,
+                             MessageRecovery recovery) throws StoreException {
     try {
       this.scheduler = scheduler;
       this.log = log;
@@ -466,7 +473,18 @@ public class BlobPersistentIndex {
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
-      // get last index info and recover index by reading log here
+
+      // perform recovery if required
+      if (indexes.size() > 0) {
+        IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
+        Map.Entry<Long, IndexSegmentInfo> entry = indexes.lowerEntry(lastSegment.getStartOffset());
+        if (entry != null) {
+          recover(entry, lastSegment.getStartOffset(), recovery);
+        }
+        // recover last segment
+        recover(indexes.lastEntry(), log.sizeInBytes(), recovery);
+      }
+
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
       this.scheduler.schedule("index persistor",
@@ -480,6 +498,40 @@ public class BlobPersistentIndex {
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
       throw new StoreException("Error while creating index " + e.getMessage(), StoreErrorCodes.Index_Creation_Failure);
+    }
+  }
+
+  private void recover(Map.Entry<Long, IndexSegmentInfo> entry, long endOffset, MessageRecovery recovery)
+          throws StoreException, IOException {
+    logger.info("Performing recovery on index with start offset {}", entry.getValue().getStartOffset());
+    // fix the start offset in the log for recovery.
+    long startOffsetForRecovery = entry.getValue().getEndOffset() == -1 ?
+                                  entry.getValue().getStartOffset() :
+                                  entry.getValue().getEndOffset();
+    List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
+    long runningOffset = startOffsetForRecovery;
+    for (MessageInfo info : messagesRecovered) {
+      BlobIndexValue value = findKey(info.getStoreKey());
+      if (value != null) {
+        logger.info("Msg already exist with key {}", info.getStoreKey());
+        if (info.isDeleted())
+          value.setFlag(BlobIndexValue.Flags.Delete_Index);
+        else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite)
+          value.setTimeToLive(BlobIndexValue.TTL_Infinite);
+        else
+          throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
+        entry.getValue().addEntry(new BlobIndexEntry(info.getStoreKey(), value), value.getOffset() + value.getSize());
+        logger.info("Added message with key {} size {} ttl {} deleted {}",
+                info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
+      }
+      else {
+        BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getTimeToLiveInMs());
+        entry.getValue().addEntry(new BlobIndexEntry(info.getStoreKey(), newValue),
+                startOffsetForRecovery + info.getSize());
+        logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
+                info.getStoreKey(), info.getSize(), info.getTimeToLiveInMs(), info.isDeleted());
+      }
+      startOffsetForRecovery += info.getSize();
     }
   }
 
@@ -623,7 +675,7 @@ public class BlobPersistentIndex {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
           IndexSegmentInfo currentInfo = indexes.lastEntry().getValue();
-          long fileEndPointer = currentInfo.getEndOffset();
+          long fileEndPointer = log.getLogEndOffset();
 
           // flush the log to ensure everything till the fileEndPointer is flushed
           log.flush();
@@ -631,6 +683,12 @@ public class BlobPersistentIndex {
           long lastOffset = indexes.lastEntry().getKey();
           IndexSegmentInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
           while (prevInfo != null && !prevInfo.isMapped()) {
+            if (prevInfo.getEndOffset() > fileEndPointer) {
+              String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
+                               " greater than the log end offset " + fileEndPointer;
+              logger.error(message);
+              throw new StoreException(message, StoreErrorCodes.IOError);
+            }
             prevInfo.writeIndexToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
             Map.Entry<Long, IndexSegmentInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
