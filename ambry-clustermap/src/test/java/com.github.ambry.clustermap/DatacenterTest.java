@@ -38,7 +38,7 @@ class TestDatacenter extends Datacenter {
  */
 public class DatacenterTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000;
+  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
 
   private static int dataNodeCount = 6;
 

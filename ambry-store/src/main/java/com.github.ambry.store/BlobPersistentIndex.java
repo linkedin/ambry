@@ -379,6 +379,9 @@ class IndexSegmentInfo {
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
             }
+            else
+              logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
+                      endOffset.get(), key);
           }
           long crc = crcStream.getValue();
           if (crc != stream.readLong())
@@ -503,11 +506,11 @@ public class BlobPersistentIndex {
 
   private void recover(Map.Entry<Long, IndexSegmentInfo> entry, long endOffset, MessageRecovery recovery)
           throws StoreException, IOException {
-    logger.info("Performing recovery on index with start offset {}", entry.getValue().getStartOffset());
     // fix the start offset in the log for recovery.
     long startOffsetForRecovery = entry.getValue().getEndOffset() == -1 ?
                                   entry.getValue().getStartOffset() :
                                   entry.getValue().getEndOffset();
+    logger.info("Performing recovery on index with start offset {} and end offset {}", startOffsetForRecovery, endOffset);
     List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
     long runningOffset = startOffsetForRecovery;
     for (MessageInfo info : messagesRecovered) {

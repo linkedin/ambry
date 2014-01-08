@@ -39,13 +39,13 @@ class TestDisk extends Disk {
 public class DiskTest {
   @Test
   public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100);
+    JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
 
     Disk testDisk = new TestDisk(jsonObject);
 
     assertEquals(testDisk.getMountPath(), "/mnt1");
     assertEquals(testDisk.getHardwareState(), HardwareState.AVAILABLE);
-    assertEquals(testDisk.getCapacityGB(), 100);
+    assertEquals(testDisk.getCapacityGB(), 100 * 1024 * 1024 * 1024L);
     assertEquals(testDisk.toJSONObject().toString(), jsonObject.toString());
     assertEquals(testDisk, new TestDisk(testDisk.toJSONObject()));
   }
@@ -63,20 +63,20 @@ public class DiskTest {
   public void validation() throws JSONException {
     try {
       // Null DataNode
-      new Disk(null, TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100));
+      new Disk(null, TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
       fail("Construction of Disk should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
     }
 
     // Bad mount path
-    failValidation(TestUtils.getJsonDisk("", HardwareState.AVAILABLE, 100));
+    failValidation(TestUtils.getJsonDisk("", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
 
     // Bad capacity (too small)
     failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 0));
 
     // Bad capacity (too big)
-    failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 1024 * 1024 * 1024 * 1024));
+    failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
   }
 
   // TODO: Add tests of disk for complete hardware map. E.g., make sure getHWState works that reasons about datanode state.

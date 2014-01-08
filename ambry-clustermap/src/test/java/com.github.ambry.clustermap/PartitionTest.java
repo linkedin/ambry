@@ -19,7 +19,7 @@ public class PartitionTest {
   @Test
   public void basics() throws JSONException {
     int replicaCount = 6;
-    int replicaCapacityGB = 100;
+    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
 
     TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
     JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(thl.getIndependentDisks(replicaCount));
@@ -44,7 +44,7 @@ public class PartitionTest {
   @Test
   public void validation() throws JSONException {
     int replicaCount = 6;
-    int replicaCapacityGB = 100;
+    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
 
     TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
     JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(thl.getIndependentDisks(replicaCount));
@@ -55,7 +55,7 @@ public class PartitionTest {
     failValidation(thl.getHardwareLayout(), jsonObject);
 
     // Bad replica capacity GB (too big)
-    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, 1024*1024*1024, jsonReplicas);
+    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, 1024*1024*1024*1024*1024*1024L, jsonReplicas);
     failValidation(thl.getHardwareLayout(), jsonObject);
 
     // Multiple Replica on same Disk.

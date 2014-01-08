@@ -71,10 +71,10 @@ public class Log implements Write, Read {
   public int appendFrom(ByteBuffer buffer) throws IOException {
     if (currentWriteOffset.get() + buffer.remaining() > capacityGB) {
       metrics.overflowWriteError.inc(1);
-      logger.error("Error trying to append to log from buffer since new data size {} exceeds log size {}",
-                   buffer.remaining(), currentWriteOffset.get());
+      logger.error("Error trying to append to log from buffer since new data size {} exceeds total log size {}",
+                   buffer.remaining(), capacityGB);
       throw new IllegalArgumentException("Error trying to append to log from buffer since new data size " +
-                                         buffer.remaining() + "exceeds log size " + currentWriteOffset.get());
+                                         buffer.remaining() + " exceeds total log size " + capacityGB);
     }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
@@ -87,10 +87,10 @@ public class Log implements Write, Read {
   public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
     if (currentWriteOffset.get() + size > capacityGB) {
       metrics.overflowWriteError.inc(1);
-      logger.error("Error trying to append to log from channel since new data size {} exceeds log size {}",
-                   size, currentWriteOffset.get());
+      logger.error("Error trying to append to log from channel since new data size {} exceeds total log size {}",
+                   size, capacityGB);
       throw new IllegalArgumentException("Error trying to append to log from channel since new data size " +
-                                         size + "exceeds log size " + currentWriteOffset.get());
+                                         size + "exceeds total log size " + capacityGB);
     }
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
     currentWriteOffset.addAndGet(bytesWritten);
@@ -113,11 +113,11 @@ public class Log implements Write, Read {
 
   @Override
   public void readInto(ByteBuffer buffer , long position) throws IOException {
-    if (currentWriteOffset.get() < position || (position + buffer.remaining() > currentWriteOffset.get())) {
+    if (sizeInBytes() < position || (position + buffer.remaining() > sizeInBytes())) {
       logger.error("Error trying to read outside the log range. log end position {} input buffer size {}",
-                   currentWriteOffset.get(), buffer.remaining());
+                   sizeInBytes(), buffer.remaining());
       throw new IllegalArgumentException("Error trying to read outside the log range. log end position " +
-                                         currentWriteOffset.get() + " input buffer size " + buffer.remaining());
+                                         sizeInBytes() + " input buffer size " + buffer.remaining());
     }
     fileChannel.read(buffer, position);
   }

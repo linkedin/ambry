@@ -20,8 +20,8 @@ import java.util.Set;
  */
 public class Partition extends PartitionId {
 
-  private static final long MinReplicaCapacityGB = 1;
-  private static final long MaxReplicaCapacityGB = 1024 * 10; // 10 TB
+  private static final long MinReplicaCapacityGB = 1 * 1024 * 1024 * 1024L;
+  private static final long MaxReplicaCapacityGB = 10995116277760L; // 10 TB
   private static final int Partition_Size_In_Bytes = 8;
 
   private Long id;

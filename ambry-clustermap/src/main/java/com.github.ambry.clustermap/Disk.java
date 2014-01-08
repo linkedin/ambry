@@ -12,8 +12,8 @@ import org.slf4j.LoggerFactory;
  */
 public class Disk {
   // Hard-code disk capacity limits in GB for validation
-  private static final long MinCapacityGB = 10;
-  private static final long MaxCapacityGB = 1024 * 1024; // 1 PB
+  private static final long MinCapacityGB = 10 * 1024 * 1024 * 1024L;
+  private static final long MaxCapacityGB = 1024 * 1024 * 1024 * 1024L; // 1 PB
 
   private DataNode dataNode;
   private String mountPath;

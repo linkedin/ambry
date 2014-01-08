@@ -102,7 +102,7 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
 
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 0);
-    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100);
+    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
     PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(0);
     assertEquals(partitionId.getReplicaIds().size(), 6);
@@ -111,7 +111,7 @@ public class ClusterMapManagerTest {
   @Test
   public void bestEffortAllocation() throws JSONException, IOException {
     int replicaCountPerDataCenter = 2;
-    long replicaCapacityGB = 100;
+    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
@@ -162,22 +162,22 @@ public class ClusterMapManagerTest {
       }
     }
 
-    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100);
+    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
 
     // Confirm 100GB has been used on 6 distinct DataNodes / Disks.
     assertEquals(clusterMapManager.getRawCapacityGB(), raw);
-    assertEquals(clusterMapManager.getAllocatedCapacityGB(), 6 * 100);
-    assertEquals(clusterMapManager.getFreeCapacityGB(), free - (6 * 100));
+    assertEquals(clusterMapManager.getAllocatedCapacityGB(), 6 * 100 * 1024 * 1024 * 1024L);
+    assertEquals(clusterMapManager.getFreeCapacityGB(), free - (6 * 100 * 1024 * 1024 * 1024L));
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         long dataNodeFree = clusterMapManager.getFreeCapacityGB(dataNode);
         assertTrue(dataNodeFree <= testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount());
-        assertTrue(dataNodeFree >= testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount() - 100);
+        assertTrue(dataNodeFree >= testHardwareLayout.getDiskCapacityGB() * testHardwareLayout.getDiskCount() - (100 * 1024 * 1024 * 1024L));
         for (Disk disk : dataNode.getDisks()) {
           long diskFree = clusterMapManager.getFreeCapacityGB(disk);
           assertTrue(diskFree <= testHardwareLayout.getDiskCapacityGB());
-          assertTrue(diskFree >= testHardwareLayout.getDiskCapacityGB() - 100);
+          assertTrue(diskFree >= testHardwareLayout.getDiskCapacityGB() - (100 * 1024 * 1024 * 1024L));
         }
       }
     }
