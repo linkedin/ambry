@@ -250,9 +250,9 @@ public class BlobPersistantIndexTest {
       final MockId blobId5 = new MockId("id5");
 
       byte flags = 3;
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0, flags, 12345));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 1000, flags, 12567));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 2000, flags, 12567));
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(3000, 0, flags, 12345));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(1000, 3000, flags, 12567));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(1000, 4000, flags, 12567));
       index.addToIndex(entry1, 3000);
       index.addToIndex(entry2, 4000);
       index.addToIndex(entry3, 5000);
@@ -265,8 +265,8 @@ public class BlobPersistantIndexTest {
       BlobIndexValue value2 = indexNew.getValue(blobId2);
       BlobIndexValue value3 = indexNew.getValue(blobId3);
       Assert.assertEquals(value1.getOffset(), 0);
-      Assert.assertEquals(value2.getOffset(), 1000);
-      Assert.assertEquals(value3.getOffset(), 2000);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
       indexNew.close();
 
       // create a new index, persist, add more entries and fail. ensure new index restore
@@ -276,16 +276,16 @@ public class BlobPersistantIndexTest {
       config = new StoreConfig(new VerifiableProperties(props));
       indexNew = new MockIndex(logFile, scheduler, log, config, factory);
       log.setLogEndOffset(5000);
-      indexNew.addToIndex(new BlobIndexEntry(blobId4, new BlobIndexValue(400, 6000, 12657)), 6000);
-      indexNew.addToIndex(new BlobIndexEntry(blobId5, new BlobIndexValue(500, 7000, 12657)), 7000);
+      indexNew.addToIndex(new BlobIndexEntry(blobId4, new BlobIndexValue(1000, 5000, 12657)), 6000);
+      indexNew.addToIndex(new BlobIndexEntry(blobId5, new BlobIndexValue(1000, 6000, 12657)), 7000);
       indexNew.close();
       indexNew = new MockIndex(logFile, scheduler, log, config, factory);
       value1 = indexNew.getValue(blobId1);
       value2 = indexNew.getValue(blobId2);
       value3 = indexNew.getValue(blobId3);
       Assert.assertEquals(value1.getOffset(), 0);
-      Assert.assertEquals(value2.getOffset(), 1000);
-      Assert.assertEquals(value3.getOffset(), 2000);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
       BlobIndexValue value4 = indexNew.getValue(blobId4);
       BlobIndexValue value5 = indexNew.getValue(blobId5);
       Assert.assertNull(value4);
@@ -297,14 +297,16 @@ public class BlobPersistantIndexTest {
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 1000));
-          infos.add(new MessageInfo(blobId5, 2000, 12657));
+          infos.add(new MessageInfo(blobId5, 1000, 12657));
           return infos;
         }
       });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.getSize(), 1000);
-      Assert.assertEquals(value5.getSize(), 2000);
+      Assert.assertEquals(value4.getOffset(), 5000);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 6000);
       Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
       log.setLogEndOffset(7000);
       indexNew.close();
@@ -314,7 +316,7 @@ public class BlobPersistantIndexTest {
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));
-          infos.add(new MessageInfo(blobId5, 200, BlobIndexValue.TTL_Infinite));
+          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
           return infos;
         }
       });
@@ -322,6 +324,10 @@ public class BlobPersistantIndexTest {
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(BlobIndexValue.Flags.Delete_Index), true);
       Assert.assertEquals(value5.getTimeToLiveInMs(), BlobIndexValue.TTL_Infinite);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 5000);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 6000);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();
@@ -364,6 +370,45 @@ public class BlobPersistantIndexTest {
       catch (StoreException e) {
         Assert.assertTrue(true);
       }
+
+      toModify.delete();
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId1, 1000));
+          infos.add(new MessageInfo(blobId2, 1000, 12657));
+          return infos;
+        }
+      });
+      value4 = indexNew.getValue(blobId1);
+      value5 = indexNew.getValue(blobId2);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 1000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+
+      // check error state. this scenario would populate the index but the contents would fail to be parsed
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId4, 100, true));
+          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
+          return infos;
+
+        }
+      });
+
+      value4 = indexNew.getValue(blobId4);
+      value5 = indexNew.getValue(blobId5);
+      Assert.assertEquals(value4.getSize(), 100);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 100);
+      Assert.assertEquals(value5.getOffset(), 100);
 
       log.close();
       scheduler.shutdown();
