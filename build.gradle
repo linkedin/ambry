@@ -6,7 +6,7 @@ buildscript {
 }
 
 apply from: file('gradle/license.gradle')
-apply from: file('gradle/maven.gradle')
+apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
 
 allprojects {

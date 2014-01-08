@@ -17,8 +17,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.Random;
 
@@ -278,9 +276,18 @@ public class Utils {
    * @throws IOException
    */
   public static String readStringFromFile(String path) throws IOException {
-    // Code cribbed from StackOverflow and is similar to IO Commons and Guava
-    // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
-    byte[] encoded = Files.readAllBytes(Paths.get(path));
+    File file = new File(path);
+    byte[] encoded = new byte[(int)file.length()];
+    DataInputStream ds = null;
+    try {
+      ds = new DataInputStream(new FileInputStream(file));
+      ds.readFully(encoded);
+    }
+    finally {
+      if (ds != null) {
+        ds.close();
+      }
+    }
     return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
   }
 
