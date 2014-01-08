@@ -296,10 +296,10 @@ public class Utils {
     return new JSONObject(readStringFromFile(path));
   }
 
-  public static void preAllocateFileIfNeeded(File file, long capacityGB) throws IOException {
+  public static void preAllocateFileIfNeeded(File file, long capacityBytes) throws IOException {
     Runtime runtime = Runtime.getRuntime();
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
-      Process process = runtime.exec("fallocate --keep-size -l " + getBytesFromGB(capacityGB) + " " + file.getAbsolutePath());
+      Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {
         process.waitFor();
       }
@@ -319,10 +319,6 @@ public class Utils {
           rfile.close();
       }
     }
-  }
-
-  public static long getBytesFromGB(long sizeInGB) {
-    return sizeInGB * 1024 * 1024 * 1024;
   }
 
   /**

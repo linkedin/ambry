@@ -40,7 +40,7 @@ class TestDataNode extends DataNode {
  */
 public class DataNodeTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000;
+  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
 
   JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);

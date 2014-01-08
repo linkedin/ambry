@@ -173,7 +173,7 @@ public class TestUtils {
   // TODO: Better name? Extract into own file?
   public static class TestHardwareLayout {
     private static final int defaultDiskCount = 10; // per DataNode
-    private static final long defaultDiskCapacityGB = 1000;
+    private static final long defaultDiskCapacityGB = 1000 * 1024 * 1024 * 1024L;
     private static final int defaultDataNodeCount = 4; // per Datacenter
     private static final int defaultDatacenterCount = 3;
     private static final int defaultBasePort = 6666;
@@ -322,7 +322,7 @@ public class TestUtils {
   public static class TestPartitionLayout {
     protected static final int defaultPartitionCount = 10;
     protected static final PartitionState defaultPartitionState = PartitionState.READ_WRITE;
-    protected static final long defaultReplicaCapacityGB = 100;
+    protected static final long defaultReplicaCapacityGB = 100 * 1024 * 1024 * 1024L;
     protected static final int defaultReplicaCount = 6; // Per Partition
 
     protected int partitionCount;
@@ -408,7 +408,7 @@ public class TestUtils {
   public static ClusterMapManager getTestClusterMap() throws JSONException {
     int numPartitions = 5;
     int replicaCountPerDatacenter = 2;
-    long replicaCapacityGB = 100;
+    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
 
     return getTestClusterMap(numPartitions, replicaCountPerDatacenter, replicaCapacityGB);
   }

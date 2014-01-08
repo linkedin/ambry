@@ -16,7 +16,7 @@ import static org.junit.Assert.fail;
  */
 public class HardwareLayoutTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000;
+  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
   private static int dataNodeCount = 6;
   private static int datacenterCount = 3;
   private static int basePort = 6666;

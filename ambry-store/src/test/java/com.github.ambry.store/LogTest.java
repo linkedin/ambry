@@ -167,7 +167,7 @@ public class LogTest {
         Assert.assertEquals(buffer.array()[i], testbuf[i + 1000]);
       try {
         buffer.clear();
-        logTest.readInto(buffer, 2500);
+        logTest.readInto(buffer, 5000);
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -175,7 +175,7 @@ public class LogTest {
       }
       buffer.clear();
       try {
-        logTest.readInto(buffer, 1500);
+        logTest.readInto(buffer, 5000);
         Assert.assertFalse(false);
       }
       catch (IllegalArgumentException e) {
