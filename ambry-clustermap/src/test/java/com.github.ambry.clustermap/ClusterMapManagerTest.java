@@ -26,18 +26,18 @@ public class ClusterMapManagerTest {
   // Useful for understanding partition layout affect on free capacity across all hardware.
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
     StringBuilder sb = new StringBuilder();
-    sb.append("Free space dump for cluster.").append(System.lineSeparator());
+    sb.append("Free space dump for cluster.").append(System.getProperty("line.separator"));
     sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager.getFreeCapacityGB())
-            .append(System.lineSeparator());
+            .append(System.getProperty("line.separator"));
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityGB(datacenter)).append
-              (System.lineSeparator());
+              (System.getProperty("line.separator"));
       for (DataNode dataNode : datacenter.getDataNodes()) {
         sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getFreeCapacityGB(dataNode)).append
-                (System.lineSeparator());
+                (System.getProperty("line.separator"));
         for (Disk disk : dataNode.getDisks()) {
           sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getFreeCapacityGB(disk)).append
-                  (System.lineSeparator());
+                  (System.getProperty("line.separator"));
         }
       }
     }
