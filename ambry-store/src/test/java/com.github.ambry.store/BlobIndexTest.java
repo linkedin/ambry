@@ -43,7 +43,7 @@ public class BlobIndexTest {
 
   class MockIndex extends BlobIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory);
+      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory, new DummyMessageRecovery());
     }
 
     BlobIndexValue getValue(StoreKey key) {
@@ -140,32 +140,43 @@ public class BlobIndexTest {
       indexNew.deleteAll();
       indexNew.close();
 
+      // truncate and make an empty index and ensure we fail index creation
       File toModify = new File(logFile, "index_current");
       FileChannel channelToModify = Utils.openChannel(toModify, true);
       channelToModify.truncate(0);
       channelToModify.force(true);
       scheduler.startup();
 
-      MockIndex indexFail = new MockIndex(logFile, scheduler, log, factory);
-      Assert.assertTrue(indexFail.isEmpty());
-      indexFail.close();
+      try {
+        MockIndex indexFail = new MockIndex(logFile, scheduler, log, factory);
+        Assert.assertTrue(false);
+      }
+      catch (StoreException e) {
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.Index_Creation_Failure);
+      }
 
-      byte[] salt = new byte[1];
-      salt[0] = 1;
+      byte[] salt = new byte[2];
+      salt[0] = 0;
+      salt[1] = 1;
       channelToModify.write(ByteBuffer.wrap(salt));  // write version 1
 
       MockIndex indexReadFail = new MockIndex(logFile, scheduler, log, factory);
       Assert.assertTrue(indexReadFail.isEmpty());
-      indexReadFail.close();
 
       channelToModify.truncate(0);
-      byte[] addOnlyVersion = new byte[1];
+      channelToModify.force(true);
+      byte[] addOnlyVersion = new byte[2];
       addOnlyVersion[0] = 0;
+      addOnlyVersion[1] = 0;
       channelToModify.write(ByteBuffer.wrap(addOnlyVersion));
 
-      MockIndex indexEmptyLine = new MockIndex(logFile, scheduler, log, factory);
-      Assert.assertTrue(indexEmptyLine.isEmpty());
-      indexEmptyLine.close();
+      try {
+        MockIndex indexEmptyLine = new MockIndex(logFile, scheduler, log, factory);
+        Assert.assertTrue(false);
+      }
+      catch (StoreException e) {
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.Index_Creation_Failure);
+      }
 
       log.close();
       scheduler.shutdown();
