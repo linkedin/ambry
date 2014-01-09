@@ -30,11 +30,11 @@ public class HardwareLayoutTest {
   }
 
   private JSONArray getDataNodes(int basePort, JSONArray disks) throws JSONException {
-    return TestUtils.getJsonArrayDataNodes(dataNodeCount, "localhost", basePort, HardwareState.AVAILABLE, disks);
+    return TestUtils.getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, HardwareState.AVAILABLE, disks);
   }
 
   private JSONArray getDuplicateDataNodes(int basePort, JSONArray disks) throws JSONException {
-    return TestUtils.getJsonArrayDuplicateDataNodes(dataNodeCount, "localhost", basePort, HardwareState.AVAILABLE, disks);
+    return TestUtils.getJsonArrayDuplicateDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, HardwareState.AVAILABLE, disks);
   }
 
   private JSONArray getDatacenters() throws JSONException {

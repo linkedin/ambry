@@ -48,11 +48,11 @@ public class DataNodeTest {
 
   @Test
   public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDataNode("localhost", 6666, HardwareState.AVAILABLE, getDisks());
+    JSONObject jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
 
     DataNode dataNode = new TestDataNode(jsonObject);
 
-    assertEquals(dataNode.getHostname(), "localhost");
+    assertEquals(dataNode.getHostname(), TestUtils.getLocalHost());
     assertEquals(dataNode.getPort(), 6666);
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
@@ -78,7 +78,7 @@ public class DataNodeTest {
 
     try {
       // Null DataNode
-      jsonObject = TestUtils.getJsonDataNode("localhost", 6666, HardwareState.AVAILABLE, getDisks());
+      jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
@@ -94,11 +94,11 @@ public class DataNodeTest {
     failValidation(jsonObject);
 
     // Bad port (too small)
-    jsonObject = TestUtils.getJsonDataNode("localhost", -1, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject);
 
     // Bad port (too big)
-    jsonObject = TestUtils.getJsonDataNode("localhost", 100 * 1000, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject);
   }
 }
