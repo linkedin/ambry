@@ -86,7 +86,7 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 0);
+      Log log = new Log(logFile, metrics, 1000);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -286,7 +286,7 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 0);
+      Log log = new Log(logFile, metrics, 1000);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -332,7 +332,7 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 0);
+      Log log = new Log(logFile, metrics, 1000);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -412,7 +412,7 @@ public class BlobIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 0);
+      Log log = new Log(logFile, metrics, 1000);
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
