@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-public class Disk {
+public class Disk implements DiskId {
   // Hard-code disk capacity limits in GB for validation
   private static final long MinCapacityGB = 10 * 1024 * 1024 * 1024L;
   private static final long MaxCapacityGB = 1024 * 1024 * 1024 * 1024L; // 1 PB
@@ -31,18 +31,12 @@ public class Disk {
     validate();
   }
 
-  public DataNode getDataNode() {
-    return dataNode;
-  }
-
+  @Override
   public String getMountPath() {
     return mountPath;
   }
 
-  public HardwareState getHardwareState() {
-    return hardwareState;
-  }
-
+  @Override
   public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
     if (dataNode.getState() == HardwareState.UNAVAILABLE) {
@@ -51,8 +45,17 @@ public class Disk {
     return hardwareState;
   }
 
+  @Override
   public long getCapacityGB() {
     return capacityGB;
+  }
+
+  public DataNode getDataNode() {
+    return dataNode;
+  }
+
+  public HardwareState getHardwareState() {
+    return hardwareState;
   }
 
   protected void validateDataNode() {

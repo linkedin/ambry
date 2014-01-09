@@ -49,4 +49,10 @@ public interface ReplicaId {
    * @return the capacity in GB
    */
   public long getCapacityGB();
+
+  /**
+   * Gets the DiskId that stores this ReplicaId
+   * @return DiskId that stores this ReplicaId
+   */
+  public DiskId getDiskId();
 }

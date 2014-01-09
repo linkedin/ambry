@@ -109,7 +109,8 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedCapacityGB = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().getDataNode().getDatacenter().equals(datacenter)) {
+        Disk disk = (Disk)replica.getDiskId();
+        if (disk.getDataNode().getDatacenter().equals(datacenter)) {
           allocatedCapacityGB += replica.getCapacityGB();
         }
       }
@@ -121,7 +122,8 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedCapacityGB = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().getDataNode().equals(dataNode)) {
+        Disk disk = (Disk)replica.getDiskId();
+        if (disk.getDataNode().equals(dataNode)) {
           allocatedCapacityGB += replica.getCapacityGB();
         }
       }
@@ -133,7 +135,8 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedCapacityGB = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().equals(disk)) {
+        Disk currentDisk = (Disk)replica.getDiskId();
+        if (currentDisk.equals(disk)) {
           allocatedCapacityGB += replica.getCapacityGB();
         }
       }

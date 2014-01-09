@@ -67,12 +67,13 @@ public class Replica implements ReplicaId {
     return partition.getReplicaCapacityGB();
   }
 
-  public Partition getPartition() {
-    return partition;
+  @Override
+  public DiskId getDiskId() {
+    return disk;
   }
 
-  public Disk getDisk() {
-    return disk;
+  public Partition getPartition() {
+    return partition;
   }
 
   public List<Replica> getPeerReplicas() {
