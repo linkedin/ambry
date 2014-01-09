@@ -4,6 +4,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -12,6 +14,16 @@ import java.util.Random;
 import static org.junit.Assert.assertEquals;
 
 public class TestUtils {
+
+  public static String getLocalHost() {
+    try {
+      return InetAddress.getByName("localhost").getCanonicalHostName().toLowerCase();
+    }
+    catch (UnknownHostException e) {
+      // this should never happen
+      return null;
+    }
+  }
 
   public static JSONObject getJsonDisk(String mountPath, HardwareState hardwareState, long capacityGB) throws JSONException {
     JSONObject jsonObject = new JSONObject();
@@ -39,7 +51,10 @@ public class TestUtils {
     return jsonArray;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, HardwareState hardwareState, JSONArray disks) throws JSONException {
+  public static JSONObject getJsonDataNode(String hostname,
+                                           int port,
+                                           HardwareState hardwareState,
+                                           JSONArray disks) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
@@ -49,16 +64,27 @@ public class TestUtils {
   }
 
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
-  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+  public static JSONArray getJsonArrayDataNodes(int dataNodeCount,
+                                                String hostname,
+                                                int basePort,
+                                                HardwareState hardwareState,
+                                                JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname,
+                                    basePort + i,
+                                    hardwareState,
+                                    disks));
     }
     return jsonArray;
   }
 
   // Does not increment basePort for each data node...
-  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort, HardwareState hardwareState, JSONArray disks) throws JSONException {
+  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount,
+                                                         String hostname,
+                                                         int basePort,
+                                                         HardwareState hardwareState,
+                                                         JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       jsonArray.put(getJsonDataNode(hostname, basePort, hardwareState, disks));
@@ -191,7 +217,7 @@ public class TestUtils {
     }
 
     protected JSONArray getDataNodes(int basePort, JSONArray disks) throws JSONException {
-      return getJsonArrayDataNodes(dataNodeCount, "localhost", basePort, HardwareState.AVAILABLE, disks);
+      return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, HardwareState.AVAILABLE, disks);
     }
 
     protected JSONArray getDatacenters() throws JSONException {
@@ -208,7 +234,12 @@ public class TestUtils {
       return TestUtils.getJsonArrayDatacenters(names, dataNodes);
     }
 
-    public TestHardwareLayout(String clusterName, int diskCount, long diskCapacityGB, int dataNodeCount, int datacenterCount, int basePort) throws JSONException {
+    public TestHardwareLayout(String clusterName,
+                              int diskCount,
+                              long diskCapacityGB,
+                              int dataNodeCount,
+                              int datacenterCount,
+                              int basePort) throws JSONException {
       this.diskCount = diskCount;
       this.diskCapacityGB = diskCapacityGB;
       this.dataNodeCount = dataNodeCount;
@@ -391,7 +422,9 @@ public class TestUtils {
     }
   }
 
-  public static ClusterMapManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter, long replicaCapacityGB) throws JSONException {
+  public static ClusterMapManager getTestClusterMap(int partitionCount,
+                                                    int replicaCountPerDatacenter,
+                                                    long replicaCapacityGB) throws JSONException {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
