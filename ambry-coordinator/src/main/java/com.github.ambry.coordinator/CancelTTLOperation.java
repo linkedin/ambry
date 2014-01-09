@@ -8,7 +8,7 @@ import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.shared.TTLResponse;
-import com.github.ambry.utils.BlockingChannelPool;
+import com.github.ambry.shared.BlockingChannelPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

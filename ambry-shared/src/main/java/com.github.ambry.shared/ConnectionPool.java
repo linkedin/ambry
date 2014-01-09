@@ -1,8 +1,7 @@
-package com.github.ambry.utils;
+package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.shared.BlockingChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,8 +10,6 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-
-// TODO: Should this connection pool be in shared? It pools BlockingChannel which are in shared.
 
 // TODO: Clean up connection pool:
 // * Decide on better names. BlockingChannel for interface and Connection for implementation is not intuitive.

@@ -7,7 +7,7 @@ import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.utils.BlockingChannelPool;
+import com.github.ambry.shared.BlockingChannelPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

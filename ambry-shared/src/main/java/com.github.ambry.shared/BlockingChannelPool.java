@@ -1,4 +1,4 @@
-package com.github.ambry.utils;
+package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.shared.BlockingChannel;

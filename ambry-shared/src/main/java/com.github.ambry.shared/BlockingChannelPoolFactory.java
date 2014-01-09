@@ -1,4 +1,6 @@
-package com.github.ambry.utils;
+package com.github.ambry.shared;
+
+import com.github.ambry.shared.BlockingChannelPool;
 
 /**
  *  Factory to create BlockingChannelPool.

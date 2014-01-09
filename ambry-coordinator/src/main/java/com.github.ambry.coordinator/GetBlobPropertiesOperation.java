@@ -8,7 +8,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.utils.BlockingChannelPool;
+import com.github.ambry.shared.BlockingChannelPool;
 
 import java.io.IOException;
 import java.io.InputStream;

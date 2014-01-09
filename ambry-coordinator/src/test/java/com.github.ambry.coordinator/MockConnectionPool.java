@@ -3,7 +3,7 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.utils.BlockingChannelPool;
+import com.github.ambry.shared.BlockingChannelPool;
 
 import java.io.IOException;
 

@@ -35,7 +35,7 @@ public class CoordinatorConfig {
    * The factory class the coordinator uses to create a connection pool.
    */
   @Config("coordinator.connection.pool.factory")
-  @Default("com.github.ambry.coordinator.ConnectionPoolFactory")
+  @Default("com.github.ambry.shared.ConnectionPoolFactory")
   public final String connectionPoolFactory;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
@@ -45,6 +45,6 @@ public class CoordinatorConfig {
             verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
             verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
-    this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory", "com.github.ambry.coordinator.ConnectionPoolFactory");
+    this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory", "com.github.ambry.shared.ConnectionPoolFactory");
   }
 }
