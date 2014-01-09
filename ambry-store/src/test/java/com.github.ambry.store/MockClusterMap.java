@@ -136,4 +136,24 @@ class MockReplicaId implements ReplicaId {
   public long getCapacityGB() {
     return 100000; // TODO This is really in bytes for now
   }
+
+  @Override
+  public DiskId getDiskId() {
+    return new DiskId() {
+      @Override
+      public String getMountPath() {
+        return mountPath;
+      }
+
+      @Override
+      public HardwareState getState() {
+        return HardwareState.AVAILABLE;
+      }
+
+      @Override
+      public long getCapacityGB() {
+        return 100000;
+      }
+    };
+  }
 }

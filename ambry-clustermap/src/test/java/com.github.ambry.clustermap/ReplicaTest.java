@@ -36,10 +36,10 @@ public class ReplicaTest {
     Disk disk = thl.getRandomDisk();
 
     TestReplica replicaA = new TestReplica(disk);
-    assertEquals(replicaA.getDisk(), disk);
+    assertEquals((Disk)replicaA.getDiskId(), disk);
 
     TestReplica replicaB = new TestReplica(thl.getHardwareLayout(), TestUtils.getJsonReplica(disk));
-    assertEquals(replicaB.getDisk(), disk);
+    assertEquals((Disk)replicaB.getDiskId(), disk);
   }
 
   @Test

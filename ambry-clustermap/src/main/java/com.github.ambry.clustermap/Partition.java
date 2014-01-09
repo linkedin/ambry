@@ -127,11 +127,11 @@ public class Partition extends PartitionId {
     Set<Disk> diskSet = new HashSet<Disk>();
 
     for (Replica replica : replicas) {
-      if (!diskSet.add(replica.getDisk())) {
+      if (!diskSet.add((Disk)replica.getDiskId())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same Disk: "
                                         + toString());
       }
-      if (!dataNodeSet.add(replica.getDisk().getDataNode())) {
+      if (!dataNodeSet.add(((Disk)replica.getDiskId()).getDataNode())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same DataNode: "
                                         + toString());
       }

@@ -93,9 +93,14 @@ public class AmbryServer {
       StoreKeyFactory factory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       networkServer = new SocketServer(networkConfig);
       networkServer.start();
-      storeManager = new StoreManager(storeConfig, scheduler, registryMap, clusterMap.getReplicaIds(nodeId), factory, new BlobRecovery());
+      storeManager = new StoreManager(storeConfig,
+                                      scheduler,
+                                      registryMap,
+                                      clusterMap.getReplicaIds(nodeId),
+                                      factory,
+                                      new BlobRecovery());
       storeManager.start();
-      requests = new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap);
+      requests = new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId);
       requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
 
       logger.info("Starting all the metrics reporters");

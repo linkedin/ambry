@@ -10,5 +10,8 @@ public enum ServerErrorCode {
   Blob_Deleted,
   Blob_Expired,
   Data_Corrupt,
+  Partition_Unknown,
+  Disk_Unavailable,
+  Partition_ReadOnly,
   Unknown_Error
 }
