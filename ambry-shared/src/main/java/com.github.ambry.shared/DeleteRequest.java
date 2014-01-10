@@ -40,7 +40,6 @@ public class DeleteRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
       writeHeader();
-      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
     }
@@ -58,6 +57,6 @@ public class DeleteRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + blobId
-    return super.sizeInBytes() + Blob_Id_Size_In_Bytes + blobId.sizeInBytes();
+    return super.sizeInBytes() +  blobId.sizeInBytes();
   }
 }

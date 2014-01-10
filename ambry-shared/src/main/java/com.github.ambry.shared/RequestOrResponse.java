@@ -17,9 +17,6 @@ public abstract class RequestOrResponse implements Send {
   protected ByteBuffer bufferToSend;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  // TODO: Foo_Size_In_Bytes is a confusing name. This applies to all such names. Foo_Header_Size_In_Bytes is more
-  // accurate name. Need to agree on clearer naming standard and then change all such constants.
-  protected static final int Blob_Id_Size_In_Bytes = 2;
   protected static final short Request_Response_Version = 1;
 
   private static final int Request_Response_Size_In_Bytes = 8;

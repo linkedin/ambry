@@ -53,7 +53,6 @@ public class TTLRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
       writeHeader();
-      bufferToSend.putShort(blobId.sizeInBytes());
       bufferToSend.put(blobId.toBytes());
       bufferToSend.putLong(newTTL);
       bufferToSend.flip();
@@ -72,7 +71,7 @@ public class TTLRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + blobId
-    return super.sizeInBytes() + Blob_Id_Size_In_Bytes + blobId.sizeInBytes() + TTL_Size_In_Bytes;
+    return super.sizeInBytes() + blobId.sizeInBytes() + TTL_Size_In_Bytes;
   }
 }
 
