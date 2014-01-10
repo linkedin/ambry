@@ -2,6 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.BlobId;
@@ -95,8 +96,9 @@ public abstract class GetOperation extends Operation {
       default:
         logger.error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
                      context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Unexpected server error code in GetResponse.",
+        throw new CoordinatorException("Server returned unexpected error for GetOperation.",
                                        CoordinatorError.UnexpectedInternalError);
+
     }
   }
 }
@@ -116,14 +118,12 @@ abstract class GetOperationRequest extends OperationRequest {
   }
 
   @Override
-  protected void deserializeResponsePayload(Response response) throws CoordinatorException, IOException,
-          MessageFormatException {
+  protected void deserializeResponsePayload(Response response) throws  IOException, MessageFormatException {
     GetResponse getResponse = (GetResponse)response;
     if (response.getError() == ServerErrorCode.No_Error) {
       if (getResponse.getMessageInfoList().size() != 1) {
-        throw new CoordinatorException("MessageInfoList indicates incorrect payload size. Should be 1: " +
-                                       getResponse.getMessageInfoList().size(),
-                                       CoordinatorError.UnexpectedInternalError);
+        throw new MessageFormatException("MessageInfoList indicates incorrect payload size. Should be 1: " +
+                                       getResponse.getMessageInfoList().size(), MessageFormatErrorCodes.Data_Corrupt);
       }
       deserializeBody(getResponse.getInputStream());
     }

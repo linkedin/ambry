@@ -123,8 +123,8 @@ public class AmbryCoordinator implements Coordinator {
 
   private BlobId getBlobIdFromString(String blobIdString) throws CoordinatorException {
     if (blobIdString == null || blobIdString.length() == 0) {
-      throw new CoordinatorException("BlobIdString argument is null or zero length.",
-                                     CoordinatorError.UnexpectedInternalError);
+      logger.error("BlobIdString argument is null or zero length: {}", blobIdString);
+      throw new CoordinatorException("BlobId is empty.", CoordinatorError.InvalidBlobId);
     }
 
     BlobId blobId;
@@ -132,8 +132,8 @@ public class AmbryCoordinator implements Coordinator {
       blobId = new BlobId(blobIdString, clusterMap);
     }
     catch (IOException e) {
-      throw new CoordinatorException("Failed to construct BlobId based on specified string.",
-                                     CoordinatorError.UnexpectedInternalError);
+      logger.info("Caller passed in invalid BlobId.");
+      throw new CoordinatorException("BlobId is invalid.", CoordinatorError.InvalidBlobId);
     }
     return blobId;
   }
@@ -142,13 +142,19 @@ public class AmbryCoordinator implements Coordinator {
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata,
                         InputStream blobStream) throws CoordinatorException {
     if (blobProperties == null) {
-      throw new IllegalArgumentException("BlobProperties argument to put operation is null.");
+      logger.info("Caller passed in null blobProperties.");
+      throw new CoordinatorException("BlobProperties argument to put operation is null.",
+                                     CoordinatorError.InvalidPutArgument);
     }
     if (userMetadata == null) {
-      throw new IllegalArgumentException("User metadata argument to put operation is null.");
+      logger.info("Caller passed in null userMetadata.");
+      throw new CoordinatorException("UserMetadata argument to put operation is null.",
+                                     CoordinatorError.InvalidPutArgument);
     }
     if (blobStream == null) {
-      throw new IllegalArgumentException("Blob stream argument to put operation is null.");
+      logger.info("Caller passed in null blobStream.");
+      throw new CoordinatorException("Blob stream argument to put operation is null.",
+                                     CoordinatorError.InvalidPutArgument);
     }
 
     PartitionId partitionId = getPartitionForPut();

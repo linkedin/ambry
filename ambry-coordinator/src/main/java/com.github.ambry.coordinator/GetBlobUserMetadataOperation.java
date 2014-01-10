@@ -43,7 +43,9 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
     if (userMetadata != null) {
       return userMetadata;
     }
-    throw new CoordinatorException("usermetadata is null.", CoordinatorError.UnexpectedInternalError);
+    logger.error("userMetadata is null and should not be.");
+    throw new CoordinatorException("GetBlobUserMetadata has invalid return data.",
+                                   CoordinatorError.UnexpectedInternalError);
   }
 
   public synchronized void setUserMetadata(ByteBuffer userMetadata) {

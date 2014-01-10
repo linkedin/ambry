@@ -43,7 +43,9 @@ final public class GetBlobPropertiesOperation extends GetOperation {
     if (blobProperties != null) {
       return blobProperties;
     }
-    throw new CoordinatorException("blobProperties is null.", CoordinatorError.UnexpectedInternalError);
+    logger.error("blobProperties is null and should not be.");
+    throw new CoordinatorException("GetBlobProperties has invalid return data.",
+                                   CoordinatorError.UnexpectedInternalError);
   }
 
   public synchronized void setBlobProperties(BlobProperties blobProperties) {

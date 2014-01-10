@@ -97,14 +97,14 @@ public abstract class Operation {
         }
 
         ReplicaId replicaId = operationResponse.getReplicaId();
-        Response response = operationResponse.getResponse();
-
         if (!requestsInFlight.remove(replicaId)) {
-          throw new CoordinatorException("Response received from replica to which no request is in flight. ReplicaId:" +
-                                         " " + replicaId, CoordinatorError.UnexpectedInternalError);
+          logger.error("Response received from replica to which no request is in flight: {}", replicaId);
+          throw new CoordinatorException("Coordinator received unexpected response",
+                                         CoordinatorError.UnexpectedInternalError);
         }
-        if (response != null) {
-          if (processResponseError(replicaId, response.getError())) {
+
+        if (operationResponse.getError() == RequestResponseError.SUCCESS) {
+          if (processResponseError(replicaId, operationResponse.getResponse().getError())) {
             operationPolicy.onSuccessfulResponse(replicaId);
           }
           else {
@@ -112,6 +112,9 @@ public abstract class Operation {
           }
         }
         else {
+          // Currently, no actions taken based upon specific RequestResponseError returned. Possible actions include
+          // retrying request, updating soft-state, notifying datanode and so forth. Specific action may depend on
+          // operation type.
           operationPolicy.onFailedResponse(replicaId);
         }
 
@@ -128,17 +131,18 @@ public abstract class Operation {
       }
       catch (CoordinatorException e) {
         operationComplete.set(true);
-        logger.debug("{} operation throwing CoordinatorException to complete execute ({}).", context, e.getErrorCode());
+        logger.debug("{} operation throwing CoordinatorException during ({}).", context, e.getErrorCode());
         throw e;
       }
       catch (InterruptedException e) {
         operationComplete.set(true);
+        // Slightly abuse the notion of "unexpected" internal error since InterruptedException does not indicate
+        // something truly unexpected.
         logger.info("{} operation interrupted during execute.", context);
         throw new CoordinatorException("Operation interrupted.", CoordinatorError.UnexpectedInternalError);
       }
     }
   }
-
 }
 
 /**
@@ -167,8 +171,7 @@ abstract class OperationRequest implements Runnable {
 
   protected abstract Response getResponse(DataInputStream dataInputStream) throws IOException;
 
-  protected void deserializeResponsePayload(Response response) throws CoordinatorException, IOException,
-          MessageFormatException {
+  protected void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
   }
 
@@ -186,7 +189,9 @@ abstract class OperationRequest implements Runnable {
       Response response = getResponse(new DataInputStream(responseStream));
 
       if (response == null) {
-        throw new CoordinatorException("Response is null.", CoordinatorError.UnexpectedInternalError);
+        logger.error("{} {} Response to request is null. BlobId {}.", context, replicaId, blobId);
+        enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
+        return;
       }
 
       logger.debug("{} {} deserializing response payload", context, replicaId);
@@ -196,43 +201,51 @@ abstract class OperationRequest implements Runnable {
       connectionPool.checkInConnection(replicaId.getDataNodeId(), blockingChannel);
       blockingChannel = null;
 
-      if (!responseQueue.offer(new OperationResponse(replicaId, response))) {
-        throw new CoordinatorException("responseQueue incorrectly sized since offer() returned false.",
-                                       CoordinatorError.UnexpectedInternalError);
-      }
-    }
-    catch (CoordinatorException e) {
-      // TODO: "transfer" error to main thread. Add OperationError type.
-      logger.error("{} {} Error processing request-response for BlobId {} : {}.", context, replicaId, blobId,
-                   e.getCause());
+      enqueueOperationResponse(new OperationResponse(replicaId, response));
     }
     catch (IOException e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : {}.", context, replicaId, blobId,
-                   e.getCause());
+      logger.warn("{} {} Error processing request-response for BlobId {} : {}.", context, replicaId, blobId,
+                  e.getCause());
+      enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
     }
     catch (MessageFormatException e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : {}.", context, replicaId, blobId,
-                   e.getCause());
+      logger.warn("{} {} Error processing request-response for BlobId {} : {} - {}.", context, replicaId, blobId,
+                  e.getErrorCode(), e.getCause());
+      enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
     }
     finally {
       if (blockingChannel != null) {
         logger.debug("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(replicaId.getDataNodeId(), blockingChannel);
-        responseQueue.offer(new OperationResponse(replicaId, null));
       }
     }
   }
+
+  private void enqueueOperationResponse(OperationResponse operationResponse) {
+    if (!responseQueue.offer(operationResponse)) {
+      logger.error("{} {} responseQueue incorrectly sized since offer() returned false.  BlobId {}.", context,
+                   replicaId, blobId);
+    }
+  }
+}
+
+enum RequestResponseError {
+  SUCCESS,
+  UNEXPECTED_ERROR,
+  IO_ERROR,
+  MESSAGE_FORMAT_ERROR
 }
 
 /**
  * OperationResponse encapsulates a complete response from a specific replica.
  */
 class OperationResponse {
-  private ReplicaId replicaId;
-  private Response response;
+  private final ReplicaId replicaId;
+  private final Response response;
+  private final RequestResponseError error;
 
   /**
-   * Construct response for a request.
+   * Construct successful response for a request.
    *
    * @param replicaId ReplicaId from which response is returned. Cannot be null.
    * @param response Response from replica. May be null. Null indicates unexpected exceptions sending request or
@@ -241,6 +254,19 @@ class OperationResponse {
   public OperationResponse(ReplicaId replicaId, Response response) {
     this.replicaId = replicaId;
     this.response = response;
+    this.error = RequestResponseError.SUCCESS;
+  }
+
+  /**
+   * Construct failed response for a request.
+   *
+   * @param replicaId ReplicaId from which response is returned. Cannot be null.
+   * @param error experienced during request-response
+   */
+  public OperationResponse(ReplicaId replicaId, RequestResponseError error) {
+    this.replicaId = replicaId;
+    this.response = null;
+    this.error = error;
   }
 
   public ReplicaId getReplicaId() {
@@ -249,6 +275,10 @@ class OperationResponse {
 
   public Response getResponse() {
     return response;
+  }
+
+  public RequestResponseError getError() {
+    return error;
   }
 }
 

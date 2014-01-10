@@ -48,7 +48,7 @@ final public class DeleteOperation extends Operation {
       default:
         logger.error("{} DeleteResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
                      context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Unexpected server error code in DeleteResponse.",
+        throw new CoordinatorException("Server returned unexpected error for DeleteOperation.",
                                        CoordinatorError.UnexpectedInternalError);
     }
   }

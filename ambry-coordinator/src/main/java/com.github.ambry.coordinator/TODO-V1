@@ -1,9 +1,7 @@
-For initial coordinator:
-TODO: Clean up package organization. Get feedback from Ram on which, if any, of these classes should be just package level visible and so on. Decide on lots of files for policies versus one big one.
-TODO: Remove ttl value from cancelTTL request; rename TTLRequest/Response to CancelTTLRequest and CancelTTLResponse.
 
 For V1
 TODO: Switch from thread-based implementation to asynchronous implementation on top of Netty. Motivating use case is performance and resource exhaustion in face of one slow data node.
+TODO: Remove ttl value from cancelTTL request; rename TTLRequest/Response to CancelTTLRequest and CancelTTLResponse.
 TODO: Get unit test dependency correct st ClusterMap.TestUtils can be used to construct test ClusterMap objects.
 TODO: Add more unit tests
 TODO: Run with test coverage to assess how much more testing is required.
@@ -12,7 +10,7 @@ TODO: Add retry loop to PutOperation that "slips" to another PartitionID for new
 TODO: add check for read-only replica to server and then add Replica_Not_Writable to server error code and handle error in PutOperation. May need to "slip" partitions to deal with this exception.
 TODO: Add getBlobInfo (i.e., gets BlobProperties plus BlobUserMetadata) to Ambry API.
 TODO: Safer cast idiom? There are a number of "(int)longValue" casts in the code.
-TODO: Signal datanode to repair blob if coordinator detects corruption upon deserialization.
+TODO: Better handling of "corrupt" data for get operations. Coordinator cannot differentiate network corruption or other message format issues from datanode-side on-disk corruption. Only datanode can tell if its local copy is corrupt. Either coordinator can demand datanode verifies data before returning it, coordinator can demand a specific blobid be scrubbed, or we wait on scrubbing to detect/document/fix.
 
 
 MessageFormatFlags:

@@ -51,7 +51,7 @@ final public class CancelTTLOperation extends Operation {
       default:
         logger.error("{} CancelTTLResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
                      context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Unexpected server error code in CancelTTLResponse.",
+        throw new CoordinatorException("Server returned unexpected error for CancelTTLOperation.",
                                        CoordinatorError.UnexpectedInternalError);
     }
   }

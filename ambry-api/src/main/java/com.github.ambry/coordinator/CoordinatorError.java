@@ -4,24 +4,20 @@ package com.github.ambry.coordinator;
  * Errors that the Coordinator returns
  */
 public enum CoordinatorError {
-  // TODO: Add OperationError enumeration to bin UnexpectedInternalErrors
-
   // General errors. May occur for any operation.
   /**
-   * Coordinator experienced an unexpected internal error. This means that there is either a transient issue with a
-   * specific node or with networking, or that there is a bug in the coordinator implementation. The caller should retry
-   * the operation. An operation that changes the state of an existing blob (delete, cancelTTL) may have partially
-   * completed and so may eventually complete in the future. A put operation may also have partially completed and so
-   * may eventually "complete", however the BlobId was never returned to the caller and so the blob will never be
-   * retrieved or deleted.
+   * Coordinator experienced an unexpected internal error. The caller should retry the operation. An operation that
+   * changes the state of an existing blob (delete, cancelTTL) may have partially completed and so may eventually
+   * complete in the future. A put operation may also have partially completed and so may eventually "complete", however
+   * the BlobId was never returned to the caller and so the blob will never be retrieved or deleted.
    */
   UnexpectedInternalError,
   /**
-   * Insufficient Ambry DataNodes could be contacted to complete an operation. The caller should retry the operation. An
-   * operation that changes the state of an existing blob (delete, cancelTTL) may have partially completed and so may
-   * eventually complete in the future. A put operation may also have partially completed and so may eventually
-   * "complete", however the BlobId was never returned to the caller and so the blob will never be retrieved or
-   * deleted.
+   * Insufficient Ambry DataNodes could be contacted to successfully complete an operation. The caller should retry the
+   * operation. An operation that changes the state of an existing blob (delete, cancelTTL) may have partially completed
+   * and so may eventually complete in the future. A put operation may also have partially completed and so may
+   * eventually "complete", however the BlobId was never returned to the caller and so the blob will never be retrieved
+   * or deleted.
    */
   AmbryUnavailable,
   /**
@@ -31,6 +27,16 @@ public enum CoordinatorError {
    * the BlobId was never returned to the caller and so the blob will never be retrieved or deleted.
    */
   OperationTimedOut,
+
+  /**
+   * Caller passed in an invalid BlobId and so operation could not be attempted. May occur for getBlobProperties,
+   * getBlobUserMetadata, getBlob, delete, or cancelTTL operations.
+   */
+  InvalidBlobId,
+  /**
+   * Caller passed in an illegal argument for put operation. May occur for put operation.
+   */
+  InvalidPutArgument,
 
   // Errors on write path. May occur for put operations.
   /**

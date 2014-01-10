@@ -43,7 +43,9 @@ final public class GetBlobOperation extends GetOperation {
     if (blobOutput != null) {
       return blobOutput;
     }
-    throw new CoordinatorException("blobOutput is null.", CoordinatorError.UnexpectedInternalError);
+    logger.error("blobOutput is null and should not be.");
+    throw new CoordinatorException("GetBlobOperation has invalid return data.",
+                                   CoordinatorError.UnexpectedInternalError);
   }
 
   public synchronized void setBlobOutput(BlobOutput blobOutput) {

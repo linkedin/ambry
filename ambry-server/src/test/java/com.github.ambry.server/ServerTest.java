@@ -128,7 +128,6 @@ public class ServerTest {
       }
       channel.disconnect();
 
-
       try {
         // get blob data
         // Use coordinator to get the blob

@@ -43,7 +43,8 @@ final public class PutOperation extends Operation {
       this.materializedBlobStream = new ByteBufferInputStream(blobStream, (int)blobProperties.getBlobSize());
     }
     catch (IOException e) {
-      throw new CoordinatorException("Could not materialize input blob data.",
+      logger.error("Could not materialize blob.");
+      throw new CoordinatorException("Error processing blob passed into PutOperation.",
                                      CoordinatorError.UnexpectedInternalError);
     }
   }
@@ -79,8 +80,9 @@ final public class PutOperation extends Operation {
       default:
         logger.error("{} PutResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
                      context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Unexpected server error code in PutResponse.",
+        throw new CoordinatorException("Server returned unexpected error for PutOperation.",
                                        CoordinatorError.UnexpectedInternalError);
+
     }
   }
 }

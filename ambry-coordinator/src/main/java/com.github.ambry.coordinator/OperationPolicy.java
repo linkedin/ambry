@@ -2,6 +2,8 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -84,11 +86,13 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   protected List<ReplicaId> failedRequests;
   protected List<ReplicaId> successfulRequests;
 
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
   protected ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
     this.replicaIdCount = partitionId.getReplicaIds().size();
     if (replicaIdCount < 1) {
-      throw new CoordinatorException("Insufficient replica ids in specified partition.",
-                                     CoordinatorError.UnexpectedInternalError);
+      logger.error("PartitionId {} has invalid number of replicas: {}.", partitionId, replicaIdCount);
+      throw new CoordinatorException("Partition has invalid configuration.", CoordinatorError.UnexpectedInternalError);
     }
     this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds());
 
