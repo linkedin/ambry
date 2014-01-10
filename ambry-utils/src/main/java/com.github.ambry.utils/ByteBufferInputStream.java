@@ -5,11 +5,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.ArrayList;
-import java.util.List;
 
 public class ByteBufferInputStream extends InputStream {
   private ByteBuffer byteBuffer;
@@ -45,6 +42,10 @@ public class ByteBufferInputStream extends InputStream {
   @Override
   public int available() throws IOException {
     return byteBuffer.remaining();
+  }
+
+  public ByteBufferInputStream duplicate() {
+    return new ByteBufferInputStream(byteBuffer.duplicate());
   }
 }
 

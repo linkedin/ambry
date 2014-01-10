@@ -2,20 +2,25 @@ package com.github.ambry.server;
 
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
-import com.github.ambry.coordinator.BlobNotFoundException;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.messageformat.*;
+import com.github.ambry.coordinator.CoordinatorException;
+import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormat;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,9 +65,9 @@ public class ServerTest {
       PutRequest putRequest = new PutRequest(1,
                                              "client1",
                                              blobId1,
-                                             ByteBuffer.wrap(usermetadata),
-                                             new ByteBufferInputStream(ByteBuffer.wrap(data)),
-                                             properties);
+                                             properties, ByteBuffer.wrap(usermetadata),
+                                             new ByteBufferInputStream(ByteBuffer.wrap(data))
+      );
       BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
       channel.connect();
       channel.send(putRequest);
@@ -73,9 +78,9 @@ public class ServerTest {
       PutRequest putRequest2 = new PutRequest(1,
                                               "client1",
                                               blobId2,
-                                              ByteBuffer.wrap(usermetadata),
-                                              new ByteBufferInputStream(ByteBuffer.wrap(data)),
-                                              properties);
+                                              properties, ByteBuffer.wrap(usermetadata),
+                                              new ByteBufferInputStream(ByteBuffer.wrap(data))
+      );
       channel.send(putRequest2);
       putResponseStream = channel.receive();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -84,9 +89,9 @@ public class ServerTest {
       PutRequest putRequest3 = new PutRequest(1,
                                               "client1",
                                               blobId3,
-                                              ByteBuffer.wrap(usermetadata),
-                                              new ByteBufferInputStream(ByteBuffer.wrap(data)),
-                                              properties);
+                                              properties, ByteBuffer.wrap(usermetadata),
+                                              new ByteBufferInputStream(ByteBuffer.wrap(data))
+      );
       channel.send(putRequest3);
       putResponseStream = channel.receive();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -96,7 +101,7 @@ public class ServerTest {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       MockPartitionId partition = new MockPartitionId();
       ids.add(blobId1);
-      GetRequest getRequest1 = new GetRequest(partition, 1, "clientid2", MessageFormatFlags.BlobProperties, ids);
+      GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
       channel.send(getRequest1);
       InputStream stream = channel.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -110,12 +115,12 @@ public class ServerTest {
       }
 
       // get user metadata
-      GetRequest getRequest2 = new GetRequest(partition, 1, "clientid2", MessageFormatFlags.UserMetadata, ids);
+      GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partition, ids);
       channel.send(getRequest2);
       stream = channel.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        ByteBuffer userMetadataOutput = MessageFormat.deserializeMetadata(resp2.getInputStream());
+        ByteBuffer userMetadataOutput = MessageFormat.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       }
       catch (MessageFormatException e) {
@@ -123,11 +128,11 @@ public class ServerTest {
       }
       channel.disconnect();
 
-
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator = new AmbryCoordinator(clusterMap);
+        Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
+        coordinator.start();
         BlobOutput output = coordinator.getBlob(blobId1.toString());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int)output.getSize()];
@@ -135,12 +140,22 @@ public class ServerTest {
         Assert.assertArrayEquals(dataOutputStream, data);
         coordinator.shutdown();
       }
-      catch (BlobNotFoundException e) {
+      catch (CoordinatorException e) {
+        e.printStackTrace();
         Assert.assertEquals(false, true);
       }
+
     }
     catch (Exception e) {
+      e.printStackTrace();
       Assert.assertEquals(true, false);
     }
+  }
+
+  public VerifiableProperties getCoordinatorProperties() {
+    Properties properties = new Properties();
+    properties.setProperty("coordinator.hostname", "localhost");
+    properties.setProperty("coordinator.datacenter.name", "Datacenter");
+    return new VerifiableProperties(properties);
   }
 }

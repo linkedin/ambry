@@ -1,26 +1,30 @@
 package com.github.ambry.server;
 
-
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.shared.*;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlockingChannel;
+import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.PutResponse;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
-import java.nio.BufferUnderflowException;
-import org.junit.Assert;
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.ServerSocket;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
-import java.net.*;
-import java.io.*;
 
 public class SocketServerTest {
 
@@ -43,19 +47,19 @@ public class SocketServerTest {
   public void simpleRequest() throws IOException, InterruptedException {
     MockClusterMap map = null;
     int correlationId = 1;
-    byte [] bufdata = new byte[10];
+    byte[] bufdata = new byte[10];
     new Random().nextBytes(bufdata);
     ByteBuffer bufstream = ByteBuffer.wrap(bufdata);
     ByteBufferInputStream stream = new ByteBufferInputStream(bufstream);
     byte[] bufmetadata = new byte[5];
     new Random().nextBytes(bufmetadata);
 
-    PutRequest emptyRequest =
-            new PutRequest(correlationId,
-                           "test",
-                           new BlobId(new MockPartitionId()),
-                           ByteBuffer.wrap(bufmetadata), stream,
-                           new BlobProperties(10, "id"));
+    PutRequest emptyRequest = new PutRequest(correlationId,
+                                             "test",
+                                             new BlobId(new MockPartitionId()),
+                                             new BlobProperties(10, "id"), ByteBuffer.wrap(bufmetadata), stream
+    );
+
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
     channel.send(emptyRequest);
@@ -75,8 +79,7 @@ public class SocketServerTest {
     Assert.assertEquals(10, requestFromNetwork.getDataSize());
     Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());
     InputStream streamFromNetwork = requestFromNetwork.getData();
-    for (int i = 0; i < 10; i++)
-    {
+    for (int i = 0; i < 10; i++) {
       Assert.assertEquals(bufdata[i], (byte)streamFromNetwork.read());
     }
     try {
@@ -100,20 +103,20 @@ public class SocketServerTest {
   /**
    * Choose a number of random available ports
    */
-   ArrayList<Integer> choosePorts(int count) throws IOException {
-     ArrayList<Integer> sockets = new ArrayList<Integer>();
-     for(int i = 0; i < count; i++) {
-       ServerSocket socket = new ServerSocket(0);
-       sockets.add(socket.getLocalPort());
-       socket.close();
-     }
-     return sockets;
-   }
-
-   /**
-    * Choose an available port
-    */
-    public int choosePort() throws IOException {
-      return choosePorts(1).get(0);
+  ArrayList<Integer> choosePorts(int count) throws IOException {
+    ArrayList<Integer> sockets = new ArrayList<Integer>();
+    for (int i = 0; i < count; i++) {
+      ServerSocket socket = new ServerSocket(0);
+      sockets.add(socket.getLocalPort());
+      socket.close();
     }
+    return sockets;
+  }
+
+  /**
+   * Choose an available port
+   */
+  public int choosePort() throws IOException {
+    return choosePorts(1).get(0);
+  }
 }

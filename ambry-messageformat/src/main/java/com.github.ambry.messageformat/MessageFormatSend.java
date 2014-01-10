@@ -99,14 +99,14 @@ public class MessageFormatSend implements Send {
               logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
-            else if (flag == MessageFormatFlags.UserMetadata) {
+            else if (flag == MessageFormatFlags.BlobUserMetadata) {
               int userMetadataSize = headerFormat.getDataRelativeOffset() - headerFormat.getUserMetadataRelativeOffset();
               infoList.add(i, new SendInfo(headerFormat.getUserMetadataRelativeOffset(), userMetadataSize));
               totalSizeToWrite += userMetadataSize;
               logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
-            else  if (flag == MessageFormatFlags.Data) {
+            else  if (flag == MessageFormatFlags.Blob) {
               long dataSize = headerFormat.getMessageSize() -
                       (headerFormat.getDataRelativeOffset() - headerFormat.getSystemMetadataRelativeOffset());
               infoList.add(i, new SendInfo(headerFormat.getDataRelativeOffset(), dataSize));

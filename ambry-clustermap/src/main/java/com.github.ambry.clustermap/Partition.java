@@ -33,7 +33,6 @@ public class Partition extends PartitionId {
 
   // For constructing new Partition
   public Partition(long id, PartitionState partitionState, long replicaCapacityGB) {
-
     this.id = id;
     this.partitionState = partitionState;
     this.replicaCapacityGB = replicaCapacityGB;

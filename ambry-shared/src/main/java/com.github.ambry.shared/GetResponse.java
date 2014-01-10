@@ -16,20 +16,21 @@ import java.util.List;
 /**
  * Response to GetRequest to fetch data
  */
-public class GetResponse extends RequestOrResponse {
+public class GetResponse extends Response {
 
   private final List<MessageInfo> messageInfoList;
   private Send toSend = null;
   private InputStream stream = null;
   private final int messageInfoListSize;
-  private ServerErrorCode error;
-  private static final int Error_Size_InBytes = 2;
 
   private int getMessageInfoListSize() {
+    int listcountSize = 4;
+    if(messageInfoList == null) {
+      return listcountSize;
+    }
     int size = 0;
     int keySize = 2;
     int fieldSize = 8;
-    int listcountSize = 4;
     size += listcountSize;
     for (MessageInfo messageInfo : messageInfoList) {
       size += keySize;
@@ -41,6 +42,10 @@ public class GetResponse extends RequestOrResponse {
   }
 
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
+    if(messageInfoList == null) {
+      outputBuffer.putInt(0);
+      return;
+    }
     outputBuffer.putInt(messageInfoList.size());
     for (MessageInfo messageInfo : messageInfoList) {
       outputBuffer.put(messageInfo.getStoreKey().toBytes());
@@ -49,7 +54,8 @@ public class GetResponse extends RequestOrResponse {
     }
   }
 
-  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map) throws IOException {
+  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream,
+                                                              ClusterMap map) throws IOException {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
@@ -66,11 +72,10 @@ public class GetResponse extends RequestOrResponse {
                      List<MessageInfo> messageInfoList,
                      Send send,
                      ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.toSend = send;
-    this.error = error;
   }
 
   public GetResponse(int correlationId,
@@ -78,24 +83,18 @@ public class GetResponse extends RequestOrResponse {
                      List<MessageInfo> messageInfoList,
                      InputStream stream,
                      ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoList = messageInfoList;
     this.messageInfoListSize = getMessageInfoListSize();
     this.stream = stream;
-    this.error = error;
   }
 
   public GetResponse(int correlationId,
                      String clientId,
                      ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId);
-    this.error = error;
+    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoList = null;
-    this.messageInfoListSize = 0;
-  }
-
-  public ServerErrorCode getError() {
-    return error;
+    this.messageInfoListSize = getMessageInfoListSize();
   }
 
   public InputStream getInputStream() {
@@ -112,7 +111,8 @@ public class GetResponse extends RequestOrResponse {
     if (type != RequestResponseType.GetResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
-    Short versionId  = stream.readShort();
+    Short versionId = stream.readShort();
+    // ignore version for now
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
@@ -120,17 +120,14 @@ public class GetResponse extends RequestOrResponse {
     if (error != ServerErrorCode.No_Error)
       return new GetResponse(correlationId, clientId, error);
     else
-      // ignoring version for now
       return new GetResponse(correlationId, clientId, messageInfoList, stream, error);
   }
 
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize);
+      bufferToSend = ByteBuffer.allocate((int)super.sizeInBytes() + messageInfoListSize);
       writeHeader();
-
-      bufferToSend.putShort((short)error.ordinal());
       serializeMessageInfoList(bufferToSend, messageInfoList);
       bufferToSend.flip();
     }
@@ -144,11 +141,11 @@ public class GetResponse extends RequestOrResponse {
 
   @Override
   public boolean isSendComplete() {
-    return bufferToSend.remaining() == 0 && (toSend == null || toSend.isSendComplete());
+    return (super.isSendComplete()) && (toSend == null || toSend.isSendComplete());
   }
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + Error_Size_InBytes + messageInfoListSize + toSend.sizeInBytes();
+    return super.sizeInBytes() + messageInfoListSize + ((toSend == null) ? 0 : toSend.sizeInBytes());
   }
 }

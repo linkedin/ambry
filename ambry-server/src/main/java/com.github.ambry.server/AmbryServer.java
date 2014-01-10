@@ -49,7 +49,7 @@ public class AmbryServer {
     // start jmx server
     jmxServer = new JmxServer();
     reporters = new HashMap<String, MetricsReporter>();
-    registryMap = new MetricsRegistryMap("Data Node");
+    registryMap = new MetricsRegistryMap("Blob Node");
     jvmMetrics = new JvmMetrics(registryMap);
     this.clusterMap = clusterMap;
   }
@@ -75,7 +75,7 @@ public class AmbryServer {
       try {
         for (String factoryClass : reporterFactoryNames) {
           MetricsReporterFactory factory = Utils.getObj(factoryClass);
-          MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Data Node", metricsConfig);
+          MetricsReporter reporter = factory.getMetricsReporter(factoryClass, "Blob Node", metricsConfig);
           reporters.put(factoryClass, reporter);
         }
         logger.info("Got metrics reporters: {}", reporters.keySet());

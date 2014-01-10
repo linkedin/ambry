@@ -65,10 +65,6 @@ public class DataNode implements DataNodeId {
     }
   }
 
-  public Datacenter getDatacenter() {
-    return datacenter;
-  }
-
   @Override
   public String getHostname() {
     return hostname;
@@ -82,6 +78,15 @@ public class DataNode implements DataNodeId {
   @Override
   public HardwareState getState() {
     return hardwareState;
+  }
+
+  @Override
+  public String getDatacenterName() {
+    return getDatacenter().getName();
+  }
+
+  public Datacenter getDatacenter() {
+    return datacenter;
   }
 
   public long getCapacityGB() {

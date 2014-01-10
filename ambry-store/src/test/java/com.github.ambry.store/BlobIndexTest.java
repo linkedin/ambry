@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+
 public class BlobIndexTest {
 
   private StoreKeyFactory factory;
@@ -100,7 +101,6 @@ public class BlobIndexTest {
       Assert.assertEquals(false, true);
     }
   }
-
 
   @Test
   public void testIndexRestore() throws IOException {

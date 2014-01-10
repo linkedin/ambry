@@ -12,3 +12,8 @@ target/
 *.iws
 */.cache
 deploy
+*~
+.gradle
+*/build/
+out/
+

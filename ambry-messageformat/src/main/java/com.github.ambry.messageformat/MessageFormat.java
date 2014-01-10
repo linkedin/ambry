@@ -20,16 +20,16 @@ public class MessageFormat {
   public static final int Version_Field_Size_In_Bytes = 2;
   public static final int Crc_Size = 8;
 
-  public static final int Header_Current_Version = 1;
-  public static final int SystemMetadata_Current_Version = 1;
-  public static final int UserMetadata_Current_Version = 1;
-  public static final int Data_Current_Version = 1;
-
   public static final short Message_Header_Version_V1 = 1;
   public static final short SystemMetadata_Version_V1 = 1;
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Data_Version_V1 = 1;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
+
+  public static final int Message_Header_Current_Version = Message_Header_Version_V1;
+  public static final int SystemMetadata_Current_Version = SystemMetadata_Version_V1;
+  public static final int UserMetadata_Current_Version = UserMetadata_Version_V1;
+  public static final int Data_Current_Version = Data_Version_V1;
 
   // Methods below defines the write format for the current version. W.r.t write there is always only one version,
   // the most recent one
@@ -88,14 +88,18 @@ public class MessageFormat {
   }
 
   // We only serialize partial data for blobs. This is to support streaming serialization of data.
-  public static void  serializeCurrentVersionPartialData(ByteBuffer outputBuffer, long dataSize) {
+  public static void serializeCurrentVersionPartialData(ByteBuffer outputBuffer, long dataSize) {
     Data_Format_V1.serializePartialData(outputBuffer, dataSize);
   }
 
 
   // Deserialization methods for all data types
 
-  public static BlobProperties deserializeBlobProperties(InputStream stream) throws IOException, MessageFormatException {
+  // TODO: Names of deserialize methods are irregular: deserialize BlobProperties vs UserMetadata vs Data. We should
+  // rename to either Properties/UserMetadata/Data or BlobProperties/BlobUserMetadata/BlobData.
+
+  public static BlobProperties deserializeBlobProperties(InputStream stream) throws IOException,
+          MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -134,7 +138,7 @@ public class MessageFormat {
     }
   }
 
-  public static ByteBuffer deserializeMetadata(InputStream stream) throws IOException, MessageFormatException {
+  public static ByteBuffer deserializeUserMetadata(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -206,9 +210,9 @@ public class MessageFormat {
       outputBuffer.putLong(crc.getValue());
       Logger logger = LoggerFactory.getLogger("MessageHeader_Format_V1");
       logger.trace("serializing header : version {} size {} systemmetadatarelativeoffset {} " +
-              "usermetadatarelativeoffset {} datarelativeoffset {} crc {}",
-              Message_Header_Version_V1, totalSize, systemMetadataRelativeOffset, userMetadataRelativeOffset,
-              dataRelativeOffset, crc.getValue());
+                   "usermetadatarelativeoffset {} datarelativeoffset {} crc {}",
+                   Message_Header_Version_V1, totalSize, systemMetadataRelativeOffset, userMetadataRelativeOffset,
+                   dataRelativeOffset, crc.getValue());
     }
 
 
@@ -295,7 +299,7 @@ public class MessageFormat {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(SystemMetadata_Version_V1);
       outputBuffer.putShort((short)SystemMetadataRecordType.DeleteRecord.ordinal());
-      outputBuffer.put(deleteFlag ? (byte) 1 : (byte) 0);
+      outputBuffer.put(deleteFlag ? (byte)1 : (byte)0);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
@@ -389,7 +393,8 @@ public class MessageFormat {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static ByteBuffer deserializeUserMetadata(CrcInputStream crcStream) throws IOException, MessageFormatException {
+    public static ByteBuffer deserializeUserMetadata(CrcInputStream crcStream) throws IOException,
+            MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       int usermetadataSize = dataStream.readInt();
       byte[] userMetadaBuffer = new byte[usermetadataSize];
@@ -428,7 +433,8 @@ public class MessageFormat {
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
         logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
-        throw new MessageFormatException("corrupt data while parsing blob content", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+                                         MessageFormatErrorCodes.Data_Corrupt);
       }
       return new BlobOutput(dataSize, output);
     }

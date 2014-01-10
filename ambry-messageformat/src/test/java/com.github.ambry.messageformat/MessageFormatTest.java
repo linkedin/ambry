@@ -1,6 +1,5 @@
 package com.github.ambry.messageformat;
 
-import java.io.BufferedInputStream;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
@@ -94,14 +93,14 @@ public class MessageFormatTest {
       ByteBuffer output = ByteBuffer.allocate(MessageFormat.getCurrentVersionUserMetadataSize(usermetadata));
       MessageFormat.serializeCurrentVersionUserMetadata(output, usermetadata);
       output.flip();
-      ByteBuffer bufOutput = MessageFormat.deserializeMetadata(new ByteBufferInputStream(output));
+      ByteBuffer bufOutput = MessageFormat.deserializeUserMetadata(new ByteBufferInputStream(output));
       Assert.assertArrayEquals(usermetadata.array(), bufOutput.array());
 
       // corrupt usermetadata
       output.flip();
       output.put(10, (byte)1);
       try {
-        MessageFormat.deserializeMetadata(new ByteBufferInputStream(output));
+        MessageFormat.deserializeUserMetadata(new ByteBufferInputStream(output));
         Assert.assertEquals(true, false);
       }
       catch (MessageFormatException e) {

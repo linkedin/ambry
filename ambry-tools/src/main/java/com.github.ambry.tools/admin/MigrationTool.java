@@ -2,32 +2,34 @@ package com.github.ambry.tools.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
+import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobProperties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.io.File;
-import java.io.IOException;
+import java.util.Properties;
 
 /**
  * Tool to migration from a source to Ambry
  */
 public class MigrationTool {
 
-  public static void directoryWalk(String path ,
-                                   String prefix,
-                                   boolean ignorePrefix,
-                                   Coordinator coordinator,
-                                   FileWriter migrationLogger) {
+  public static void directoryWalk( String path , String prefix,
+                                    boolean ignorePrefix, Coordinator coordinator,
+                                    FileWriter writer) throws CoordinatorException, InterruptedException {
+
     File root = new File( path );
     File[] list = root.listFiles();
 
@@ -36,11 +38,11 @@ public class MigrationTool {
     for ( File f : list ) {
       if ( f.isDirectory()) {
         if (ignorePrefix || f.getName().startsWith(prefix)) {
-          directoryWalk(f.getAbsolutePath(), prefix, true, coordinator, migrationLogger);
+          directoryWalk(f.getAbsolutePath(), prefix, true, coordinator, writer);
         }
       }
       else {
-        System.out.println( "File: " + f.getAbsoluteFile() );
+        System.out.println( "File:" + f.getAbsoluteFile() );
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
@@ -49,7 +51,7 @@ public class MigrationTool {
           long startMs = System.currentTimeMillis();
           String id = coordinator.putBlob(props, ByteBuffer.wrap(usermetadata), stream);
           System.out.println("Time taken to put " + (System.currentTimeMillis() - startMs));
-          migrationLogger.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
+          writer.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
         }
         catch (FileNotFoundException e) {
           System.out.println("File not found path : " + f.getAbsolutePath() + " exception : " + e);
@@ -71,7 +73,7 @@ public class MigrationTool {
   }
 
   public static void main(String args[]) {
-    FileWriter migrationLogger = null;
+    FileWriter writer = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
@@ -127,20 +129,20 @@ public class MigrationTool {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
-      migrationLogger = new FileWriter(logFile);
+      writer = new FileWriter(logFile);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
-      Coordinator coordinator = new AmbryCoordinator(map);
-      directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, migrationLogger);
+      Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(new Properties()), map);
+      directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
     }
     catch (Exception e) {
       System.err.println("Error on exit " + e);
     }
     finally {
-      if (migrationLogger != null) {
+      if (writer != null) {
         try {
-          migrationLogger.close();
+          writer.close();
         }
         catch (Exception e) {
           System.out.println("Error when closing the writer");

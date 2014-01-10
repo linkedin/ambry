@@ -25,4 +25,11 @@ public interface DataNodeId {
    * @return state of the DataNodeId.
    */
   public HardwareState getState();
+
+  /**
+   * Gets the DataNodeId's datacenter
+   *
+   * @return name of the Datacenter
+   */
+  public String getDatacenterName();
 }

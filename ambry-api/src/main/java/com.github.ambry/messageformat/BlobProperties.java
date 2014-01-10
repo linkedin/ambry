@@ -3,7 +3,8 @@ package com.github.ambry.messageformat;
 import com.github.ambry.utils.SystemTime;
 
 /**
- * The set of properties that the client can set
+ * The properties of a blob that the client can set at time of put. The blob size and serviceId are mandatory fields and
+ * must be set. The creation time is determined when this object is constructed.
  */
 public class BlobProperties {
   protected long timeToLiveInMs;
@@ -16,20 +17,23 @@ public class BlobProperties {
   protected long creationTimeInMs;
 
   public static final long Infinite_TTL = -1;
+  /**
+   * The size in bytes of the largest blob that can be stored.
+   */
+  public static final long Max_Blob_Size_In_Bytes = 5 * 1024 * 1024;
 
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
    */
   public BlobProperties(long blobSize, String serviceId) {
-    timeToLiveInMs = Infinite_TTL;
-    isPrivate = false;
-    this.blobSize = blobSize;
-    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
-    this.serviceId = serviceId;
-    this.contentType = null;
-    this.memberId = null;
-    this.parentBlobId = null;
+    this(Infinite_TTL,
+         false, // public
+         null,
+         null,
+         null,
+         blobSize,
+         serviceId);
   }
 
   /**
@@ -48,9 +52,20 @@ public class BlobProperties {
     this.contentType = contentType;
     this.memberId = memberId;
     this.parentBlobId = parentBlobId;
-    this.blobSize = blobSize;
+    this.blobSize = verifiedBlobSize(blobSize);
     this.serviceId = serviceId;
     this.creationTimeInMs = SystemTime.getInstance().milliseconds();
+  }
+
+  private long verifiedBlobSize(long blobSize) {
+    if (blobSize >= Max_Blob_Size_In_Bytes) {
+      throw new IllegalArgumentException("Specified Blob size is too large. Max Blob size allowed is " +
+                                         Max_Blob_Size_In_Bytes + " bytes.");
+    }
+    if (blobSize < 0) {
+      throw new IllegalArgumentException("Specified Blob size is negative. Must be positive.");
+    }
+    return blobSize;
   }
 
   public void setTimeToLiveInMs(long timeToLiveInMs) {
@@ -62,7 +77,7 @@ public class BlobProperties {
   }
 
   public void setBlobSize(long blobSize) {
-    this.blobSize = blobSize;
+    this.blobSize = verifiedBlobSize(blobSize);
   }
 
   public long getBlobSize() {

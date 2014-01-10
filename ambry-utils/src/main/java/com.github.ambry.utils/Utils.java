@@ -20,6 +20,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.Random;
 
 /**
  * A set of utility methods
@@ -31,6 +32,7 @@ public class Utils {
     if(size <= 0)
       return null;
     byte[] bytes = new byte[size];
+    // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
     int read = input.read(bytes);
     if (read != size) {
       throw new IllegalArgumentException("the size of the input does not match the actual data size");
@@ -330,5 +332,26 @@ public class Utils {
 
   public static long getBytesFromGB(long sizeInGB) {
     return sizeInGB * 1024 * 1024 * 1024;
+  }
+
+  /**
+   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from
+   * {@link java.util.Random#nextInt()}.
+   *
+   * @param n the bound
+   * @return a value select randomly from the range {@code [0..n)}.
+   */
+  public static long getRandomLong(long n) {
+    if (n<=0) {
+      throw new IllegalArgumentException("Cannot generate random long in range [0,n) for n<=0.");
+    }
+
+    final int BITS_PER_LONG = 63;
+      long bits, val;
+      do {
+        bits = new Random().nextLong() & (~(1L << BITS_PER_LONG));
+        val = bits % n;
+      } while (bits - val + (n - 1) < 0L);
+      return val;
   }
 }

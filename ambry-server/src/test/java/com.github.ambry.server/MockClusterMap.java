@@ -1,12 +1,15 @@
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-
-import com.github.ambry.clustermap.*;
 
 /**
  * Mock cluster map for unit tests
@@ -74,8 +77,23 @@ class MockDataNodeId implements DataNodeId {
   }
 
   @Override
+  public String getDatacenterName() {
+    return "Datacenter";
+  }
+
+  @Override
   public HardwareState getState() {
     return HardwareState.AVAILABLE;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    return 1;
   }
 }
 
