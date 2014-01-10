@@ -20,7 +20,7 @@ public class BlobProperties {
   /**
    * The size in bytes of the largest blob that can be stored.
    */
-  public static final long Max_Blob_Size = 5 * 1024 * 1024;
+  public static final long Max_Blob_Size_In_Bytes = 5 * 1024 * 1024;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -58,9 +58,9 @@ public class BlobProperties {
   }
 
   private long verifiedBlobSize(long blobSize) {
-    if (blobSize >= Max_Blob_Size) {
+    if (blobSize >= Max_Blob_Size_In_Bytes) {
       throw new IllegalArgumentException("Specified Blob size is too large. Max Blob size allowed is " +
-                                         Max_Blob_Size + " bytes.");
+                                         Max_Blob_Size_In_Bytes + " bytes.");
     }
     if (blobSize < 0) {
       throw new IllegalArgumentException("Specified Blob size is negative. Must be positive.");

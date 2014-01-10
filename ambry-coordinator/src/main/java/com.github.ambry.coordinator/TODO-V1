@@ -15,5 +15,8 @@ TODO: Safer cast idiom? There are a number of "(int)longValue" casts in the code
 TODO: Signal datanode to repair blob if coordinator detects corruption upon deserialization.
 
 
+MessageFormatFlags:
+TODO: MessageFormatFlags is an obtuse name. Need a better name and/or clearer Javadoc
+TODO: Add 'BlobInfo' enum to cover use case of retrieving BlobProperties & BlobUserMetadata
 
 

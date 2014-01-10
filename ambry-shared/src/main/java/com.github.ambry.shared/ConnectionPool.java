@@ -33,7 +33,7 @@ public class ConnectionPool implements BlockingChannelPool {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public class DataNodePool {
+  private class DataNodePool {
     private DataNodeId dataNodeId;
     private Queue<BlockingChannel> openBlockingChannels;
 

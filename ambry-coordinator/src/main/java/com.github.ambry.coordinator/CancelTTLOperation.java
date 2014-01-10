@@ -14,35 +14,27 @@ import org.slf4j.LoggerFactory;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
 /**
  * Performs a cancel TTL operation by sending and receiving cancel TTL requests until operation is complete or has
  * failed.
  */
-public class CancelTTLOperation extends Operation {
+final public class CancelTTLOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public CancelTTLOperation(String datacenterName, BlockingChannelPool connectionPool, ExecutorService requesterPool,
                             OperationContext oc, BlobId blobId, long operationTimeoutMs) throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-          new CancelTTLPolicy(datacenterName, blobId.getPartition()));
-  }
-
-  protected class CancelTTLOperationRequest extends OperationRequest {
-    protected CancelTTLOperationRequest(ReplicaId replicaId, RequestOrResponse request) {
-      super(replicaId, request);
-    }
-
-    protected Response getResponse(DataInputStream dataInputStream) throws IOException {
-      return TTLResponse.readFrom(dataInputStream);
-    }
+          new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    TTLRequest ttlRequest = new TTLRequest(oc.getCorrelationId(), oc.getClientId(), blobId, BlobProperties.Infinite_TTL);
-    return new CancelTTLOperationRequest(replicaId, ttlRequest);
+    TTLRequest ttlRequest = new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId,
+                                           BlobProperties.Infinite_TTL);
+    return new CancelTTLOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, ttlRequest);
   }
 
   @Override
@@ -58,9 +50,21 @@ public class CancelTTLOperation extends Operation {
         return false;
       default:
         logger.error("{} CancelTTLResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     oc, blobId, replicaId, serverErrorCode);
+                     context, blobId, replicaId, serverErrorCode);
         throw new CoordinatorException("Unexpected server error code in CancelTTLResponse.",
                                        CoordinatorError.UnexpectedInternalError);
     }
   }
 }
+
+final class CancelTTLOperationRequest extends OperationRequest {
+  protected CancelTTLOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse>
+          responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request);
+  }
+
+  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+    return TTLResponse.readFrom(dataInputStream);
+  }
+}
+

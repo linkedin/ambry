@@ -19,7 +19,6 @@ public interface Coordinator {
    * @param blob The blob that needs to be stored
    * @return The id of the blob if the blob was successfully stored
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata,
                  InputStream blob) throws CoordinatorException;
@@ -29,7 +28,6 @@ public interface Coordinator {
    *
    * @param id The id of the blob that needs to be deleted.
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   void deleteBlob(String id) throws CoordinatorException;
 
@@ -39,7 +37,6 @@ public interface Coordinator {
    *
    * @param id The id of the blob that needs its TTL cancelled
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   void cancelTTL(String id) throws CoordinatorException;
 
@@ -49,7 +46,6 @@ public interface Coordinator {
    * @param blobId The id of the blob for which to retrieve its blob properties.
    * @return The blob properties of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   BlobProperties getBlobProperties(String blobId) throws CoordinatorException;
 
@@ -59,7 +55,6 @@ public interface Coordinator {
    * @param blobId The id of the blob for which to retrieve its user metadata.
    * @return A buffer that contains the user metadata of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   ByteBuffer getBlobUserMetadata(String blobId) throws CoordinatorException;
 
@@ -69,7 +64,6 @@ public interface Coordinator {
    * @param blobId The id of the blob for which to retrieve its content.
    * @return The data of  of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
-   * @throws InterruptedException if the operation is interrupted
    */
   BlobOutput getBlob(String blobId) throws CoordinatorException;
 

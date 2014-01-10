@@ -151,50 +151,52 @@ public class AmbryCoordinator implements Coordinator {
       throw new IllegalArgumentException("Blob stream argument to put operation is null.");
     }
 
-    OperationContext oc = getOperationContext();
     PartitionId partitionId = getPartitionForPut();
     BlobId blobId = new BlobId(partitionId);
 
-    new PutOperation(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties,
-                     userMetadata, blobStream).execute();
+    PutOperation putOperation = new PutOperation(datacenterName, connectionPool, requesterPool,
+                                                 getOperationContext(), blobId, operationTimeoutMs, blobProperties,
+                                                 userMetadata, blobStream);
+    putOperation.execute();
 
     return blobId.toString();
   }
 
   @Override
   public void deleteBlob(String blobIdString) throws CoordinatorException {
-    OperationContext oc = getOperationContext();
     BlobId blobId = getBlobIdFromString(blobIdString);
 
-    new DeleteOperation(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs).execute();
+    DeleteOperation deleteOperation = new DeleteOperation(datacenterName, connectionPool, requesterPool,
+                                                          getOperationContext(), blobId, operationTimeoutMs);
+    deleteOperation.execute();
   }
 
   @Override
   public void cancelTTL(String blobIdString) throws CoordinatorException {
-    OperationContext oc = getOperationContext();
     BlobId blobId = getBlobIdFromString(blobIdString);
 
-    new CancelTTLOperation(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs).execute();
+    CancelTTLOperation cancelTTLOperation = new CancelTTLOperation(datacenterName, connectionPool, requesterPool,
+                                                                   getOperationContext(), blobId, operationTimeoutMs);
+    cancelTTLOperation.execute();
   }
 
   @Override
   public BlobProperties getBlobProperties(String blobIdString) throws CoordinatorException {
-    OperationContext oc = getOperationContext();
     BlobId blobId = getBlobIdFromString(blobIdString);
 
     GetBlobPropertiesOperation gbpo = new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool,
-                                                                     oc, blobId, operationTimeoutMs, clusterMap);
+                                                                     getOperationContext(), blobId,
+                                                                     operationTimeoutMs, clusterMap);
     gbpo.execute();
     return gbpo.getBlobProperties();
   }
 
   @Override
   public ByteBuffer getBlobUserMetadata(String blobIdString) throws CoordinatorException {
-    OperationContext oc = getOperationContext();
     BlobId blobId = getBlobIdFromString(blobIdString);
 
     GetBlobUserMetadataOperation gumo = new GetBlobUserMetadataOperation(datacenterName, connectionPool,
-                                                                         requesterPool, oc,
+                                                                         requesterPool, getOperationContext(),
                                                                          blobId, operationTimeoutMs, clusterMap);
     gumo.execute();
     return gumo.getUserMetadata();
@@ -202,10 +204,9 @@ public class AmbryCoordinator implements Coordinator {
 
   @Override
   public BlobOutput getBlob(String blobIdString) throws CoordinatorException {
-    OperationContext oc = getOperationContext();
     BlobId blobId = getBlobIdFromString(blobIdString);
 
-    GetBlobOperation gbdo = new GetBlobOperation(datacenterName, connectionPool, requesterPool, oc,
+    GetBlobOperation gbdo = new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(),
                                                  blobId, operationTimeoutMs, clusterMap);
     gbdo.execute();
     return gbdo.getBlobOutput();

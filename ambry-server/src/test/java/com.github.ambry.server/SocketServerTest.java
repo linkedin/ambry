@@ -100,8 +100,6 @@ public class SocketServerTest {
     Assert.assertEquals(responseReplay.getError(), ServerErrorCode.IO_Error);
   }
 
-  /*
-
   /**
    * Choose a number of random available ports
    */

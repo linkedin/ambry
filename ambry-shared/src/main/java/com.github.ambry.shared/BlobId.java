@@ -76,7 +76,6 @@ public class BlobId extends StoreKey {
 
   @Override
   public String toString() {
-    // TODO: Decide between Hex and Base64
     //return DatatypeConverter.printBase64Binary(toBytes());
     return DatatypeConverter.printHexBinary(toBytes());
   }

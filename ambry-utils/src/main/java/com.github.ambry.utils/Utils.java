@@ -335,17 +335,23 @@ public class Utils {
   }
 
   /**
-   * Generates a random long in specified range.
+   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from
+   * {@link java.util.Random#nextInt()}.
    *
-   * @param n exclusive upper bound
-   * @return  a pseudorandom, uniformly distributed long value between 0 (inclusive) and the specified value (exclusive).
+   * @param n the bound
+   * @return a value select randomly from the range {@code [0..n)}.
    */
   public static long getRandomLong(long n) {
-    // Approach borrowed from Stack Overflow:
-    // http://stackoverflow.com/questions/2546078/java-random-long-number-in-0-x-n-range
     if (n<=0) {
       throw new IllegalArgumentException("Cannot generate random long in range [0,n) for n<=0.");
     }
-    return (long)(new Random().nextDouble()*n);
+
+    final int BITS_PER_LONG = 63;
+      long bits, val;
+      do {
+        bits = new Random().nextLong() & (~(1L << BITS_PER_LONG));
+        val = bits % n;
+      } while (bits - val + (n - 1) < 0L);
+      return val;
   }
 }

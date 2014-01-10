@@ -18,7 +18,10 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+
+import static java.lang.Math.min;
 
 /**
  * Performs a get operation by sending and receiving get requests until operation is complete or has failed.
@@ -26,7 +29,19 @@ import java.util.concurrent.ExecutorService;
 public abstract class GetOperation extends Operation {
   protected ClusterMap clusterMap;
   private MessageFormatFlags flags;
-  private GetResponsePolicy getResponsePolicy;
+
+  private int blobNotFoundCount;
+  private int blobDeletedCount;
+  private int blobExpiredCount;
+
+  // Number of replicas in the partition. This is used to set threshold to determine blob not found (all replicas
+  // must reply). Also used to modify blob deleted and blob expired thresholds for partitions with a small number of
+  // replicas.
+  private final int replicaIdCount;
+  // Minimum number of Blob_Deleted responses from servers necessary before returning Blob_Deleted to caller.
+  private final int Blob_Deleted_Count_Threshold = 1;
+  // Minimum number of Blob_Expired responses from servers necessary before returning Blob_Expired to caller.
+  private final int Blob_Expired_Count_Threshold = 2;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -37,38 +52,17 @@ public abstract class GetOperation extends Operation {
           new GetPolicy(datacenterName, blobId.getPartition()));
     this.clusterMap = clusterMap;
     this.flags = flags;
-    this.getResponsePolicy = new GetThresholdResponsePolicy(blobId.getPartition());
-  }
 
-  protected abstract class GetOperationRequest extends OperationRequest {
-    protected GetOperationRequest(ReplicaId replicaId, RequestOrResponse request) {
-      super(replicaId, request);
-    }
-
-    protected Response getResponse(DataInputStream dataInputStream) throws IOException {
-      return GetResponse.readFrom(dataInputStream, clusterMap);
-    }
-
-    @Override
-    protected void deserializeResponsePayload(Response response) throws CoordinatorException, IOException, MessageFormatException {
-      GetResponse getResponse = (GetResponse)response;
-      if (response.getError() == ServerErrorCode.No_Error) {
-        if (getResponse.getMessageInfoList().size() != 1) {
-          throw new CoordinatorException("MessageInfoList indicates incorrect payload size. Should be 1: " +
-                                         getResponse.getMessageInfoList().size(),
-                                         CoordinatorError.UnexpectedInternalError);
-        }
-        deserializeBody(getResponse.getInputStream());
-      }
-    }
-
-    protected abstract void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException;
+    this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
+    this.blobNotFoundCount = 0;
+    this.blobDeletedCount = 0;
+    this.blobExpiredCount = 0;
   }
 
   protected GetRequest makeGetRequest() {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);
     blobIds.add(blobId);
-    return new GetRequest(oc.getCorrelationId(), oc.getClientId(), flags, blobId.getPartition(), blobIds);
+    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, blobId.getPartition(), blobIds);
   }
 
   @Override
@@ -81,19 +75,61 @@ public abstract class GetOperation extends Operation {
       case Data_Corrupt:
         return false;
       case Blob_Not_Found:
-        getResponsePolicy.blobNotFound(replicaId);
+        blobNotFoundCount++;
+        if (blobNotFoundCount == replicaIdCount) {
+          throw new CoordinatorException("Blob not found.", CoordinatorError.BlobDoesNotExist);
+        }
         return false;
       case Blob_Deleted:
-        getResponsePolicy.blobDeleted(replicaId);
+        blobDeletedCount++;
+        if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
+          throw new CoordinatorException("Blob deleted.", CoordinatorError.BlobDeleted);
+        }
         return false;
       case Blob_Expired:
-        getResponsePolicy.blobExpired(replicaId);
+        blobExpiredCount++;
+        if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
+          throw new CoordinatorException("Blob expired.", CoordinatorError.BlobExpired);
+        }
         return false;
       default:
         logger.error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     oc, blobId, replicaId, serverErrorCode);
+                     context, blobId, replicaId, serverErrorCode);
         throw new CoordinatorException("Unexpected server error code in GetResponse.",
                                        CoordinatorError.UnexpectedInternalError);
     }
   }
 }
+
+abstract class GetOperationRequest extends OperationRequest {
+  private final ClusterMap clusterMap;
+
+  protected GetOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+                                OperationContext context, BlobId blobId, ReplicaId replicaId,
+                                RequestOrResponse request, ClusterMap clusterMap) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request);
+    this.clusterMap = clusterMap;
+  }
+
+  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+    return GetResponse.readFrom(dataInputStream, clusterMap);
+  }
+
+  @Override
+  protected void deserializeResponsePayload(Response response) throws CoordinatorException, IOException,
+          MessageFormatException {
+    GetResponse getResponse = (GetResponse)response;
+    if (response.getError() == ServerErrorCode.No_Error) {
+      if (getResponse.getMessageInfoList().size() != 1) {
+        throw new CoordinatorException("MessageInfoList indicates incorrect payload size. Should be 1: " +
+                                       getResponse.getMessageInfoList().size(),
+                                       CoordinatorError.UnexpectedInternalError);
+      }
+      deserializeBody(getResponse.getInputStream());
+    }
+  }
+
+  protected abstract void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException;
+}
+
+

@@ -7,18 +7,23 @@ import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.RequestOrResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
 /**
  * Performs a get blob data operation by sending and receiving get requests until operation is complete or has failed.
  */
-public class GetBlobPropertiesOperation extends GetOperation {
+final public class GetBlobPropertiesOperation extends GetOperation {
   private BlobProperties blobProperties;
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, BlockingChannelPool connectionPool,
                                     ExecutorService requesterPool, OperationContext oc, BlobId blobId,
@@ -28,20 +33,10 @@ public class GetBlobPropertiesOperation extends GetOperation {
     this.blobProperties = null;
   }
 
-  protected class GetBlobPropertiesOperationRequest extends GetOperationRequest {
-    protected GetBlobPropertiesOperationRequest(ReplicaId replicaId, RequestOrResponse request) {
-      super(replicaId, request);
-    }
-
-    @Override
-    protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
-      blobProperties = MessageFormat.deserializeBlobProperties(inputStream);
-    }
-  }
-
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    return new GetBlobPropertiesOperationRequest(replicaId, makeGetRequest());
+    return new GetBlobPropertiesOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
+                                                 makeGetRequest(), clusterMap, this);
   }
 
   public BlobProperties getBlobProperties() throws CoordinatorException {
@@ -49,6 +44,32 @@ public class GetBlobPropertiesOperation extends GetOperation {
       return blobProperties;
     }
     throw new CoordinatorException("blobProperties is null.", CoordinatorError.UnexpectedInternalError);
+  }
+
+  public synchronized void setBlobProperties(BlobProperties blobProperties) {
+    if (this.blobProperties == null) {
+      this.blobProperties = blobProperties;
+    }
+    else {
+      logger.warn("{} BlobProperties attempted to be set after being set.", context);
+    }
+  }
+}
+
+final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
+  private GetBlobPropertiesOperation getBlobPropertiesOperation;
+
+  protected GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse>
+          responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request,
+                                              ClusterMap clusterMap,
+                                              GetBlobPropertiesOperation getBlobPropertiesOperation) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
+    this.getBlobPropertiesOperation = getBlobPropertiesOperation;
+  }
+
+  @Override
+  protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
+    getBlobPropertiesOperation.setBlobProperties(MessageFormat.deserializeBlobProperties(inputStream));
   }
 }
 

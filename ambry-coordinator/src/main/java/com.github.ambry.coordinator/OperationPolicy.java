@@ -14,7 +14,7 @@ import static java.lang.Math.min;
 
 /**
  * An OperationPolicy controls parallelism of an operation (how many requests in flight at a time), probing policy
- * (order in which to send requests to replicas), and whether an operation isDone or not.
+ * (order in which to send requests to replicas), and whether an operation isComplete or not.
  */
 public interface OperationPolicy {
   /**
@@ -26,29 +26,36 @@ public interface OperationPolicy {
   public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight);
 
   /**
-   * Determines if an operation is complete or not.
+   * Determines if an operation is now successfully complete.
    *
-   * @return true iff the operation is complete.
-   * @throws CoordinatorException if operation must end in an exceptional manner.
+   * @return true iff the operation is successfully complete.
    */
-  public boolean isDone() throws CoordinatorException;
+  public boolean isComplete();
+
+  /**
+   * Determines if an operation may complete in the future.
+   *
+   * @return true iff the operation may complete in the future, false if the operation can never complete in the
+   *         future.
+   */
+  public boolean mayComplete();
 
   /**
    * Accounts for successful request-response pairs. Operation must invoke this method so that sendMoreRequests and
-   * isDone has necessary information.
+   * isComplete has necessary information.
    *
    * @param replicaId ReplicaId that successfully handled request.
    */
-  public void successfulResponse(ReplicaId replicaId);
+  public void onSuccessfulResponse(ReplicaId replicaId);
 
   /**
-   * Accounts for failed request-response pairs. Operation must invoke this method so that sendMoreRequests and isDone
-   * has necessary information. A failed request-response pair is any request-response pair that experienced an
-   * exception or that returned are response with an error.
+   * Accounts for failed request-response pairs. Operation must invoke this method so that sendMoreRequests and
+   * isComplete has necessary information. A failed request-response pair is any request-response pair that experienced
+   * an exception or that returned are response with an error.
    *
    * @param replicaId ReplicaId that did not successfully handle request.
    */
-  public void failedResponse(ReplicaId replicaId);
+  public void onFailedResponse(ReplicaId replicaId);
 
   /**
    * Determines the next replica to which to send a request. This method embodies the "probing" policy for the
@@ -67,7 +74,8 @@ public interface OperationPolicy {
 }
 
 /**
- * Implements a local datacenter first probing policy. Implements basic request accounting too.
+ * Implements a local datacenter first probing policy. I.e., replicas for the local datacenter are sent requests before
+ * replicas in remote datacenters. Also implements basic request accounting of failed and successful requests.
  */
 abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   protected int replicaIdCount;
@@ -114,15 +122,15 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   public abstract boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight);
 
   @Override
-  public abstract boolean isDone() throws CoordinatorException;
+  public abstract boolean isComplete();
 
   @Override
-  public void successfulResponse(ReplicaId replicaId) {
+  public void onSuccessfulResponse(ReplicaId replicaId) {
     successfulRequests.add(replicaId);
   }
 
   @Override
-  public void failedResponse(ReplicaId replicaId) {
+  public void onFailedResponse(ReplicaId replicaId) {
     failedRequests.add(replicaId);
   }
 
@@ -151,15 +159,19 @@ class GetPolicy extends ProbeLocalFirstOperationPolicy {
   }
 
   @Override
-  public boolean isDone() throws CoordinatorException {
+  public boolean isComplete() {
     if (successfulRequests.size() >= 1) {
       return true;
     }
-    else if (failedRequests.size() == replicaIdCount) {
-      throw new CoordinatorException("Insufficient DataNodes replied to complete operation",
-                                     CoordinatorError.AmbryUnavailable);
-    }
     return false;
+  }
+
+  @Override
+  public boolean mayComplete() {
+    if (failedRequests.size() == replicaIdCount) {
+      return false;
+    }
+    return true;
   }
 }
 
@@ -195,18 +207,26 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   }
 
   @Override
-  public boolean isDone() throws CoordinatorException {
+  public boolean isComplete() {
     if (successfulRequests.size() >= successTarget) {
       return true;
     }
-    else if ((replicaIdCount - failedRequests.size()) < successTarget) {
-      throw new CoordinatorException("Insufficient DataNodes replied to complete Operation.",
-                                     CoordinatorError.AmbryUnavailable);
-    }
     return false;
+  }
+
+  @Override
+  public boolean mayComplete() {
+    if ((replicaIdCount - failedRequests.size()) < successTarget) {
+      return false;
+    }
+    return true;
   }
 }
 
+/**
+ * Sends requests in parallel --- threshold number for durability plus one for good luck. Durability threshold is 2 so
+ * long as there are more than 2 replicas in the partition.
+ */
 class PutPolicy extends ParallelOperationPolicy {
   /*
    There are many possibilities for extending the put policy. Some ideas that have been discussed include the following:
@@ -233,26 +253,12 @@ class PutPolicy extends ParallelOperationPolicy {
   }
 }
 
-class CancelTTLPolicy extends ParallelOperationPolicy {
-  public CancelTTLPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
-    super(datacenterName, partitionId);
-    if (replicaIdCount == 1) {
-      super.successTarget = 1;
-      super.requestParallelism = 1;
-    }
-    else if (replicaIdCount <= 2) {
-      super.successTarget = 1;
-      super.requestParallelism = 2;
-    }
-    else {
-      super.successTarget = 2;
-      super.requestParallelism = replicaIdCount;
-    }
-  }
-}
-
-class DeletePolicy extends ParallelOperationPolicy {
-  public DeletePolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+/**
+ * Sends requests in parallel to all replicas. Durability threshold is 2, so  long as there are more than 2 replicas in
+ * the partition. Policy is used for both delete and cancelTTL.
+ */
+class AllInParallelOperationPolicy extends ParallelOperationPolicy {
+  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
     super(datacenterName, partitionId);
     if (replicaIdCount == 1) {
       super.successTarget = 1;

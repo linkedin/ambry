@@ -17,12 +17,13 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
 /**
  * Performs a put operation by sending and receiving put requests until operation is complete or has failed.
  */
-public class PutOperation extends Operation {
+final public class PutOperation extends Operation {
   private final BlobProperties blobProperties;
   private final ByteBuffer userMetadata;
   private final ByteBufferInputStream materializedBlobStream;
@@ -33,7 +34,8 @@ public class PutOperation extends Operation {
                       OperationContext oc, BlobId blobId, long operationTimeoutMs,
                       BlobProperties blobProperties, ByteBuffer userMetadata,
                       InputStream blobStream) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, new PutPolicy(datacenterName, blobId.getPartition()));
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+          new PutPolicy(datacenterName, blobId.getPartition()));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
@@ -46,27 +48,18 @@ public class PutOperation extends Operation {
     }
   }
 
-  protected class PutOperationRequest extends OperationRequest {
-    protected PutOperationRequest(ReplicaId replicaId, RequestOrResponse request) {
-      super(replicaId, request);
-    }
-
-    protected Response getResponse(DataInputStream dataInputStream) throws IOException {
-      return PutResponse.readFrom(dataInputStream);
-    }
-  }
-
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    PutRequest putRequest = new PutRequest(oc.getCorrelationId(), oc.getClientId(), blobId, blobProperties, userMetadata,
+    PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
+                                           userMetadata,
                                            materializedBlobStream.duplicate());
 
-    return new PutOperationRequest(replicaId, putRequest);
+    return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
   }
 
-
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws CoordinatorException {
+  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
+          CoordinatorException {
     switch (serverErrorCode) {
       case No_Error:
         return true;
@@ -74,19 +67,34 @@ public class PutOperation extends Operation {
         return false;
       case Blob_Already_Exists:
         logger.error("{} Put issued to BlobId {} that already exists on ReplicaId {}.",
-                     oc, blobId, replicaId);
+                     context, blobId, replicaId);
         throw new CoordinatorException("BlobId already exists.", CoordinatorError.UnexpectedInternalError);
       /*
       case Replica_Not_Writable:
         logger.error("{} Put issued to BlobId {} on read only partition (ReplicaId {} responded with {}).",
-                     oc, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Attempt to write to read-only partition.", CoordinatorError.UnexpectedInternalError);
+                     context, blobId, replicaId, serverErrorCode);
+        throw new CoordinatorException("Attempt to write to read-only partition.",
+        CoordinatorError.UnexpectedInternalError);
        */
       default:
         logger.error("{} PutResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     oc, blobId, replicaId, serverErrorCode);
+                     context, blobId, replicaId, serverErrorCode);
         throw new CoordinatorException("Unexpected server error code in PutResponse.",
                                        CoordinatorError.UnexpectedInternalError);
     }
   }
 }
+
+final class PutOperationRequest extends OperationRequest {
+  protected PutOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+                                OperationContext context, BlobId blobId, ReplicaId replicaId,
+                                RequestOrResponse request) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request);
+  }
+
+  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+    return PutResponse.readFrom(dataInputStream);
+  }
+}
+
+

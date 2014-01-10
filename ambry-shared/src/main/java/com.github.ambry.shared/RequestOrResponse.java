@@ -6,9 +6,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
-// TODO: Stream SerDe code has leaked up to BlobId and PartitionId. Any way to have a StreamSerDe interface so we can
-// keep track of types that must SerDe to stream and to ensure all such types do so in same manner.
-
 /**
  * Request Response for serialization and de-serialization
  */
