@@ -435,7 +435,6 @@ class IndexSegmentInfo {
  **/
 public class BlobPersistentIndex {
 
-  private BlobJournal indexJournal;
   private long maxInMemoryIndexSizeInBytes;
   private int maxInMemoryNumElements;
   private Log log;

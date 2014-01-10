@@ -28,7 +28,6 @@ public class BlobIndex {
   protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
   protected Scheduler scheduler;
   private AtomicLong logEndOffset;
-  private BlobJournal indexJournal;
   private File indexFile;
   private static final String indexFileName = "index_current";
   private IndexPersistor persistor;
