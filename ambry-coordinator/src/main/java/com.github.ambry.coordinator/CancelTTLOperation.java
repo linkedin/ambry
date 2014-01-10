@@ -24,9 +24,18 @@ import java.util.concurrent.ExecutorService;
 final public class CancelTTLOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CancelTTLOperation(String datacenterName, BlockingChannelPool connectionPool, ExecutorService requesterPool,
-                            OperationContext oc, BlobId blobId, long operationTimeoutMs) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+  public CancelTTLOperation(String datacenterName,
+                            BlockingChannelPool connectionPool,
+                            ExecutorService requesterPool,
+                            OperationContext oc,
+                            BlobId blobId,
+                            long operationTimeoutMs) throws CoordinatorException {
+    super(datacenterName,
+          connectionPool,
+          requesterPool,
+          oc,
+          blobId,
+          operationTimeoutMs,
           new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
   }
 
@@ -49,17 +58,22 @@ final public class CancelTTLOperation extends Operation {
       case Blob_Deleted:
         return false;
       default:
-        logger.error("{} CancelTTLResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Server returned unexpected error for CancelTTLOperation.",
-                                       CoordinatorError.UnexpectedInternalError);
+        CoordinatorException e = new CoordinatorException("Server returned unexpected error for CancelTTLOperation.",
+                                                          CoordinatorError.UnexpectedInternalError);
+        logger.error("{} CancelTTLResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
+                     context, blobId, replicaId, serverErrorCode, e);
+        throw e;
     }
   }
 }
 
 final class CancelTTLOperationRequest extends OperationRequest {
-  protected CancelTTLOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse>
-          responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
+  protected CancelTTLOperationRequest(BlockingChannelPool connectionPool,
+                                      BlockingQueue<OperationResponse> responseQueue,
+                                      OperationContext context,
+                                      BlobId blobId,
+                                      ReplicaId replicaId,
+                                      RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 

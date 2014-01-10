@@ -40,16 +40,26 @@ public abstract class GetOperation extends Operation {
   // replicas.
   private final int replicaIdCount;
   // Minimum number of Blob_Deleted responses from servers necessary before returning Blob_Deleted to caller.
-  private final int Blob_Deleted_Count_Threshold = 1;
+  private static final int Blob_Deleted_Count_Threshold = 1;
   // Minimum number of Blob_Expired responses from servers necessary before returning Blob_Expired to caller.
-  private final int Blob_Expired_Count_Threshold = 2;
+  private static final int Blob_Expired_Count_Threshold = 2;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetOperation(String datacenterName, BlockingChannelPool connectionPool, ExecutorService requesterPool,
-                      OperationContext oc, BlobId blobId, long operationTimeoutMs,
-                      ClusterMap clusterMap, MessageFormatFlags flags) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+  public GetOperation(String datacenterName,
+                      BlockingChannelPool connectionPool,
+                      ExecutorService requesterPool,
+                      OperationContext oc,
+                      BlobId blobId,
+                      long operationTimeoutMs,
+                      ClusterMap clusterMap,
+                      MessageFormatFlags flags) throws CoordinatorException {
+    super(datacenterName,
+          connectionPool,
+          requesterPool,
+          oc,
+          blobId,
+          operationTimeoutMs,
           new GetPolicy(datacenterName, blobId.getPartition()));
     this.clusterMap = clusterMap;
     this.flags = flags;
@@ -94,10 +104,11 @@ public abstract class GetOperation extends Operation {
         }
         return false;
       default:
-        logger.error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Server returned unexpected error for GetOperation.",
-                                       CoordinatorError.UnexpectedInternalError);
+        CoordinatorException e = new CoordinatorException("Server returned unexpected error for GetOperation.",
+                                                          CoordinatorError.UnexpectedInternalError);
+        logger.error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
+                     context, blobId, replicaId, serverErrorCode, e);
+        throw e;
 
     }
   }
@@ -106,9 +117,13 @@ public abstract class GetOperation extends Operation {
 abstract class GetOperationRequest extends OperationRequest {
   private final ClusterMap clusterMap;
 
-  protected GetOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context, BlobId blobId, ReplicaId replicaId,
-                                RequestOrResponse request, ClusterMap clusterMap) {
+  protected GetOperationRequest(BlockingChannelPool connectionPool,
+                                BlockingQueue<OperationResponse> responseQueue,
+                                OperationContext context,
+                                BlobId blobId,
+                                ReplicaId replicaId,
+                                RequestOrResponse request,
+                                ClusterMap clusterMap) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
     this.clusterMap = clusterMap;
   }
@@ -118,12 +133,12 @@ abstract class GetOperationRequest extends OperationRequest {
   }
 
   @Override
-  protected void deserializeResponsePayload(Response response) throws  IOException, MessageFormatException {
+  protected void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
     GetResponse getResponse = (GetResponse)response;
     if (response.getError() == ServerErrorCode.No_Error) {
       if (getResponse.getMessageInfoList().size() != 1) {
         throw new MessageFormatException("MessageInfoList indicates incorrect payload size. Should be 1: " +
-                                       getResponse.getMessageInfoList().size(), MessageFormatErrorCodes.Data_Corrupt);
+                                         getResponse.getMessageInfoList().size(), MessageFormatErrorCodes.Data_Corrupt);
       }
       deserializeBody(getResponse.getInputStream());
     }

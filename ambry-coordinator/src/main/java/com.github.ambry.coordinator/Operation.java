@@ -44,8 +44,13 @@ public abstract class Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Operation(String datacenterName, BlockingChannelPool connectionPool, ExecutorService requesterPool,
-                   OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
+  public Operation(String datacenterName,
+                   BlockingChannelPool connectionPool,
+                   ExecutorService requesterPool,
+                   OperationContext context,
+                   BlobId blobId,
+                   long operationTimeoutMs,
+                   OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -98,9 +103,10 @@ public abstract class Operation {
 
         ReplicaId replicaId = operationResponse.getReplicaId();
         if (!requestsInFlight.remove(replicaId)) {
-          logger.error("Response received from replica to which no request is in flight: {}", replicaId);
-          throw new CoordinatorException("Coordinator received unexpected response",
-                                         CoordinatorError.UnexpectedInternalError);
+          CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
+                                                            CoordinatorError.UnexpectedInternalError);
+          logger.error("Response received from replica ({}) to which no request is in flight: {}", replicaId, e);
+          throw e;
         }
 
         if (operationResponse.getError() == RequestResponseError.SUCCESS) {
@@ -115,6 +121,10 @@ public abstract class Operation {
           // Currently, no actions taken based upon specific RequestResponseError returned. Possible actions include
           // retrying request, updating soft-state, notifying datanode and so forth. Specific action may depend on
           // operation type.
+          // At the least, need metric for each error type here. And, need to make sure that 'data corrupt' tracked
+          // on its own since that indicates possibly issues with server-side state. If multiple responses return
+          // corrupt, we need to signal a serious alert because we likely have a software bug corrupting state on
+          // servers.
           operationPolicy.onFailedResponse(replicaId);
         }
 
@@ -138,7 +148,7 @@ public abstract class Operation {
         operationComplete.set(true);
         // Slightly abuse the notion of "unexpected" internal error since InterruptedException does not indicate
         // something truly unexpected.
-        logger.info("{} operation interrupted during execute.", context);
+        logger.info("{} operation interrupted during execute", context);
         throw new CoordinatorException("Operation interrupted.", CoordinatorError.UnexpectedInternalError);
       }
     }
@@ -159,8 +169,12 @@ abstract class OperationRequest implements Runnable {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected OperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-                             OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
+  protected OperationRequest(BlockingChannelPool connectionPool,
+                             BlockingQueue<OperationResponse> responseQueue,
+                             OperationContext context,
+                             BlobId blobId,
+                             ReplicaId replicaId,
+                             RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;

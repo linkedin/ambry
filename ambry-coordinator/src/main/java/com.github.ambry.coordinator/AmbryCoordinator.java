@@ -159,40 +159,53 @@ public class AmbryCoordinator implements Coordinator {
 
     PartitionId partitionId = getPartitionForPut();
     BlobId blobId = new BlobId(partitionId);
-
-    PutOperation putOperation = new PutOperation(datacenterName, connectionPool, requesterPool,
-                                                 getOperationContext(), blobId, operationTimeoutMs, blobProperties,
-                                                 userMetadata, blobStream);
+    PutOperation putOperation = new PutOperation(datacenterName,
+                                                 connectionPool,
+                                                 requesterPool,
+                                                 getOperationContext(),
+                                                 blobId,
+                                                 operationTimeoutMs,
+                                                 blobProperties,
+                                                 userMetadata,
+                                                 blobStream);
     putOperation.execute();
-
     return blobId.toString();
   }
 
   @Override
   public void deleteBlob(String blobIdString) throws CoordinatorException {
     BlobId blobId = getBlobIdFromString(blobIdString);
-
-    DeleteOperation deleteOperation = new DeleteOperation(datacenterName, connectionPool, requesterPool,
-                                                          getOperationContext(), blobId, operationTimeoutMs);
+    DeleteOperation deleteOperation = new DeleteOperation(datacenterName,
+                                                          connectionPool,
+                                                          requesterPool,
+                                                          getOperationContext(),
+                                                          blobId,
+                                                          operationTimeoutMs);
     deleteOperation.execute();
   }
 
   @Override
   public void cancelTTL(String blobIdString) throws CoordinatorException {
     BlobId blobId = getBlobIdFromString(blobIdString);
-
-    CancelTTLOperation cancelTTLOperation = new CancelTTLOperation(datacenterName, connectionPool, requesterPool,
-                                                                   getOperationContext(), blobId, operationTimeoutMs);
+    CancelTTLOperation cancelTTLOperation = new CancelTTLOperation(datacenterName,
+                                                                   connectionPool,
+                                                                   requesterPool,
+                                                                   getOperationContext(),
+                                                                   blobId,
+                                                                   operationTimeoutMs);
     cancelTTLOperation.execute();
   }
 
   @Override
   public BlobProperties getBlobProperties(String blobIdString) throws CoordinatorException {
     BlobId blobId = getBlobIdFromString(blobIdString);
-
-    GetBlobPropertiesOperation gbpo = new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool,
-                                                                     getOperationContext(), blobId,
-                                                                     operationTimeoutMs, clusterMap);
+    GetBlobPropertiesOperation gbpo = new GetBlobPropertiesOperation(datacenterName,
+                                                                     connectionPool,
+                                                                     requesterPool,
+                                                                     getOperationContext(),
+                                                                     blobId,
+                                                                     operationTimeoutMs,
+                                                                     clusterMap);
     gbpo.execute();
     return gbpo.getBlobProperties();
   }
@@ -200,10 +213,13 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public ByteBuffer getBlobUserMetadata(String blobIdString) throws CoordinatorException {
     BlobId blobId = getBlobIdFromString(blobIdString);
-
-    GetBlobUserMetadataOperation gumo = new GetBlobUserMetadataOperation(datacenterName, connectionPool,
-                                                                         requesterPool, getOperationContext(),
-                                                                         blobId, operationTimeoutMs, clusterMap);
+    GetBlobUserMetadataOperation gumo = new GetBlobUserMetadataOperation(datacenterName,
+                                                                         connectionPool,
+                                                                         requesterPool,
+                                                                         getOperationContext(),
+                                                                         blobId,
+                                                                         operationTimeoutMs,
+                                                                         clusterMap);
     gumo.execute();
     return gumo.getUserMetadata();
   }
@@ -212,8 +228,13 @@ public class AmbryCoordinator implements Coordinator {
   public BlobOutput getBlob(String blobIdString) throws CoordinatorException {
     BlobId blobId = getBlobIdFromString(blobIdString);
 
-    GetBlobOperation gbdo = new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(),
-                                                 blobId, operationTimeoutMs, clusterMap);
+    GetBlobOperation gbdo = new GetBlobOperation(datacenterName,
+                                                 connectionPool,
+                                                 requesterPool,
+                                                 getOperationContext(),
+                                                 blobId,
+                                                 operationTimeoutMs,
+                                                 clusterMap);
     gbdo.execute();
     return gbdo.getBlobOutput();
   }

@@ -25,9 +25,13 @@ final public class GetBlobOperation extends GetOperation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetBlobOperation(String datacenterName, BlockingChannelPool connectionPool,
-                          ExecutorService requesterPool, OperationContext oc, BlobId blobId,
-                          long operationTimeoutMs, ClusterMap clusterMap) throws CoordinatorException {
+  public GetBlobOperation(String datacenterName,
+                          BlockingChannelPool connectionPool,
+                          ExecutorService requesterPool,
+                          OperationContext oc,
+                          BlobId blobId,
+                          long operationTimeoutMs,
+                          ClusterMap clusterMap) throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
           MessageFormatFlags.Blob);
     this.blobOutput = null;
@@ -35,17 +39,24 @@ final public class GetBlobOperation extends GetOperation {
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    return new GetBlobOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, makeGetRequest(),
-                                       clusterMap, this);
+    return new GetBlobOperationRequest(connectionPool,
+                                       responseQueue,
+                                       context,
+                                       blobId,
+                                       replicaId,
+                                       makeGetRequest(),
+                                       clusterMap,
+                                       this);
   }
 
   public BlobOutput getBlobOutput() throws CoordinatorException {
     if (blobOutput != null) {
       return blobOutput;
     }
-    logger.error("blobOutput is null and should not be.");
-    throw new CoordinatorException("GetBlobOperation has invalid return data.",
-                                   CoordinatorError.UnexpectedInternalError);
+    CoordinatorException e = new CoordinatorException("GetBlobOperation has invalid return data.",
+                                                      CoordinatorError.UnexpectedInternalError);
+    logger.error("blobOutput is null and should not be: {}", e);
+    throw e;
   }
 
   public synchronized void setBlobOutput(BlobOutput blobOutput) {
@@ -61,9 +72,14 @@ final public class GetBlobOperation extends GetOperation {
 final class GetBlobOperationRequest extends GetOperationRequest {
   private GetBlobOperation getBlobOperation;
 
-  protected GetBlobOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse>
-          responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request,
-                                    ClusterMap clusterMap, GetBlobOperation getBlobOperation) {
+  protected GetBlobOperationRequest(BlockingChannelPool connectionPool,
+                                    BlockingQueue<OperationResponse> responseQueue,
+                                    OperationContext context,
+                                    BlobId blobId,
+                                    ReplicaId replicaId,
+                                    RequestOrResponse request,
+                                    ClusterMap clusterMap,
+                                    GetBlobOperation getBlobOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobOperation = getBlobOperation;
   }

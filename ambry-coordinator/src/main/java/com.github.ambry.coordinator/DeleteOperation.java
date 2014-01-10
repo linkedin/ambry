@@ -22,9 +22,18 @@ import java.util.concurrent.ExecutorService;
 final public class DeleteOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public DeleteOperation(String datacenterName, BlockingChannelPool connectionPool, ExecutorService requesterPool,
-                         OperationContext oc, BlobId blobId, long operationTimeoutMs) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+  public DeleteOperation(String datacenterName,
+                         BlockingChannelPool connectionPool,
+                         ExecutorService requesterPool,
+                         OperationContext oc,
+                         BlobId blobId,
+                         long operationTimeoutMs) throws CoordinatorException {
+    super(datacenterName,
+          connectionPool,
+          requesterPool,
+          oc,
+          blobId,
+          operationTimeoutMs,
           new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
   }
 
@@ -46,17 +55,21 @@ final public class DeleteOperation extends Operation {
         return false;
       case Blob_Expired:
       default:
-        logger.error("{} DeleteResponse for BlobId {} received from ReplicaId {} had unexpected error code {}",
-                     context, blobId, replicaId, serverErrorCode);
-        throw new CoordinatorException("Server returned unexpected error for DeleteOperation.",
-                                       CoordinatorError.UnexpectedInternalError);
+        CoordinatorException e = new CoordinatorException("Server returned unexpected error for DeleteOperation.",
+                                                          CoordinatorError.UnexpectedInternalError);
+        logger.error("{} DeleteResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
+                     context, blobId, replicaId, serverErrorCode, e);
+        throw e;
     }
   }
 }
 
 final class DeleteOperationRequest extends OperationRequest {
-  protected DeleteOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-                                   OperationContext context, BlobId blobId, ReplicaId replicaId,
+  protected DeleteOperationRequest(BlockingChannelPool connectionPool,
+                                   BlockingQueue<OperationResponse> responseQueue,
+                                   OperationContext context,
+                                   BlobId blobId,
+                                   ReplicaId replicaId,
                                    RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }

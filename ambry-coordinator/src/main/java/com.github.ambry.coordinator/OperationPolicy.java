@@ -91,8 +91,10 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   protected ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
     this.replicaIdCount = partitionId.getReplicaIds().size();
     if (replicaIdCount < 1) {
-      logger.error("PartitionId {} has invalid number of replicas: {}.", partitionId, replicaIdCount);
-      throw new CoordinatorException("Partition has invalid configuration.", CoordinatorError.UnexpectedInternalError);
+      CoordinatorException e = new CoordinatorException("Partition has invalid configuration.",
+                                                        CoordinatorError.UnexpectedInternalError);
+      logger.error("PartitionId {} has invalid number of replicas {}: {}", partitionId, replicaIdCount, e);
+      throw e;
     }
     this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds());
 

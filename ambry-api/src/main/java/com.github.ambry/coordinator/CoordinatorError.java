@@ -8,23 +8,19 @@ public enum CoordinatorError {
   /**
    * Coordinator experienced an unexpected internal error. The caller should retry the operation. An operation that
    * changes the state of an existing blob (delete, cancelTTL) may have partially completed and so may eventually
-   * complete in the future. A put operation may also have partially completed and so may eventually "complete", however
-   * the BlobId was never returned to the caller and so the blob will never be retrieved or deleted.
+   * complete in the future.
    */
   UnexpectedInternalError,
   /**
    * Insufficient Ambry DataNodes could be contacted to successfully complete an operation. The caller should retry the
    * operation. An operation that changes the state of an existing blob (delete, cancelTTL) may have partially completed
-   * and so may eventually complete in the future. A put operation may also have partially completed and so may
-   * eventually "complete", however the BlobId was never returned to the caller and so the blob will never be retrieved
-   * or deleted.
+   * and so may eventually complete in the future.
    */
   AmbryUnavailable,
   /**
    * Operation did not complete within specified time out. The caller should retry the operation. An operation that
    * changes the state of an existing blob (delete, cancelTTL) may have partially completed and so may eventually
-   * complete in the future. A put operation may also have partially completed and so may eventually "complete", however
-   * the BlobId was never returned to the caller and so the blob will never be retrieved or deleted.
+   * complete in the future.
    */
   OperationTimedOut,
 

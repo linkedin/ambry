@@ -20,8 +20,7 @@ public interface Coordinator {
    * @return The id of the blob if the blob was successfully stored
    * @throws CoordinatorException If the operation experienced an error
    */
-  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata,
-                 InputStream blob) throws CoordinatorException;
+  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) throws CoordinatorException;
 
   /**
    * Deletes the blob that corresponds to the given id.

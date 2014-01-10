@@ -25,27 +25,44 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetBlobUserMetadataOperation(String datacenterName, BlockingChannelPool connectionPool,
-                                      ExecutorService requesterPool, OperationContext oc, BlobId blobId,
-                                      long operationTimeoutMs, ClusterMap clusterMap) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
+  public GetBlobUserMetadataOperation(String datacenterName,
+                                      BlockingChannelPool connectionPool,
+                                      ExecutorService requesterPool,
+                                      OperationContext oc,
+                                      BlobId blobId,
+                                      long operationTimeoutMs,
+                                      ClusterMap clusterMap) throws CoordinatorException {
+    super(datacenterName,
+          connectionPool,
+          requesterPool,
+          oc,
+          blobId,
+          operationTimeoutMs,
+          clusterMap,
           MessageFormatFlags.BlobUserMetadata);
     this.userMetadata = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-                                                   makeGetRequest(), clusterMap, this);
+    return new GetBlobUserMetadataOperationRequest(connectionPool,
+                                                   responseQueue,
+                                                   context,
+                                                   blobId,
+                                                   replicaId,
+                                                   makeGetRequest(),
+                                                   clusterMap,
+                                                   this);
   }
 
   public ByteBuffer getUserMetadata() throws CoordinatorException {
     if (userMetadata != null) {
       return userMetadata;
     }
-    logger.error("userMetadata is null and should not be.");
-    throw new CoordinatorException("GetBlobUserMetadata has invalid return data.",
-                                   CoordinatorError.UnexpectedInternalError);
+    CoordinatorException e = new CoordinatorException("GetBlobUserMetadata has invalid return data.",
+                                                      CoordinatorError.UnexpectedInternalError);
+    logger.error("userMetadata is null and should not be: {}", e);
+    throw e;
   }
 
   public synchronized void setUserMetadata(ByteBuffer userMetadata) {
@@ -63,8 +80,11 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
 
   protected GetBlobUserMetadataOperationRequest(BlockingChannelPool connectionPool,
                                                 BlockingQueue<OperationResponse> responseQueue,
-                                                OperationContext context, BlobId blobId, ReplicaId replicaId,
-                                                RequestOrResponse request, ClusterMap clusterMap,
+                                                OperationContext context,
+                                                BlobId blobId,
+                                                ReplicaId replicaId,
+                                                RequestOrResponse request,
+                                                ClusterMap clusterMap,
                                                 GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobUserMetadataOperation = getBlobUserMetadataOperation;

@@ -25,27 +25,44 @@ final public class GetBlobPropertiesOperation extends GetOperation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetBlobPropertiesOperation(String datacenterName, BlockingChannelPool connectionPool,
-                                    ExecutorService requesterPool, OperationContext oc, BlobId blobId,
-                                    long operationTimeoutMs, ClusterMap clusterMap) throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
+  public GetBlobPropertiesOperation(String datacenterName,
+                                    BlockingChannelPool connectionPool,
+                                    ExecutorService requesterPool,
+                                    OperationContext oc,
+                                    BlobId blobId,
+                                    long operationTimeoutMs,
+                                    ClusterMap clusterMap) throws CoordinatorException {
+    super(datacenterName,
+          connectionPool,
+          requesterPool,
+          oc,
+          blobId,
+          operationTimeoutMs,
+          clusterMap,
           MessageFormatFlags.BlobProperties);
     this.blobProperties = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    return new GetBlobPropertiesOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-                                                 makeGetRequest(), clusterMap, this);
+    return new GetBlobPropertiesOperationRequest(connectionPool,
+                                                 responseQueue,
+                                                 context,
+                                                 blobId,
+                                                 replicaId,
+                                                 makeGetRequest(),
+                                                 clusterMap,
+                                                 this);
   }
 
   public BlobProperties getBlobProperties() throws CoordinatorException {
     if (blobProperties != null) {
       return blobProperties;
     }
-    logger.error("blobProperties is null and should not be.");
-    throw new CoordinatorException("GetBlobProperties has invalid return data.",
-                                   CoordinatorError.UnexpectedInternalError);
+    CoordinatorException e = new CoordinatorException("GetBlobProperties has invalid return data.",
+                                                      CoordinatorError.UnexpectedInternalError);
+    logger.error("blobProperties is null and should not be: {}", e);
+    throw e;
   }
 
   public synchronized void setBlobProperties(BlobProperties blobProperties) {
@@ -61,8 +78,12 @@ final public class GetBlobPropertiesOperation extends GetOperation {
 final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   private GetBlobPropertiesOperation getBlobPropertiesOperation;
 
-  protected GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool, BlockingQueue<OperationResponse>
-          responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request,
+  protected GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool,
+                                              BlockingQueue<OperationResponse> responseQueue,
+                                              OperationContext context,
+                                              BlobId blobId,
+                                              ReplicaId replicaId,
+                                              RequestOrResponse request,
                                               ClusterMap clusterMap,
                                               GetBlobPropertiesOperation getBlobPropertiesOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
