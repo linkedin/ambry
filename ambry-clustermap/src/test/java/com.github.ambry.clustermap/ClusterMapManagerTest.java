@@ -216,7 +216,7 @@ public class ClusterMapManagerTest {
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
     ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
-    assertEquals(clusterMapManager.getFreeCapacityGB(), 10);
+    assertEquals(clusterMapManager.getFreeCapacityGB(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }
 }

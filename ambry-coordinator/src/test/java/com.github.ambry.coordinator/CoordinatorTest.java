@@ -36,7 +36,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -57,7 +57,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 0,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -83,7 +83,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -95,7 +95,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -107,7 +107,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -128,7 +128,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 0,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -164,7 +164,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -176,7 +176,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -188,7 +188,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -200,7 +200,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -221,7 +221,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 0,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -243,7 +243,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 1,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -279,7 +279,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -291,7 +291,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -303,7 +303,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -315,7 +315,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -332,7 +332,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -344,7 +344,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -356,7 +356,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -368,7 +368,7 @@ public class CoordinatorTest {
                 "      {\n" +
                 "        \"disks\": [\n" +
                 "        {\n" +
-                "          \"capacityGB\": 20,\n" +
+                "          \"capacityGB\": 21474836480,\n" +
                 "                \"hardwareState\": \"AVAILABLE\",\n" +
                 "                \"mountPath\": \"/mnt0\"\n" +
                 "        }\n" +
@@ -389,7 +389,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 0,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -427,7 +427,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 1,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -465,7 +465,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 2,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +
@@ -503,7 +503,7 @@ public class CoordinatorTest {
                 "    {\n" +
                 "      \"id\": 3,\n" +
                 "            \"partitionState\": \"READ_WRITE\",\n" +
-                "            \"replicaCapacityGB\": 10,\n" +
+                "            \"replicaCapacityGB\": 10737418240,\n" +
                 "            \"replicas\": [\n" +
                 "      {\n" +
                 "        \"hostname\": \"localhost\",\n" +

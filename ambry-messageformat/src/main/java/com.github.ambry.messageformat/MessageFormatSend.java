@@ -101,7 +101,7 @@ public class MessageFormatSend implements Send {
               logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                            infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             }
-            else if (flag == MessageFormatFlags.UserMetadata) {
+            else if (flag == MessageFormatFlags.BlobUserMetadata) {
               int userMetadataRecordSize = headerFormat.getBlobRecordRelativeOffset() -
                                      headerFormat.getUserMetadataRecordRelativeOffset();
 

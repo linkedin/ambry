@@ -97,10 +97,6 @@ public class GetResponse extends Response {
     this.messageInfoListSize = getMessageInfoListSize();
   }
 
-  public ServerErrorCode getError() {
-    return error;
-  }
-
   public InputStream getInputStream() {
     return stream;
   }
