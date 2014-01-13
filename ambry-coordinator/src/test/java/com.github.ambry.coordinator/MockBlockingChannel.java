@@ -2,7 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormat;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Send;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannel;
@@ -116,9 +116,9 @@ public class MockBlockingChannel extends BlockingChannel {
             getResponseErrorCode = bpae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
               BlobProperties blobProperties = bpae.getBlobProperties();
-              byteBufferSize = MessageFormat.getCurrentVersionBlobPropertyRecordSize(blobProperties);
+              byteBufferSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(blobProperties);
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormat.serializeCurrentVersionBlobPropertyRecord(byteBuffer, blobProperties);
+              MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(byteBuffer, blobProperties);
             }
             break;
 
@@ -127,10 +127,10 @@ public class MockBlockingChannel extends BlockingChannel {
             getResponseErrorCode = umae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
               ByteBuffer userMetadata = umae.getUserMetadata();
-              byteBufferSize = MessageFormat.getCurrentVersionUserMetadataSize(userMetadata);
+              byteBufferSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
               userMetadata.flip();
-              MessageFormat.serializeCurrentVersionUserMetadata(byteBuffer, userMetadata);
+              MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             }
             break;
 
@@ -139,9 +139,9 @@ public class MockBlockingChannel extends BlockingChannel {
             getResponseErrorCode = bdae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
               BlobOutput blobData = bdae.getBlobOutput();
-              byteBufferSize = (int)MessageFormat.getCurrentVersionDataSize(blobData.getSize());
+              byteBufferSize = (int)MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormat.serializeCurrentVersionPartialData(byteBuffer, blobData.getSize());
+              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer, blobData.getSize());
 
               byte[] blobDataBytes = new byte[(int)blobData.getSize()];
               blobData.getStream().read(blobDataBytes, 0, (int)blobData.getSize());

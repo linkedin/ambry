@@ -2,9 +2,9 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.messageformat.MessageFormat;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelPool;
 import com.github.ambry.shared.RequestOrResponse;
@@ -92,7 +92,7 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
 
   @Override
   protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
-    getBlobUserMetadataOperation.setUserMetadata(MessageFormat.deserializeUserMetadata(inputStream));
+    getBlobUserMetadataOperation.setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream));
   }
 }
 
