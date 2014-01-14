@@ -24,14 +24,12 @@ class TestDataNode extends DataNode {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    TestDataNode testDataNode = (TestDataNode) o;
+    TestDataNode testDataNode = (TestDataNode)o;
 
     if (!getHostname().equals(testDataNode.getHostname())) return false;
     if (getPort() != testDataNode.getPort()) return false;
     if (getState() != testDataNode.getState()) return false;
-    if (getCapacityInBytes() != testDataNode.getCapacityInBytes()) return false;
-
-    return true;
+    return getCapacityInBytes() == testDataNode.getCapacityInBytes();
   }
 }
 
@@ -39,8 +37,8 @@ class TestDataNode extends DataNode {
  * Tests {@link DataNode} class.
  */
 public class DataNodeTest {
-  private static int diskCount = 10;
-  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
+  private static final int diskCount = 10;
+  private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
   JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
@@ -48,7 +46,10 @@ public class DataNodeTest {
 
   @Test
   public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
+    JSONObject jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(),
+                                                      6666,
+                                                      HardwareState.AVAILABLE,
+                                                      getDisks());
 
     DataNode dataNode = new TestDataNode(jsonObject);
 
@@ -67,7 +68,8 @@ public class DataNodeTest {
     try {
       new TestDataNode(jsonObject);
       fail("Construction of TestDataNode should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
   }
@@ -81,7 +83,8 @@ public class DataNodeTest {
       jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject);
       fail("Should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
 

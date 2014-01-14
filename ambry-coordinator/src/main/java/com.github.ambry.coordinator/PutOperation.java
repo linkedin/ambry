@@ -108,12 +108,12 @@ final public class PutOperation extends Operation {
 }
 
 final class PutOperationRequest extends OperationRequest {
-  protected PutOperationRequest(BlockingChannelPool connectionPool,
-                                BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context,
-                                BlobId blobId,
-                                ReplicaId replicaId,
-                                RequestOrResponse request) {
+  PutOperationRequest(BlockingChannelPool connectionPool,
+                      BlockingQueue<OperationResponse> responseQueue,
+                      OperationContext context,
+                      BlobId blobId,
+                      ReplicaId replicaId,
+                      RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 

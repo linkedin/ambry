@@ -23,13 +23,11 @@ class TestDisk extends Disk {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    TestDisk testDisk = (TestDisk) o;
+    TestDisk testDisk = (TestDisk)o;
 
     if (!getMountPath().equals(testDisk.getMountPath())) return false;
     if (getCapacityInBytes() != testDisk.getCapacityInBytes()) return false;
-    if (getHardwareState() != testDisk.getHardwareState()) return false;
-
-    return true;
+    return getHardwareState() == testDisk.getHardwareState();
   }
 }
 
@@ -54,7 +52,8 @@ public class DiskTest {
     try {
       new TestDisk(jsonObject);
       fail("Construction of TestDisk should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
   }
@@ -65,7 +64,8 @@ public class DiskTest {
       // Null DataNode
       new Disk(null, TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
       fail("Construction of Disk should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
 
@@ -76,7 +76,9 @@ public class DiskTest {
     failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 0));
 
     // Bad capacity (too big)
-    failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
+    failValidation(TestUtils.getJsonDisk("/mnt1",
+                                         HardwareState.UNAVAILABLE,
+                                         1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
   }
 
   // TODO: Add tests of disk for complete hardware map. E.g., make sure getHWState works that reasons about datanode state.

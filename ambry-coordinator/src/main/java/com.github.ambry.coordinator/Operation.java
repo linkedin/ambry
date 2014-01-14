@@ -28,29 +28,29 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public abstract class Operation {
   // Operation context
-  protected String datacenterName;
-  protected BlockingChannelPool connectionPool;
-  protected ExecutorService requesterPool;
-  protected OperationContext context;
-  protected BlobId blobId;
+  private String datacenterName;
+  BlockingChannelPool connectionPool;
+  private ExecutorService requesterPool;
+  OperationContext context;
+  BlobId blobId;
 
   // Operation state
-  protected OperationPolicy operationPolicy;
-  protected long operationExpirationMs;
-  protected final AtomicBoolean operationComplete;
+  private OperationPolicy operationPolicy;
+  private long operationExpirationMs;
+  private final AtomicBoolean operationComplete;
 
-  protected BlockingQueue<OperationResponse> responseQueue;
-  protected Set<ReplicaId> requestsInFlight;
+  BlockingQueue<OperationResponse> responseQueue;
+  private Set<ReplicaId> requestsInFlight;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Operation(String datacenterName,
-                   BlockingChannelPool connectionPool,
-                   ExecutorService requesterPool,
-                   OperationContext context,
-                   BlobId blobId,
-                   long operationTimeoutMs,
-                   OperationPolicy operationPolicy) {
+  Operation(String datacenterName,
+            BlockingChannelPool connectionPool,
+            ExecutorService requesterPool,
+            OperationContext context,
+            BlobId blobId,
+            long operationTimeoutMs,
+            OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -169,12 +169,12 @@ abstract class OperationRequest implements Runnable {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected OperationRequest(BlockingChannelPool connectionPool,
-                             BlockingQueue<OperationResponse> responseQueue,
-                             OperationContext context,
-                             BlobId blobId,
-                             ReplicaId replicaId,
-                             RequestOrResponse request) {
+  OperationRequest(BlockingChannelPool connectionPool,
+                   BlockingQueue<OperationResponse> responseQueue,
+                   OperationContext context,
+                   BlobId blobId,
+                   ReplicaId replicaId,
+                   RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;
@@ -185,7 +185,7 @@ abstract class OperationRequest implements Runnable {
 
   protected abstract Response getResponse(DataInputStream dataInputStream) throws IOException;
 
-  protected void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
+  void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
   }
 

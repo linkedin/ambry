@@ -78,14 +78,14 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
 final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   private GetBlobUserMetadataOperation getBlobUserMetadataOperation;
 
-  protected GetBlobUserMetadataOperationRequest(BlockingChannelPool connectionPool,
-                                                BlockingQueue<OperationResponse> responseQueue,
-                                                OperationContext context,
-                                                BlobId blobId,
-                                                ReplicaId replicaId,
-                                                RequestOrResponse request,
-                                                ClusterMap clusterMap,
-                                                GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
+  GetBlobUserMetadataOperationRequest(BlockingChannelPool connectionPool,
+                                      BlockingQueue<OperationResponse> responseQueue,
+                                      OperationContext context,
+                                      BlobId blobId,
+                                      ReplicaId replicaId,
+                                      RequestOrResponse request,
+                                      ClusterMap clusterMap,
+                                      GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobUserMetadataOperation = getBlobUserMetadataOperation;
   }

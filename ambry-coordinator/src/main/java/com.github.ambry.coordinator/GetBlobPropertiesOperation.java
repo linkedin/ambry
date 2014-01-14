@@ -78,14 +78,14 @@ final public class GetBlobPropertiesOperation extends GetOperation {
 final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   private GetBlobPropertiesOperation getBlobPropertiesOperation;
 
-  protected GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool,
-                                              BlockingQueue<OperationResponse> responseQueue,
-                                              OperationContext context,
-                                              BlobId blobId,
-                                              ReplicaId replicaId,
-                                              RequestOrResponse request,
-                                              ClusterMap clusterMap,
-                                              GetBlobPropertiesOperation getBlobPropertiesOperation) {
+  GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool,
+                                    BlockingQueue<OperationResponse> responseQueue,
+                                    OperationContext context,
+                                    BlobId blobId,
+                                    ReplicaId replicaId,
+                                    RequestOrResponse request,
+                                    ClusterMap clusterMap,
+                                    GetBlobPropertiesOperation getBlobPropertiesOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobPropertiesOperation = getBlobPropertiesOperation;
   }

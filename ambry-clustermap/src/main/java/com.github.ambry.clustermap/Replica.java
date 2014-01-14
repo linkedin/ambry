@@ -15,7 +15,7 @@ import java.util.List;
  * given Disk. This ensures that a Partition does not have Replicas that share fates.
  */
 public class Replica implements ReplicaId {
-  private Partition partition;
+  private final Partition partition;
   private Disk disk;
 
   private Logger logger = LoggerFactory.getLogger(getClass());

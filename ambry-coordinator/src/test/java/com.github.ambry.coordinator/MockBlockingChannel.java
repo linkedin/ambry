@@ -34,10 +34,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  *
  */
-public class MockBlockingChannel extends BlockingChannel {
+class MockBlockingChannel extends BlockingChannel {
   private MockDataNode mockDataNode;
   private AtomicBoolean connected;
-  private Object lock;
+  private final Object lock;
   private InputStream responseStream;
 
   public MockBlockingChannel(MockDataNode mockDataNode, String host, int port, int readBufferSize,
@@ -54,14 +54,12 @@ public class MockBlockingChannel extends BlockingChannel {
   public void connect() throws SocketException, IOException {
     connected.set(true);
     responseStream = null;
-    return;
   }
 
   @Override
   public void disconnect() {
     connected.set(false);
     responseStream = null;
-    return;
   }
 
   @Override
@@ -164,7 +162,8 @@ public class MockBlockingChannel extends BlockingChannel {
           messageInfoList.add(new MessageInfo(blobId, byteBufferSize));
           response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), messageInfoList,
                                      responseSend, getResponseErrorCode);
-        } else {
+        }
+        else {
           response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), getResponseErrorCode);
         }
 
@@ -182,7 +181,7 @@ public class MockBlockingChannel extends BlockingChannel {
 
       case TTLRequest: {
         TTLRequest ttlRequest = (TTLRequest)request;
-        throw new IOException("TTLRequest is not yet mocked: " + request.getRequestType());
+        throw new IOException("TTLRequest is not yet mocked: " + ttlRequest.getRequestType());
         // break;
       }
 

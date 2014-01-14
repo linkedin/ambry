@@ -19,13 +19,13 @@ public class DataNode implements DataNodeId {
   private static final int MinPort = 1025;
   private static final int MaxPort = 65535;
 
-  private Datacenter datacenter;
+  private final Datacenter datacenter;
   private String hostname;
   private int port;
   private HardwareState hardwareState;
   private ArrayList<Disk> disks;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
     this.datacenter = datacenter;
@@ -45,7 +45,7 @@ public class DataNode implements DataNodeId {
   /**
    * Converts a hostname into a canonical hostname.
    *
-   * @param unqualifiedHostname
+   * @param unqualifiedHostname hostname to be fully qualified
    * @return canonical hostname that can be compared with DataNode.getHostname()
    */
   public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
@@ -160,9 +160,7 @@ public class DataNode implements DataNodeId {
     DataNode dataNode = (DataNode)o;
 
     if (port != dataNode.port) return false;
-    if (!hostname.equals(dataNode.hostname)) return false;
-
-    return true;
+    return hostname.equals(dataNode.hostname);
   }
 
   @Override

@@ -55,9 +55,9 @@ public class HardwareLayout {
    */
   public Datacenter findDatacenter(String datacenterName) {
     for (Datacenter datacenter : datacenters) {
-        if (datacenter.getName().compareToIgnoreCase(datacenterName) == 0) {
-          return datacenter;
-        }
+      if (datacenter.getName().compareToIgnoreCase(datacenterName) == 0) {
+        return datacenter;
+      }
     }
     return null;
   }
@@ -65,8 +65,8 @@ public class HardwareLayout {
   /**
    * Finds DataNode by hostname and port. Note that hostname is converted to canonical hostname for comparison.
    *
-   * @param hostname
-   * @param port
+   * @param hostname of datanode
+   * @param port of datanode
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
@@ -86,9 +86,9 @@ public class HardwareLayout {
   /**
    * Finds Disk by hostname, port, and mount path.
    *
-   * @param hostname
-   * @param port
-   * @param mountPath
+   * @param hostname of datanode
+   * @param port of datanode
+   * @param mountPath of disk
    * @return Disk or null if not found.
    */
   public Disk findDisk(String hostname, int port, String mountPath) {
@@ -173,8 +173,6 @@ public class HardwareLayout {
     HardwareLayout that = (HardwareLayout)o;
 
     if (!clusterName.equals(that.clusterName)) return false;
-    if (!datacenters.equals(that.datacenters)) return false;
-
-    return true;
+    return datacenters.equals(that.datacenters);
   }
 }

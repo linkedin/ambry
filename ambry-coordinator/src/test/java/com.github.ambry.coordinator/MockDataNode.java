@@ -19,10 +19,10 @@ import java.util.Set;
  *
  */
 public class MockDataNode {
-  DataNodeId dataNodeId;
+  private DataNodeId dataNodeId;
 
-  Map<BlobId, MaterializedBlob> blobs;
-  Set<BlobId> deletedBlobs;
+  private Map<BlobId, MaterializedBlob> blobs;
+  private Set<BlobId> deletedBlobs;
 
   public class MaterializedBlob extends Blob {
     final ByteBuffer materializedBlobOutput;
@@ -51,7 +51,7 @@ public class MockDataNode {
   }
 
   public synchronized ServerErrorCode put(BlobId blobId, Blob blob) throws IOException {
-    if(blobs.containsKey(blobId)) {
+    if (blobs.containsKey(blobId)) {
       return ServerErrorCode.Unknown_Error;
     }
     blobs.put(blobId, new MaterializedBlob(blob));
@@ -81,7 +81,7 @@ public class MockDataNode {
       return new BlobPropertiesAndError(null, ServerErrorCode.Blob_Deleted);
     }
 
-    if(!blobs.containsKey(blobId)) {
+    if (!blobs.containsKey(blobId)) {
       return new BlobPropertiesAndError(null, ServerErrorCode.Blob_Not_Found);
     }
 
@@ -111,7 +111,7 @@ public class MockDataNode {
       return new UserMetadataAndError(null, ServerErrorCode.Blob_Deleted);
     }
 
-    if(!blobs.containsKey(blobId)) {
+    if (!blobs.containsKey(blobId)) {
       return new UserMetadataAndError(null, ServerErrorCode.Blob_Not_Found);
     }
 
@@ -142,7 +142,7 @@ public class MockDataNode {
       return new BlobOutputAndError(null, ServerErrorCode.Blob_Deleted);
     }
 
-    if(!blobs.containsKey(blobId)) {
+    if (!blobs.containsKey(blobId)) {
       return new BlobOutputAndError(null, ServerErrorCode.Blob_Not_Found);
     }
 
@@ -159,7 +159,7 @@ public class MockDataNode {
     StringBuilder sb = new StringBuilder();
     sb.append(dataNodeId).append(System.getProperty("line.separator"));
     sb.append("put blobs").append(System.getProperty("line.separator"));
-    for(Map.Entry<BlobId,MaterializedBlob> entry : blobs.entrySet()) {
+    for (Map.Entry<BlobId, MaterializedBlob> entry : blobs.entrySet()) {
       sb.append("\t").append(entry.getKey()).append(" : ");
       Blob blob = entry.getValue();
       sb.append(blob.getBlobProperties().getBlobSize()).append(" / ");

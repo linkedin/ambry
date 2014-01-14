@@ -24,12 +24,10 @@ class TestDatacenter extends Datacenter {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    TestDatacenter testDatacenter = (TestDatacenter) o;
+    TestDatacenter testDatacenter = (TestDatacenter)o;
 
     if (!getName().equals(testDatacenter.getName())) return false;
-    if (getCapacityInBytes() != testDatacenter.getCapacityInBytes()) return false;
-
-    return true;
+    return getCapacityInBytes() == testDatacenter.getCapacityInBytes();
   }
 }
 
@@ -37,17 +35,21 @@ class TestDatacenter extends Datacenter {
  * Tests {@link Datacenter} class.
  */
 public class DatacenterTest {
-  private static int diskCount = 10;
-  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
+  private static final int diskCount = 10;
+  private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
-  private static int dataNodeCount = 6;
+  private static final int dataNodeCount = 6;
 
   JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   JSONArray getDataNodes() throws JSONException {
-    return TestUtils.getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
+    return TestUtils.getJsonArrayDataNodes(dataNodeCount,
+                                           TestUtils.getLocalHost(),
+                                           6666,
+                                           HardwareState.AVAILABLE,
+                                           getDisks());
   }
 
   @Test
@@ -67,7 +69,8 @@ public class DatacenterTest {
     try {
       new TestDatacenter(jsonObject);
       fail("Should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
   }
@@ -81,7 +84,8 @@ public class DatacenterTest {
       jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
       new Datacenter(null, jsonObject);
       fail("Should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
 

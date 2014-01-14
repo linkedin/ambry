@@ -23,12 +23,12 @@ import java.util.Set;
 public class PartitionLayout {
   private static final long MinPartitionId = 0;
 
-  private HardwareLayout hardwareLayout;
+  private final HardwareLayout hardwareLayout;
   private String clusterName;
   private long maxPartitionId;
   private Map<ByteBuffer, Partition> partitionMap;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     this.hardwareLayout = hardwareLayout;
@@ -204,8 +204,6 @@ public class PartitionLayout {
     PartitionLayout that = (PartitionLayout)o;
 
     if (!clusterName.equals(that.clusterName)) return false;
-    if (!hardwareLayout.equals(that.hardwareLayout)) return false;
-
-    return true;
+    return hardwareLayout.equals(that.hardwareLayout);
   }
 }

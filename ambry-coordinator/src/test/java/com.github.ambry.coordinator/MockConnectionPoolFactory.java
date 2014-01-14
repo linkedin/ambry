@@ -5,7 +5,7 @@ import com.github.ambry.shared.BlockingChannelPool;
 import com.github.ambry.shared.BlockingChannelPoolFactory;
 
 public class MockConnectionPoolFactory implements BlockingChannelPoolFactory {
-  ConnectionPoolConfig config;
+  private ConnectionPoolConfig config;
 
   public MockConnectionPoolFactory(ConnectionPoolConfig config) {
     this.config = config;

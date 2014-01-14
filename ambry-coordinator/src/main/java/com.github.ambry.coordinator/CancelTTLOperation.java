@@ -68,12 +68,12 @@ final public class CancelTTLOperation extends Operation {
 }
 
 final class CancelTTLOperationRequest extends OperationRequest {
-  protected CancelTTLOperationRequest(BlockingChannelPool connectionPool,
-                                      BlockingQueue<OperationResponse> responseQueue,
-                                      OperationContext context,
-                                      BlobId blobId,
-                                      ReplicaId replicaId,
-                                      RequestOrResponse request) {
+  CancelTTLOperationRequest(BlockingChannelPool connectionPool,
+                            BlockingQueue<OperationResponse> responseQueue,
+                            OperationContext context,
+                            BlobId blobId,
+                            ReplicaId replicaId,
+                            RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 

@@ -65,12 +65,12 @@ final public class DeleteOperation extends Operation {
 }
 
 final class DeleteOperationRequest extends OperationRequest {
-  protected DeleteOperationRequest(BlockingChannelPool connectionPool,
-                                   BlockingQueue<OperationResponse> responseQueue,
-                                   OperationContext context,
-                                   BlobId blobId,
-                                   ReplicaId replicaId,
-                                   RequestOrResponse request) {
+  DeleteOperationRequest(BlockingChannelPool connectionPool,
+                         BlockingQueue<OperationResponse> responseQueue,
+                         OperationContext context,
+                         BlobId blobId,
+                         ReplicaId replicaId,
+                         RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
