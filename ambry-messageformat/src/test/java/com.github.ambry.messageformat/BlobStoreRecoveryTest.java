@@ -78,7 +78,7 @@ class MockIdFactory implements StoreKeyFactory {
   }
 }
 
-public class BlobRecoveryTest {
+public class BlobStoreRecoveryTest {
 
   public class ReadImp implements Read {
 
@@ -139,7 +139,12 @@ public class BlobRecoveryTest {
                                                                          new ByteBufferInputStream(ByteBuffer.wrap(blob)),
                                                                          4000);
 
-      buffer = ByteBuffer.allocate((int)(msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() + msg6.getSize() / 2));
+      buffer = ByteBuffer.allocate((int)(msg1.getSize() +
+                                         msg2.getSize() +
+                                         msg3.getSize() +
+                                         msg4.getSize() +
+                                         msg5.getSize() +
+                                         msg6.getSize() / 2));
 
 
       writeToBuffer(msg1, (int)msg1.getSize());
@@ -171,7 +176,7 @@ public class BlobRecoveryTest {
   }
   @Test
   public void recoveryTest() throws MessageFormatException, IOException {
-    MessageRecovery recovery = new BlobRecovery();
+    MessageStoreRecovery recovery = new BlobStoreRecovery();
     // create log and write to it
     ReadImp readrecovery = new ReadImp();
     readrecovery.initialize();

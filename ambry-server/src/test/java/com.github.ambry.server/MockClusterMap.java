@@ -143,8 +143,8 @@ class MockReplicaId implements ReplicaId {
   }
 
   @Override
-  public long getCapacityGB() {
-    return 100000; // TODO This is really in bytes for now
+  public long getCapacityInBytes() {
+    return 100000;
   }
 
   @Override
@@ -161,7 +161,7 @@ class MockReplicaId implements ReplicaId {
       }
 
       @Override
-      public long getCapacityGB() {
+      public long getCapacityInBytes() {
         return 100000;
       }
     };

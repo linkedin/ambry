@@ -41,7 +41,7 @@ public class BlobIndex {
                    Log log,
                    StoreConfig config,
                    StoreKeyFactory factory,
-                   MessageRecovery recovery) throws StoreException  {
+                   MessageStoreRecovery recovery) throws StoreException  {
     try {
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();
@@ -73,7 +73,7 @@ public class BlobIndex {
         BlobIndexValue value = index.get(info.getStoreKey());
         // if the key already exist, update the delete state or ttl value if required
         if (value != null) {
-          logger.info("Msg already exist with key {}", info.getStoreKey());
+          logger.info("Message already exists with key {}", info.getStoreKey());
           verifyFileEndOffset(logEndOffset.get() + info.getSize());
           if (info.isDeleted())
             markAsDeleted(info.getStoreKey(), logEndOffset.get() + info.getSize());

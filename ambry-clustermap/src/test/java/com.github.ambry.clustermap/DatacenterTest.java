@@ -27,7 +27,7 @@ class TestDatacenter extends Datacenter {
     TestDatacenter testDatacenter = (TestDatacenter) o;
 
     if (!getName().equals(testDatacenter.getName())) return false;
-    if (getCapacityGB() != testDatacenter.getCapacityGB()) return false;
+    if (getCapacityInBytes() != testDatacenter.getCapacityInBytes()) return false;
 
     return true;
   }
@@ -38,12 +38,12 @@ class TestDatacenter extends Datacenter {
  */
 public class DatacenterTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
+  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
   private static int dataNodeCount = 6;
 
   JSONArray getDisks() throws JSONException {
-    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
+    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   JSONArray getDataNodes() throws JSONException {
@@ -58,7 +58,7 @@ public class DatacenterTest {
 
     assertEquals(datacenter.getName(), "XYZ1");
     assertEquals(datacenter.getDataNodes().size(), dataNodeCount);
-    assertEquals(datacenter.getCapacityGB(), dataNodeCount * diskCount * diskCapacityGB);
+    assertEquals(datacenter.getCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
     assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject()));
   }

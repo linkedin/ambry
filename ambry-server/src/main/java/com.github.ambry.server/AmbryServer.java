@@ -2,11 +2,8 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.config.MetricsConfig;
-import com.github.ambry.config.NetworkConfig;
-import com.github.ambry.config.StoreConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobRecovery;
+import com.github.ambry.config.*;
+import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.metrics.JmxServer;
 import com.github.ambry.metrics.JvmMetrics;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -66,6 +63,7 @@ public class AmbryServer {
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
       MetricsConfig metricsConfig = new MetricsConfig(properties);
+      ServerConfig serverConfig = new ServerConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -98,10 +96,12 @@ public class AmbryServer {
                                       registryMap,
                                       clusterMap.getReplicaIds(nodeId),
                                       factory,
-                                      new BlobRecovery());
+                                      new BlobStoreRecovery());
       storeManager.start();
       requests = new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId);
-      requestHandlerPool = new RequestHandlerPool(7, networkServer.getRequestResponseChannel(), requests);
+      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+                                                  networkServer.getRequestResponseChannel(),
+                                                  requests);
 
       logger.info("Starting all the metrics reporters");
       for (Map.Entry<String, MetricsReporter> reporterEntry : reporters.entrySet()) {

@@ -78,12 +78,12 @@ public class PartitionLayout {
     return writablePartitions;
   }
 
-  public long getCapacityGB() {
-    long capacityGB = 0;
+  public long getCapacityInBytes() {
+    long capacityInBytes = 0;
     for (Partition partition : partitionMap.values()) {
-      capacityGB += partition.getCapacityGB();
+      capacityInBytes += partition.getCapacityInBytes();
     }
-    return capacityGB;
+    return capacityInBytes;
   }
 
   /**
@@ -149,12 +149,12 @@ public class PartitionLayout {
   }
 
   // Creates a Partition and corresponding Replicas for each specified disk
-  public Partition addNewPartition(List<Disk> disks, long replicaCapacityGB) {
+  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
     if (disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Disks either null or of zero length.");
     }
 
-    Partition partition = new Partition(getNewPartitionId(), PartitionState.READ_WRITE, replicaCapacityGB);
+    Partition partition = new Partition(getNewPartitionId(), PartitionState.READ_WRITE, replicaCapacityInBytes);
     for (Disk disk : disks) {
       partition.addReplica(new Replica(partition, disk));
     }

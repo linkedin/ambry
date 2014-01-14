@@ -1,10 +1,6 @@
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageRecovery;
-import com.github.ambry.store.Read;
-import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +15,7 @@ import java.io.InputStream;
  * Recovers a set of messages from a given start and end offset
  * from the read interface that represents the underlying store
  */
-public class BlobRecovery implements MessageRecovery {
+public class BlobStoreRecovery implements MessageStoreRecovery {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
@@ -34,11 +30,12 @@ public class BlobRecovery implements MessageRecovery {
         read.readInto(headerVersion, startOffset);
         startOffset += headerVersion.capacity();
         headerVersion.flip();
-        switch (headerVersion.getShort()) {
+        short version = headerVersion.getShort();
+        switch (version) {
           case MessageFormatRecord.Message_Header_Version_V1:
 
             ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-            header.putShort(headerVersion.getShort(0));
+            header.putShort(version);
             if (startOffset + (MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() - headerVersion.capacity()) > endOffset)
               throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
             read.readInto(header, startOffset);
@@ -78,8 +75,8 @@ public class BlobRecovery implements MessageRecovery {
             startOffset = stream.getCurrentPosition();
             break;
           default:
-            throw new MessageFormatException("Version not known while reading message - " + headerVersion.getShort(),
-                    MessageFormatErrorCodes.Unknown_Format_Version);
+            throw new MessageFormatException("Version not known while reading message - " + version,
+                                             MessageFormatErrorCodes.Unknown_Format_Version);
         }
       }
     }

@@ -11,14 +11,14 @@ import org.slf4j.LoggerFactory;
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
 public class Disk implements DiskId {
-  // Hard-code disk capacity limits in GB for validation
-  private static final long MinCapacityGB = 10 * 1024 * 1024 * 1024L;
-  private static final long MaxCapacityGB = 1024 * 1024 * 1024 * 1024L; // 1 PB
+  // Hard-code disk capacity limits in bytes for validation
+  private static final long MinCapacityInBytes = 10 * 1024 * 1024 * 1024L;
+  private static final long MaxCapacityInBytes = 1024 * 1024 * 1024 * 1024L; // 1 PB
 
   private DataNode dataNode;
   private String mountPath;
   private HardwareState hardwareState;
-  private long capacityGB;
+  private long capacityInBytes;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -26,7 +26,7 @@ public class Disk implements DiskId {
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
-    this.capacityGB = jsonObject.getLong("capacityGB");
+    this.capacityInBytes = jsonObject.getLong("capacityInBytes");
 
     validate();
   }
@@ -46,8 +46,8 @@ public class Disk implements DiskId {
   }
 
   @Override
-  public long getCapacityGB() {
-    return capacityGB;
+  public long getCapacityInBytes() {
+    return capacityInBytes;
   }
 
   public DataNode getDataNode() {
@@ -74,11 +74,11 @@ public class Disk implements DiskId {
   }
 
   protected void validateCapacity() {
-    if (capacityGB < MinCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is less than " + MinCapacityGB);
+    if (capacityInBytes < MinCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
     }
-    else if (capacityGB > MaxCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is more than " + MaxCapacityGB);
+    else if (capacityInBytes > MaxCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " + MaxCapacityInBytes);
     }
   }
 
@@ -94,7 +94,7 @@ public class Disk implements DiskId {
     return new JSONObject()
             .put("mountPath", mountPath)
             .put("hardwareState", hardwareState)
-            .put("capacityGB", capacityGB);
+            .put("capacityInBytes", capacityInBytes);
   }
 
   @Override

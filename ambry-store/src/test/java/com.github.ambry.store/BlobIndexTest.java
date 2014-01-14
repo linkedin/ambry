@@ -47,7 +47,12 @@ public class BlobIndexTest {
                      Scheduler scheduler,
                      Log log,
                      StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory, new DummyMessageRecovery());
+      super(datadir,
+            scheduler,
+            log,
+            new StoreConfig(new VerifiableProperties(new Properties())),
+            factory,
+            new DummyMessageStoreRecovery());
     }
 
     public MockIndex(String datadir,
@@ -55,7 +60,7 @@ public class BlobIndexTest {
                      Log log,
                      StoreKeyFactory factory,
                      StoreConfig config,
-                     MessageRecovery messageRecovery) throws StoreException {
+                     MessageStoreRecovery messageRecovery) throws StoreException {
       super(datadir, scheduler, log, config, factory, messageRecovery);
     }
 
@@ -133,7 +138,7 @@ public class BlobIndexTest {
                                       log,
                                       factory,
                                       new StoreConfig(new VerifiableProperties(props)),
-                                      new DummyMessageRecovery());
+                                      new DummyMessageStoreRecovery());
       final MockId blobId1 = new MockId("id1");
       final MockId blobId2 = new MockId("id2");
       final MockId blobId3 = new MockId("id3");
@@ -155,7 +160,7 @@ public class BlobIndexTest {
                                          log,
                                          factory,
                                          new StoreConfig(new VerifiableProperties(props)),
-                                         new DummyMessageRecovery());
+                                         new DummyMessageStoreRecovery());
 
       BlobIndexValue value1 = indexNew.getValue(blobId1);
       BlobIndexValue value2 = indexNew.getValue(blobId2);
@@ -170,7 +175,7 @@ public class BlobIndexTest {
                                log,
                                factory,
                                new StoreConfig(new VerifiableProperties(props)),
-                               new DummyMessageRecovery());
+                               new DummyMessageStoreRecovery());
 
       BlobIndexEntry entry4 = new BlobIndexEntry(blobId4, new BlobIndexValue(1000, 3000, flags, 12567));
       BlobIndexEntry entry5 = new BlobIndexEntry(blobId5, new BlobIndexValue(1000, 4000, flags, 12567));
@@ -182,7 +187,7 @@ public class BlobIndexTest {
                                log,
                                factory,
                                new StoreConfig(new VerifiableProperties(props)),
-                               new DummyMessageRecovery());
+                               new DummyMessageStoreRecovery());
       value1 = indexNew.getValue(blobId1);
       value2 = indexNew.getValue(blobId2);
       value3 = indexNew.getValue(blobId3);
@@ -195,9 +200,11 @@ public class BlobIndexTest {
       Assert.assertNull(value5);
       indexNew.close();
 
-      indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)), new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
+              new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+                throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 1000));
           infos.add(new MessageInfo(blobId5, 1000, 12657));
@@ -212,9 +219,11 @@ public class BlobIndexTest {
       log.setLogEndOffset(5000);
       indexNew.close();
 
-      indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)), new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
+              new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+                throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 1000, true));
           infos.add(new MessageInfo(blobId5, 1000, BlobIndexValue.TTL_Infinite));

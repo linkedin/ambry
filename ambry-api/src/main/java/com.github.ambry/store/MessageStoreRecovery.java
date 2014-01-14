@@ -7,7 +7,7 @@ import java.io.IOException;
  * The recovery component used by the store to recover
  * the index from the log.
  */
-public interface MessageRecovery {
+public interface MessageStoreRecovery {
   /**
    * Recovers the messages from the underlying store using the read interface. It recovers from the startOffset
    * till the endOffset. The expectation of this interface is that read never blocks

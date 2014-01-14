@@ -26,14 +26,14 @@ public class StoreManager {
   private ConcurrentMap<PartitionId, Store> stores;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private StoreKeyFactory factory;
-  private MessageRecovery recovery;
+  private MessageStoreRecovery recovery;
 
   public StoreManager(StoreConfig config,
                       Scheduler scheduler,
                       ReadableMetricsRegistry registry,
                       List<ReplicaId> replicas,
                       StoreKeyFactory factory,
-                      MessageRecovery recovery) {
+                      MessageStoreRecovery recovery) {
     this.config = config;
     this.scheduler = scheduler;
     this.registry = registry;
@@ -52,7 +52,13 @@ public class StoreManager {
       if (!file.exists()) {
         throw new IllegalStateException("Mount path does not exist " + replica.getMountPath());
       }
-      Store store = new BlobStore(config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityGB(), factory, recovery);
+      Store store = new BlobStore(config,
+                                  scheduler,
+                                  registry,
+                                  replica.getReplicaPath(),
+                                  replica.getCapacityInBytes(),
+                                  factory,
+                                  recovery);
       store.start();
       stores.put(replica.getPartitionId(), store);
     }

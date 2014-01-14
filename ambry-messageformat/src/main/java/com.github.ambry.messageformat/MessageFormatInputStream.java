@@ -11,7 +11,10 @@ import java.nio.ByteBuffer;
 /**
  * Converts a set of message inputs into the right message format.
  * This provides the base implementation for all types of messages
- * that need to be persisted.
+ * that need to be persisted. The bytebuffer is mandatory for
+ * all derived classes. It is used to store all data except and
+ * stream based data. The stream is an optional payload used to
+ * stream contents from an input stream.
  */
 public abstract class MessageFormatInputStream extends InputStream {
 
@@ -19,7 +22,6 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected CrcInputStream stream = null;
   protected long streamLength = 0;
   protected long streamRead = 0;
-  protected static int StoreKey_Size_Field_Size_In_Bytes = 2;
   ByteBuffer crc = ByteBuffer.allocate(MessageFormatRecord.Crc_Size);
   protected long messageLength;
   protected Logger logger = LoggerFactory.getLogger(getClass());
