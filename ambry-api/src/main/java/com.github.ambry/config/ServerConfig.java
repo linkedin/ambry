@@ -7,7 +7,7 @@ package com.github.ambry.config;
 public class ServerConfig {
 
   /**
-   * The max size of the index that can reside in memory in bytes for a single store
+   * The number of request handler threads used by the server to process requests
    */
   @Config("server.request.handler.num.of.threads")
   @Default("7")
