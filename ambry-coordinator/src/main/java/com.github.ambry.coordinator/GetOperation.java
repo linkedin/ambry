@@ -128,6 +128,7 @@ abstract class GetOperationRequest extends OperationRequest {
     this.clusterMap = clusterMap;
   }
 
+  @Override
   protected Response getResponse(DataInputStream dataInputStream) throws IOException {
     return GetResponse.readFrom(dataInputStream, clusterMap);
   }

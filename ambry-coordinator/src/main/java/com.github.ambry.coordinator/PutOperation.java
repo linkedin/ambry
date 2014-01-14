@@ -117,6 +117,7 @@ final class PutOperationRequest extends OperationRequest {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
+  @Override
   protected Response getResponse(DataInputStream dataInputStream) throws IOException {
     return PutResponse.readFrom(dataInputStream);
   }

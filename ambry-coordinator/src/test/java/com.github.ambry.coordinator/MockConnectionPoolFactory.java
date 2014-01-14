@@ -11,6 +11,7 @@ public class MockConnectionPoolFactory implements BlockingChannelPoolFactory {
     this.config = config;
   }
 
+  @Override
   public BlockingChannelPool getBlockingChannelPool() {
     return new MockConnectionPool(config);
   }

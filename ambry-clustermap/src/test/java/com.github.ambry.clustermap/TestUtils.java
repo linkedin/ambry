@@ -448,6 +448,7 @@ public class TestUtils {
   }
 
   public static class TestPartitionLayoutWithDuplicatePartitions extends TestPartitionLayout {
+    @Override
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
       JSONArray jsonPartitions = getJsonDuplicatePartitions(partitionCount,
                                                             partitionState,
@@ -465,6 +466,7 @@ public class TestUtils {
   }
 
   public static class TestPartitionLayoutWithDuplicateReplicas extends TestPartitionLayout {
+    @Override
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
       JSONArray jsonPartitions = getJsonDuplicateReplicas(partitionCount,
                                                           partitionState,

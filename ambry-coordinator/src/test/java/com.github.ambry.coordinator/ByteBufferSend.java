@@ -18,16 +18,19 @@ class ByteBufferSend implements Send {
     this.buffer = byteBuffer.duplicate();
   }
 
+  @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (!isSendComplete()) {
       channel.write(buffer);
     }
   }
 
+  @Override
   public boolean isSendComplete() {
     return buffer.remaining() == 0;
   }
 
+  @Override
   public long sizeInBytes() {
     return buffer.limit();
   }
