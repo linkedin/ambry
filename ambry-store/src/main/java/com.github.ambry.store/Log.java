@@ -26,17 +26,17 @@ public class Log implements Write, Read {
   private final FileInputStream readOnlyStream;
   private final File file;
   private final StoreMetrics metrics;
-  private final long capacityGB;
+  private final long capacityInBytes;
   private static final String Log_File_Name = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Log(String dataDir, StoreMetrics metrics, long capacityGB) throws IOException {
+  public Log(String dataDir, StoreMetrics metrics, long capacityInBytes) throws IOException {
     file = new File(dataDir, Log_File_Name);
     if (!file.exists()) {
       // if the file does not exist, preallocate it
-      Utils.preAllocateFileIfNeeded(file, capacityGB);
+      Utils.preAllocateFileIfNeeded(file, capacityInBytes);
     }
-    this.capacityGB = capacityGB;
+    this.capacityInBytes = capacityInBytes;
     fileChannel = Utils.openChannel(file, true);
     readOnlyStream = new FileInputStream(file);
     // A log's write offset will always be set to the start of the log.
@@ -54,9 +54,9 @@ public class Log implements Write, Read {
   }
 
   public void setLogEndOffset(long endOffset) throws IOException {
-    if (endOffset < 0 || endOffset > capacityGB) {
-      logger.error("endOffset {} outside the file size {}", endOffset, capacityGB);
-      throw new IllegalArgumentException("endOffset " + endOffset + " outside the file size " + capacityGB);
+    if (endOffset < 0 || endOffset > capacityInBytes) {
+      logger.error("endOffset {} outside the file size {}", endOffset, capacityInBytes);
+      throw new IllegalArgumentException("endOffset " + endOffset + " outside the file size " + capacityInBytes);
     }
     fileChannel.position(endOffset);
     logger.trace("Setting log end offset {}", endOffset);
@@ -69,12 +69,12 @@ public class Log implements Write, Read {
 
   @Override
   public int appendFrom(ByteBuffer buffer) throws IOException {
-    if (currentWriteOffset.get() + buffer.remaining() > capacityGB) {
+    if (currentWriteOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
       logger.error("Error trying to append to log from buffer since new data size {} exceeds total log size {}",
-                   buffer.remaining(), capacityGB);
+                   buffer.remaining(), capacityInBytes);
       throw new IllegalArgumentException("Error trying to append to log from buffer since new data size " +
-                                         buffer.remaining() + " exceeds total log size " + capacityGB);
+                                         buffer.remaining() + " exceeds total log size " + capacityInBytes);
     }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
@@ -85,12 +85,12 @@ public class Log implements Write, Read {
 
   @Override
   public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
-    if (currentWriteOffset.get() + size > capacityGB) {
+    if (currentWriteOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
       logger.error("Error trying to append to log from channel since new data size {} exceeds total log size {}",
-                   size, capacityGB);
+                   size, capacityInBytes);
       throw new IllegalArgumentException("Error trying to append to log from channel since new data size " +
-                                         size + "exceeds total log size " + capacityGB);
+                                         size + "exceeds total log size " + capacityInBytes);
     }
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
     currentWriteOffset.addAndGet(bytesWritten);

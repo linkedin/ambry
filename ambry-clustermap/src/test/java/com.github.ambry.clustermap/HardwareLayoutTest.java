@@ -16,17 +16,17 @@ import static org.junit.Assert.fail;
  */
 public class HardwareLayoutTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
+  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
   private static int dataNodeCount = 6;
   private static int datacenterCount = 3;
   private static int basePort = 6666;
 
   private JSONArray getDisks() throws JSONException {
-    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
+    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   private JSONArray getDuplicateDisks() throws JSONException {
-    return TestUtils.getJsonArrayDuplicateDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
+    return TestUtils.getJsonArrayDuplicateDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   private JSONArray getDataNodes(int basePort, JSONArray disks) throws JSONException {
@@ -103,7 +103,7 @@ public class HardwareLayoutTest {
 
     assertEquals(hardwareLayout.getClusterName(), "Alpha");
     assertEquals(hardwareLayout.getDatacenters().size(), datacenterCount);
-    assertEquals(hardwareLayout.getCapacityGB(), datacenterCount * dataNodeCount * diskCount * diskCapacityGB);
+    assertEquals(hardwareLayout.getCapacityInBytes(), datacenterCount * dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(hardwareLayout.toJSONObject().toString(), jsonObject.toString());
   }
 

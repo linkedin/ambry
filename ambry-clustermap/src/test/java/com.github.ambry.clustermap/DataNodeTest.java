@@ -29,7 +29,7 @@ class TestDataNode extends DataNode {
     if (!getHostname().equals(testDataNode.getHostname())) return false;
     if (getPort() != testDataNode.getPort()) return false;
     if (getState() != testDataNode.getState()) return false;
-    if (getCapacityGB() != testDataNode.getCapacityGB()) return false;
+    if (getCapacityInBytes() != testDataNode.getCapacityInBytes()) return false;
 
     return true;
   }
@@ -40,10 +40,10 @@ class TestDataNode extends DataNode {
  */
 public class DataNodeTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000 * 1024 * 1024 * 1024L;
+  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
   JSONArray getDisks() throws JSONException {
-    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
+    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   @Test
@@ -57,7 +57,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
     assertEquals(dataNode.getDisks().size(), diskCount);
-    assertEquals(dataNode.getCapacityGB(), diskCount * diskCapacityGB);
+    assertEquals(dataNode.getCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject()));

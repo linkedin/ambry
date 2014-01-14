@@ -98,15 +98,15 @@ public class MessageFormatRecord {
   }
 
   /**
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   * |         |            |                 |                 |                 |                 |                 |            |
-   * | version | total size | Blob Property   |      TTL        |     Delete      |  User Metadata  |      Blob       |    Crc     |
-   * |(2 bytes)| (8 bytes)  | Relative Offset | Relative Offset | Relative Offset | Relative Offset | Relative Offset |  (8 bytes) |
-   * |         |            |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |            |
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |                 |                 |                 |                 |                 |                 |            |
+   * | version |  payload size   | Blob Property   |      TTL        |     Delete      |  User Metadata  |      Blob       |    Crc     |
+   * |(2 bytes)|   (8 bytes)     | Relative Offset | Relative Offset | Relative Offset | Relative Offset | Relative Offset |  (8 bytes) |
+   * |         |                 |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |   (4 bytes)     |            |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the message header
    *
-   *  total size      - The size of the message payload.
+   *  payload size    - The size of the message payload.
    *                    (Blob prop record size or TTL record size or delete record size) + user metadata size + blob size
    *
    *  blob property   - The offset at which the blob property record is located relative to this message. Only one of
@@ -369,9 +369,10 @@ public class MessageFormatRecord {
    * |(2 bytes)|    (1 byte)   |  (8 bytes) |
    * |         |               |            |
    *  - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the blob property record
+   *  version         - The version of the delete record
    *
-   *  delete byte     - Takes value 0 or 1. If it is set to 1, it signifies that the blob is deleted
+   *  delete byte     - Takes value 0 or 1. If it is set to 1, it signifies that the blob is deleted. The field
+   *                    is required to be able to support undelete in the future if required.
    *
    *  crc             - The crc of the delete record
    *
@@ -415,7 +416,7 @@ public class MessageFormatRecord {
    * |(2 bytes)|   (8 byte)    |  (8 bytes) |
    * |         |               |            |
    *  - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the blob property record
+   *  version         - The version of the ttl record
    *
    *  ttl value       - The time to live value for the blob
    *
@@ -460,7 +461,7 @@ public class MessageFormatRecord {
    * |(2 bytes)| (4 bytes) |  (n bytes) |  (8 bytes) |
    * |         |           |            |            |
    *  - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version    - The version of the blob property record
+   *  version    - The version of the user metadata record
    *
    *  size       - The size of the user metadata content
    *
@@ -512,7 +513,7 @@ public class MessageFormatRecord {
    * |(2 bytes)| (8 bytes) |  (n bytes) |  (8 bytes) |
    * |         |           |            |            |
    *  - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version    - The version of the blob property record
+   *  version    - The version of the blob record
    *
    *  size       - The size of the blob content
    *
@@ -540,7 +541,8 @@ public class MessageFormatRecord {
     public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
-      // we only support data of max size = MAX_INT for now
+      if (dataSize > Integer.MAX_VALUE)
+        throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int)dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();

@@ -67,7 +67,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(null);
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
+                                  replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -141,7 +141,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
+                                  replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -201,7 +201,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
+                                  replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -283,7 +283,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
+                                  replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -354,7 +354,7 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("127.0.01", 6667));
       Store store = new BlobStore(config, scheduler, registryMap, replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityGB(), factory, new DummyMessageRecovery());
+                                  replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);

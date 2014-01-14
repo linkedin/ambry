@@ -1,7 +1,7 @@
 package com.github.ambry.tools.perf;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.messageformat.BlobRecovery;
+import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.*;
 import com.github.ambry.utils.Scheduler;
@@ -26,7 +26,7 @@ class BlobIndexMetrics extends BlobPersistentIndex {
   public BlobIndexMetrics(String datadir, Scheduler scheduler, Log log, boolean enableVerboseLogging,
                           AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads,
                           StoreConfig config, FileWriter writer, StoreKeyFactory factory)  throws StoreException {
-    super(datadir, scheduler, log, config, factory, new BlobRecovery());
+    super(datadir, scheduler, log, config, factory, new BlobStoreRecovery());
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;

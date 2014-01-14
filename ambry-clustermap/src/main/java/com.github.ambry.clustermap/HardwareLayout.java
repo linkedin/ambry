@@ -39,12 +39,12 @@ public class HardwareLayout {
     return datacenters;
   }
 
-  public long getCapacityGB() {
-    long capacityGB = 0;
+  public long getCapacityInBytes() {
+    long capacityInBytes = 0;
     for (Datacenter datacenter : datacenters) {
-      capacityGB += datacenter.getCapacityGB();
+      capacityInBytes += datacenter.getCapacityInBytes();
     }
-    return capacityGB;
+    return capacityInBytes;
   }
 
   /**

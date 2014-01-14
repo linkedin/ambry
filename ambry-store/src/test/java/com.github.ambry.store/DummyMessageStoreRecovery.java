@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DummyMessageRecovery implements MessageRecovery {
+public class DummyMessageStoreRecovery implements MessageStoreRecovery {
 
   @Override
   public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {

@@ -39,7 +39,7 @@ public class BlobPersistantIndexTest {
                      Log log,
                      StoreConfig config,
                      StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageRecovery());
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery());
     }
 
     public MockIndex(String datadir,
@@ -47,7 +47,7 @@ public class BlobPersistantIndexTest {
                      Log log,
                      StoreConfig config,
                      StoreKeyFactory factory,
-                     MessageRecovery recovery) throws StoreException {
+                     MessageStoreRecovery recovery) throws StoreException {
       super(datadir, scheduler, log, config, factory, recovery);
     }
 
@@ -292,7 +292,7 @@ public class BlobPersistantIndexTest {
       Assert.assertNull(value5);
       indexNew.close();
 
-      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
@@ -311,7 +311,7 @@ public class BlobPersistantIndexTest {
       log.setLogEndOffset(7000);
       indexNew.close();
 
-      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
@@ -373,7 +373,7 @@ public class BlobPersistantIndexTest {
 
       toModify.delete();
 
-      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
@@ -392,7 +392,7 @@ public class BlobPersistantIndexTest {
 
       // check error state. this scenario would populate the index but the contents would fail to be parsed
 
-      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageRecovery() {
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();

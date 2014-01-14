@@ -9,13 +9,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Random;
 
-/**
- * Created with IntelliJ IDEA.
- * User: srsubram
- * Date: 1/3/14
- * Time: 3:28 PM
- * To change this template use File | Settings | File Templates.
- */
 public class TestPrealloc {
   public static void main(String args[]) {
     try {

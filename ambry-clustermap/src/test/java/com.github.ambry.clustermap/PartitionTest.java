@@ -19,16 +19,16 @@ public class PartitionTest {
   @Test
   public void basics() throws JSONException {
     int replicaCount = 6;
-    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
+    long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
     JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(thl.getIndependentDisks(replicaCount));
-    JSONObject jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityGB, jsonReplicas);
+    JSONObject jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityInBytes, jsonReplicas);
 
     Partition partition = new Partition(thl.getHardwareLayout(), jsonObject);
 
     assertEquals(partition.getReplicaIds().size(), replicaCount);
-    assertEquals(partition.getReplicaCapacityGB(), replicaCapacityGB);
+    assertEquals(partition.getReplicaCapacityInBytes(), replicaCapacityInBytes);
     assertEquals(partition.getPartitionState(), PartitionState.READ_WRITE);
   }
 
@@ -44,17 +44,17 @@ public class PartitionTest {
   @Test
   public void validation() throws JSONException {
     int replicaCount = 6;
-    long replicaCapacityGB = 100 * 1024 * 1024 * 1024L;
+    long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
     JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(thl.getIndependentDisks(replicaCount));
     JSONObject jsonObject;
 
-    // Bad replica capacity GB (too small)
+    // Bad replica capacity in bytes (too small)
     jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, -1, jsonReplicas);
     failValidation(thl.getHardwareLayout(), jsonObject);
 
-    // Bad replica capacity GB (too big)
+    // Bad replica capacity in bytes (too big)
     jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, 1024*1024*1024*1024*1024*1024L, jsonReplicas);
     failValidation(thl.getHardwareLayout(), jsonObject);
 
@@ -65,12 +65,12 @@ public class PartitionTest {
       disks.add(randomDisk);
     }
     JSONArray jsonReplicasSameDisk = TestUtils.getJsonArrayReplicas(disks);
-    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityGB, jsonReplicasSameDisk);
+    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityInBytes, jsonReplicasSameDisk);
     failValidation(thl.getHardwareLayout(), jsonObject);
 
     // Multiple Replica on same DataNode.
     JSONArray jsonReplicasSameDataNode = TestUtils.getJsonArrayReplicas(thl.getDependentDisks(replicaCount));
-    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityGB, jsonReplicasSameDataNode);
+    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, replicaCapacityInBytes, jsonReplicasSameDataNode);
     failValidation(thl.getHardwareLayout(), jsonObject);
   }
 

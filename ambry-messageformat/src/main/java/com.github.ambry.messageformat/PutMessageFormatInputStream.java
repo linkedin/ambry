@@ -10,18 +10,19 @@ import java.nio.ByteBuffer;
  * Represents a message that consist of the blob, blob properties and user metadata.
  * This format is used to put a new blob into the store
  *
- *  - - - - - - - - - - - - -
- * |     Message Header      |
- *  - - - - - - - - - - - - -
- * |       blob key          |
- *  - - - - - - - - - - - - -
- * |  Blob Property Record   |
- *  - - - - - - - - - - - - -
- * |  User metadata Record   |
- *  - - - - - - - - - - - - -
- * |       Blob Record       |
- *  - - - - - - - - - - - - -
+ *  - - - - - - - - - - - - - -
+ * |     Message Header        |
+ *  - - - - - - - - - - - - - -
+ * |       blob key            |
+ *  - - - - - - - - - - - - - -
+ * |  Blob Properties Record   |
+ *  - - - - - - - - - - - - - -
+ * |  User metadata Record     |
+ *  - - - - - - - - - - - - - -
+ * |       Blob Record         |
+ *  - - - - - - - - - - - - - -
  *
+ * TODO rename blob property to blob properties across code base
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 

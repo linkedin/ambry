@@ -461,7 +461,7 @@ public class BlobPersistentIndex {
                              Log log,
                              StoreConfig config,
                              StoreKeyFactory factory,
-                             MessageRecovery recovery) throws StoreException {
+                             MessageStoreRecovery recovery) throws StoreException {
     try {
       this.scheduler = scheduler;
       this.log = log;
@@ -532,7 +532,7 @@ public class BlobPersistentIndex {
     }
   }
 
-  private void recover(IndexSegmentInfo segmentToRecover, long endOffset, MessageRecovery recovery)
+  private void recover(IndexSegmentInfo segmentToRecover, long endOffset, MessageStoreRecovery recovery)
           throws StoreException, IOException {
     // fix the start offset in the log for recovery.
     long startOffsetForRecovery = 0;

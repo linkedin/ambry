@@ -63,8 +63,8 @@ public class Replica implements ReplicaId {
   }
 
   @Override
-  public long getCapacityGB() {
-    return partition.getReplicaCapacityGB();
+  public long getCapacityInBytes() {
+    return partition.getReplicaCapacityInBytes();
   }
 
   @Override
