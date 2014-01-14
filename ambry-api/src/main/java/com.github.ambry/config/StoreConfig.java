@@ -41,6 +41,13 @@ public class StoreConfig {
   @Default("10000")
   public final int storeIndexMaxNumberOfInmemElements;
 
+  /**
+   * The max number of entries that the journal will return when queried for entries
+   */
+  @Config("store.journal.max.number.of.entries.to.return")
+  @Default("5000")
+  public final int storeJournalMaxNumberOfEntriesToReturn;
+
 
   /**
    * The max probability of a false positive for the index bloom filter
@@ -59,6 +66,8 @@ public class StoreConfig {
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability = verifiableProperties.getDoubleInRange(
             "store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
+    storeJournalMaxNumberOfEntriesToReturn = verifiableProperties.getInt(
+            "store.journal.max.number.of.entries.to.return", 5000);
   }
 }
 

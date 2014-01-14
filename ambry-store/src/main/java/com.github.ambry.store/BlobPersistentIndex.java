@@ -443,6 +443,7 @@ public class BlobPersistentIndex {
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
   private StoreConfig config;
+  private BlobJournal journal;
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegmentInfo> indexes = new ConcurrentSkipListMap<Long, IndexSegmentInfo>();
   public static final String Index_File_Name_Suffix = "index";
@@ -525,6 +526,7 @@ public class BlobPersistentIndex {
                               TimeUnit.SECONDS);
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
+      journal = new BlobJournal(maxInMemoryNumElements, config.storeJournalMaxNumberOfEntriesToReturn);
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
