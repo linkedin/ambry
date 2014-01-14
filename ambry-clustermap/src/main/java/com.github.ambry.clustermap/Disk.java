@@ -10,15 +10,15 @@ import org.slf4j.LoggerFactory;
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-public class Disk {
-  // Hard-code disk capacity limits in GB for validation
-  private static final long MinCapacityGB = 10;
-  private static final long MaxCapacityGB = 1024 * 1024; // 1 PB
+public class Disk implements DiskId {
+  // Hard-code disk capacity limits in bytes for validation
+  private static final long MinCapacityInBytes = 10 * 1024 * 1024 * 1024L;
+  private static final long MaxCapacityInBytes = 1024 * 1024 * 1024 * 1024L; // 1 PB
 
   private DataNode dataNode;
   private String mountPath;
   private HardwareState hardwareState;
-  private long capacityGB;
+  private long capacityInBytes;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -26,23 +26,17 @@ public class Disk {
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
-    this.capacityGB = jsonObject.getLong("capacityGB");
+    this.capacityInBytes = jsonObject.getLong("capacityInBytes");
 
     validate();
   }
 
-  public DataNode getDataNode() {
-    return dataNode;
-  }
-
+  @Override
   public String getMountPath() {
     return mountPath;
   }
 
-  public HardwareState getHardwareState() {
-    return hardwareState;
-  }
-
+  @Override
   public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
     if (dataNode.getState() == HardwareState.UNAVAILABLE) {
@@ -51,8 +45,17 @@ public class Disk {
     return hardwareState;
   }
 
-  public long getCapacityGB() {
-    return capacityGB;
+  @Override
+  public long getCapacityInBytes() {
+    return capacityInBytes;
+  }
+
+  public DataNode getDataNode() {
+    return dataNode;
+  }
+
+  public HardwareState getHardwareState() {
+    return hardwareState;
   }
 
   protected void validateDataNode() {
@@ -71,11 +74,11 @@ public class Disk {
   }
 
   protected void validateCapacity() {
-    if (capacityGB < MinCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is less than " + MinCapacityGB);
+    if (capacityInBytes < MinCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
     }
-    else if (capacityGB > MaxCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityGB + " is more than " + MaxCapacityGB);
+    else if (capacityInBytes > MaxCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " + MaxCapacityInBytes);
     }
   }
 
@@ -91,7 +94,7 @@ public class Disk {
     return new JSONObject()
             .put("mountPath", mountPath)
             .put("hardwareState", hardwareState)
-            .put("capacityGB", capacityGB);
+            .put("capacityInBytes", capacityInBytes);
   }
 
   @Override

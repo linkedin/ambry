@@ -41,14 +41,14 @@ public class LogTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 1000);
-      Assert.assertEquals(logTest.sizeInBytes(), 1000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 1000);
       // append to log from channel
       long writtenFromChannel = logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
       Assert.assertEquals(writtenFromChannel, 1000);
-      Assert.assertEquals(logTest.sizeInBytes(), 2000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 1000);
-      Assert.assertEquals(logTest.sizeInBytes(), 3000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 3000);
       ByteBuffer result = ByteBuffer.allocate(3000);
       logTest.readInto(result, 0);
       byte[] expectedAns = new byte[3000];
@@ -73,7 +73,7 @@ public class LogTest {
       // flush the file and ensure the write offset is different from file size
       logTest.flush();
       Assert.assertEquals(randomFile.length(), 5000);
-      Assert.assertEquals(logTest.sizeInBytes(), 3000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 3000);
       tempFile.delete();
     }
     catch (Exception e) {
@@ -98,11 +98,11 @@ public class LogTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 2000);
-      Assert.assertEquals(logTest.sizeInBytes(), 2000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       // append to log from channel
       long writtenFromChannel = logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
       Assert.assertEquals(writtenFromChannel, 2000);
-      Assert.assertEquals(logTest.sizeInBytes(), 4000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 4000);
 
       // write more and verify we fail to write
       try {
@@ -126,7 +126,7 @@ public class LogTest {
       logTest.close();
       // ensure we fail to append
       try {
-        logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
+        logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
         Assert.assertTrue(false);
       }
       catch (ClosedChannelException e) {
@@ -155,7 +155,7 @@ public class LogTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 2000);
-      Assert.assertEquals(logTest.sizeInBytes(), 2000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 2000);
 
       ByteBuffer buffer = ByteBuffer.allocate(1000);
       logTest.readInto(buffer, 0);
@@ -167,7 +167,7 @@ public class LogTest {
         Assert.assertEquals(buffer.array()[i], testbuf[i + 1000]);
       try {
         buffer.clear();
-        logTest.readInto(buffer, 2500);
+        logTest.readInto(buffer, 5000);
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -175,7 +175,7 @@ public class LogTest {
       }
       buffer.clear();
       try {
-        logTest.readInto(buffer, 1500);
+        logTest.readInto(buffer, 5000);
         Assert.assertFalse(false);
       }
       catch (IllegalArgumentException e) {
@@ -204,7 +204,7 @@ public class LogTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 2000);
-      Assert.assertEquals(logTest.sizeInBytes(), 2000);
+      Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       logTest.setLogEndOffset(4000);
       Assert.assertEquals(logTest.getLogEndOffset(), 4000);
       try {

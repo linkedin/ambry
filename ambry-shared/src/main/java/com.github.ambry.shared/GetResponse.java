@@ -32,25 +32,25 @@ public class GetResponse extends Response {
     int keySize = 2;
     int fieldSize = 8;
     size += listcountSize;
-    for (MessageInfo messageInfo : messageInfoList) {
-      size += keySize;
-      size += messageInfo.getStoreKey().sizeInBytes();
-      size += fieldSize;
-      size += fieldSize;
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        size += keySize;
+        size += messageInfo.getStoreKey().sizeInBytes();
+        size += fieldSize;
+        size += fieldSize;
+      }
     }
     return size;
   }
 
   private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
-    if(messageInfoList == null) {
-      outputBuffer.putInt(0);
-      return;
-    }
-    outputBuffer.putInt(messageInfoList.size());
-    for (MessageInfo messageInfo : messageInfoList) {
-      outputBuffer.put(messageInfo.getStoreKey().toBytes());
-      outputBuffer.putLong(messageInfo.getSize());
-      outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
+    outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        outputBuffer.put(messageInfo.getStoreKey().toBytes());
+        outputBuffer.putLong(messageInfo.getSize());
+        outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
+      }
     }
   }
 

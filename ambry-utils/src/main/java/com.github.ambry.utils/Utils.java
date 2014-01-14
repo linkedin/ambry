@@ -17,8 +17,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.Random;
 
@@ -278,9 +276,18 @@ public class Utils {
    * @throws IOException
    */
   public static String readStringFromFile(String path) throws IOException {
-    // Code cribbed from StackOverflow and is similar to IO Commons and Guava
-    // http://stackoverflow.com/questions/326390/how-to-create-a-java-string-from-the-contents-of-a-file
-    byte[] encoded = Files.readAllBytes(Paths.get(path));
+    File file = new File(path);
+    byte[] encoded = new byte[(int)file.length()];
+    DataInputStream ds = null;
+    try {
+      ds = new DataInputStream(new FileInputStream(file));
+      ds.readFully(encoded);
+    }
+    finally {
+      if (ds != null) {
+        ds.close();
+      }
+    }
     return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
   }
 
@@ -296,10 +303,10 @@ public class Utils {
     return new JSONObject(readStringFromFile(path));
   }
 
-  public static void preAllocateFile(File file, long capacityGB) throws IOException {
+  public static void preAllocateFileIfNeeded(File file, long capacityBytes) throws IOException {
     Runtime runtime = Runtime.getRuntime();
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
-      Process process = runtime.exec("fallocate -l " + getBytesFromGB(capacityGB) + " " + file.getAbsolutePath());
+      Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {
         process.waitFor();
       }
@@ -313,25 +320,12 @@ public class Utils {
       RandomAccessFile rfile = null;
       try {
         rfile = new RandomAccessFile(file, "rw");
-        rfile.setLength(capacityGB);
-      }
+     }
       finally {
         if (rfile != null)
           rfile.close();
       }
     }
-  }
-
-  public static boolean checkFileExistWithGivenSize(File file, long size) {
-    // TODO temporary conversion for linux till we fix capacityGB to bytes
-    if (System.getProperty("os.name").toLowerCase().startsWith("linux"))
-      size = getBytesFromGB(size);
-    // if the file exist, check size is equal to capacity
-    return file.exists() && file.length() == size;
-  }
-
-  public static long getBytesFromGB(long sizeInGB) {
-    return sizeInGB * 1024 * 1024 * 1024;
   }
 
   /**

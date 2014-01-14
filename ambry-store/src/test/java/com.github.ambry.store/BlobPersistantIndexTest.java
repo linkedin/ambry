@@ -34,8 +34,21 @@ public class BlobPersistantIndexTest {
   }
 
   class MockIndex extends BlobPersistentIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, config, factory);
+    public MockIndex(String datadir,
+                     Scheduler scheduler,
+                     Log log,
+                     StoreConfig config,
+                     StoreKeyFactory factory) throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery());
+    }
+
+    public MockIndex(String datadir,
+                     Scheduler scheduler,
+                     Log log,
+                     StoreConfig config,
+                     StoreKeyFactory factory,
+                     MessageStoreRecovery recovery) throws StoreException {
+      super(datadir, scheduler, log, config, factory, recovery);
     }
 
     BlobIndexValue getValue(StoreKey key) throws StoreException {
@@ -115,7 +128,7 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(info.find(blobId8).getSize(), 1000);
       Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
 
-      info.writeIndexToFile(3000);
+      info.writeIndexToFile(9000);
       IndexSegmentInfo infonew = new IndexSegmentInfo(info.getFile(), false, factory, config);
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
       Assert.assertEquals(infonew.find(blobId1).getOffset(), 0);
@@ -224,19 +237,22 @@ public class BlobPersistantIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 0);
+      Log log = new Log(logFile, metrics, 7000);
+      log.setLogEndOffset(5000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
-      MockId blobId1 = new MockId("id1");
-      MockId blobId2 = new MockId("id2");
-      MockId blobId3 = new MockId("id3");
+      final MockId blobId1 = new MockId("id1");
+      final MockId blobId2 = new MockId("id2");
+      final MockId blobId3 = new MockId("id3");
+      final MockId blobId4 = new MockId("id4");
+      final MockId blobId5 = new MockId("id5");
 
       byte flags = 3;
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0, flags, 12345));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 1000, flags, 12567));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 2000, flags, 12567));
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(3000, 0, flags, 12345));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(1000, 3000, flags, 12567));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(1000, 4000, flags, 12567));
       index.addToIndex(entry1, 3000);
       index.addToIndex(entry2, 4000);
       index.addToIndex(entry3, 5000);
@@ -249,8 +265,69 @@ public class BlobPersistantIndexTest {
       BlobIndexValue value2 = indexNew.getValue(blobId2);
       BlobIndexValue value3 = indexNew.getValue(blobId3);
       Assert.assertEquals(value1.getOffset(), 0);
-      Assert.assertEquals(value2.getOffset(), 1000);
-      Assert.assertEquals(value3.getOffset(), 2000);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
+      indexNew.close();
+
+      // create a new index, persist, add more entries and fail. ensure new index restore
+      // removes extra rows
+      Properties props = new Properties();
+      props.put("store.data.flush.delay.seconds", "999999");
+      config = new StoreConfig(new VerifiableProperties(props));
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory);
+      log.setLogEndOffset(5000);
+      indexNew.addToIndex(new BlobIndexEntry(blobId4, new BlobIndexValue(1000, 5000, 12657)), 6000);
+      indexNew.addToIndex(new BlobIndexEntry(blobId5, new BlobIndexValue(1000, 6000, 12657)), 7000);
+      indexNew.close();
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory);
+      value1 = indexNew.getValue(blobId1);
+      value2 = indexNew.getValue(blobId2);
+      value3 = indexNew.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
+      BlobIndexValue value4 = indexNew.getValue(blobId4);
+      BlobIndexValue value5 = indexNew.getValue(blobId5);
+      Assert.assertNull(value4);
+      Assert.assertNull(value5);
+      indexNew.close();
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId4, 1000));
+          infos.add(new MessageInfo(blobId5, 1000, 12657));
+          return infos;
+        }
+      });
+      value4 = indexNew.getValue(blobId4);
+      value5 = indexNew.getValue(blobId5);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 5000);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 6000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+      log.setLogEndOffset(7000);
+      indexNew.close();
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId4, 100, true));
+          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
+          return infos;
+        }
+      });
+      value4 = indexNew.getValue(blobId4);
+      value5 = indexNew.getValue(blobId5);
+      Assert.assertEquals(value4.isFlagSet(BlobIndexValue.Flags.Delete_Index), true);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), BlobIndexValue.TTL_Infinite);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 5000);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 6000);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();
@@ -293,6 +370,45 @@ public class BlobPersistantIndexTest {
       catch (StoreException e) {
         Assert.assertTrue(true);
       }
+
+      toModify.delete();
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId1, 1000));
+          infos.add(new MessageInfo(blobId2, 1000, 12657));
+          return infos;
+        }
+      });
+      value4 = indexNew.getValue(blobId1);
+      value5 = indexNew.getValue(blobId2);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 1000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+
+      // check error state. this scenario would populate the index but the contents would fail to be parsed
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId4, 100, true));
+          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
+          return infos;
+
+        }
+      });
+
+      value4 = indexNew.getValue(blobId4);
+      value5 = indexNew.getValue(blobId5);
+      Assert.assertEquals(value4.getSize(), 100);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 100);
+      Assert.assertEquals(value5.getOffset(), 100);
 
       log.close();
       scheduler.shutdown();
@@ -511,7 +627,8 @@ public class BlobPersistantIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, metrics, 30000);
+      log.setLogEndOffset(30000);
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");

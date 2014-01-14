@@ -4,17 +4,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
-import com.github.ambry.messageformat.BlobOutput;
-import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormat;
-import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.GetRequest;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
+import com.github.ambry.messageformat.*;
+import com.github.ambry.shared.*;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.After;
@@ -73,6 +64,7 @@ public class ServerTest {
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
 
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1,
@@ -84,6 +76,7 @@ public class ServerTest {
       channel.send(putRequest2);
       putResponseStream = channel.receive();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1,
@@ -95,7 +88,7 @@ public class ServerTest {
       channel.send(putRequest3);
       putResponseStream = channel.receive();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-
+      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -106,7 +99,7 @@ public class ServerTest {
       InputStream stream = channel.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        BlobProperties propertyOutput = MessageFormat.deserializeBlobProperties(resp1.getInputStream());
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
@@ -120,13 +113,12 @@ public class ServerTest {
       stream = channel.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        ByteBuffer userMetadataOutput = MessageFormat.deserializeUserMetadata(resp2.getInputStream());
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       }
       catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
-      channel.disconnect();
 
       try {
         // get blob data
@@ -145,6 +137,17 @@ public class ServerTest {
         Assert.assertEquals(false, true);
       }
 
+      // fetch blob that does not exist
+      // get blob properties
+      ids = new ArrayList<BlobId>();
+      partition = new MockPartitionId();
+      ids.add(new BlobId(partition));
+      GetRequest getRequest4 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
+      channel.send(getRequest4);
+      stream = channel.receive();
+      GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      Assert.assertEquals(resp4.getError(), ServerErrorCode.Blob_Not_Found);
+      channel.disconnect();
     }
     catch (Exception e) {
       e.printStackTrace();

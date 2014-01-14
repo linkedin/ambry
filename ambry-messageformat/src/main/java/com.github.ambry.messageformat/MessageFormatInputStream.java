@@ -1,8 +1,6 @@
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.Crc32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +11,10 @@ import java.nio.ByteBuffer;
 /**
  * Converts a set of message inputs into the right message format.
  * This provides the base implementation for all types of messages
- * that need to be persisted.
+ * that need to be persisted. The bytebuffer is mandatory for
+ * all derived classes. It is used to store all data except and
+ * stream based data. The stream is an optional payload used to
+ * stream contents from an input stream.
  */
 public abstract class MessageFormatInputStream extends InputStream {
 
@@ -21,15 +22,14 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected CrcInputStream stream = null;
   protected long streamLength = 0;
   protected long streamRead = 0;
-  protected static int StoreKey_Size_Field_Size_In_Bytes = 2;
-  ByteBuffer crc = ByteBuffer.allocate(MessageFormat.Crc_Size);
+  ByteBuffer crc = ByteBuffer.allocate(MessageFormatRecord.Crc_Size);
   protected long messageLength;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
   public int read() throws IOException {
     if (buffer != null && buffer.remaining() > 0) {
-      return buffer.get();
+      return buffer.get() & 0xFF;
     }
     if (stream != null && streamRead < streamLength) {
       streamRead++;
@@ -56,21 +56,32 @@ public abstract class MessageFormatInputStream extends InputStream {
     } else if (len == 0) {
       return 0;
     }
+    int totalRead = 0;
 
-    int c = read();
+    if (buffer != null && buffer.remaining() > 0) {
+      int bytesToRead = Math.min(buffer.remaining(), len);
+      buffer.get(b, off, bytesToRead);
+      totalRead += bytesToRead;
+    }
+    if (stream != null) {
+      if (streamRead < streamLength && (len - totalRead) > 0) {
+        long bytesToRead = Math.min(streamLength - streamRead, len - totalRead);
+        int readFromStream = stream.read(b, off + totalRead, (int)bytesToRead);
+        streamRead += readFromStream;
+        totalRead += readFromStream;
+      }
 
-    b[off] = (byte)c;
-
-    int i = 1;
-    try {
-      for (; i < len ; i++) {
-        c = read();
-        b[off + i] = (byte)c;
+      if (streamRead == streamLength) {
+        if (crc.position() == 0) {
+          crc.putLong(stream.getValue());
+          crc.flip();
+        }
+        int bytesToRead = Math.min(crc.remaining(), len - totalRead);
+        crc.get(b, off + totalRead, bytesToRead);
+        totalRead += bytesToRead;
       }
     }
-    catch (IOException ee) {
-    }
-    return i;
+    return totalRead;
   }
 
   public long getSize() {

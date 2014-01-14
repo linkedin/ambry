@@ -4,7 +4,7 @@
     {
       "id": 0,
       "partitionState": "READ_WRITE",
-      "replicaCapacityGB": 10,
+      "replicaCapacityInBytes": 10737418240,
       "replicas": [
         {
           "hostname": "localhost",

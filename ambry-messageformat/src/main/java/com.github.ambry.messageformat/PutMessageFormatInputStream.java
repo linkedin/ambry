@@ -3,45 +3,58 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
-
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
- * The message format input stream that helps to serialize and write a new
- * message to the underlying store
+ * Represents a message that consist of the blob, blob properties and user metadata.
+ * This format is used to put a new blob into the store
+ *
+ *  - - - - - - - - - - - - - -
+ * |     Message Header        |
+ *  - - - - - - - - - - - - - -
+ * |       blob key            |
+ *  - - - - - - - - - - - - - -
+ * |  Blob Properties Record   |
+ *  - - - - - - - - - - - - - -
+ * |  User metadata Record     |
+ *  - - - - - - - - - - - - - -
+ * |       Blob Record         |
+ *  - - - - - - - - - - - - - -
+ *
+ * TODO rename blob property to blob properties across code base
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
   public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperty,
                                      ByteBuffer userMetadata, InputStream data,
-                                     long streamSize) {
+                                     long streamSize) throws MessageFormatException {
 
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionBlobPropertyRecordSize(blobProperty);
-    int userMetadataSize = MessageFormat.getCurrentVersionUserMetadataSize(userMetadata);
-    long dataSize = MessageFormat.getCurrentVersionDataSize(streamSize);
-    buffer = ByteBuffer.allocate(headerSize +
-            key.sizeInBytes() +
-            systemMetadataSize +
-            userMetadataSize +
-            (int)(dataSize - streamSize - MessageFormat.Crc_Size));
+    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+    int blobPropertyRecordSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(blobProperty);
+    int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
 
-    MessageFormat.serializeCurrentVersionHeader(buffer,
-            systemMetadataSize + userMetadataSize + dataSize,
-            headerSize + key.sizeInBytes(),
-            headerSize + key.sizeInBytes() + systemMetadataSize,
-            headerSize + key.sizeInBytes() + systemMetadataSize + userMetadataSize);
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize +
+                                (int)(blobSize - streamSize - MessageFormatRecord.Crc_Size));
+
+    MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer,
+                                                                blobPropertyRecordSize + userMetadataSize + blobSize,
+                                                                headerSize + key.sizeInBytes(),
+                                                                MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+                                                                MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+                                                                headerSize + key.sizeInBytes() + blobPropertyRecordSize,
+                                                                headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize);
     buffer.put(key.toBytes());
-    MessageFormat.serializeCurrentVersionBlobPropertyRecord(buffer, blobProperty);
-    MessageFormat.serializeCurrentVersionUserMetadata(buffer, userMetadata);
-    int bufferDataStart = buffer.position();
-    MessageFormat.serializeCurrentVersionPartialData(buffer, streamSize);
+    MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(buffer, blobProperty);
+    MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
+    int bufferBlobStart = buffer.position();
+    MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(buffer, streamSize);
     Crc32 crc = new Crc32();
-    crc.update(buffer.array(), bufferDataStart, buffer.position() - bufferDataStart);
+    crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, data);
     streamLength = streamSize;
-    messageLength = buffer.capacity() + streamLength + MessageFormat.Crc_Size;
+    messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
     buffer.flip();
   }
 }

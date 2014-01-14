@@ -1,10 +1,6 @@
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HardwareState;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.*;
 
 import java.io.DataInputStream;
 import java.io.File;
@@ -147,7 +143,27 @@ class MockReplicaId implements ReplicaId {
   }
 
   @Override
-  public long getCapacityGB() {
-    return 100000; // TODO This is really in bytes for now
+  public long getCapacityInBytes() {
+    return 100000;
+  }
+
+  @Override
+  public DiskId getDiskId() {
+    return new DiskId() {
+      @Override
+      public String getMountPath() {
+        return mountPath;
+      }
+
+      @Override
+      public HardwareState getState() {
+        return HardwareState.AVAILABLE;
+      }
+
+      @Override
+      public long getCapacityInBytes() {
+        return 100000;
+      }
+    };
   }
 }

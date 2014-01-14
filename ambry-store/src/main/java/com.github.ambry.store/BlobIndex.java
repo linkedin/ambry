@@ -28,7 +28,6 @@ public class BlobIndex {
   protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
   protected Scheduler scheduler;
   private AtomicLong logEndOffset;
-  private BlobJournal indexJournal;
   private File indexFile;
   private static final String indexFileName = "index_current";
   private IndexPersistor persistor;
@@ -41,16 +40,60 @@ public class BlobIndex {
                    Scheduler scheduler,
                    Log log,
                    StoreConfig config,
-                   StoreKeyFactory factory) throws StoreException  {
+                   StoreKeyFactory factory,
+                   MessageStoreRecovery recovery) throws StoreException  {
     try {
       logEndOffset = new AtomicLong(0);
-      indexJournal = new BlobJournal();
+      //indexJournal = new BlobJournal();
       this.log = log;
       this.factory = factory;
       // check if file exist and recover from it
       indexFile = new File(datadir, indexFileName);
       persistor = new IndexPersistor();
-      persistor.read();
+      if (indexFile.exists()) {
+        try {
+          persistor.read();
+        }
+        catch (StoreException e) {
+          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure ||
+              e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
+            // we just log the error here and retain the index so far created.
+            // subsequent recovery process will add the missed out entries
+            logger.error("Error while reading from index {}", e);
+          }
+          else
+            throw e;
+        }
+      }
+      // do recovery
+      List<MessageInfo> messagesRecovered = recovery.recover(log, logEndOffset.get(), log.sizeInBytes(), factory);
+      long runningOffset = logEndOffset.get();
+      // iterate through the recovered messages and restore the state of the index
+      for (MessageInfo info : messagesRecovered) {
+        BlobIndexValue value = index.get(info.getStoreKey());
+        // if the key already exist, update the delete state or ttl value if required
+        if (value != null) {
+          logger.info("Message already exists with key {}", info.getStoreKey());
+          verifyFileEndOffset(logEndOffset.get() + info.getSize());
+          if (info.isDeleted())
+            markAsDeleted(info.getStoreKey(), logEndOffset.get() + info.getSize());
+          else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite)
+            updateTTL(info.getStoreKey(), BlobIndexValue.TTL_Infinite, logEndOffset.get() + info.getSize());
+          else
+            throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
+          logger.info("Updated message with key {} size {} ttl {} deleted {}",
+                      info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
+        }
+        else {
+          // add a new entry to the index
+          BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getTimeToLiveInMs());
+          verifyFileEndOffset(logEndOffset.get() + info.getSize());
+          addToIndex(new BlobIndexEntry(info.getStoreKey(), newValue), logEndOffset.get() + info.getSize());
+          logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
+                  info.getStoreKey(), info.getSize(), info.getTimeToLiveInMs(), info.isDeleted());
+        }
+        runningOffset += info.getSize();
+      }
       logger.info("read index from file {}", datadir);
 
       // start scheduler thread to persist index in the background
@@ -60,12 +103,6 @@ public class BlobIndex {
                               config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
                               config.storeDataFlushIntervalSeconds,
                               TimeUnit.SECONDS);
-    }
-    catch (StoreException e) {
-      // ignore any exception while reading the index file
-      // reset to recover from start
-      logEndOffset.set(0);
-      index.clear();
     }
     catch (Exception e) {
       throw new StoreException("Error while creating index", e, StoreErrorCodes.Index_Creation_Failure);
@@ -197,13 +234,14 @@ public class BlobIndex {
 
           // write the current version
           writer.writeShort(BlobIndex.version);
+          writer.writeLong(fileEndPointer);
 
           // write the entries
           for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
           }
-          writer.writeLong(fileEndPointer);
+
           long crcValue = crc.getValue();
           writer.writeLong(crcValue);
 
@@ -245,18 +283,25 @@ public class BlobIndex {
           short version = stream.readShort();
           switch (version) {
             case 0:
-              while (stream.available() > (Crc_Size + Log_End_Offset_Size)) {
+              long endOffset = stream.readLong();
+              logEndOffset.set(endOffset);
+              while (stream.available() > Crc_Size) {
                 StoreKey key = factory.getStoreKey(stream);
                 byte[] value = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
                 stream.read(value);
                 BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
-                index.put(key, blobValue);
+                if (blobValue.getOffset() < logEndOffset.get())
+                  index.put(key, blobValue);
+                else
+                  logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
+                          logEndOffset.get(), key);
               }
-              long endOffset = stream.readLong();
-              logEndOffset.set(endOffset);
               long crc = crcStream.getValue();
-              if (crc != stream.readLong())
+              if (crc != stream.readLong()) {
+                index.clear();
+                logEndOffset.set(0);
                 throw new StoreException("Crc check does not match", StoreErrorCodes.Index_Creation_Failure);
+              }
               break;
             default:
               throw new StoreException("Invalid version in index file", StoreErrorCodes.Index_Version_Error);

@@ -40,12 +40,12 @@ public class Datacenter {
     return name;
   }
 
-  public long getCapacityGB() {
-    long capacityGB = 0;
+  public long getCapacityInBytes() {
+    long capacityInBytes = 0;
     for (DataNode dataNode : dataNodes) {
-      capacityGB += dataNode.getCapacityGB();
+      capacityInBytes += dataNode.getCapacityInBytes();
     }
-    return capacityGB;
+    return capacityInBytes;
   }
 
   public List<DataNode> getDataNodes() {

@@ -97,83 +97,86 @@ public class ClusterMapManager implements ClusterMap {
   // Administrative API
   // -----------------------
 
-  public long getRawCapacityGB() {
-    return hardwareLayout.getCapacityGB();
+  public long getRawCapacityInBytes() {
+    return hardwareLayout.getCapacityInBytes();
   }
 
-  public long getAllocatedCapacityGB() {
-    return partitionLayout.getCapacityGB();
+  public long getAllocatedCapacityInBytes() {
+    return partitionLayout.getCapacityInBytes();
   }
 
-  public long getAllocatedCapacityGB(Datacenter datacenter) {
-    long allocatedCapacityGB = 0;
+  public long getAllocatedCapacityInBytes(Datacenter datacenter) {
+    long allocatedCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().getDataNode().getDatacenter().equals(datacenter)) {
-          allocatedCapacityGB += replica.getCapacityGB();
+        Disk disk = (Disk)replica.getDiskId();
+        if (disk.getDataNode().getDatacenter().equals(datacenter)) {
+          allocatedCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityGB;
+    return allocatedCapacityInBytes;
   }
 
-  public long getAllocatedCapacityGB(DataNodeId dataNode) {
-    long allocatedCapacityGB = 0;
+  public long getAllocatedCapacityInBytes(DataNodeId dataNode) {
+    long allocatedCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().getDataNode().equals(dataNode)) {
-          allocatedCapacityGB += replica.getCapacityGB();
+        Disk disk = (Disk)replica.getDiskId();
+        if (disk.getDataNode().equals(dataNode)) {
+          allocatedCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityGB;
+    return allocatedCapacityInBytes;
   }
 
-  public long getAllocatedCapacityGB(Disk disk) {
-    long allocatedCapacityGB = 0;
+  public long getAllocatedCapacityInBytes(Disk disk) {
+    long allocatedCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        if (replica.getDisk().equals(disk)) {
-          allocatedCapacityGB += replica.getCapacityGB();
+        Disk currentDisk = (Disk)replica.getDiskId();
+        if (currentDisk.equals(disk)) {
+          allocatedCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityGB;
+    return allocatedCapacityInBytes;
   }
 
-  public long getFreeCapacityGB() {
-    return getRawCapacityGB() - getAllocatedCapacityGB();
+  public long getFreeCapacityInBytes() {
+    return getRawCapacityInBytes() - getAllocatedCapacityInBytes();
   }
 
-  public long getFreeCapacityGB(Datacenter datacenter) {
-    return datacenter.getCapacityGB() - getAllocatedCapacityGB(datacenter);
+  public long getFreeCapacityInBytes(Datacenter datacenter) {
+    return datacenter.getCapacityInBytes() - getAllocatedCapacityInBytes(datacenter);
   }
 
-  public long getFreeCapacityGB(DataNode dataNode) {
-    return dataNode.getCapacityGB() - getAllocatedCapacityGB(dataNode);
+  public long getFreeCapacityInBytes(DataNode dataNode) {
+    return dataNode.getCapacityInBytes() - getAllocatedCapacityInBytes(dataNode);
   }
 
-  public long getFreeCapacityGB(Disk disk) {
-    return disk.getCapacityGB() - getAllocatedCapacityGB(disk);
+  public long getFreeCapacityInBytes(Disk disk) {
+    return disk.getCapacityInBytes() - getAllocatedCapacityInBytes(disk);
   }
 
-  public PartitionId addNewPartition(List<Disk> disks, long replicaCapacityGB) {
-    return partitionLayout.addNewPartition(disks, replicaCapacityGB);
+  public PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
+    return partitionLayout.addNewPartition(disks, replicaCapacityInBytes);
   }
 
   // Determine if there is enough capacity to allocate a PartitionId.
-  private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityGB) {
+  private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      if (getFreeCapacityGB(datacenter) < replicaCountPerDatacenter * replicaCapacityGB) {
-        logger.warn("Insufficient free space in datacenter {} ({} GB free)", datacenter.getName(),
-                    getFreeCapacityGB(datacenter));
+      if (getFreeCapacityInBytes(datacenter) < replicaCountPerDatacenter * replicaCapacityInBytes) {
+        logger.warn("Insufficient free space in datacenter {} ({} bytes free)", datacenter.getName(),
+                    getFreeCapacityInBytes(datacenter));
         return false;
       }
 
       int rcpd = replicaCountPerDatacenter;
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-          if (getFreeCapacityGB(disk) >= replicaCapacityGB) {
+          if (getFreeCapacityInBytes(disk) >= replicaCapacityInBytes) {
             rcpd--;
             break; // Only one replica per DataNodeId.
           }
@@ -191,7 +194,7 @@ public class ClusterMapManager implements ClusterMap {
 
   // Allocate unique datanode.disks for each replica in each datacenter up to replicaCountPerDatacenter (hard-code all
   // datacenters to have same number of replicas for now).
-  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityGB) {
+  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
@@ -204,7 +207,7 @@ public class ClusterMapManager implements ClusterMap {
         Collections.shuffle(shuffledDisks);
 
         for (Disk disk : shuffledDisks) {
-          if (getFreeCapacityGB(disk) >= replicaCapacityGB) {
+          if (getFreeCapacityInBytes(disk) >= replicaCapacityInBytes) {
             allocatedDisks.add(disk);
             rcpd--;
             break; // Only one replica per DataNodeId.
@@ -223,17 +226,18 @@ public class ClusterMapManager implements ClusterMap {
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
   // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient. All cluster map
   // operations are performed by a single thread in some tool.
-  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
-                                              long replicaCapacityGB) {
+  public List<PartitionId> allocatePartitions(int numPartitions,
+                                              int replicaCountPerDatacenter,
+                                              long replicaCapacityInBytes) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
-    while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityGB) && numPartitions > 0) {
-      List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityGB);
+    while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
+      List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes);
       if (disks.size() == 0) {
         System.err.println("numPartitions: " + numPartitions);
         break;
       }
-      partitions.add(partitionLayout.addNewPartition(disks, replicaCapacityGB));
+      partitions.add(partitionLayout.addNewPartition(disks, replicaCapacityInBytes));
       numPartitions--;
     }
 

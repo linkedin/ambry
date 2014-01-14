@@ -27,23 +27,26 @@ public class BlobStore implements Store {
   private final StoreMetrics metrics;
   private boolean started;
   private StoreConfig config;
-  private long capacityGB;
+  private long capacityInBytes;
   private static String LockFile = ".lock";
   private FileLock fileLock;
   private StoreKeyFactory factory;
+  private MessageStoreRecovery recovery;
 
   public BlobStore(StoreConfig config,
                    Scheduler scheduler,
                    ReadableMetricsRegistry registry,
                    String dataDir,
-                   long capacityGB,
-                   StoreKeyFactory factory) {
+                   long capacityInBytes,
+                   StoreKeyFactory factory,
+                   MessageStoreRecovery recovery) {
     this.dataDir = dataDir;
     this.scheduler = scheduler;
     metrics = new StoreMetrics(this.dataDir, registry);
     this.config = config;
-    this.capacityGB = capacityGB;
+    this.capacityInBytes = capacityInBytes;
     this.factory = factory;
+    this.recovery = recovery;
   }
 
   @Override
@@ -71,8 +74,8 @@ public class BlobStore implements Store {
           throw new StoreException("Failed to acquire lock on file " + dataDir +
                                    ". Another process or thread is using this directory.",
                                    StoreErrorCodes.Initialization_Error);
-        log = new Log(dataDir, metrics, capacityGB);
-        index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory);
+        log = new Log(dataDir, metrics, capacityInBytes);
+        index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
         started = true;

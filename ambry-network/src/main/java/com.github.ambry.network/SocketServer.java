@@ -336,7 +336,7 @@ class Processor extends AbstractServerThread {
             }
             catch (Throwable e) {
               logger.error("closing key on exception remote host {} exception {}",
-                           ((SocketChannel) key.channel()).getRemoteAddress(), e);
+                           ((SocketChannel) key.channel()).socket().getRemoteSocketAddress(), e);
               close(key);
             }
           }
@@ -433,7 +433,8 @@ class Processor extends AbstractServerThread {
       key.attach(null);
       // explicitly reset interest ops to not READ, no need to wake up the selector just yet
       key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
-      logger.trace("resetting read interest for key for {}", ((SocketChannel) key.channel()).getRemoteAddress());
+      logger.trace("resetting read interest for key for {}",
+                   ((SocketChannel) key.channel()).socket().getRemoteSocketAddress());
     }
     else {
       // more reading to be done

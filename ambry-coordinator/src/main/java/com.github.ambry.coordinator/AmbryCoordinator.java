@@ -7,6 +7,8 @@ import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelPool;
 import com.github.ambry.shared.BlockingChannelPoolFactory;

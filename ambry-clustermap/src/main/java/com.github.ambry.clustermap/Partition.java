@@ -20,22 +20,22 @@ import java.util.Set;
  */
 public class Partition extends PartitionId {
 
-  private static final long MinReplicaCapacityGB = 1;
-  private static final long MaxReplicaCapacityGB = 1024 * 10; // 10 TB
+  private static final long MinReplicaCapacityInBytes = 1 * 1024 * 1024 * 1024L;
+  private static final long MaxReplicaCapacityInBytes = 10995116277760L; // 10 TB
   private static final int Partition_Size_In_Bytes = 8;
 
   private Long id;
   PartitionState partitionState;
-  long replicaCapacityGB;
+  long replicaCapacityInBytes;
   List<Replica> replicas;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   // For constructing new Partition
-  public Partition(long id, PartitionState partitionState, long replicaCapacityGB) {
+  public Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
     this.id = id;
     this.partitionState = partitionState;
-    this.replicaCapacityGB = replicaCapacityGB;
+    this.replicaCapacityInBytes = replicaCapacityInBytes;
     this.replicas = new ArrayList<Replica>();
 
     validate();
@@ -48,7 +48,7 @@ public class Partition extends PartitionId {
   public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     this.id = jsonObject.getLong("id");
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
-    this.replicaCapacityGB = jsonObject.getLong("replicaCapacityGB");
+    this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
     this.replicas = new ArrayList<Replica>(jsonObject.getJSONArray("replicas").length());
     for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
       this.replicas.add(i, new Replica(hardwareLayout, this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
@@ -81,12 +81,12 @@ public class Partition extends PartitionId {
     return partitionState;
   }
 
-  public long getCapacityGB() {
-    return replicaCapacityGB * replicas.size();
+  public long getCapacityInBytes() {
+    return replicaCapacityInBytes * replicas.size();
   }
 
-  public long getReplicaCapacityGB() {
-    return replicaCapacityGB;
+  public long getReplicaCapacityInBytes() {
+    return replicaCapacityInBytes;
   }
 
   public List<Replica> getReplicas() {
@@ -109,14 +109,14 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  protected void validateReplicaCapacityGB() {
-    if (replicaCapacityGB < MinReplicaCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
-                                      + " is less than " + MinReplicaCapacityGB);
+  protected void validateReplicaCapacityInBytes() {
+    if (replicaCapacityInBytes < MinReplicaCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityInBytes
+                                      + " is less than " + MinReplicaCapacityInBytes);
     }
-    else if (replicaCapacityGB > MaxReplicaCapacityGB) {
-      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityGB
-                                      + " is more than " + MaxReplicaCapacityGB);
+    else if (replicaCapacityInBytes > MaxReplicaCapacityInBytes) {
+      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityInBytes
+                                      + " is more than " + MaxReplicaCapacityInBytes);
     }
   }
 
@@ -126,11 +126,11 @@ public class Partition extends PartitionId {
     Set<Disk> diskSet = new HashSet<Disk>();
 
     for (Replica replica : replicas) {
-      if (!diskSet.add(replica.getDisk())) {
+      if (!diskSet.add((Disk)replica.getDiskId())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same Disk: "
                                         + toString());
       }
-      if (!dataNodeSet.add(replica.getDisk().getDataNode())) {
+      if (!dataNodeSet.add(((Disk)replica.getDiskId()).getDataNode())) {
         throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same DataNode: "
                                         + toString());
       }
@@ -139,7 +139,7 @@ public class Partition extends PartitionId {
 
   protected void validate() {
     logger.trace("begin validate.");
-    validateReplicaCapacityGB();
+    validateReplicaCapacityInBytes();
     validateConstraints();
     logger.trace("complete validate.");
   }
@@ -148,7 +148,7 @@ public class Partition extends PartitionId {
     JSONObject jsonObject = new JSONObject()
             .put("id", id)
             .put("partitionState", partitionState)
-            .put("replicaCapacityGB", replicaCapacityGB)
+            .put("replicaCapacityInBytes", replicaCapacityInBytes)
             .put("replicas", new JSONArray());
     for (Replica replica : replicas) {
       jsonObject.accumulate("replicas", replica.toJSONObject());

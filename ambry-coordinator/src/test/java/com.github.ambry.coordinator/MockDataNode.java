@@ -157,18 +157,18 @@ public class MockDataNode {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append(dataNodeId).append(System.lineSeparator());
-    sb.append("put blobs").append(System.lineSeparator());
+    sb.append(dataNodeId).append(System.getProperty("line.separator"));
+    sb.append("put blobs").append(System.getProperty("line.separator"));
     for(Map.Entry<BlobId,MaterializedBlob> entry : blobs.entrySet()) {
       sb.append("\t").append(entry.getKey()).append(" : ");
       Blob blob = entry.getValue();
       sb.append(blob.getBlobProperties().getBlobSize()).append(" / ");
       sb.append(blob.getUserMetadata().capacity()).append(" / ");
-      sb.append(blob.getBlobOutput().getSize()).append(System.lineSeparator());
+      sb.append(blob.getBlobOutput().getSize()).append(System.getProperty("line.separator"));
     }
-    sb.append("deleted blobs").append(System.lineSeparator());
+    sb.append("deleted blobs").append(System.getProperty("line.separator"));
     for (BlobId blobId : deletedBlobs) {
-      sb.append("\t").append(blobId).append(System.lineSeparator());
+      sb.append("\t").append(blobId).append(System.getProperty("line.separator"));
     }
     return sb.toString();
   }

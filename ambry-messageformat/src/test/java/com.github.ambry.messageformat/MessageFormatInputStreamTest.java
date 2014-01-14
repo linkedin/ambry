@@ -51,7 +51,7 @@ public class MessageFormatInputStreamTest {
   }
 
   @Test
-  public void messageFormatBlobPropertyTest() throws IOException {
+  public void messageFormatBlobPropertyTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     BlobProperties prop = new BlobProperties(10, "servid");
     byte[] usermetadata = new byte[1000];
@@ -63,25 +63,27 @@ public class MessageFormatInputStreamTest {
     MessageFormatInputStream messageFormatStream = new PutMessageFormatInputStream(key, prop,
             ByteBuffer.wrap(usermetadata), stream, 2000);
 
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionBlobPropertyRecordSize(prop);
-    int userMetadataSize = MessageFormat.getCurrentVersionUserMetadataSize(ByteBuffer.wrap(usermetadata));
-    long dataSize = MessageFormat.getCurrentVersionDataSize(2000);
+    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+    int blobPropertyRecordSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(prop);
+    int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
+    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
 
-    Assert.assertEquals(messageFormatStream.getSize(), headerSize + systemMetadataSize +
-                        userMetadataSize + dataSize + key.sizeInBytes());
+    Assert.assertEquals(messageFormatStream.getSize(), headerSize + blobPropertyRecordSize +
+                        userMetadataSize + blobSize + key.sizeInBytes());
 
     // verify header
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
-    Assert.assertEquals(systemMetadataSize + userMetadataSize + dataSize, headerBuf.getLong());
+    Assert.assertEquals(1, headerBuf.getShort());
+    Assert.assertEquals(blobPropertyRecordSize + userMetadataSize + blobSize, headerBuf.getLong());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-    Assert.assertEquals(headerSize + key.sizeInBytes() + systemMetadataSize, headerBuf.getInt());
-    Assert.assertEquals(headerSize + key.sizeInBytes() + systemMetadataSize + userMetadataSize, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertyRecordSize, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize, headerBuf.getInt());
     Crc32 crc = new Crc32();
-    crc.update(headerOutput, 0, headerSize - MessageFormat.Crc_Size);
+    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
 
@@ -93,37 +95,36 @@ public class MessageFormatInputStreamTest {
     handleOutputBuf.get(dest);
     Assert.assertArrayEquals(dest, key.toBytes());
 
-    // verify system metadata
-    byte[] systemMetadataOutput = new byte[systemMetadataSize];
-    ByteBuffer systemMetadataBuf = ByteBuffer.wrap(systemMetadataOutput);
-    messageFormatStream.read(systemMetadataOutput);
-    Assert.assertEquals(systemMetadataBuf.getShort(), MessageFormat.SystemMetadata_Current_Version);
-    Assert.assertEquals(MessageFormat.SystemMetadataRecordType.BlobPropertyRecord.ordinal(), systemMetadataBuf.getShort());
+    // verify blob properties
+    byte[] blobPropertyOutput = new byte[blobPropertyRecordSize];
+    ByteBuffer blobPropertyBuf = ByteBuffer.wrap(blobPropertyOutput);
+    messageFormatStream.read(blobPropertyOutput);
+    Assert.assertEquals(blobPropertyBuf.getShort(), 1);
     BlobProperties propOutput =
-            BlobPropertySerDe.getBlobPropertyFromStream(new DataInputStream(new ByteBufferInputStream(systemMetadataBuf)));
+            BlobPropertySerDe.getBlobPropertyFromStream(new DataInputStream(new ByteBufferInputStream(blobPropertyBuf)));
     Assert.assertEquals(10, propOutput.getBlobSize());
     Assert.assertEquals("servid", propOutput.getServiceId());
     crc = new Crc32();
-    crc.update(systemMetadataOutput, 0, systemMetadataSize - MessageFormat.Crc_Size);
-    Assert.assertEquals(crc.getValue(), systemMetadataBuf.getLong());
+    crc.update(blobPropertyOutput, 0, blobPropertyRecordSize - MessageFormatRecord.Crc_Size);
+    Assert.assertEquals(crc.getValue(), blobPropertyBuf.getLong());
 
     // verify user metadata
     byte[] userMetadataOutput = new byte[userMetadataSize];
     ByteBuffer userMetadataBuf = ByteBuffer.wrap(userMetadataOutput);
     messageFormatStream.read(userMetadataOutput);
-    Assert.assertEquals(userMetadataBuf.getShort(), MessageFormat.UserMetadata_Current_Version);
+    Assert.assertEquals(userMetadataBuf.getShort(), 1);
     Assert.assertEquals(userMetadataBuf.getInt(), 1000);
     dest = new byte[1000];
     userMetadataBuf.get(dest);
     Assert.assertArrayEquals(dest, usermetadata);
     crc = new Crc32();
-    crc.update(userMetadataOutput, 0, userMetadataSize - MessageFormat.Crc_Size);
+    crc.update(userMetadataOutput, 0, userMetadataSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), userMetadataBuf.getLong());
 
-    // verify data
+    // verify blob
     CrcInputStream crcstream = new CrcInputStream(messageFormatStream);
     DataInputStream streamData = new DataInputStream(crcstream);
-    Assert.assertEquals(streamData.readShort(), MessageFormat.Data_Current_Version);
+    Assert.assertEquals(streamData.readShort(), 1);
     Assert.assertEquals(streamData.readLong(), 2000);
     for (int i = 0; i < 2000; i++) {
       Assert.assertEquals((byte)streamData.read(), data[i]);
@@ -133,24 +134,26 @@ public class MessageFormatInputStreamTest {
   }
 
   @Test
-  public void messageFormatDeleteRecordTest() throws IOException {
+  public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     MessageFormatInputStream messageFormatStream = new DeleteMessageFormatInputStream(key);
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionDeleteRecordSize();
-    Assert.assertEquals(headerSize + systemMetadataSize + key.sizeInBytes(), messageFormatStream.getSize());
+    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+    int deleteRecordSize = MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize();
+    Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
     // check header
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
-    Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
+    Assert.assertEquals(1, headerBuf.getShort());
+    Assert.assertEquals(deleteRecordSize, headerBuf.getLong());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-    Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Crc32 crc = new Crc32();
-    crc.update(headerOutput, 0, headerSize - MessageFormat.Crc_Size);
+    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
     // verify handle
@@ -162,37 +165,38 @@ public class MessageFormatInputStreamTest {
     Assert.assertArrayEquals(dest, key.toBytes());
 
 
-    // check system metadata record
-    byte[] systemMetadataOutput = new byte[systemMetadataSize];
-    ByteBuffer systemMetadataBuf = ByteBuffer.wrap(systemMetadataOutput);
-    messageFormatStream.read(systemMetadataOutput);
-    Assert.assertEquals(systemMetadataBuf.getShort(), MessageFormat.SystemMetadata_Current_Version);
-    Assert.assertEquals(MessageFormat.SystemMetadataRecordType.DeleteRecord.ordinal(), systemMetadataBuf.getShort());
-    Assert.assertEquals(true, systemMetadataBuf.get() == 1 ? true : false);
+    // check delete record
+    byte[] deleteRecordOutput = new byte[deleteRecordSize];
+    ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
+    messageFormatStream.read(deleteRecordOutput);
+    Assert.assertEquals(deleteRecordBuf.getShort(), 1);
+    Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
     crc = new Crc32();
-    crc.update(systemMetadataOutput, 0, systemMetadataSize - MessageFormat.Crc_Size);
-    Assert.assertEquals(crc.getValue(), systemMetadataBuf.getLong());
+    crc.update(deleteRecordOutput, 0, deleteRecordSize - MessageFormatRecord.Crc_Size);
+    Assert.assertEquals(crc.getValue(), deleteRecordBuf.getLong());
   }
 
   @Test
-  public void messageFormatTTLTest() throws IOException {
+  public void messageFormatTTLTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     MessageFormatInputStream messageFormatStream = new TTLMessageFormatInputStream(key, 1124);
-    int headerSize = MessageFormat.getCurrentVersionHeaderSize();
-    int systemMetadataSize = MessageFormat.getCurrentVersionTTLRecordSize();
-    Assert.assertEquals(headerSize + systemMetadataSize + key.sizeInBytes(), messageFormatStream.getSize());
+    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+    int ttlRecordSize = MessageFormatRecord.TTL_Format_V1.getTTLRecordSize();
+    Assert.assertEquals(headerSize + ttlRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
     // check header
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormat.Message_Header_Current_Version, headerBuf.getShort());
-    Assert.assertEquals(systemMetadataSize, headerBuf.getLong());
+    Assert.assertEquals(1, headerBuf.getShort());
+    Assert.assertEquals(ttlRecordSize, headerBuf.getLong());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-    Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Assert.assertEquals(MessageFormat.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Crc32 crc = new Crc32();
-    crc.update(headerOutput, 0, headerSize - MessageFormat.Crc_Size);
+    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
     // verify handle
@@ -203,16 +207,14 @@ public class MessageFormatInputStreamTest {
     handleOutputBuf.get(dest);
     Assert.assertArrayEquals(dest, key.toBytes());
 
-    // check system metadata record
-    byte[] systemMetadataOutput = new byte[systemMetadataSize];
-    ByteBuffer systemMetadataBuf = ByteBuffer.wrap(systemMetadataOutput);
-    messageFormatStream.read(systemMetadataOutput);
-    Assert.assertEquals(systemMetadataBuf.getShort(), MessageFormat.SystemMetadata_Current_Version);
-    Assert.assertEquals(MessageFormat.SystemMetadataRecordType.TTLRecord.ordinal(), systemMetadataBuf.getShort());
-    Assert.assertEquals(1124, systemMetadataBuf.getLong());
+    // check ttl record
+    byte[] ttlRecordOutput = new byte[ttlRecordSize];
+    ByteBuffer ttlRecordBuf = ByteBuffer.wrap(ttlRecordOutput);
+    messageFormatStream.read(ttlRecordOutput);
+    Assert.assertEquals(ttlRecordBuf.getShort(), 1);
+    Assert.assertEquals(1124, ttlRecordBuf.getLong());
     crc = new Crc32();
-    crc.update(systemMetadataOutput, 0, systemMetadataSize - MessageFormat.Crc_Size);
-    Assert.assertEquals(crc.getValue(), systemMetadataBuf.getLong());
+    crc.update(ttlRecordOutput, 0, ttlRecordSize - MessageFormatRecord.Crc_Size);
+    Assert.assertEquals(crc.getValue(), ttlRecordBuf.getLong());
   }
-
 }

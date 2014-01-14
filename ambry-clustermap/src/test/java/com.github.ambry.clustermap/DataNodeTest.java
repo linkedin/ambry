@@ -29,7 +29,7 @@ class TestDataNode extends DataNode {
     if (!getHostname().equals(testDataNode.getHostname())) return false;
     if (getPort() != testDataNode.getPort()) return false;
     if (getState() != testDataNode.getState()) return false;
-    if (getCapacityGB() != testDataNode.getCapacityGB()) return false;
+    if (getCapacityInBytes() != testDataNode.getCapacityInBytes()) return false;
 
     return true;
   }
@@ -40,24 +40,24 @@ class TestDataNode extends DataNode {
  */
 public class DataNodeTest {
   private static int diskCount = 10;
-  private static long diskCapacityGB = 1000;
+  private static long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
   JSONArray getDisks() throws JSONException {
-    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityGB);
+    return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   @Test
   public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDataNode("localhost", 6666, HardwareState.AVAILABLE, getDisks());
+    JSONObject jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
 
     DataNode dataNode = new TestDataNode(jsonObject);
 
-    assertEquals(dataNode.getHostname(), "localhost");
+    assertEquals(dataNode.getHostname(), TestUtils.getLocalHost());
     assertEquals(dataNode.getPort(), 6666);
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
     assertEquals(dataNode.getDisks().size(), diskCount);
-    assertEquals(dataNode.getCapacityGB(), diskCount * diskCapacityGB);
+    assertEquals(dataNode.getCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject()));
@@ -78,7 +78,7 @@ public class DataNodeTest {
 
     try {
       // Null DataNode
-      jsonObject = TestUtils.getJsonDataNode("localhost", 6666, HardwareState.AVAILABLE, getDisks());
+      jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
@@ -94,11 +94,11 @@ public class DataNodeTest {
     failValidation(jsonObject);
 
     // Bad port (too small)
-    jsonObject = TestUtils.getJsonDataNode("localhost", -1, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject);
 
     // Bad port (too big)
-    jsonObject = TestUtils.getJsonDataNode("localhost", 100 * 1000, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject);
   }
 }

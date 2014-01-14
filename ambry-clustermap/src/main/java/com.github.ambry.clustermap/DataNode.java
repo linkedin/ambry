@@ -89,12 +89,12 @@ public class DataNode implements DataNodeId {
     return datacenter;
   }
 
-  public long getCapacityGB() {
-    long capacityGB = 0;
+  public long getCapacityInBytes() {
+    long capacityInBytes = 0;
     for (Disk disk : disks) {
-      capacityGB += disk.getCapacityGB();
+      capacityInBytes += disk.getCapacityInBytes();
     }
-    return capacityGB;
+    return capacityInBytes;
   }
 
   public List<Disk> getDisks() {
