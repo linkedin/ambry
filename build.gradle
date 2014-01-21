@@ -72,6 +72,7 @@ project(':ambry-network') {
     compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "com.codahale.metrics:metrics-core:$metricsVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -91,6 +92,7 @@ project(':ambry-server') {
     compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "com.codahale.metrics:metrics-core:$metricsVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -106,6 +108,7 @@ project(':ambry-store') {
     compile "log4j:log4j:$log4jVersion"   
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "com.codahale.metrics:metrics-core:$metricsVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -119,6 +122,7 @@ project(':ambry-messageformat') {
     compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    compile "com.codahale.metrics:metrics-core:$metricsVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
@@ -129,6 +133,7 @@ project(':ambry-replication') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
+    compile "com.codahale.metrics:metrics-core:$metricsVersion"
     testCompile "junit:junit:$junitVersion"
   }
 }
