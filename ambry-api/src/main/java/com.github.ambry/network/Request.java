@@ -11,4 +11,6 @@ public interface Request {
    * @return The inputstream that represents the request
    */
   InputStream getInputStream();
+
+  long getStartTime();
 }

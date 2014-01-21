@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -38,8 +39,9 @@ public class SocketServer implements NetworkServer {
   private volatile Acceptor acceptor;
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private final NetworkMetrics metrics;
 
-  public SocketServer(NetworkConfig config) {
+  public SocketServer(NetworkConfig config, MetricRegistry registry) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -49,6 +51,7 @@ public class SocketServer implements NetworkServer {
     this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
+    metrics = new NetworkMetrics(requestResponseChannel, registry);
   }
 
   public String getHost() {
@@ -87,7 +90,7 @@ public class SocketServer implements NetworkServer {
   public void start() throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for(int i = 0; i < numProcessorThreads; i++) {
-      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel));
+      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
@@ -290,12 +293,14 @@ class Processor extends AbstractServerThread {
   private final int maxRequestSize;
   private SocketRequestResponseChannel channel;
   private final int id;
+  private final NetworkMetrics metrics;
   private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
 
-  Processor(int id, int maxRequestSize, RequestResponseChannel channel) throws IOException {
+  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics) throws IOException {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel)channel;
     this.id = id;
+    this.metrics = metrics;
   }
 
   public void run() {
@@ -354,6 +359,8 @@ class Processor extends AbstractServerThread {
   private void processNewResponses() throws InterruptedException, IOException {
     SocketServerResponse curr = (SocketServerResponse)channel.receiveResponse(id);
     while(curr != null) {
+      curr.onDequeueFromResponseQueue();
+      curr.setStartSendTime(SystemTime.getInstance().milliseconds());
       SocketServerRequest request = (SocketServerRequest)curr.getRequest();
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {
@@ -367,6 +374,7 @@ class Processor extends AbstractServerThread {
           logger.trace("Socket server received response to send, registering for write: {}", curr);
           key.interestOps(SelectionKey.OP_WRITE);
           key.attach(curr);
+          metrics.sendInFlight.inc();
         }
       }
       catch (CancelledKeyException e) {
@@ -460,7 +468,8 @@ class Processor extends AbstractServerThread {
 
     if(responseSend.isSendComplete()) {
       logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
-      // TODO update metrics
+      response.onSendComplete();
+      metrics.sendInFlight.dec();
       key.attach(null);
       // log trace
       key.interestOps(SelectionKey.OP_READ);

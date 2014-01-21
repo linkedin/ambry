@@ -1,6 +1,8 @@
 package com.github.ambry.network;
 
 
+import com.github.ambry.metrics.MetricsHistogram;
+import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.InputStream;
@@ -15,17 +17,25 @@ class SocketServerRequest implements Request {
   private final int processor;
   private final Object requestKey;
   private final InputStream input;
+  private final long startTime;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServerRequest(int processor, Object requestKey, InputStream input) throws IOException {
     this.processor = processor;
     this.requestKey = requestKey;
     this.input = input;
+    this.startTime = SystemTime.getInstance().milliseconds();
     logger.trace("Processor {} received request : {}", processor, requestKey);
   }
 
+  @Override
   public InputStream getInputStream() {
     return input;
+  }
+
+  @Override
+  public long getStartTime() {
+    return startTime;
   }
 
   public int getProcessor() {
@@ -43,11 +53,20 @@ class SocketServerResponse implements Response {
   private final int processor;
   private final Request request;
   private final Send output;
+  private final MetricsHistogram responseQueueTime;
+  private final MetricsHistogram responseSendTime;
+  private long startQueueTime;
+  private long startSendTime;
 
-  public SocketServerResponse(Request request, Send output) {
+  public SocketServerResponse(Request request,
+                              Send output,
+                              MetricsHistogram responseQueueTime,
+                              MetricsHistogram responseSendTime) {
     this.request = request;
     this.output = output;
     this.processor = ((SocketServerRequest)request).getProcessor();
+    this.responseQueueTime = responseQueueTime;
+    this.responseSendTime = responseSendTime;
   }
 
   public Send getPayload() {
@@ -60,6 +79,24 @@ class SocketServerResponse implements Response {
 
   public int getProcessor() {
     return processor;
+  }
+
+  public void setStartQueueTime(long startQueueTime) {
+    this.startQueueTime = startQueueTime;
+  }
+
+  public void setStartSendTime(long startSendTime) {
+    this.startSendTime = startSendTime;
+  }
+
+  public void onDequeueFromResponseQueue() {
+    if (responseQueueTime != null)
+      responseQueueTime.update(SystemTime.getInstance().milliseconds() - startQueueTime);
+  }
+
+  public void onSendComplete() {
+    if (responseSendTime != null)
+      responseSendTime.update(SystemTime.getInstance().milliseconds() - startSendTime);
   }
 }
 
@@ -96,8 +133,15 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Send a response back to the socket server to be sent over the network */
   @Override
-  public void sendResponse(Send payloadToSend, Request originalRequest) throws InterruptedException {
-    SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend);
+  public void sendResponse(Send payloadToSend,
+                           Request originalRequest,
+                           MetricsHistogram responseQueueTime,
+                           MetricsHistogram responseSendTime) throws InterruptedException {
+    SocketServerResponse response = new SocketServerResponse(originalRequest,
+                                                             payloadToSend,
+                                                             responseQueueTime,
+                                                             responseSendTime);
+    response.setStartQueueTime(SystemTime.getInstance().milliseconds());
     responseQueues.get(response.getProcessor()).put(response);
     for(ResponseListener listener : responseListeners)
       listener.onResponse(response.getProcessor());
@@ -108,7 +152,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
    */
   @Override
   public void closeConnection(Request originalRequest) throws InterruptedException {
-    SocketServerResponse response = new SocketServerResponse(originalRequest, null);
+    SocketServerResponse response = new SocketServerResponse(originalRequest, null, null, null);
     responseQueues.get(response.getProcessor()).put(response);
     for(ResponseListener listener : responseListeners)
       listener.onResponse(response.getProcessor());
@@ -127,6 +171,18 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   public void addResponseListener(ResponseListener listener) {
     responseListeners.add(listener);
+  }
+
+  public int getRequestQueueSize() {
+    return requestQueue.size();
+  }
+
+  public int getResponseQueueSize(int processor) {
+    return responseQueues.get(processor).size();
+  }
+
+  public int getNumberOfProcessors() {
+    return numProcessors;
   }
 
   public void shutdown() {

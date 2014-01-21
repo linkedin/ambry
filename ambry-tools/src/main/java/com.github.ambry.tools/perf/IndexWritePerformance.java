@@ -1,5 +1,6 @@
 package com.github.ambry.tools.perf;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
@@ -108,9 +109,8 @@ public class IndexWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(System.getProperty("user.dir"), metrics, 10);
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      Log log = new Log(System.getProperty("user.dir"), 10, metrics);
 
       Scheduler s = new Scheduler(numberOfWriters, "index", false);
       s.startup();
