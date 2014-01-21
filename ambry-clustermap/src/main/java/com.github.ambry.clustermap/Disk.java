@@ -15,12 +15,12 @@ public class Disk implements DiskId {
   private static final long MinCapacityInBytes = 10 * 1024 * 1024 * 1024L;
   private static final long MaxCapacityInBytes = 1024 * 1024 * 1024 * 1024L; // 1 PB
 
-  private DataNode dataNode;
+  private final DataNode dataNode;
   private String mountPath;
   private HardwareState hardwareState;
   private long capacityInBytes;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
     this.dataNode = dataNode;
@@ -75,10 +75,12 @@ public class Disk implements DiskId {
 
   protected void validateCapacity() {
     if (capacityInBytes < MinCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " +
+                                      MinCapacityInBytes);
     }
     else if (capacityInBytes > MaxCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " + MaxCapacityInBytes);
+      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " +
+                                      MaxCapacityInBytes);
     }
   }
 
@@ -110,9 +112,7 @@ public class Disk implements DiskId {
     Disk disk = (Disk)o;
 
     if (!dataNode.equals(disk.dataNode)) return false;
-    if (!mountPath.equals(disk.mountPath)) return false;
-
-    return true;
+    return mountPath.equals(disk.mountPath);
   }
 
   @Override

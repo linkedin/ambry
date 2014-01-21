@@ -46,6 +46,12 @@ final public class PutOperation extends Operation {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
           new PutPolicy(datacenterName, blobId.getPartition()));
     this.blobProperties = blobProperties;
+
+    if (userMetadata.capacity() >= BlobProperties.Max_Blob_User_Metadata_Size_In_Bytes) {
+      throw new CoordinatorException("Specified Blob User Metadata size is too large. Max allowed size is " +
+                                     BlobProperties.Max_Blob_User_Metadata_Size_In_Bytes + " bytes.",
+                                     CoordinatorError.InvalidPutArgument);
+    }
     this.userMetadata = userMetadata;
 
     try {
@@ -102,15 +108,16 @@ final public class PutOperation extends Operation {
 }
 
 final class PutOperationRequest extends OperationRequest {
-  protected PutOperationRequest(BlockingChannelPool connectionPool,
-                                BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context,
-                                BlobId blobId,
-                                ReplicaId replicaId,
-                                RequestOrResponse request) {
+  PutOperationRequest(BlockingChannelPool connectionPool,
+                      BlockingQueue<OperationResponse> responseQueue,
+                      OperationContext context,
+                      BlobId blobId,
+                      ReplicaId replicaId,
+                      RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
+  @Override
   protected Response getResponse(DataInputStream dataInputStream) throws IOException {
     return PutResponse.readFrom(dataInputStream);
   }

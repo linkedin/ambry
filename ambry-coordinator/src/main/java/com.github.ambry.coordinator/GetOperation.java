@@ -28,7 +28,7 @@ import static java.lang.Math.min;
  * Performs a get operation by sending and receiving get requests until operation is complete or has failed.
  */
 public abstract class GetOperation extends Operation {
-  protected ClusterMap clusterMap;
+  ClusterMap clusterMap;
   private MessageFormatFlags flags;
 
   private int blobNotFoundCount;
@@ -46,14 +46,14 @@ public abstract class GetOperation extends Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetOperation(String datacenterName,
-                      BlockingChannelPool connectionPool,
-                      ExecutorService requesterPool,
-                      OperationContext oc,
-                      BlobId blobId,
-                      long operationTimeoutMs,
-                      ClusterMap clusterMap,
-                      MessageFormatFlags flags) throws CoordinatorException {
+  GetOperation(String datacenterName,
+               BlockingChannelPool connectionPool,
+               ExecutorService requesterPool,
+               OperationContext oc,
+               BlobId blobId,
+               long operationTimeoutMs,
+               ClusterMap clusterMap,
+               MessageFormatFlags flags) throws CoordinatorException {
     super(datacenterName,
           connectionPool,
           requesterPool,
@@ -70,7 +70,7 @@ public abstract class GetOperation extends Operation {
     this.blobExpiredCount = 0;
   }
 
-  protected GetRequest makeGetRequest() {
+  GetRequest makeGetRequest() {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);
     blobIds.add(blobId);
     return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, blobId.getPartition(), blobIds);
@@ -117,17 +117,18 @@ public abstract class GetOperation extends Operation {
 abstract class GetOperationRequest extends OperationRequest {
   private final ClusterMap clusterMap;
 
-  protected GetOperationRequest(BlockingChannelPool connectionPool,
-                                BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context,
-                                BlobId blobId,
-                                ReplicaId replicaId,
-                                RequestOrResponse request,
-                                ClusterMap clusterMap) {
+  GetOperationRequest(BlockingChannelPool connectionPool,
+                      BlockingQueue<OperationResponse> responseQueue,
+                      OperationContext context,
+                      BlobId blobId,
+                      ReplicaId replicaId,
+                      RequestOrResponse request,
+                      ClusterMap clusterMap) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
     this.clusterMap = clusterMap;
   }
 
+  @Override
   protected Response getResponse(DataInputStream dataInputStream) throws IOException {
     return GetResponse.readFrom(dataInputStream, clusterMap);
   }

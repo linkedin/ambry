@@ -10,7 +10,9 @@ import static org.junit.Assert.fail;
 public class PartitionLayoutTest {
   @Test
   public void basics() throws JSONException {
-    TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(new TestUtils.TestHardwareLayout("Alpha"));
+    TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(new TestUtils
+            .TestHardwareLayout(
+            "Alpha"));
 
     PartitionLayout partitionLayout = testPartitionLayout.getPartitionLayout();
 
@@ -26,14 +28,16 @@ public class PartitionLayoutTest {
     try {
       TestUtils.TestPartitionLayout tpl = new TestUtils.TestPartitionLayoutWithDuplicatePartitions(testHardwareLayout);
       fail("Should have failed validation:" + tpl.getPartitionLayout().toString());
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
 
     try {
       TestUtils.TestPartitionLayout tpl = new TestUtils.TestPartitionLayoutWithDuplicateReplicas(testHardwareLayout);
       fail("Should have failed validation:" + tpl.getPartitionLayout().toString());
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
   }

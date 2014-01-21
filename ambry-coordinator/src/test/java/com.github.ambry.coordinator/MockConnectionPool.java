@@ -10,7 +10,7 @@ import java.io.IOException;
 /**
  *
  */
-public class MockConnectionPool implements BlockingChannelPool {
+class MockConnectionPool implements BlockingChannelPool {
   private final int readBufferSizeBytes;
   private final int writeBufferSizeBytes;
   private final int readTimeoutMs;

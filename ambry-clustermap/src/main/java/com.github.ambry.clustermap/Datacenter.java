@@ -15,7 +15,7 @@ import java.util.List;
  * at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link DataNode}s.
  */
 public class Datacenter {
-  private HardwareLayout hardwareLayout;
+  private final HardwareLayout hardwareLayout;
   private String name; // E.g., "ELA4"
   private ArrayList<DataNode> dataNodes;
 
@@ -96,9 +96,7 @@ public class Datacenter {
 
     Datacenter that = (Datacenter)o;
 
-    if (!name.equals(that.name)) return false;
-
-    return true;
+    return name.equals(that.name);
   }
 
   @Override

@@ -5,7 +5,6 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,10 +63,7 @@ public class ClusterMapManager implements ClusterMap {
 
   @Override
   public boolean hasDatacenter(String datacenterName) {
-    if(hardwareLayout.findDatacenter(datacenterName) != null) {
-      return true;
-    }
-    return false;
+    return hardwareLayout.findDatacenter(datacenterName) != null;
   }
 
   @Override
@@ -253,9 +249,7 @@ public class ClusterMapManager implements ClusterMap {
 
     if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null)
       return false;
-    if (partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null)
-      return false;
+    return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
 
-    return true;
   }
 }

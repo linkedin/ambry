@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  *
  */
-public class MockCluster {
+class MockCluster {
   private Map<DataNodeId, MockDataNode> mockDataNodes;
 
   public MockCluster() {
@@ -25,7 +25,7 @@ public class MockCluster {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    for(MockDataNode mockDataNode : mockDataNodes.values()) {
+    for (MockDataNode mockDataNode : mockDataNodes.values()) {
       sb.append(mockDataNode);
     }
     return sb.toString();

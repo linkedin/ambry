@@ -36,10 +36,10 @@ public class ReplicaTest {
     Disk disk = thl.getRandomDisk();
 
     TestReplica replicaA = new TestReplica(disk);
-    assertEquals((Disk)replicaA.getDiskId(), disk);
+    assertEquals(replicaA.getDiskId(), disk);
 
     TestReplica replicaB = new TestReplica(thl.getHardwareLayout(), TestUtils.getJsonReplica(disk));
-    assertEquals((Disk)replicaB.getDiskId(), disk);
+    assertEquals(replicaB.getDiskId(), disk);
   }
 
   @Test
@@ -49,7 +49,8 @@ public class ReplicaTest {
       // Null Partition
       new Replica(null, thl.getRandomDisk());
       fail("Should have failed validation.");
-    } catch (IllegalStateException e) {
+    }
+    catch (IllegalStateException e) {
       // Expected.
     }
   }

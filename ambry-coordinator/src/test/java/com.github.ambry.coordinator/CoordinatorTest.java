@@ -27,7 +27,7 @@ import static org.junit.Assert.assertEquals;
  *
  */
 public class CoordinatorTest {
-  public ClusterMap getClusterMapOneDCOneNodeOneDiskOnePartition() throws JSONException {
+  ClusterMap getClusterMapOneDCOneNodeOneDiskOnePartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCOneNodeOneDiskOnePartition\",\n" +
                 "          \"datacenters\": [\n" +
@@ -74,7 +74,7 @@ public class CoordinatorTest {
     return new ClusterMapManager(pl);
   }
 
-  public ClusterMap getClusterMapOneDCThreeNodeOneDiskOnePartition() throws JSONException {
+  ClusterMap getClusterMapOneDCThreeNodeOneDiskOnePartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCThreeNodeOneDiskOnePartition\",\n" +
                 "          \"datacenters\": [\n" +
@@ -155,7 +155,7 @@ public class CoordinatorTest {
     return new ClusterMapManager(pl);
   }
 
-  public ClusterMap getClusterMapOneDCFourNodeOneDiskTwoPartition() throws JSONException {
+  ClusterMap getClusterMapOneDCFourNodeOneDiskTwoPartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCFourNodeOneDiskTwoPartition\",\n" +
                 "          \"datacenters\": [\n" +
@@ -270,7 +270,7 @@ public class CoordinatorTest {
     return new ClusterMapManager(pl);
   }
 
-  public ClusterMap getClusterMapTwoDCFourNodeOneDiskFourPartition() throws JSONException {
+  ClusterMap getClusterMapTwoDCFourNodeOneDiskFourPartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"TwoDCFourNodeOneDiskFourPartition\",\n" +
                 "          \"datacenters\": [\n" +
@@ -546,23 +546,25 @@ public class CoordinatorTest {
     return new ClusterMapManager(pl);
   }
 
-  public VerifiableProperties getVProps() {
+  VerifiableProperties getVProps() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "Datacenter");
-    properties.setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
+    properties.setProperty("coordinator.connection.pool.factory",
+                           "com.github.ambry.coordinator.MockConnectionPoolFactory");
     return new VerifiableProperties(properties);
   }
 
-  public VerifiableProperties getVPropsTwo() {
+  VerifiableProperties getVPropsTwo() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DatacenterTwo");
-    properties.setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
+    properties.setProperty("coordinator.connection.pool.factory",
+                           "com.github.ambry.coordinator.MockConnectionPoolFactory");
     return new VerifiableProperties(properties);
   }
 
-  public void PutGetDelete(AmbryCoordinator ac) throws InterruptedException, StoreException, IOException,
+  void PutGetDelete(AmbryCoordinator ac) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
     BlobProperties putBlobProperties = new BlobProperties(-1, false, "contentType", "memberId", "parentId", 100,
                                                           "serviceId");
@@ -596,7 +598,7 @@ public class CoordinatorTest {
     ac.deleteBlob(blobId);
   }
 
-  public void simple(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
+  void simple(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
     AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
     ac.start();
@@ -631,7 +633,7 @@ public class CoordinatorTest {
   }
 
 
-  public void multiAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
+  void multiAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
@@ -654,7 +656,8 @@ public class CoordinatorTest {
     multiAC(getClusterMapTwoDCFourNodeOneDiskFourPartition());
   }
 
-  public void PutRemoteGetDelete(AmbryCoordinator acOne, AmbryCoordinator acTwo) throws InterruptedException, StoreException, IOException,
+  void PutRemoteGetDelete(AmbryCoordinator acOne,
+                          AmbryCoordinator acTwo) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
     BlobProperties putBlobProperties = new BlobProperties(-1, false, "contentType", "memberId", "parentId", 100,
                                                           "serviceId");
@@ -688,7 +691,7 @@ public class CoordinatorTest {
     acTwo.deleteBlob(blobId);
   }
 
-  public void remoteAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
+  void remoteAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);

@@ -168,9 +168,7 @@ public class Partition extends PartitionId {
 
     Partition partition = (Partition)o;
 
-    if (id != partition.id) return false;
-
-    return true;
+    return id == partition.id;
   }
 
   @Override

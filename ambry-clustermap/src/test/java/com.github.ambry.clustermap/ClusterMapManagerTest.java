@@ -30,14 +30,14 @@ public class ClusterMapManagerTest {
     sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager.getFreeCapacityInBytes())
             .append(System.getProperty("line.separator"));
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(datacenter)).append
-              (System.getProperty("line.separator"));
+      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(datacenter))
+              .append(System.getProperty("line.separator"));
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(dataNode)).append
-                (System.getProperty("line.separator"));
+        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(dataNode))
+                .append(System.getProperty("line.separator"));
         for (Disk disk : dataNode.getDisks()) {
-          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(disk)).append
-                  (System.getProperty("line.separator"));
+          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(disk))
+                  .append(System.getProperty("line.separator"));
         }
       }
     }

@@ -80,15 +80,15 @@ public interface OperationPolicy {
  * replicas in remote datacenters. Also implements basic request accounting of failed and successful requests.
  */
 abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
-  protected int replicaIdCount;
-  protected Queue<ReplicaId> orderedReplicaIds;
+  int replicaIdCount;
+  Queue<ReplicaId> orderedReplicaIds;
 
-  protected List<ReplicaId> failedRequests;
-  protected List<ReplicaId> successfulRequests;
+  List<ReplicaId> failedRequests;
+  List<ReplicaId> successfulRequests;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
     this.replicaIdCount = partitionId.getReplicaIds().size();
     if (replicaIdCount < 1) {
       CoordinatorException e = new CoordinatorException("Partition has invalid configuration.",
@@ -102,7 +102,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     this.successfulRequests = new ArrayList<ReplicaId>(replicaIdCount);
   }
 
-  protected Queue<ReplicaId> orderReplicaIds(String datacenterName, List<ReplicaId> replicaIds) {
+  Queue<ReplicaId> orderReplicaIds(String datacenterName, List<ReplicaId> replicaIds) {
     Queue<ReplicaId> orderedReplicaIds = new ArrayDeque<ReplicaId>(replicaIdCount);
 
     List<ReplicaId> localReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
@@ -166,18 +166,12 @@ class GetPolicy extends ProbeLocalFirstOperationPolicy {
 
   @Override
   public boolean isComplete() {
-    if (successfulRequests.size() >= 1) {
-      return true;
-    }
-    return false;
+    return successfulRequests.size() >= 1;
   }
 
   @Override
   public boolean mayComplete() {
-    if (failedRequests.size() == replicaIdCount) {
-      return false;
-    }
-    return true;
+    return failedRequests.size() != replicaIdCount;
   }
 }
 
@@ -189,10 +183,10 @@ class GetPolicy extends ProbeLocalFirstOperationPolicy {
  * no "additional" requests are kept in flight.
  */
 abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
-  protected int successTarget;
-  protected int requestParallelism;
+  int successTarget;
+  int requestParallelism;
 
-  protected ParallelOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  ParallelOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
     super(datacenterName, partitionId);
   }
 
@@ -214,18 +208,12 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
 
   @Override
   public boolean isComplete() {
-    if (successfulRequests.size() >= successTarget) {
-      return true;
-    }
-    return false;
+    return successfulRequests.size() >= successTarget;
   }
 
   @Override
   public boolean mayComplete() {
-    if ((replicaIdCount - failedRequests.size()) < successTarget) {
-      return false;
-    }
-    return true;
+    return (replicaIdCount - failedRequests.size()) >= successTarget;
   }
 }
 
