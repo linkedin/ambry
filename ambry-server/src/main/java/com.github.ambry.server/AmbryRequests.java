@@ -75,7 +75,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handlePutRequest(Request request) throws IOException, InterruptedException {
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.putBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+    metrics.putBlobRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.putBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
@@ -125,12 +125,12 @@ public class AmbryRequests implements RequestAPI {
                                  ServerErrorCode.Unknown_Error);
     }
     finally {
-      metrics.putBlobProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+      metrics.putBlobProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     requestResponseChannel.sendResponse(response,
                                         request,
-                                        new HistogramMeasurement(metrics.putBlobResponseQueueTime),
-                                        new HistogramMeasurement(metrics.putBlobSendTime));
+                                        new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
+                                        new HistogramMeasurement(metrics.putBlobSendTimeInMs));
   }
 
   public void handleGetRequest(Request request) throws IOException, InterruptedException {
@@ -138,22 +138,22 @@ public class AmbryRequests implements RequestAPI {
     HistogramMeasurement responseQueueMeasurement = null;
     HistogramMeasurement responseSendMeasurement = null;
     if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
-      metrics.getBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+      metrics.getBlobRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobRequestRate.mark();
-      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobResponseQueueTime);
-      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobSendTime);
+      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobResponseQueueTimeInMs);
+      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobSendTimeInMs);
     }
     else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
-      metrics.getBlobPropertiesRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+      metrics.getBlobPropertiesRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobPropertiesRequestRate.mark();
-      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesResponseQueueTime);
-      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesSendTime);
+      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesResponseQueueTimeInMs);
+      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesSendTimeInMs);
     }
     else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
-      metrics.getBlobUserMetadataRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+      metrics.getBlobUserMetadataRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobUserMetadataRequestRate.mark();
-      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTime);
-      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTime);
+      responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTimeInMs);
+      responseSendMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTimeInMs);
     }
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
@@ -210,18 +210,18 @@ public class AmbryRequests implements RequestAPI {
     }
     finally {
       if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob)
-        metrics.getBlobProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+        metrics.getBlobProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
       else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties)
-        metrics.getBlobPropertiesProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+        metrics.getBlobPropertiesProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
       else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata)
-        metrics.getBlobUserMetadataProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+        metrics.getBlobUserMetadataProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     requestResponseChannel.sendResponse(response, request, responseQueueMeasurement, responseSendMeasurement);
   }
 
   public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.deleteBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+    metrics.deleteBlobRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.deleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
@@ -267,17 +267,17 @@ public class AmbryRequests implements RequestAPI {
                                     ServerErrorCode.Unknown_Error);
     }
     finally {
-      metrics.deleteBlobProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+      metrics.deleteBlobProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     requestResponseChannel.sendResponse(response,
                                         request,
-                                        new HistogramMeasurement(metrics.deleteBlobResponseQueueTime),
-                                        new HistogramMeasurement(metrics.deleteBlobSendTime));
+                                        new HistogramMeasurement(metrics.deleteBlobResponseQueueTimeInMs),
+                                        new HistogramMeasurement(metrics.deleteBlobSendTimeInMs));
   }
 
   public void handleTTLRequest(Request request) throws IOException, InterruptedException {
     TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.ttlBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
+    metrics.ttlBlobRequestQueueTimeInMs.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.ttlBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     TTLResponse response = null;
@@ -323,11 +323,11 @@ public class AmbryRequests implements RequestAPI {
                                  ServerErrorCode.Unknown_Error);
     }
     finally {
-      metrics.ttlBlobProcessingTime.update(SystemTime.getInstance().milliseconds() - startTime);
+      metrics.ttlBlobProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     requestResponseChannel.sendResponse(response,
                                         request,
-                                        new HistogramMeasurement(metrics.ttlBlobResponseQueueTime),
+                                        new HistogramMeasurement(metrics.ttlBlobResponseQueueTimeInMs),
                                         new HistogramMeasurement(metrics.ttlBlobSendTime));
   }
 

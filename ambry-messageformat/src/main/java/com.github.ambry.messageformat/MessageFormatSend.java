@@ -53,7 +53,7 @@ public class MessageFormatSend implements Send {
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
     calculateOffsets();
-    metrics.calculateOffsetMessageSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
+    metrics.calculateOffsetMessageFormatSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
     sizeWritten = 0;
     currentWriteIndex = 0;
     sizeWrittenFromCurrentIndex = 0;

@@ -11,34 +11,34 @@ import com.github.ambry.metrics.MetricsHistogram;
  */
 public class ServerMetrics {
 
-  public final Histogram putBlobRequestQueueTime;
-  public final Histogram putBlobProcessingTime;
-  public final Histogram putBlobResponseQueueTime;
-  public final Histogram putBlobSendTime;
+  public final Histogram putBlobRequestQueueTimeInMs;
+  public final Histogram putBlobProcessingTimeInMs;
+  public final Histogram putBlobResponseQueueTimeInMs;
+  public final Histogram putBlobSendTimeInMs;
 
-  public final Histogram getBlobRequestQueueTime;
-  public final Histogram getBlobProcessingTime;
-  public final Histogram getBlobResponseQueueTime;
-  public final Histogram getBlobSendTime;
+  public final Histogram getBlobRequestQueueTimeInMs;
+  public final Histogram getBlobProcessingTimeInMs;
+  public final Histogram getBlobResponseQueueTimeInMs;
+  public final Histogram getBlobSendTimeInMs;
 
-  public final Histogram getBlobPropertiesRequestQueueTime;
-  public final Histogram getBlobPropertiesProcessingTime;
-  public final Histogram getBlobPropertiesResponseQueueTime;
-  public final Histogram getBlobPropertiesSendTime;
+  public final Histogram getBlobPropertiesRequestQueueTimeInMs;
+  public final Histogram getBlobPropertiesProcessingTimeInMs;
+  public final Histogram getBlobPropertiesResponseQueueTimeInMs;
+  public final Histogram getBlobPropertiesSendTimeInMs;
 
-  public final Histogram getBlobUserMetadataRequestQueueTime;
-  public final Histogram getBlobUserMetadataProcessingTime;
-  public final Histogram getBlobUserMetadataResponseQueueTime;
-  public final Histogram getBlobUserMetadataSendTime;
+  public final Histogram getBlobUserMetadataRequestQueueTimeInMs;
+  public final Histogram getBlobUserMetadataProcessingTimeInMs;
+  public final Histogram getBlobUserMetadataResponseQueueTimeInMs;
+  public final Histogram getBlobUserMetadataSendTimeInMs;
 
-  public final Histogram deleteBlobRequestQueueTime;
-  public final Histogram deleteBlobProcessingTime;
-  public final Histogram deleteBlobResponseQueueTime;
-  public final Histogram deleteBlobSendTime;
+  public final Histogram deleteBlobRequestQueueTimeInMs;
+  public final Histogram deleteBlobProcessingTimeInMs;
+  public final Histogram deleteBlobResponseQueueTimeInMs;
+  public final Histogram deleteBlobSendTimeInMs;
 
-  public final Histogram ttlBlobRequestQueueTime;
-  public final Histogram ttlBlobProcessingTime;
-  public final Histogram ttlBlobResponseQueueTime;
+  public final Histogram ttlBlobRequestQueueTimeInMs;
+  public final Histogram ttlBlobProcessingTimeInMs;
+  public final Histogram ttlBlobResponseQueueTimeInMs;
   public final Histogram ttlBlobSendTime;
 
   public final Meter putBlobRequestRate;
@@ -64,46 +64,46 @@ public class ServerMetrics {
   public final Counter ttlExpiredError;
 
   public ServerMetrics(MetricRegistry registry) {
-    putBlobRequestQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestQueueTime"));
-    putBlobProcessingTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobProcessingTime"));
-    putBlobResponseQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobResponseQueueTime"));
-    putBlobSendTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
+    putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestQueueTime"));
+    putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobProcessingTime"));
+    putBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobResponseQueueTime"));
+    putBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
 
-    getBlobRequestQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestQueueTime"));
-    getBlobProcessingTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobProcessingTime"));
-    getBlobResponseQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
-    getBlobSendTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
+    getBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestQueueTime"));
+    getBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobProcessingTime"));
+    getBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
+    getBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
 
-    getBlobPropertiesRequestQueueTime =
+    getBlobPropertiesRequestQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestQueueTime"));
-    getBlobPropertiesProcessingTime =
+    getBlobPropertiesProcessingTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesProcessingTime"));
-    getBlobPropertiesResponseQueueTime =
+    getBlobPropertiesResponseQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesResponseQueueTime"));
-    getBlobPropertiesSendTime =
+    getBlobPropertiesSendTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesSendTime"));
 
-    getBlobUserMetadataRequestQueueTime =
+    getBlobUserMetadataRequestQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestQueueTime"));
-    getBlobUserMetadataProcessingTime =
+    getBlobUserMetadataProcessingTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataProcessingTime"));
-    getBlobUserMetadataResponseQueueTime =
+    getBlobUserMetadataResponseQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataResponseQueueTime"));
-    getBlobUserMetadataSendTime =
+    getBlobUserMetadataSendTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataSendTime"));
 
-    deleteBlobRequestQueueTime =
+    deleteBlobRequestQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestQueueTime"));
-    deleteBlobProcessingTime =
+    deleteBlobProcessingTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobProcessingTime"));
-    deleteBlobResponseQueueTime =
+    deleteBlobResponseQueueTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobResponseQueueTime"));
-    deleteBlobSendTime =
+    deleteBlobSendTimeInMs =
             registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobSendTime"));
 
-    ttlBlobRequestQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestQueueTime"));
-    ttlBlobProcessingTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobProcessingTime"));
-    ttlBlobResponseQueueTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobResponseQueueTime"));
+    ttlBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestQueueTime"));
+    ttlBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobProcessingTime"));
+    ttlBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobResponseQueueTime"));
     ttlBlobSendTime = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobSendTime"));
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestRate"));
