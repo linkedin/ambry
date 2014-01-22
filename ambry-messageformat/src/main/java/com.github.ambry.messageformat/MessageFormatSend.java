@@ -62,6 +62,7 @@ public class MessageFormatSend implements Send {
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
   // based on the type of data requested as indicated by the flags
   private void calculateOffsets() throws IOException, MessageFormatException {
+    long startTime = SystemTime.getInstance().milliseconds();
     // get size
     int messageCount = readSet.count();
     // for each message, determine the offset and size that needs to be sent based on the flag

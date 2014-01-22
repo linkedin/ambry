@@ -51,7 +51,7 @@ public class ServerMetrics {
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
   public final Counter partitionReadOnlyError;
-  public final Counter storeIOError;
+  public final Counter storeIOError; 
   public final Counter unExpectedStorePutError;
   public final Counter unExpectedStoreGetError;
   public final Counter unExpectedStoreTTLError;
