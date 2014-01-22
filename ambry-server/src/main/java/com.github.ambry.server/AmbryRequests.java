@@ -75,7 +75,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handlePutRequest(Request request) throws IOException, InterruptedException {
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.putBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+    metrics.putBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.putBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
@@ -112,6 +112,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.idAlreadyExistError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.IOError)
         metrics.storeIOError.inc();
+      else
+        metrics.unExpectedStorePutError.inc();
       response = new PutResponse(putRequest.getCorrelationId(),
                                  putRequest.getClientId(),
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -136,19 +138,19 @@ public class AmbryRequests implements RequestAPI {
     HistogramMeasurement responseQueueMeasurement = null;
     HistogramMeasurement responseSendMeasurement = null;
     if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
-      metrics.getBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+      metrics.getBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobRequestRate.mark();
       responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobResponseQueueTime);
       responseSendMeasurement = new HistogramMeasurement(metrics.getBlobSendTime);
     }
     else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
-      metrics.getBlobPropertiesRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+      metrics.getBlobPropertiesRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobPropertiesRequestRate.mark();
       responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesResponseQueueTime);
       responseSendMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesSendTime);
     }
     else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
-      metrics.getBlobUserMetadataRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+      metrics.getBlobUserMetadataRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
       metrics.getBlobUserMetadataRequestRate.mark();
       responseQueueMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTime);
       responseSendMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTime);
@@ -184,6 +186,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.ttlExpiredError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
         metrics.idDeletedError.inc();
+      else
+        metrics.unExpectedStoreGetError.inc();
       response = new GetResponse(getRequest.getCorrelationId(),
                                  getRequest.getClientId(),
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -217,7 +221,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.deleteBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+    metrics.deleteBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.deleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
@@ -250,6 +254,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.ttlExpiredError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
         metrics.idDeletedError.inc();
+      else
+        metrics.unExpectedStoreDeleteError.inc();
       response = new DeleteResponse(deleteRequest.getCorrelationId(),
                                     deleteRequest.getClientId(),
                                     ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -271,7 +277,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handleTTLRequest(Request request) throws IOException, InterruptedException {
     TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    metrics.ttlBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTime());
+    metrics.ttlBlobRequestQueueTime.update(SystemTime.getInstance().milliseconds() - request.getStartTimeInMs());
     metrics.ttlBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     TTLResponse response = null;
@@ -304,6 +310,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.ttlExpiredError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
         metrics.idDeletedError.inc();
+      else
+        metrics.unExpectedStoreTTLError.inc();
       response = new TTLResponse(ttlRequest.getCorrelationId(),
                                  ttlRequest.getClientId(),
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));

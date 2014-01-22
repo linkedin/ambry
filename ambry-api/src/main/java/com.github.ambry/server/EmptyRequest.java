@@ -9,7 +9,7 @@ import java.io.InputStream;
  * The request class used to identify the end of the network communication
  */
 public class EmptyRequest implements Request {
-  private final long startTime;
+  private final long startTimeInMs;
   private static EmptyRequest ourInstance = new EmptyRequest();
 
   public static EmptyRequest getInstance() {
@@ -17,7 +17,7 @@ public class EmptyRequest implements Request {
   }
 
   private EmptyRequest() {
-    startTime = SystemTime.getInstance().milliseconds();
+    startTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
   @Override
@@ -26,7 +26,7 @@ public class EmptyRequest implements Request {
   }
 
   @Override
-  public long getStartTime() {
-    return startTime;
+  public long getStartTimeInMs() {
+    return startTimeInMs;
   }
 }

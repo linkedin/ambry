@@ -17,14 +17,14 @@ class SocketServerRequest implements Request {
   private final int processor;
   private final Object requestKey;
   private final InputStream input;
-  private final long startTime;
+  private final long startTimeInMs;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServerRequest(int processor, Object requestKey, InputStream input) throws IOException {
     this.processor = processor;
     this.requestKey = requestKey;
     this.input = input;
-    this.startTime = SystemTime.getInstance().milliseconds();
+    this.startTimeInMs = SystemTime.getInstance().milliseconds();
     logger.trace("Processor {} received request : {}", processor, requestKey);
   }
 
@@ -34,8 +34,8 @@ class SocketServerRequest implements Request {
   }
 
   @Override
-  public long getStartTime() {
-    return startTime;
+  public long getStartTimeInMs() {
+    return startTimeInMs;
   }
 
   public int getProcessor() {
@@ -55,8 +55,8 @@ class SocketServerResponse implements Response {
   private final Send output;
   private final MetricsHistogram responseQueueTime;
   private final MetricsHistogram responseSendTime;
-  private long startQueueTime;
-  private long startSendTime;
+  private long startQueueTimeInMs;
+  private long startSendTimeInMs;
 
   public SocketServerResponse(Request request,
                               Send output,
@@ -81,22 +81,22 @@ class SocketServerResponse implements Response {
     return processor;
   }
 
-  public void setStartQueueTime(long startQueueTime) {
-    this.startQueueTime = startQueueTime;
+  public void onEnqueueIntoResponseQueue() {
+    this.startQueueTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
-  public void setStartSendTime(long startSendTime) {
-    this.startSendTime = startSendTime;
+  public void onSendStart() {
+    this.startSendTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
   public void onDequeueFromResponseQueue() {
     if (responseQueueTime != null)
-      responseQueueTime.update(SystemTime.getInstance().milliseconds() - startQueueTime);
+      responseQueueTime.update(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
   }
 
   public void onSendComplete() {
     if (responseSendTime != null)
-      responseSendTime.update(SystemTime.getInstance().milliseconds() - startSendTime);
+      responseSendTime.update(SystemTime.getInstance().milliseconds() - startSendTimeInMs);
   }
 }
 
@@ -141,7 +141,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
                                                              payloadToSend,
                                                              responseQueueTime,
                                                              responseSendTime);
-    response.setStartQueueTime(SystemTime.getInstance().milliseconds());
+    response.onEnqueueIntoResponseQueue();
     responseQueues.get(response.getProcessor()).put(response);
     for(ResponseListener listener : responseListeners)
       listener.onResponse(response.getProcessor());

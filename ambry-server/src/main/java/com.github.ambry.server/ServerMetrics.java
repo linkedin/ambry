@@ -52,6 +52,10 @@ public class ServerMetrics {
   public final Counter diskUnavailableError;
   public final Counter partitionReadOnlyError;
   public final Counter storeIOError;
+  public final Counter unExpectedStorePutError;
+  public final Counter unExpectedStoreGetError;
+  public final Counter unExpectedStoreTTLError;
+  public final Counter unExpectedStoreDeleteError;
   public final Counter idAlreadyExistError;
   public final Counter dataCorruptError;
   public final Counter unknownFormatError;
@@ -121,6 +125,10 @@ public class ServerMetrics {
     idNotFoundError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDDeletedError"));
     ttlExpiredError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TTLExpiredError"));
+    unExpectedStorePutError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStorePutError"));
+    unExpectedStoreGetError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreGetError"));
+    unExpectedStoreDeleteError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreDeleteError"));
+    unExpectedStoreTTLError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
   }
 }
 

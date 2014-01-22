@@ -27,7 +27,6 @@ public class MessageFormatSend implements Send {
   private long sizeWritten;
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
-  private MessageFormatMetrics metrics;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private class SendInfo {
@@ -52,8 +51,9 @@ public class MessageFormatSend implements Send {
     this.readSet = readSet;
     this.flag = flag;
     totalSizeToWrite = 0;
-    this.metrics = metrics;
+    long startTime = SystemTime.getInstance().milliseconds();
     calculateOffsets();
+    metrics.calculateOffsetMessageSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
     sizeWritten = 0;
     currentWriteIndex = 0;
     sizeWrittenFromCurrentIndex = 0;
@@ -62,7 +62,6 @@ public class MessageFormatSend implements Send {
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
   // based on the type of data requested as indicated by the flags
   private void calculateOffsets() throws IOException, MessageFormatException {
-    long startTime = SystemTime.getInstance().milliseconds();
     // get size
     int messageCount = readSet.count();
     // for each message, determine the offset and size that needs to be sent based on the flag
@@ -137,7 +136,6 @@ public class MessageFormatSend implements Send {
         }
       }
     }
-    metrics.calculateOffsetMessageSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
   }
 
   @Override

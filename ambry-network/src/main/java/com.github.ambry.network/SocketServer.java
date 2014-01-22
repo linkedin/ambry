@@ -360,7 +360,7 @@ class Processor extends AbstractServerThread {
     SocketServerResponse curr = (SocketServerResponse)channel.receiveResponse(id);
     while(curr != null) {
       curr.onDequeueFromResponseQueue();
-      curr.setStartSendTime(SystemTime.getInstance().milliseconds());
+      curr.onSendStart();
       SocketServerRequest request = (SocketServerRequest)curr.getRequest();
       SelectionKey key = (SelectionKey)request.getRequestKey();
       try {

@@ -16,7 +16,7 @@ import java.util.ArrayList;
 /**
  * Helps to perform all operations related to a partition
  */
-public class PartitionCommandTool {
+public class PartitionManager {
   public static void main(String args[]) {
     try {
       OptionParser parser = new OptionParser();
