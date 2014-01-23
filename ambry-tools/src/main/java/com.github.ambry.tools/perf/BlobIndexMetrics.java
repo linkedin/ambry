@@ -44,7 +44,7 @@ class BlobIndexMetrics extends BlobPersistentIndex {
       BlobIndexEntry entry = new BlobIndexEntry(id, new BlobIndexValue(size, lastOffsetUsed.get(), (byte)1, 1000));
       lastOffsetUsed.addAndGet(size);
       long offset = getCurrentEndOffset();
-      addToIndex(entry, offset + entry.getValue().getSize());
+      addToIndex(entry, new FileSpan(offset, offset + entry.getValue().getSize()));
       long endTimeInMs = System.currentTimeMillis();
       BlobIndexValue value = findKey(id);
       if (value == null)
@@ -80,7 +80,7 @@ class BlobIndexMetrics extends BlobPersistentIndex {
     }
     long startTimeInMs = System.currentTimeMillis();
     synchronized (lock) {
-      addToIndex(list, getCurrentEndOffset() + 1000);
+      addToIndex(list, new FileSpan(getCurrentEndOffset(), getCurrentEndOffset() + 1000));
     }
     long endTimeInMs = System.currentTimeMillis();
     System.out.println("Time taken to add to the index all the entries - " + (endTimeInMs - startTimeInMs));

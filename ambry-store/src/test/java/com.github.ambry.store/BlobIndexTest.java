@@ -98,18 +98,18 @@ public class BlobIndexTest {
       MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000, flags, 12567));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 3000, flags, 12567));
-      index.addToIndex(entry1, 3000);
-      index.addToIndex(entry2, 4000);
-      index.addToIndex(entry3, 5000);
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0, flags, 12345));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 100, flags, 12567));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 200, flags, 12567));
+      index.addToIndex(entry1, new FileSpan(0, 100));
+      index.addToIndex(entry2, new FileSpan(100, 200));
+      index.addToIndex(entry3, new FileSpan(200, 300));
       BlobIndexValue value1 = index.getValue(blobId1);
       BlobIndexValue value2 = index.getValue(blobId2);
       BlobIndexValue value3 = index.getValue(blobId3);
-      Assert.assertEquals(value1.getOffset(), 1000);
-      Assert.assertEquals(value2.getOffset(), 2000);
-      Assert.assertEquals(value3.getOffset(), 3000);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 100);
+      Assert.assertEquals(value3.getOffset(), 200);
       indexFile.delete();
       scheduler.shutdown();
       log.close();
@@ -149,9 +149,9 @@ public class BlobIndexTest {
       BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(1000, 0, flags, 12345));
       BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(1000, 1000, flags, 12567));
       BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(1000, 2000, flags, 12567));
-      index.addToIndex(entry1, 1000);
-      index.addToIndex(entry2, 2000);
-      index.addToIndex(entry3, 3000);
+      index.addToIndex(entry1, new FileSpan(0, 1000));
+      index.addToIndex(entry2, new FileSpan(1000, 2000));
+      index.addToIndex(entry3, new FileSpan(2000, 3000));
       index.close();
 
       // create a new index and ensure the index is restored
@@ -179,8 +179,8 @@ public class BlobIndexTest {
 
       BlobIndexEntry entry4 = new BlobIndexEntry(blobId4, new BlobIndexValue(1000, 3000, flags, 12567));
       BlobIndexEntry entry5 = new BlobIndexEntry(blobId5, new BlobIndexValue(1000, 4000, flags, 12567));
-      index.addToIndex(entry4, 4000);
-      index.addToIndex(entry5, 5000);
+      index.addToIndex(entry4, new FileSpan(3000, 4000));
+      index.addToIndex(entry5, new FileSpan(4000, 5000));
       indexNew.close();
       indexNew = new MockIndex(logFile,
                                scheduler,
@@ -302,24 +302,24 @@ public class BlobIndexTest {
       MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000, flags, 12345));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000, flags, 12567));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 3000, flags, 12567));
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0, flags, 12345));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 100, flags, 12567));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 300, flags, 12567));
       ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>();
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.addToIndex(list, 5000);
+      index.addToIndex(list, new FileSpan(0, 600));
       BlobIndexValue value1 = index.getValue(blobId1);
       BlobIndexValue value2 = index.getValue(blobId2);
       BlobIndexValue value3 = index.getValue(blobId3);
-      Assert.assertEquals(value1.getOffset(), 1000);
-      Assert.assertEquals(value2.getOffset(), 2000);
-      Assert.assertEquals(value3.getOffset(), 3000);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 100);
+      Assert.assertEquals(value3.getOffset(), 300);
 
       BlobIndexValue value4 = index.getValue(new MockId("id4"));
       try {
-        index.addToIndex(new BlobIndexEntry(new MockId("id5"), value4), 4000);
+        index.addToIndex(new BlobIndexEntry(new MockId("id5"), value4), new FileSpan(500, 600));
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
@@ -347,17 +347,17 @@ public class BlobIndexTest {
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
 
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 3000, System.currentTimeMillis()));
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 100));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 300, System.currentTimeMillis()));
       ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>();
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.addToIndex(list, 5000);
+      index.addToIndex(list, new FileSpan(0, 600));
       // simple read
       BlobReadOptions readOptions = index.getBlobReadInfo(blobId1);
-      Assert.assertEquals(readOptions.getOffset(), 1000);
+      Assert.assertEquals(readOptions.getOffset(), 0);
       Assert.assertEquals(readOptions.getSize(), 100);
       Assert.assertEquals(readOptions.getTTL(), -1);
 
@@ -371,7 +371,7 @@ public class BlobIndexTest {
       }
 
       // read deleted item
-      index.markAsDeleted(blobId2, 6000);
+      index.markAsDeleted(blobId2, new FileSpan(600, 700));
       try {
         index.getBlobReadInfo(blobId2);
         Assert.assertTrue(false);
@@ -380,7 +380,7 @@ public class BlobIndexTest {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       // read ttl expired item
-      index.updateTTL(blobId1, 1234, 7000);
+      index.updateTTL(blobId1, 1234, new FileSpan(700, 800));
       try {
         index.getBlobReadInfo(blobId1);
         Assert.assertTrue(false);
@@ -391,7 +391,7 @@ public class BlobIndexTest {
 
       // try to delete or update a missing blob
       try {
-        index.markAsDeleted(new MockId("id5"), 8000);
+        index.markAsDeleted(new MockId("id5"), new FileSpan(800, 900));
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -399,7 +399,7 @@ public class BlobIndexTest {
 
       }
       try {
-        index.updateTTL(new MockId("id6"), 1234, 9000);
+        index.updateTTL(new MockId("id6"), 1234, new FileSpan(900, 1000));
         Assert.assertTrue(false);
       }
       catch (StoreException e) {
@@ -427,14 +427,14 @@ public class BlobIndexTest {
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
 
-      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 1000));
-      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 2000));
-      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 3000));
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(200, 100));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(300, 300));
       ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>();
       list.add(entry1);
       list.add(entry2);
       list.add(entry3);
-      index.addToIndex(list, 5000);
+      index.addToIndex(list, new FileSpan(0, 600));
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       MockId missingId = new MockId("id4");
       keys.add(missingId);

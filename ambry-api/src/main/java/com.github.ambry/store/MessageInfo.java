@@ -10,17 +10,18 @@ public class MessageInfo {
   private boolean isDeleted;
 
   public MessageInfo(StoreKey key, long size, long timeToLiveInMs) {
-    this.key= key;
-    this.size = size;
-    this.timeToLiveInMs = timeToLiveInMs;
-    this.isDeleted = false;
+    this(key, size, false, timeToLiveInMs);
   }
 
   public MessageInfo(StoreKey key, long size, boolean deleted) {
+    this(key, size, deleted, -1);
+  }
+
+  public MessageInfo(StoreKey key, long size, boolean deleted, long timeToLiveInMs) {
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;
-    this.timeToLiveInMs = -1;
+    this.timeToLiveInMs = timeToLiveInMs;
   }
 
   public MessageInfo(StoreKey key, long size) {

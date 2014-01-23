@@ -76,8 +76,6 @@ public class BlobStore implements Store {
                                    StoreErrorCodes.Initialization_Error);
         log = new Log(dataDir, metrics, capacityInBytes);
         index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery);
-        // set the log end offset to the recovered offset from the index after initializing it
-        log.setLogEndOffset(index.getCurrentEndOffset());
         started = true;
       }
       catch (Exception e) {
@@ -113,6 +111,8 @@ public class BlobStore implements Store {
     synchronized (lock) {
       checkStarted();
       try {
+        if (messageSetToWrite.getMessageSetInfo().size() == 0)
+          throw new IllegalArgumentException("Message write set cannot be empty");
         // if any of the keys alreadys exist in the store, we fail
         for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
           if (index.exists(info.getStoreKey())) {
@@ -132,7 +132,8 @@ public class BlobStore implements Store {
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
         }
-        index.addToIndex(indexEntries, log.getLogEndOffset());
+        FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - messageInfo.get(0).getSize(), log.getLogEndOffset());
+        index.addToIndex(indexEntries, fileSpan);
         metrics.writes.inc(1);
       }
       catch (IOException e) {
@@ -149,7 +150,8 @@ public class BlobStore implements Store {
         messageSetToDelete.writeTo(log);
         List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
         for (MessageInfo info : infoList) {
-          index.markAsDeleted(info.getStoreKey(), log.getLogEndOffset());
+          FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
+          index.markAsDeleted(info.getStoreKey(), fileSpan);
         }
         metrics.deletes.inc(1);
       }
@@ -167,7 +169,8 @@ public class BlobStore implements Store {
         messageSetToUpdateTTL.writeTo(log);
         List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
         for (MessageInfo info : infoList) {
-          index.updateTTL(info.getStoreKey(), info.getTimeToLiveInMs(), log.getLogEndOffset());
+          FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
+          index.updateTTL(info.getStoreKey(), info.getTimeToLiveInMs(), fileSpan);
         }
       }
       catch (IOException e) {

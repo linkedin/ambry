@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * The index implementation that is responsible for adding and modifying index entries,
+ * An in memory index implementation that is responsible for adding and modifying index entries,
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  */
@@ -36,6 +36,17 @@ public class BlobIndex {
   private Logger logger = LoggerFactory.getLogger(getClass());
   public static final Short version = 0;
 
+  /**
+   * Reads the index from disk, performs recovery if required and starts background
+   * task to schedule index persistence
+   * @param datadir The data directory to use to store the index
+   * @param scheduler The scheduler that runs regular background tasks
+   * @param log The log that is represented by this index
+   * @param config The store configs for this index
+   * @param factory The factory used to create store keys
+   * @param recovery The recovery handle to perform recovery on startup
+   * @throws StoreException
+   */
   public BlobIndex(String datadir,
                    Scheduler scheduler,
                    Log log,
@@ -74,11 +85,15 @@ public class BlobIndex {
         // if the key already exist, update the delete state or ttl value if required
         if (value != null) {
           logger.info("Message already exists with key {}", info.getStoreKey());
-          verifyFileEndOffset(logEndOffset.get() + info.getSize());
-          if (info.isDeleted())
-            markAsDeleted(info.getStoreKey(), logEndOffset.get() + info.getSize());
-          else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite)
-            updateTTL(info.getStoreKey(), BlobIndexValue.TTL_Infinite, logEndOffset.get() + info.getSize());
+          verifyFileEndOffset(new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize()));
+          if (info.isDeleted()) {
+            FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
+            markAsDeleted(info.getStoreKey(), fileSpan);
+          }
+          else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite) {
+            FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
+            updateTTL(info.getStoreKey(), BlobIndexValue.TTL_Infinite, fileSpan);
+          }
           else
             throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
           logger.info("Updated message with key {} size {} ttl {} deleted {}",
@@ -87,8 +102,9 @@ public class BlobIndex {
         else {
           // add a new entry to the index
           BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getTimeToLiveInMs());
-          verifyFileEndOffset(logEndOffset.get() + info.getSize());
-          addToIndex(new BlobIndexEntry(info.getStoreKey(), newValue), logEndOffset.get() + info.getSize());
+          verifyFileEndOffset(new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize()));
+          FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
+          addToIndex(new BlobIndexEntry(info.getStoreKey(), newValue), fileSpan);
           logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
                   info.getStoreKey(), info.getSize(), info.getTimeToLiveInMs(), info.isDeleted());
         }
@@ -109,26 +125,50 @@ public class BlobIndex {
     }
   }
 
-  public void addToIndex(BlobIndexEntry entry, long fileEndOffset) {
-    verifyFileEndOffset(fileEndOffset);
+  /**
+   * Adds a new entry to the index
+   * @param entry The entry to be added to the index
+   * @param fileSpan The file span that this entry represents in the log
+   * @throws StoreException
+   */
+  public void addToIndex(BlobIndexEntry entry, FileSpan fileSpan) {
+    verifyFileEndOffset(fileSpan);
     index.put(entry.getKey(), entry.getValue());
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(fileSpan.getEndOffset());
   }
 
-  public void addToIndex(ArrayList<BlobIndexEntry> entries, long fileEndOffset) {
-    verifyFileEndOffset(fileEndOffset);
+  /**
+   * Adds a set of entries to the index
+   * @param entries The entries to be added to the index
+   * @param fileSpan The file span that the entries represent in the log
+   * @throws StoreException
+   */
+  public void addToIndex(ArrayList<BlobIndexEntry> entries, FileSpan fileSpan) {
+    verifyFileEndOffset(fileSpan);
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
     }
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(fileSpan.getEndOffset());
   }
 
+  /**
+   * Indicates if a key is present in the index
+   * @param key The key to do the exist check against
+   * @return True, if the key exist in the index. False, otherwise.
+   * @throws StoreException
+   */
   public boolean exists(StoreKey key) {
     return index.containsKey(key);
   }
 
-  public void markAsDeleted(StoreKey id, long fileEndOffset) throws StoreException {
-    verifyFileEndOffset(fileEndOffset);
+  /**
+   * Marks the index entry represented by the key for delete
+   * @param id The id of the entry that needs to be deleted
+   * @param fileSpan The file range represented by this entry in the log
+   * @throws StoreException
+   */
+  public void markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
+    verifyFileEndOffset(fileSpan);
     BlobIndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. marking id as deleted failed", id);
@@ -136,11 +176,18 @@ public class BlobIndex {
     }
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
     index.put(id, value);
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(fileSpan.getEndOffset());
   }
 
-  public void updateTTL(StoreKey id, long ttl, long fileEndOffset) throws StoreException {
-    verifyFileEndOffset(fileEndOffset);
+  /**
+   * Updates the ttl for the index entry represented by the key
+   * @param id The id of the entry that needs its ttl to be updated
+   * @param ttl The new ttl value that needs to be set
+   * @param fileSpan The file range represented by this entry in the log
+   * @throws StoreException
+   */
+  public void updateTTL(StoreKey id, long ttl, FileSpan fileSpan) throws StoreException {
+    verifyFileEndOffset(fileSpan);
     BlobIndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. updating ttl failed", id);
@@ -148,9 +195,15 @@ public class BlobIndex {
     }
     value.setTimeToLive(ttl);
     index.put(id, value);
-    this.logEndOffset.set(fileEndOffset);
+    this.logEndOffset.set(fileSpan.getEndOffset());
   }
 
+  /**
+   * Returns the blob read info for a given key
+   * @param id The id of the entry whose info is required
+   * @return The blob read info that contains the information for the given key
+   * @throws StoreException
+   */
   public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
     BlobIndexValue value = index.get(id);
     if (value == null) {
@@ -169,6 +222,12 @@ public class BlobIndex {
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
   }
 
+  /**
+   * Returns the list of keys that are not found in the index from the given input keys
+   * @param keys The list of keys that needs to be tested against the index
+   * @return The list of keys that are not found in the index
+   * @throws StoreException
+   */
   public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
     List<StoreKey> missingEntries = new ArrayList<StoreKey>();
     for (StoreKey key : keys) {
@@ -185,20 +244,35 @@ public class BlobIndex {
     return null;
   }
 
+  /**
+   * Closes the index
+   * @throws StoreException
+   */
   public void close() throws StoreException, IOException {
     persistor.write();
   }
 
-  public long getCurrentEndOffset() {
+  /**
+   * Returns the current end offset that the index represents in the log
+   * @return The end offset in the log that this index currently represents
+   */
+  protected long getCurrentEndOffset() {
     return logEndOffset.get();
   }
 
-  private void verifyFileEndOffset(long fileEndOffset) {
-    if (this.logEndOffset.get() > fileEndOffset) {
-      logger.error("File end offset provided to the index is less than the current end offset. " +
-              "logEndOffset {} inputFileEndOffset {}", logEndOffset.get(), fileEndOffset);
-      throw new IllegalArgumentException("File end offset provided to the index is less than the current end offset. " +
-              "logEndOffset " + logEndOffset.get() + " inputFileEndOffset " + fileEndOffset);
+  /**
+   * Ensures that the provided fileendoffset satisfies constraints
+   * @param fileSpan The filespan that needs to be verified
+   */
+  private void verifyFileEndOffset(FileSpan fileSpan) {
+    if (this.logEndOffset.get() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
+      logger.error("File span offsets provided to the index does not meet constraints " +
+                   "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}",
+                   logEndOffset.get(), fileSpan.getStartOffset(), fileSpan.getEndOffset());
+      throw new IllegalArgumentException("File span offsets provided to the index does not meet constraints " +
+                                         "logEndOffset " + logEndOffset.get() +
+                                         " inputFileStartOffset " + fileSpan.getStartOffset() +
+                                         " inputFileEndOffset " + fileSpan.getEndOffset());
     }
   }
 
@@ -213,6 +287,19 @@ public class BlobIndex {
     private int Crc_Size = 8;
     private int Log_End_Offset_Size = 8;
 
+    /**
+     * Writes the index to a temp file and does an atomic swap with the current index file
+     *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+     * | version | fileendpointer |   key 1  | value 1  |  ...  |   key n   | value n   | crc      |
+     * |(2 bytes)|   (8 bytes)    | (n bytes)| (n bytes)|       | (n bytes) | (n bytes) | (8 bytes)|
+     *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+     *  version         - the index format version
+     *  fileendpointer  - the log end pointer that pertains to the index being persisted
+     *  key n / value n - the key and value entries contained in this index segment
+     *  crc             - the crc of the index segment content
+     * @throws StoreException
+     * @throws IOException
+     */
     public void write() throws StoreException, IOException {
       logger.info("writing index to disk for {}", indexFile.getPath());
       // write to temp file and then swap with the existing file
@@ -273,6 +360,11 @@ public class BlobIndex {
       }
     }
 
+    /**
+     * Reads the index from the file and populates the in memory map
+     * @throws IOException
+     * @throws StoreException
+     */
     public void read() throws IOException, StoreException {
       logger.info("Reading index from file {}", indexFile.getPath());
       synchronized(lock) {
