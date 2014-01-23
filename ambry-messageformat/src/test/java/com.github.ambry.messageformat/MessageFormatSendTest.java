@@ -1,5 +1,6 @@
 package com.github.ambry.messageformat;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
@@ -96,8 +97,10 @@ public class MessageFormatSendTest {
       listbuf.add(buf1);
       MessageReadSet readSet = new MockMessageReadSet(listbuf);
 
+      MetricRegistry registry = new MetricRegistry();
+      MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
       // get all
-      MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All);
+      MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics);
       Assert.assertEquals(send.sizeInBytes(), 1016);
       ByteBuffer bufresult = ByteBuffer.allocate(1016);
       WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -107,7 +110,7 @@ public class MessageFormatSendTest {
       Assert.assertArrayEquals(buf1.array(), bufresult.array());
 
       // get blob
-      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob);
+      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics);
       Assert.assertEquals(send1.sizeInBytes(), 819);
       bufresult.clear();
       WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -120,7 +123,7 @@ public class MessageFormatSendTest {
       }
 
       // get user metadata
-      MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata);
+      MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics);
       Assert.assertEquals(send2.sizeInBytes(), 110);
       bufresult.clear();
       WritableByteChannel channel3 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -133,7 +136,7 @@ public class MessageFormatSendTest {
       }
 
       // get blob properties
-      MessageFormatSend send3 = new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties);
+      MessageFormatSend send3 = new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties, metrics);
       Assert.assertEquals(send3.sizeInBytes(), 21);
       bufresult.clear();
       WritableByteChannel channel4 = Channels.newChannel(new ByteBufferOutputStream(bufresult));

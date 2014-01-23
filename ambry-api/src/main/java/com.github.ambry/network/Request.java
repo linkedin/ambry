@@ -11,4 +11,10 @@ public interface Request {
    * @return The inputstream that represents the request
    */
   InputStream getInputStream();
+
+  /**
+   * Gets the start time in ms when this request started
+   * @return The start time in ms when the request started
+   */
+  long getStartTimeInMs();
 }

@@ -1,5 +1,6 @@
 package com.github.ambry.tools.perf;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.StoreConfig;
@@ -128,9 +129,8 @@ public class IndexReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(System.getProperty("user.dir"), metrics,1000);
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      Log log = new Log(System.getProperty("user.dir"), 1000, metrics);
       Scheduler s = new Scheduler(numberOfReaders, "index", true);
       s.startup();
 

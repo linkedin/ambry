@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.File;
@@ -34,8 +35,7 @@ public class LogTest {
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[1000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
@@ -90,9 +90,8 @@ public class LogTest {
       logFile.deleteOnExit();
       // preallocate file
       randomFile.setLength(5000);
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      MetricRegistry registry = new MetricRegistry();
+      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), registry));
       byte[] testbuf = new byte[2000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
@@ -110,7 +109,8 @@ public class LogTest {
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
-        Assert.assertEquals(metrics.overflowWriteError.getCount(), 1);
+        Assert.assertEquals(registry.getCounters().
+                get("com.github.ambry.store.Log." + tempFile.getParent() +"overflowWriteError").getCount(), 1);
       }
 
       // append to log from buffer and check overflow
@@ -120,7 +120,8 @@ public class LogTest {
         Assert.assertTrue(false);
       }
       catch (IllegalArgumentException e) {
-        Assert.assertEquals(metrics.overflowWriteError.getCount(), 2);
+        Assert.assertEquals(registry.getCounters().
+                get("com.github.ambry.store.Log." + tempFile.getParent() +"overflowWriteError").getCount(), 2);
       }
 
       logTest.close();
@@ -148,8 +149,7 @@ public class LogTest {
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[2000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
@@ -197,8 +197,7 @@ public class LogTest {
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[2000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer

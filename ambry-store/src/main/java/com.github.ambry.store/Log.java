@@ -1,5 +1,7 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +27,12 @@ public class Log implements Write, Read {
   private final FileChannel fileChannel;
   private final FileInputStream readOnlyStream;
   private final File file;
-  private final StoreMetrics metrics;
   private final long capacityInBytes;
   private static final String Log_File_Name = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private final StoreMetrics metrics;
 
-  public Log(String dataDir, StoreMetrics metrics, long capacityInBytes) throws IOException {
+  public Log(String dataDir, long capacityInBytes, StoreMetrics metrics) throws IOException {
     file = new File(dataDir, Log_File_Name);
     if (!file.exists()) {
       // if the file does not exist, preallocate it
@@ -114,6 +116,7 @@ public class Log implements Write, Read {
   @Override
   public void readInto(ByteBuffer buffer , long position) throws IOException {
     if (sizeInBytes() < position || (position + buffer.remaining() > sizeInBytes())) {
+      metrics.overflowReadError.inc(1);
       logger.error("Error trying to read outside the log range. log end position {} input buffer size {}",
                    sizeInBytes(), buffer.remaining());
       throw new IllegalArgumentException("Error trying to read outside the log range. log end position " +
