@@ -1,5 +1,6 @@
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -34,7 +35,7 @@ public class SocketServerTest {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
-    server = new SocketServer(config);
+    server = new SocketServer(config, new MetricRegistry());
     server.start();
   }
 
@@ -92,7 +93,7 @@ public class SocketServerTest {
 
     // send response back and ensure response is received
     PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);
-    requestResponseChannel.sendResponse(response, request);
+    requestResponseChannel.sendResponse(response, request, null, null);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);

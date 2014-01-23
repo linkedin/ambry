@@ -1,15 +1,31 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.File;
+import java.io.DataInputStream;
+import java.io.FileOutputStream;
+import java.io.DataOutputStream;
+import java.io.RandomAccessFile;
+import java.io.IOException;
+import java.io.FileInputStream;
+import java.io.FilenameFilter;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Comparator;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
@@ -53,8 +69,9 @@ class IndexSegmentInfo {
   private File bloomFile;
   private int prevNumOfEntriesWritten = 0;
   private AtomicInteger numberOfItems;
-
   protected ConcurrentSkipListMap<StoreKey, BlobIndexValue> index = null;
+  private final StoreMetrics metrics;
+
 
   /**
    * Creates a new segment
@@ -70,7 +87,8 @@ class IndexSegmentInfo {
                           StoreKeyFactory factory,
                           int keySize,
                           int valueSize,
-                          StoreConfig config) {
+                          StoreConfig config,
+                          StoreMetrics metrics) {
     // create a new file with the start offset
     indexFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Index_File_Name_Suffix);
     bloomFile = new File(dataDir, startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
@@ -86,8 +104,10 @@ class IndexSegmentInfo {
     bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
                                           config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
+    this.metrics = metrics;
   }
 
+<<<<<<< HEAD
   /**
    * Initializes an existing segment. Memory maps the segment or reads the segment into memory. Also reads the
    * persisted bloom filter from disk.
@@ -99,6 +119,13 @@ class IndexSegmentInfo {
    */
   public IndexSegmentInfo(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config)
           throws StoreException {
+=======
+  public IndexSegmentInfo(File indexFile,
+                          boolean isMapped,
+                          StoreKeyFactory factory,
+                          StoreConfig config,
+                          StoreMetrics metrics) throws StoreException {
+>>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
       String startOffsetValue = indexFile.getName().substring(0, startIndex);
@@ -152,6 +179,7 @@ class IndexSegmentInfo {
       logger.error("Error while loading index from file {}", e);
       throw new StoreException("Error while loading index from file Exception: " + e, StoreErrorCodes.Index_Creation_Failure);
     }
+    this.metrics = metrics;
   }
 
   /**
@@ -216,8 +244,11 @@ class IndexSegmentInfo {
         return index.get(keyToFind);
       }
       else {
+        boolean bloomSaysYes = false;
         // check bloom filter first
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
+          bloomSaysYes = true;
+          metrics.bloomPositiveCount.inc(1);
           logger.trace(bloomFilter == null ?
                        "Bloom filter empty. Searching file with start offset {} and for key {} " :
                        "Found in bloom filter for index with start offset {} and for key {} ",
@@ -244,6 +275,8 @@ class IndexSegmentInfo {
               high = mid - 1;
           }
         }
+        if (bloomSaysYes)
+          metrics.bloomFalsePositiveCount.inc(1);
         return null;
       }
     }
@@ -616,6 +649,7 @@ public class BlobPersistentIndex {
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   public static final Short version = 0;
+  private final StoreMetrics metrics;
 
   private class IndexFilter implements FilenameFilter {
     @Override
@@ -639,9 +673,11 @@ public class BlobPersistentIndex {
                              Log log,
                              StoreConfig config,
                              StoreKeyFactory factory,
-                             MessageStoreRecovery recovery) throws StoreException {
+                             MessageStoreRecovery recovery,
+                             StoreMetrics metrics) throws StoreException {
     try {
       this.scheduler = scheduler;
+      this.metrics = metrics;
       this.log = log;
       File indexDir = new File(datadir);
       File[] indexFiles = indexDir.listFiles(new IndexFilter());
@@ -675,13 +711,14 @@ public class BlobPersistentIndex {
         // read into memory
         if (i < indexFiles.length - 2)
           map = true;
-        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config);
+        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config, metrics);
         logger.info("Loaded index {}", indexFiles[i]);
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
 
       // perform recovery if required
+      final Timer.Context context = metrics.recoveryTime.time();
       if (indexes.size() > 0) {
         IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
         Map.Entry<Long, IndexSegmentInfo> entry = indexes.lowerEntry(lastSegment.getStartOffset());
@@ -693,6 +730,7 @@ public class BlobPersistentIndex {
       }
       else
         recover(null, log.sizeInBytes(), recovery);
+      context.stop();
 
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(getCurrentEndOffset());
@@ -734,6 +772,8 @@ public class BlobPersistentIndex {
     }
     logger.info("Performing recovery on index with start offset {} and end offset {}", startOffsetForRecovery, endOffset);
     List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
+    if (messagesRecovered.size() > 0)
+      metrics.nonzeroMessageRecovery.inc(1);
     long runningOffset = startOffsetForRecovery;
     // Iterate through the recovered messages and update the index
     for (MessageInfo info : messagesRecovered) {
@@ -745,7 +785,8 @@ public class BlobPersistentIndex {
                                                 factory,
                                                 info.getStoreKey().sizeInBytes(),
                                                 BlobIndexValue.Index_Value_Size_In_Bytes,
-                                                config);
+                                                config,
+                                                metrics);
         indexes.put(startOffsetForRecovery, segmentToRecover);
       }
       BlobIndexValue value = findKey(info.getStoreKey());
@@ -790,8 +831,14 @@ public class BlobPersistentIndex {
                                                    factory,
                                                    entry.getKey().sizeInBytes(),
                                                    BlobIndexValue.Index_Value_Size_In_Bytes,
+<<<<<<< HEAD
                                                    config);
       info.addEntry(entry, fileSpan.getEndOffset());
+=======
+                                                   config,
+                                                   metrics);
+      info.addEntry(entry, fileEndOffset);
+>>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
       indexes.put(info.getStartOffset(), info);
     }
     else {
@@ -814,8 +861,14 @@ public class BlobPersistentIndex {
                                                    factory,
                                                    entries.get(0).getKey().sizeInBytes(),
                                                    BlobIndexValue.Index_Value_Size_In_Bytes,
+<<<<<<< HEAD
                                                    config);
       info.addEntries(entries, fileSpan.getEndOffset());
+=======
+                                                   config,
+                                                   metrics);
+      info.addEntries(entries, fileEndOffset);
+>>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
       indexes.put(info.getStartOffset(), info);
     }
     else {
@@ -856,15 +909,21 @@ public class BlobPersistentIndex {
    * @throws StoreException
    */
   protected BlobIndexValue findKey(StoreKey key) throws StoreException {
-    ConcurrentNavigableMap<Long, IndexSegmentInfo> descendMap = indexes.descendingMap();
-    for (Map.Entry<Long, IndexSegmentInfo> entry : descendMap.entrySet()) {
-      logger.trace("Searching index with start offset {}", entry.getKey());
-      BlobIndexValue value = entry.getValue().find(key);
-      if (value != null) {
-        logger.trace("found value offset {} size {} ttl {}",
-                value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
-        return value;
+    final Timer.Context context = metrics.findTime.time();
+    try {
+      ConcurrentNavigableMap<Long, IndexSegmentInfo> descendMap = indexes.descendingMap();
+      for (Map.Entry<Long, IndexSegmentInfo> entry : descendMap.entrySet()) {
+        logger.trace("Searching index with start offset {}", entry.getKey());
+        BlobIndexValue value = entry.getValue().find(key);
+        if (value != null) {
+          logger.trace("found value offset {} size {} ttl {}",
+                  value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
+          return value;
+        }
       }
+    }
+    finally {
+      context.stop();
     }
     return null;
   }
@@ -1063,6 +1122,7 @@ public class BlobPersistentIndex {
      * @throws StoreException
      */
     public void write() throws StoreException {
+      final Timer.Context context = metrics.indexFlushTime.time();
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
@@ -1091,6 +1151,9 @@ public class BlobPersistentIndex {
       }
       catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
+      }
+      finally {
+        context.stop();
       }
     }
 

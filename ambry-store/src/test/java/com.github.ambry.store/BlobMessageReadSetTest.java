@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -41,8 +42,7 @@ public class BlobMessageReadSetTest {
       // preallocate file
       randomFile.setLength(5000);
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log logTest = new Log(tempFile.getParent(), metrics, 5000);
+      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[3000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer

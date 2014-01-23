@@ -60,7 +60,7 @@ public class SocketRequestResponseChannelTest {
       ResponseListenerMock mock = new ResponseListenerMock();
       channel.addResponseListener(mock);
       MockSend mocksend = new MockSend();
-      channel.sendResponse(mocksend, request);
+      channel.sendResponse(mocksend, request, null, null);
       Assert.assertEquals(mock.call, 1);
       SocketServerResponse response = (SocketServerResponse)channel.receiveResponse(0);
       Assert.assertEquals(response.getProcessor() , 0);

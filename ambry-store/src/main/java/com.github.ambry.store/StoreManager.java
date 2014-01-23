@@ -3,10 +3,10 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.codahale.metrics.MetricRegistry;
 
 import java.io.File;
 import java.util.List;
@@ -21,7 +21,7 @@ public class  StoreManager {
 
   private StoreConfig config;
   private Scheduler scheduler;
-  private ReadableMetricsRegistry registry;
+  private MetricRegistry registry;
   private List<ReplicaId> replicas;
   private ConcurrentMap<PartitionId, Store> stores;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -30,7 +30,7 @@ public class  StoreManager {
 
   public StoreManager(StoreConfig config,
                       Scheduler scheduler,
-                      ReadableMetricsRegistry registry,
+                      MetricRegistry registry,
                       List<ReplicaId> replicas,
                       StoreKeyFactory factory,
                       MessageStoreRecovery recovery) {

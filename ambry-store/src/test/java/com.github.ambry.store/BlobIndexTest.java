@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -52,7 +53,8 @@ public class BlobIndexTest {
             log,
             new StoreConfig(new VerifiableProperties(new Properties())),
             factory,
-            new DummyMessageStoreRecovery());
+            new DummyMessageStoreRecovery(),
+            new MetricRegistry());
     }
 
     public MockIndex(String datadir,
@@ -61,7 +63,7 @@ public class BlobIndexTest {
                      StoreKeyFactory factory,
                      StoreConfig config,
                      MessageStoreRecovery messageRecovery) throws StoreException {
-      super(datadir, scheduler, log, config, factory, messageRecovery);
+      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
     }
 
     BlobIndexValue getValue(StoreKey key) {
@@ -90,8 +92,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 1000);
+      Log log = new Log(logFile, 1000, new StoreMetrics(logFile, new MetricRegistry()));
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -128,8 +129,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 5000);
+      Log log = new Log(logFile, 5000, new StoreMetrics(logFile, new MetricRegistry()));
       log.setLogEndOffset(3000);
       Properties props = new Properties();
       props.put("store.data.flush.delay.seconds", "999999");
@@ -294,8 +294,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 1000);
+      Log log = new Log(logFile, 1000, new StoreMetrics(logFile, new MetricRegistry()));
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -340,8 +339,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 1000);
+      Log log = new Log(logFile, 1000, new StoreMetrics(logFile, new MetricRegistry()));
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -420,8 +418,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 1000);
+      Log log = new Log(logFile, 1000, new StoreMetrics(logFile, new MetricRegistry()));
       MockIndex index = new MockIndex(logFile, scheduler, log, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");

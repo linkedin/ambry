@@ -20,11 +20,11 @@ public class VerifiableProperties {
     this.props = props;
   }
 
-  boolean containsKey(String name) {
+  public boolean containsKey(String name) {
     return props.containsKey(name);
   }
 
-  String getProperty(String name) {
+  public String getProperty(String name) {
     String value = props.getProperty(name);
     referenceSet.add(name);
     return value;
@@ -33,11 +33,11 @@ public class VerifiableProperties {
   /**
    * Read a required integer property value or throw an exception if no such property is found
    */
-  int getInt(String name) {
+  public int getInt(String name) {
     return Integer.parseInt(getString(name));
   }
 
-  int getIntInRange(String name, int start, int end) {
+  public int getIntInRange(String name, int start, int end) {
     if (!containsKey(name)) {
       throw new IllegalArgumentException("Missing required property '" + name + "'");
     }
@@ -50,11 +50,11 @@ public class VerifiableProperties {
    * @param defaultVal The default value to use if the property is not found
    * @return the integer value
    */
-  int getInt(String name, int defaultVal) {
+  public int getInt(String name, int defaultVal) {
     return getIntInRange(name, defaultVal, Integer.MIN_VALUE, Integer.MAX_VALUE);
   }
 
-  Short getShort(String name, Short defaultVal) {
+  public Short getShort(String name, Short defaultVal) {
     return getShortInRange(name, defaultVal, Short.MIN_VALUE, Short.MAX_VALUE);
   }
 
@@ -68,7 +68,7 @@ public class VerifiableProperties {
    * @throws IllegalArgumentException If the value is not in the given range
    * @return the integer value
    */
-  int getIntInRange(String name, int defaultVal, int start, int end) {
+  public int getIntInRange(String name, int defaultVal, int start, int end) {
     int v = 0;
     if(containsKey(name))
       v = Integer.parseInt(getProperty(name));
@@ -80,7 +80,7 @@ public class VerifiableProperties {
       throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
   }
 
-  Short getShortInRange(String name, Short defaultVal, Short start, Short end) {
+  public Short getShortInRange(String name, Short defaultVal, Short start, Short end) {
     Short v = 0;
     if(containsKey(name))
       v = Short.parseShort(getProperty(name));
@@ -92,7 +92,7 @@ public class VerifiableProperties {
       throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
   }
 
-  Double getDoubleInRange(String name, Double defaultVal, Double start, Double end) {
+  public Double getDoubleInRange(String name, Double defaultVal, Double start, Double end) {
     Double v = 0.0;
     if (containsKey(name))
       v = Double.parseDouble(getProperty(name));
@@ -111,7 +111,7 @@ public class VerifiableProperties {
   /**
    * Read a required long property value or throw an exception if no such property is found
    */
-  long getLong(String name) {
+  public long getLong(String name) {
     return Long.parseLong(getString(name));
   }
 
@@ -121,7 +121,7 @@ public class VerifiableProperties {
    * @param defaultVal The default value to use if the property is not found
    * @return the long value
    */
-  long getLong(String name, long defaultVal) {
+  public long getLong(String name, long defaultVal) {
     return getLongInRange(name, defaultVal, Long.MIN_VALUE, Long.MAX_VALUE);
   }
 
@@ -135,7 +135,7 @@ public class VerifiableProperties {
    * @throws IllegalArgumentException If the value is not in the given range
    * @return the long value
    */
-  long getLongInRange(String name, long defaultVal, long start, long end) {
+  public long getLongInRange(String name, long defaultVal, long start, long end) {
     long v = 0;
     if(containsKey(name))
       v = Long.parseLong(getProperty(name));
@@ -153,7 +153,7 @@ public class VerifiableProperties {
    * @return the value
    * @throw IllegalArgumentException If the given property is not present
    */
-   double getDouble(String name) {
+   public double getDouble(String name) {
      return Double.parseDouble(getString(name));
    }
 
@@ -162,7 +162,7 @@ public class VerifiableProperties {
    * @param name The property name
    * @default The default value for the property if not present
    */
-  double getDouble(String name, double defaultVal) {
+  public double getDouble(String name, double defaultVal) {
     if(containsKey(name))
       return getDouble(name);
     else
@@ -175,7 +175,7 @@ public class VerifiableProperties {
    * @param defaultVal The default value to use if the property is not found
    * @return the boolean value
    */
-  boolean getBoolean(String name, boolean defaultVal) {
+  public boolean getBoolean(String name, boolean defaultVal) {
     String v = "";
     if(!containsKey(name))
       return defaultVal;
@@ -188,14 +188,14 @@ public class VerifiableProperties {
     }
   }
 
-  boolean getBoolean(String name) {
+  public boolean getBoolean(String name) {
     return Boolean.parseBoolean(getString(name));
   }
 
   /**
    * Get a string property, or, if no such property is defined, return the given default value
    */
-  String getString(String name, String defaultVal) {
+  public String getString(String name, String defaultVal) {
     if(containsKey(name))
       return getProperty(name);
     else
@@ -205,7 +205,7 @@ public class VerifiableProperties {
   /**
    * Get a string property or throw and exception if no such property is defined.
    */
-  String getString(String name) {
+  public String getString(String name) {
     if (!containsKey(name))
       throw new IllegalArgumentException("Missing required property '" + name + "'");
     else

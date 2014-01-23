@@ -1,5 +1,8 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.*;
 import org.slf4j.Logger;
@@ -52,8 +55,13 @@ public class BlobIndex {
                    Log log,
                    StoreConfig config,
                    StoreKeyFactory factory,
-                   MessageStoreRecovery recovery) throws StoreException  {
+                   MessageStoreRecovery recovery,
+                   MetricRegistry registry) throws StoreException  {
     try {
+      this.registry = registry;
+      this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
+      this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
+      this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();
       this.log = log;
@@ -77,7 +85,10 @@ public class BlobIndex {
         }
       }
       // do recovery
+      final Timer.Context context = recoveryTime.time();
       List<MessageInfo> messagesRecovered = recovery.recover(log, logEndOffset.get(), log.sizeInBytes(), factory);
+      if (messagesRecovered.size() > 0)
+        nonzeroMessageRecovery.inc(1);
       long runningOffset = logEndOffset.get();
       // iterate through the recovered messages and restore the state of the index
       for (MessageInfo info : messagesRecovered) {
@@ -110,6 +121,7 @@ public class BlobIndex {
         }
         runningOffset += info.getSize();
       }
+      context.stop();
       logger.info("read index from file {}", datadir);
 
       // start scheduler thread to persist index in the background
@@ -306,6 +318,7 @@ public class BlobIndex {
       DataOutputStream writer = null;
 
       synchronized(lock) {
+        final Timer.Context context = indexFlushTime.time();
         try {
           // write to temp file and then swap with the existing file
           File temp = new File(indexFile.getAbsolutePath() + ".tmp");
@@ -346,6 +359,7 @@ public class BlobIndex {
         finally {
           if (writer != null)
             writer.close();
+          context.stop();
         }
       }
       logger.info("Completed writing index to file");

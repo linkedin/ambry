@@ -1,7 +1,6 @@
 package com.github.ambry.store;
 
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -41,7 +40,13 @@ public class BlobPersistantIndexTest {
                      Log log,
                      StoreConfig config,
                      StoreKeyFactory factory) throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery());
+      super(datadir,
+            scheduler,
+            log,
+            config,
+            factory,
+            new DummyMessageStoreRecovery(),
+            new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     public MockIndex(String datadir,
@@ -50,7 +55,7 @@ public class BlobPersistantIndexTest {
                      StoreConfig config,
                      StoreKeyFactory factory,
                      MessageStoreRecovery recovery) throws StoreException {
-      super(datadir, scheduler, log, config, factory, recovery);
+      super(datadir, scheduler, log, config, factory, recovery, new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     BlobIndexValue getValue(StoreKey key) throws StoreException {
@@ -93,7 +98,8 @@ public class BlobPersistantIndexTest {
                                                    factory,
                                                    blobId1.sizeInBytes(),
                                                    BlobIndexValue.Index_Value_Size_In_Bytes,
-                                                   config);
+                                                   config,
+                                                   new StoreMetrics(tempFile().getParent(), new MetricRegistry()));
       BlobIndexValue value = new BlobIndexValue(1000, 0, (byte)0);
       info.addEntry(new BlobIndexEntry(blobId1, value), 1000);
       value = new BlobIndexValue(1000, 1000, (byte)0);
@@ -147,7 +153,12 @@ public class BlobPersistantIndexTest {
 
 
       info.writeIndexToFile(9000);
-      IndexSegmentInfo infonew = new IndexSegmentInfo(info.getFile(), false, factory, config);
+      IndexSegmentInfo infonew = new IndexSegmentInfo(info.getFile(),
+                                                      false,
+                                                      factory,
+                                                      config,
+                                                      new StoreMetrics(info.getFile().getAbsolutePath(),
+                                                                       new MetricRegistry()));
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
       Assert.assertEquals(infonew.find(blobId1).getOffset(), 0);
       Assert.assertEquals(infonew.find(blobId2).getSize(), 1000);
@@ -222,8 +233,7 @@ public class BlobPersistantIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -269,9 +279,8 @@ public class BlobPersistantIndexTest {
         c.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 8000);
+      Log log = new Log(logFile, 7000, new StoreMetrics(logFile, new MetricRegistry()));
+      log.setLogEndOffset(5000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -466,8 +475,7 @@ public class BlobPersistantIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -523,8 +531,7 @@ public class BlobPersistantIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -612,8 +619,7 @@ public class BlobPersistantIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 10000);
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -659,8 +665,8 @@ public class BlobPersistantIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      StoreMetrics metrics = new StoreMetrics("test", registry);
-      Log log = new Log(logFile, metrics, 30000);
+      Log log = new Log(logFile, 30000, new StoreMetrics(logFile, new MetricRegistry()));
+      log.setLogEndOffset(30000);
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");

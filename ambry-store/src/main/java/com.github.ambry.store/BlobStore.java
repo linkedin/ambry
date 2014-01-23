@@ -1,11 +1,12 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.codahale.metrics.MetricRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -24,7 +25,6 @@ public class BlobStore implements Store {
   private Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
   private Object lock = new Object();
-  private final StoreMetrics metrics;
   private boolean started;
   private StoreConfig config;
   private long capacityInBytes;
@@ -32,17 +32,19 @@ public class BlobStore implements Store {
   private FileLock fileLock;
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
+  private StoreMetrics metrics;
+
 
   public BlobStore(StoreConfig config,
                    Scheduler scheduler,
-                   ReadableMetricsRegistry registry,
+                   MetricRegistry registry,
                    String dataDir,
                    long capacityInBytes,
                    StoreKeyFactory factory,
                    MessageStoreRecovery recovery) {
+    this.metrics = new StoreMetrics(dataDir, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
-    metrics = new StoreMetrics(this.dataDir, registry);
     this.config = config;
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
@@ -54,6 +56,7 @@ public class BlobStore implements Store {
     synchronized (lock) {
       if (started)
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
+      final Timer.Context context = metrics.storeStartTime.time();
       try {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
@@ -74,13 +77,18 @@ public class BlobStore implements Store {
           throw new StoreException("Failed to acquire lock on file " + dataDir +
                                    ". Another process or thread is using this directory.",
                                    StoreErrorCodes.Initialization_Error);
-        log = new Log(dataDir, metrics, capacityInBytes);
-        index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery);
+        log = new Log(dataDir, capacityInBytes, metrics);
+        index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery, metrics);
+        // set the log end offset to the recovered offset from the index after initializing it
+        log.setLogEndOffset(index.getCurrentEndOffset());
         started = true;
       }
       catch (Exception e) {
         logger.error("Error while starting store for directory {} with exception {}",dataDir, e);
         throw new StoreException("Error while starting store for dir " + dataDir, StoreErrorCodes.Initialization_Error);
+      }
+      finally {
+        context.stop();
       }
     }
   }
@@ -88,6 +96,7 @@ public class BlobStore implements Store {
   @Override
   public StoreInfo get(List<? extends StoreKey> ids) throws StoreException {
     // allows concurrent gets
+    final Timer.Context context = metrics.getResponse.time();
     try {
       checkStarted();
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
@@ -98,17 +107,20 @@ public class BlobStore implements Store {
         messageInfo.add(new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
       }
       MessageReadSet readSet = log.getView(readOptions);
-      metrics.reads.inc(1);
       return new StoreInfo(readSet, messageInfo);
     }
     catch (IOException e) {
       throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);
+    }
+    finally {
+      context.stop();
     }
   }
 
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     synchronized (lock) {
+      final Timer.Context context = metrics.putResponse.time();
       checkStarted();
       try {
         if (messageSetToWrite.getMessageSetInfo().size() == 0)
@@ -139,12 +151,16 @@ public class BlobStore implements Store {
       catch (IOException e) {
         throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);
       }
+      finally {
+        context.stop();
+      }
     }
   }
 
   @Override
   public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
     synchronized (lock) {
+      final Timer.Context context = metrics.deleteResponse.time();
       checkStarted();
       try {
         messageSetToDelete.writeTo(log);
@@ -153,10 +169,12 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
         }
-        metrics.deletes.inc(1);
       }
       catch (IOException e) {
         throw new StoreException("io error while trying to delete blobs : " + e, StoreErrorCodes.IOError);
+      }
+      finally {
+        context.stop();
       }
     }
   }
@@ -164,6 +182,7 @@ public class BlobStore implements Store {
   @Override
   public void updateTTL(MessageWriteSet messageSetToUpdateTTL) throws StoreException {
     synchronized (lock) {
+      final Timer.Context context = metrics.ttlResponse.time();
       checkStarted();
       try {
         messageSetToUpdateTTL.writeTo(log);
@@ -175,6 +194,9 @@ public class BlobStore implements Store {
       }
       catch (IOException e) {
         throw new StoreException("io error while trying to update ttl for blobs : " + e, StoreErrorCodes.IOError);
+      }
+      finally {
+        context.stop();
       }
     }
   }
