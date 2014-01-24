@@ -146,7 +146,6 @@ public class BlobStore implements Store {
         }
         FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - messageInfo.get(0).getSize(), log.getLogEndOffset());
         index.addToIndex(indexEntries, fileSpan);
-        metrics.writes.inc(1);
       }
       catch (IOException e) {
         throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);

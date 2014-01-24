@@ -47,13 +47,6 @@ public class BlobJournalTest {
     Assert.assertEquals(entries.size(), 5);
     Assert.assertEquals(entries.get(4).getOffset(), 5000);
     Assert.assertEquals(entries.get(4).getKey(), new MockId("id6"));
-    try {
-      journal.addEntry(2000, new MockId("id12"));
-      Assert.assertTrue(false);
-    }
-    catch (IllegalArgumentException e) {
-      Assert.assertTrue(true);
-    }
   }
 
 }

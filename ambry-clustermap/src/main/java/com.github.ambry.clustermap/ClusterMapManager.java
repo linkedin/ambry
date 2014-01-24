@@ -8,9 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static com.github.ambry.utils.Utils.readStringFromFile;
 import static com.github.ambry.utils.Utils.writeJsonToFile;
@@ -160,6 +158,30 @@ public class ClusterMapManager implements ClusterMap {
     return disk.getCapacityInBytes() - getAllocatedCapacityInBytes(disk);
   }
 
+  public DataNode getNodeWithMostCapacity(Datacenter dc, Set nodesToExclude) {
+    DataNode maxCapacityNode = null;
+    List<DataNode> dataNodes = dc.getDataNodes();
+    for (DataNode dataNode : dataNodes) {
+      if (!nodesToExclude.contains(dataNode) &&
+          (maxCapacityNode == null || getFreeCapacityInBytes(dataNode) > getFreeCapacityInBytes(maxCapacityNode))) {
+        maxCapacityNode = dataNode;
+      }
+    }
+    return maxCapacityNode;
+  }
+
+  public Disk getDiskWithMostCapacity(DataNode node, long minCapacity) {
+    Disk maxCapacityDisk = null;
+    List<Disk> disks = node.getDisks();
+    for (Disk disk : disks) {
+      if ((maxCapacityDisk == null || getFreeCapacityInBytes(disk) > getFreeCapacityInBytes(maxCapacityDisk)) &&
+          getFreeCapacityInBytes(disk) >= minCapacity) {
+        maxCapacityDisk = disk;
+      }
+    }
+    return maxCapacityDisk;
+  }
+
   public PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
     return partitionLayout.addNewPartition(disks, replicaCapacityInBytes);
   }
@@ -198,28 +220,15 @@ public class ClusterMapManager implements ClusterMap {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      List<DataNode> shuffledDataNodes = new ArrayList<DataNode>(datacenter.getDataNodes());
-      Collections.shuffle(shuffledDataNodes);
-
       int rcpd = replicaCountPerDatacenter;
-      for (DataNode dataNode : shuffledDataNodes) {
-        List<Disk> shuffledDisks = new ArrayList<Disk>(dataNode.getDisks());
-        Collections.shuffle(shuffledDisks);
-
-        for (Disk disk : shuffledDisks) {
-          if (getFreeCapacityInBytes(disk) >= replicaCapacityInBytes) {
-            allocatedDisks.add(disk);
-            rcpd--;
-            break; // Only one replica per DataNodeId.
-          }
-        }
-
-        if (rcpd == 0) {
-          break;
-        }
+      Set<DataNode> nodesToExclude = new HashSet<DataNode>();
+      for (int i = 0; i < rcpd; i++) {
+        DataNode nodeWithMostCapacity = getNodeWithMostCapacity(datacenter, nodesToExclude);
+        Disk diskWithMostCapacity = getDiskWithMostCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
+        allocatedDisks.add(diskWithMostCapacity);
+        nodesToExclude.add(nodeWithMostCapacity);
       }
     }
-
     return allocatedDisks;
   }
 

@@ -107,7 +107,6 @@ class IndexSegmentInfo {
     this.metrics = metrics;
   }
 
-<<<<<<< HEAD
   /**
    * Initializes an existing segment. Memory maps the segment or reads the segment into memory. Also reads the
    * persisted bloom filter from disk.
@@ -115,17 +114,15 @@ class IndexSegmentInfo {
    * @param isMapped Indicates if the segment needs to be memory mapped
    * @param factory The store key factory used to create new store keys
    * @param config The store config used to initialize the index segment
+   * @param metrics The store metrics used to track metrics
    * @throws StoreException
    */
-  public IndexSegmentInfo(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config)
-          throws StoreException {
-=======
   public IndexSegmentInfo(File indexFile,
                           boolean isMapped,
                           StoreKeyFactory factory,
                           StoreConfig config,
-                          StoreMetrics metrics) throws StoreException {
->>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
+                          StoreMetrics metrics,
+                          BlobJournal journal) throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
       String startOffsetValue = indexFile.getName().substring(0, startIndex);
@@ -161,7 +158,7 @@ class IndexSegmentInfo {
                                               config.storeIndexBloomMaxFalsePositiveProbability);
         bloomFile = new File(indexFile.getParent(), startOffset + "_" + BlobPersistentIndex.Bloom_File_Name_Suffix);
         try {
-          readFromFile(indexFile);
+          readFromFile(indexFile, journal);
         }
         catch (StoreException e) {
           if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure ||
@@ -537,7 +534,7 @@ class IndexSegmentInfo {
    * @throws StoreException
    * @throws IOException
    */
-  private void readFromFile(File fileToRead) throws StoreException, IOException {
+  private void readFromFile(File fileToRead, BlobJournal journal) throws StoreException, IOException {
     logger.info("Reading index from file {}", indexFile.getPath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
@@ -559,6 +556,8 @@ class IndexSegmentInfo {
               index.put(key, blobValue);
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+              // add to the journal
+              journal.addEntry(blobValue.getOffset(), key);
             }
             else
               logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
@@ -684,6 +683,7 @@ public class BlobPersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
+      journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements, config.storeMaxNumberOfEntriesToReturnForFind);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
         public int compare(File o1, File o2) {
@@ -711,7 +711,7 @@ public class BlobPersistentIndex {
         // read into memory
         if (i < indexFiles.length - 2)
           map = true;
-        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config, metrics);
+        IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config, metrics, journal);
         logger.info("Loaded index {}", indexFiles[i]);
         indexes.put(info.getStartOffset(), info);
       }
@@ -745,7 +745,6 @@ public class BlobPersistentIndex {
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
       this.maxNumberOfEntriesToReturnForFind = config.storeMaxNumberOfEntriesToReturnForFind;
-      journal = new BlobJournal(maxInMemoryNumElements, config.storeMaxNumberOfEntriesToReturnForFind);
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
@@ -831,14 +830,9 @@ public class BlobPersistentIndex {
                                                    factory,
                                                    entry.getKey().sizeInBytes(),
                                                    BlobIndexValue.Index_Value_Size_In_Bytes,
-<<<<<<< HEAD
-                                                   config);
-      info.addEntry(entry, fileSpan.getEndOffset());
-=======
                                                    config,
                                                    metrics);
-      info.addEntry(entry, fileEndOffset);
->>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
+      info.addEntry(entry, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     }
     else {
@@ -861,14 +855,9 @@ public class BlobPersistentIndex {
                                                    factory,
                                                    entries.get(0).getKey().sizeInBytes(),
                                                    BlobIndexValue.Index_Value_Size_In_Bytes,
-<<<<<<< HEAD
-                                                   config);
-      info.addEntries(entries, fileSpan.getEndOffset());
-=======
                                                    config,
                                                    metrics);
-      info.addEntries(entries, fileEndOffset);
->>>>>>> a84915c39dc6df59844704d29e4f2a77892054fd
+      info.addEntries(entries, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     }
     else {
@@ -1005,9 +994,10 @@ public class BlobPersistentIndex {
   }
 
   /**
-   *
-   * @param token
-   * @return
+   * Finds all the entries from the given start token. The token defines the start position in the index from
+   * where entries needs to be fetched
+   * @param token The token that signifies the start position in the index from where entries need to be retrieved
+   * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
   public FindInfo findEntriesSince(FindToken token) throws StoreException {
     try {
@@ -1054,6 +1044,7 @@ public class BlobPersistentIndex {
     long offsetEnd = -1;
     while (messageEntries.size() < maxNumberOfEntriesToReturnForFind) {
       segment = indexes.higherEntry(offset).getValue();
+      offset = segment.getStartOffset();
       IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
       if (segment != lastSegment) {
         segment.getEntriesSince(null, maxNumberOfEntriesToReturnForFind, messageEntries);
@@ -1073,6 +1064,7 @@ public class BlobPersistentIndex {
               break;
           }
         }
+        break;
       }
     }
     if (offsetEnd != -1)

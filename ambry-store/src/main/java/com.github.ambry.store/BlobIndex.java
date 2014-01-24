@@ -35,9 +35,16 @@ public class BlobIndex {
   private static final String indexFileName = "index_current";
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
+  private BlobJournal journal;
   private Log log;
   private Logger logger = LoggerFactory.getLogger(getClass());
   public static final Short version = 0;
+
+  // metrics
+  private final MetricRegistry registry;
+  private final Timer recoveryTime;
+  private final Timer indexFlushTime;
+  private final Counter nonzeroMessageRecovery;
 
   /**
    * Reads the index from disk, performs recovery if required and starts background
@@ -62,6 +69,8 @@ public class BlobIndex {
       this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
       this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
       this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
+      this.journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements,
+                                     config.storeMaxNumberOfEntriesToReturnForFind);
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();
       this.log = log;
@@ -147,6 +156,7 @@ public class BlobIndex {
     verifyFileEndOffset(fileSpan);
     index.put(entry.getKey(), entry.getValue());
     this.logEndOffset.set(fileSpan.getEndOffset());
+    journal.addEntry(entry.getValue().getOffset(), entry.getKey());
   }
 
   /**
@@ -159,6 +169,7 @@ public class BlobIndex {
     verifyFileEndOffset(fileSpan);
     for (BlobIndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
+      journal.addEntry(entry.getValue().getOffset(), entry.getKey());
     }
     this.logEndOffset.set(fileSpan.getEndOffset());
   }
@@ -189,6 +200,7 @@ public class BlobIndex {
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
+    journal.addEntry(fileSpan.getStartOffset(), id);
   }
 
   /**
@@ -208,6 +220,7 @@ public class BlobIndex {
     value.setTimeToLive(ttl);
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
+    journal.addEntry(fileSpan.getStartOffset(), id);
   }
 
   /**
@@ -249,11 +262,39 @@ public class BlobIndex {
     return missingEntries;
   }
 
-  // TODO need to fix this
-  public ArrayList<BlobIndexValue> getIndexEntrySince(long offset) {
-    // check journal
-    // return complete index
-    return null;
+  /**
+   * Finds all the entries from the given start token. The token defines the start position in the index from
+   * where entries needs to be fetched
+   * @param token The token that signifies the start position in the index from where entries need to be retrieved
+   * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
+   */
+  public FindInfo findEntriesSince(FindToken token) throws StoreException {
+    StoreFindToken storeToken = (StoreFindToken)token;
+    List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
+    List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
+    if (entries == null) {
+      // read the entire index and return it
+      long largestOffset = 0;
+      for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
+        messageEntries.add(new MessageInfo(entry.getKey(),
+                                           entry.getValue().getSize(),
+                                           entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
+                                           entry.getValue().getTimeToLiveInMs()));
+        if (entry.getValue().getOffset() > largestOffset)
+          largestOffset = entry.getValue().getOffset();
+      }
+      return new FindInfo(messageEntries, new StoreFindToken(largestOffset));
+    }
+    else {
+      for (JournalEntry entry : entries) {
+        BlobIndexValue value = index.get(entry.getKey());
+        messageEntries.add(new MessageInfo(entry.getKey(),
+                                           value.getSize(),
+                                           value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
+                                           value.getTimeToLiveInMs()));
+      }
+      return new FindInfo(messageEntries, new StoreFindToken(entries.get(entries.size() - 1).getOffset()));
+    }
   }
 
   /**
@@ -396,8 +437,10 @@ public class BlobIndex {
                 byte[] value = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
                 stream.read(value);
                 BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
-                if (blobValue.getOffset() < logEndOffset.get())
+                if (blobValue.getOffset() < logEndOffset.get()) {
                   index.put(key, blobValue);
+                  journal.addEntry(blobValue.getOffset(), key);
+                }
                 else
                   logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
                           logEndOffset.get(), key);

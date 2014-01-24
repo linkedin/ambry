@@ -446,4 +446,77 @@ public class BlobIndexTest {
     }
   }
 
+  @Test
+  public void testFindEntries() {
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile, "index_current");
+      indexFile.delete();
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      Log log = new Log(logFile, 1000, new StoreMetrics(logFile, new MetricRegistry()));
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      MockIndex index = new MockIndex(logFile, scheduler, log, factory, config, new DummyMessageStoreRecovery());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
+      MockId blobId4 = new MockId("id4");
+      MockId blobId5 = new MockId("id5");
+      MockId blobId6 = new MockId("id6");
+      MockId blobId7 = new MockId("id7");
+      MockId blobId8 = new MockId("id8");
+      MockId blobId9 = new MockId("id9");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+
+      BlobIndexEntry entry1 = new BlobIndexEntry(blobId1, new BlobIndexValue(100, 0));
+      BlobIndexEntry entry2 = new BlobIndexEntry(blobId2, new BlobIndexValue(100, 100));
+      BlobIndexEntry entry3 = new BlobIndexEntry(blobId3, new BlobIndexValue(100, 200));
+      BlobIndexEntry entry4 = new BlobIndexEntry(blobId4, new BlobIndexValue(100, 300));
+      BlobIndexEntry entry5 = new BlobIndexEntry(blobId5, new BlobIndexValue(100, 400));
+      BlobIndexEntry entry6 = new BlobIndexEntry(blobId6, new BlobIndexValue(100, 500));
+      BlobIndexEntry entry7 = new BlobIndexEntry(blobId7, new BlobIndexValue(100, 600));
+      BlobIndexEntry entry8 = new BlobIndexEntry(blobId8, new BlobIndexValue(100, 700));
+      BlobIndexEntry entry9 = new BlobIndexEntry(blobId9, new BlobIndexValue(100, 800));
+      BlobIndexEntry entry10 = new BlobIndexEntry(blobId10, new BlobIndexValue(100, 900));
+      BlobIndexEntry entry11 = new BlobIndexEntry(blobId11, new BlobIndexValue(100, 1000));
+      BlobIndexEntry entry12 = new BlobIndexEntry(blobId12, new BlobIndexValue(100, 1100));
+
+      ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>();
+      list.add(entry1);
+      list.add(entry2);
+      list.add(entry3);
+      list.add(entry4);
+      list.add(entry5);
+      list.add(entry6);
+      list.add(entry7);
+      list.add(entry8);
+      list.add(entry9);
+      list.add(entry10);
+      list.add(entry11);
+      list.add(entry12);
+
+      index.addToIndex(list, new FileSpan(0, 1200));
+      StoreFindToken token = new StoreFindToken(900);
+      FindInfo info1 = index.findEntriesSince(token);
+      List<MessageInfo> entries = info1.getMessageEntries();
+      Assert.assertEquals(entries.size(), 3);
+      Assert.assertEquals(entries.get(0).getStoreKey(), blobId10);
+      Assert.assertEquals(entries.get(1).getStoreKey(), blobId11);
+      Assert.assertEquals(entries.get(2).getStoreKey(), blobId12);
+      info1 = index.findEntriesSince(info1.getFindToken());
+      Assert.assertEquals(info1.getMessageEntries().size(), 1);
+      token = new StoreFindToken();
+      info1 = index.findEntriesSince(token);
+      Assert.assertEquals(info1.getMessageEntries().size(), 12);
+    }
+    catch (Exception e) {
+      Assert.assertTrue(false);
+    }
+  }
+
 }

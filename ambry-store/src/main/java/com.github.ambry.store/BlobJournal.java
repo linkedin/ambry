@@ -55,9 +55,6 @@ public class BlobJournal {
     if (key == null || offset < 0)
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
 
-    if (journal.size() > 0 && journal.lastEntry().getKey() >= offset)
-      throw new IllegalArgumentException("Offsets for the journal need to be monotonically increasing. " +
-              "                           Input offset does not satisfy constraint " + offset);
     if (currentNumberOfEntries == maxEntriesToJournal) {
       journal.remove(journal.firstKey());
       currentNumberOfEntries--;
@@ -77,6 +74,8 @@ public class BlobJournal {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
+    if (!journal.containsKey(offset))
+      return null;
     ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
