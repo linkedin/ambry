@@ -301,7 +301,7 @@ class IndexSegmentInfo {
     int low = 0;
     int high  = numberOfEntries(mmap) - 1;
     logger.trace("binary search low : {} high : {}", low, high);
-    while(low <= high) {
+    while (low <= high) {
       int mid = (int)(Math.ceil(high/2.0 + low/2.0));
       StoreKey found = getKeyAt(mmap, mid);
       logger.trace("Binary search - key found on iteration {}", found);
@@ -587,6 +587,14 @@ class IndexSegmentInfo {
     }
   }
 
+  /**
+   * Gets all the entries upto maxEntries from the start of a given key(inclusive).
+   * @param key The key from where to start retrieving entries.
+   *            If the key is null, all entries are retrieved upto maxentries
+   * @param maxEntries The max number of entries to retreive
+   * @param entries The input entries list that needs to be filled. The entries list can have existing entries
+   * @throws IOException
+   */
   public void getEntriesSince(StoreKey key, int maxEntries, List<MessageInfo> entries) throws IOException {
     if (mapped.get()) {
       int index = 0;
@@ -994,7 +1002,7 @@ public class BlobPersistentIndex {
   }
 
   /**
-   * Finds all the entries from the given start token. The token defines the start position in the index from
+   * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
    * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
@@ -1019,7 +1027,11 @@ public class BlobPersistentIndex {
         else {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegmentInfo> entry = indexes.floorEntry(storeToken.getOffset());
-          StoreFindToken newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries);
+          StoreFindToken newToken = null;
+          if (entry != null)
+            newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries);
+          else
+            newToken = storeToken;
           return new FindInfo(messageEntries, newToken);
         }
       }
@@ -1160,6 +1172,16 @@ public class BlobPersistentIndex {
   }
 }
 
+/**
+ * The StoreFindToken is an implementation of FindToken.
+ * It is used to provide a token to the client to resume
+ * the find from where it was left previously. The StoreFindToken
+ * maintains a offset to track entries within the journal. If the
+ * offset gets outside the range of the journal, the storekey and
+ * indexstartoffset that refers to the segment of the index is used
+ * to perform the search. This is possible because the journal is
+ * always equal or larger than the writable segment.
+ */
 class StoreFindToken implements FindToken {
   private long offset;
   private long indexStartOffset;

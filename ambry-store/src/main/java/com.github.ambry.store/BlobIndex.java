@@ -263,7 +263,7 @@ public class BlobIndex {
   }
 
   /**
-   * Finds all the entries from the given start token. The token defines the start position in the index from
+   * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
    * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration

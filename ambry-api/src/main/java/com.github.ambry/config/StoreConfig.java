@@ -42,7 +42,7 @@ public class StoreConfig {
   public final int storeIndexMaxNumberOfInmemElements;
 
   /**
-   * The max number of entries that the journal will return when queried for entries
+   * The max number of entries that the journal will return each time it is queried for entries
    */
   @Config("store.max.number.of.entries.to.return.for.find")
   @Default("5000")

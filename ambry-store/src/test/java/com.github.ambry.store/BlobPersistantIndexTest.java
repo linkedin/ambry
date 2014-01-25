@@ -813,6 +813,8 @@ public class BlobPersistantIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      FindInfo infoempty = index.findEntriesSince(token);
+      Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");

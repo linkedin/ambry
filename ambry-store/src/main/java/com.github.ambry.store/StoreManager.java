@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * The store manager that handles all the stores
  */
-public class  StoreManager {
+public class StoreManager {
 
   private StoreConfig config;
   private Scheduler scheduler;

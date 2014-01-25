@@ -158,7 +158,7 @@ public class ClusterMapManager implements ClusterMap {
     return disk.getCapacityInBytes() - getAllocatedCapacityInBytes(disk);
   }
 
-  public DataNode getNodeWithMostCapacity(Datacenter dc, Set nodesToExclude) {
+  public DataNode getDataNodeWithMostFreeCapacity(Datacenter dc, Set nodesToExclude) {
     DataNode maxCapacityNode = null;
     List<DataNode> dataNodes = dc.getDataNodes();
     for (DataNode dataNode : dataNodes) {
@@ -170,7 +170,7 @@ public class ClusterMapManager implements ClusterMap {
     return maxCapacityNode;
   }
 
-  public Disk getDiskWithMostCapacity(DataNode node, long minCapacity) {
+  public Disk getDiskWithMostFreeCapacity(DataNode node, long minCapacity) {
     Disk maxCapacityDisk = null;
     List<Disk> disks = node.getDisks();
     for (Disk disk : disks) {
@@ -223,8 +223,8 @@ public class ClusterMapManager implements ClusterMap {
       int rcpd = replicaCountPerDatacenter;
       Set<DataNode> nodesToExclude = new HashSet<DataNode>();
       for (int i = 0; i < rcpd; i++) {
-        DataNode nodeWithMostCapacity = getNodeWithMostCapacity(datacenter, nodesToExclude);
-        Disk diskWithMostCapacity = getDiskWithMostCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
+        DataNode nodeWithMostCapacity = getDataNodeWithMostFreeCapacity(datacenter, nodesToExclude);
+        Disk diskWithMostCapacity = getDiskWithMostFreeCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
         allocatedDisks.add(diskWithMostCapacity);
         nodesToExclude.add(nodeWithMostCapacity);
       }

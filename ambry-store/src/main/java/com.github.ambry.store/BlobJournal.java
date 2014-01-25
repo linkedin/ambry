@@ -74,6 +74,7 @@ public class BlobJournal {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
+    // The offset may not be present in the journal as it could be removed.
     if (!journal.containsKey(offset))
       return null;
     ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
