@@ -9,10 +9,10 @@ import java.io.DataInputStream;
 public interface StoreKeyFactory {
 
   /**
-   * The index key created using the value provided
-   * @param value The value the key needs to store  in string format
-   * @return The index key containing the value provided
+   * The store key created using the stream provided
+   * @param stream The stream used to create the store key
+   * @return The store key created from the stream
    */
-  StoreKey getStoreKey(DataInputStream value) throws IOException;
+  StoreKey getStoreKey(DataInputStream stream) throws IOException;
 }
 

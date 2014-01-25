@@ -3,7 +3,7 @@ package com.github.ambry.store;
 import java.nio.ByteBuffer;
 
 /**
- * The set of data stored in the index
+ * Represents the blob value stored in the index for a key.
  */
 
 public class BlobIndexValue {
@@ -78,3 +78,5 @@ public class BlobIndexValue {
     return value;
   }
 }
+
+

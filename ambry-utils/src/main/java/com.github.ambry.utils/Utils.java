@@ -314,7 +314,9 @@ public class Utils {
         // ignore the interruption and check the exit value to be sure
       }
       if (process.exitValue() != 0)
-        throw new IOException("error while trying to preallocate file " + file.getAbsolutePath());
+        throw new IOException("error while trying to preallocate file " + file.getAbsolutePath() +
+                              " exitvalue " + process.exitValue() +
+                              " error string " + process.getErrorStream());
     }
     else {
       RandomAccessFile rfile = null;
