@@ -1,6 +1,8 @@
 package com.github.ambry.store;
 
 
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -66,7 +68,7 @@ public class BlobStoreTest {
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(null);
+      List<ReplicaId> replicaIds = map.getReplicaIds(new MockDataNodeId(6667));
       Store store = new BlobStore(config,
                                   scheduler,
                                   new MetricRegistry(),

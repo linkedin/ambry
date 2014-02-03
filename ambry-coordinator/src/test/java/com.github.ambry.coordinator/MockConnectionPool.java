@@ -3,25 +3,27 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.ConnectionPoolTimeoutException;
 
 import java.io.IOException;
 
 /**
  *
  */
-class MockConnectionPool implements BlockingChannelPool {
+public class MockConnectionPool implements ConnectionPool {
   private final int readBufferSizeBytes;
   private final int writeBufferSizeBytes;
   private final int readTimeoutMs;
 
   // Need static instance of MockCluster so that all connection pools share common MockCluster.
-  private static MockCluster mockCluster = new MockCluster();
+  public static MockCluster mockCluster= null;
 
   public MockConnectionPool(ConnectionPoolConfig config) {
-    this.readBufferSizeBytes = config.readBufferSizeBytes;
-    this.writeBufferSizeBytes = config.writeBufferSizeBytes;
-    this.readTimeoutMs = config.readTimeoutMs;
+    this.readBufferSizeBytes = config.connectionPoolReadBufferSizeBytes;
+    this.writeBufferSizeBytes = config.connectionPoolWriteBufferSizeBytes;
+    this.readTimeoutMs = config.connectionPoolReadTimeoutMs;
   }
 
   @Override
@@ -33,23 +35,28 @@ class MockConnectionPool implements BlockingChannelPool {
   }
 
   @Override
-  public BlockingChannel checkOutConnection(DataNodeId dataNodeId) throws IOException {
-    BlockingChannel blockingChannel = new MockBlockingChannel(mockCluster.getMockDataNode(dataNodeId),
-                                                              dataNodeId.getHostname(), dataNodeId.getPort(),
-                                                              readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs);
+  public ConnectedChannel checkOutConnection(String host, int port, long timeout)
+          throws IOException, InterruptedException, ConnectionPoolTimeoutException {
+    BlockingChannel blockingChannel = new MockBlockingChannel(mockCluster.getMockDataNode(host, port),
+                                                              host,
+                                                              port,
+                                                              readBufferSizeBytes,
+                                                              writeBufferSizeBytes,
+                                                              readTimeoutMs);
     blockingChannel.connect();
     return blockingChannel;
   }
 
   @Override
-  public void checkInConnection(DataNodeId dataNodeId, BlockingChannel blockingChannel) {
-    destroyConnection(dataNodeId, blockingChannel);
+  public void checkInConnection(ConnectedChannel connectedChannel) {
+    destroyConnection(connectedChannel);
   }
 
   @Override
-  public void destroyConnection(DataNodeId dataNodeId, BlockingChannel blockingChannel) {
-    if (blockingChannel != null) {
-      blockingChannel.disconnect();
+  public void destroyConnection(ConnectedChannel connectedChannel) {
+    if (connectedChannel != null) {
+      MockBlockingChannel channel = (MockBlockingChannel)connectedChannel;
+      channel.disconnect();
     }
   }
 }

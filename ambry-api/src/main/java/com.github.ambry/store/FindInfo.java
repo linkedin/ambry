@@ -15,11 +15,11 @@ public class FindInfo {
     this.findToken = findToken;
   }
 
-  List<MessageInfo> getMessageEntries() {
+  public List<MessageInfo> getMessageEntries() {
     return messageEntries;
   }
 
-  FindToken getFindToken() {
+  public FindToken getFindToken() {
     return findToken;
   }
 }

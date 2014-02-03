@@ -2,12 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.*;
 import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,11 +23,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public abstract class Operation {
   // Operation context
-  private String datacenterName;
-  BlockingChannelPool connectionPool;
-  private ExecutorService requesterPool;
-  OperationContext context;
-  BlobId blobId;
+  protected String datacenterName;
+  protected ConnectionPool connectionPool;
+  protected ExecutorService requesterPool;
+  protected OperationContext context;
+  protected BlobId blobId;
 
   // Operation state
   private OperationPolicy operationPolicy;
@@ -44,13 +39,13 @@ public abstract class Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  Operation(String datacenterName,
-            BlockingChannelPool connectionPool,
-            ExecutorService requesterPool,
-            OperationContext context,
-            BlobId blobId,
-            long operationTimeoutMs,
-            OperationPolicy operationPolicy) {
+  public Operation(String datacenterName,
+                   ConnectionPool connectionPool,
+                   ExecutorService requesterPool,
+                   OperationContext context,
+                   BlobId blobId,
+                   long operationTimeoutMs,
+                   OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -160,7 +155,7 @@ public abstract class Operation {
  * request until the response is received and deserialized. Or, until request-response fails.
  */
 abstract class OperationRequest implements Runnable {
-  private final BlockingChannelPool connectionPool;
+  private final ConnectionPool connectionPool;
   private final BlockingQueue<OperationResponse> responseQueue;
   private final OperationContext context;
   private final BlobId blobId;
@@ -169,12 +164,12 @@ abstract class OperationRequest implements Runnable {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  OperationRequest(BlockingChannelPool connectionPool,
-                   BlockingQueue<OperationResponse> responseQueue,
-                   OperationContext context,
-                   BlobId blobId,
-                   ReplicaId replicaId,
-                   RequestOrResponse request) {
+  protected OperationRequest(ConnectionPool connectionPool,
+                             BlockingQueue<OperationResponse> responseQueue,
+                             OperationContext context,
+                             BlobId blobId,
+                             ReplicaId replicaId,
+                             RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;
@@ -191,14 +186,16 @@ abstract class OperationRequest implements Runnable {
 
   @Override
   public void run() {
-    BlockingChannel blockingChannel = null;
+    ConnectedChannel connectedChannel = null;
     try {
       logger.debug("{} {} checking out connection", context, replicaId);
-      blockingChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId());
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+                                                           replicaId.getDataNodeId().getPort(),
+                                                           context.getConnectionPoolCheckoutTimeout());
       logger.debug("{} {} sending request", context, replicaId);
-      blockingChannel.send(request);
+      connectedChannel.send(request);
       logger.debug("{} {} receiving response", context, replicaId);
-      InputStream responseStream = blockingChannel.receive();
+      InputStream responseStream = connectedChannel.receive();
       logger.debug("{} {} processing response", context, replicaId);
       Response response = getResponse(new DataInputStream(responseStream));
 
@@ -212,25 +209,35 @@ abstract class OperationRequest implements Runnable {
       deserializeResponsePayload(response);
 
       logger.debug("{} {} checking in connection", context, replicaId);
-      connectionPool.checkInConnection(replicaId.getDataNodeId(), blockingChannel);
-      blockingChannel = null;
+      connectionPool.checkInConnection(connectedChannel);
+      connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
     }
     catch (IOException e) {
-      logger.warn("{} {} Error processing request-response for BlobId {} : {}.", context, replicaId, blobId,
-                  e.getCause());
+      logger.error("{} {} Error processing request-response for BlobId {} : {}.",
+                   context, replicaId, blobId, e.getCause());
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
     }
     catch (MessageFormatException e) {
-      logger.warn("{} {} Error processing request-response for BlobId {} : {} - {}.", context, replicaId, blobId,
-                  e.getErrorCode(), e.getCause());
+      logger.error("{} {} Error processing request-response for BlobId {} : {} - {}.",
+                   context, replicaId, blobId, e.getErrorCode(), e.getCause());
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
     }
+    catch (ConnectionPoolTimeoutException e) {
+      logger.error("{} {} Error processing request-response for BlobId {} : connectionpooltimeout - {}.",
+                   context, replicaId, blobId, e.getCause());
+      enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
+    }
+    catch (Exception e) {
+      logger.error("{} {} Error processing request-response for BlobId {} : unexpected error - {}.",
+                   context, replicaId, blobId, e.getCause());
+      enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
+    }
     finally {
-      if (blockingChannel != null) {
+      if (connectedChannel != null) {
         logger.debug("{} {} destroying connection", context, replicaId);
-        connectionPool.destroyConnection(replicaId.getDataNodeId(), blockingChannel);
+        connectionPool.destroyConnection(connectedChannel);
       }
     }
   }
@@ -247,7 +254,8 @@ enum RequestResponseError {
   SUCCESS,
   UNEXPECTED_ERROR,
   IO_ERROR,
-  MESSAGE_FORMAT_ERROR
+  MESSAGE_FORMAT_ERROR,
+  TIMEOUT_ERROR
 }
 
 /**

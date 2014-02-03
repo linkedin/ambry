@@ -67,7 +67,7 @@ public class Scheduler {
         } catch (Exception e) {
           logger.error("The scheduled job {} failed with the following error {}", name, e);
         } finally {
-          logger.info("Completed execution of the task {}", name);
+          logger.trace("Completed execution of the task {}", name);
         }
       }
     };

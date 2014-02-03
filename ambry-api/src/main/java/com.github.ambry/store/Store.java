@@ -1,8 +1,8 @@
 
 package com.github.ambry.store;
 
-import java.io.InputStream;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The object store's underlying store
@@ -43,6 +43,31 @@ public interface Store {
    * @throws StoreException
    */
   void updateTTL(MessageWriteSet messageSetToUpdateTTL) throws StoreException;
+
+  /**
+   * Finds all the entries from the store given a find token
+   * @param token The token that acts as a bookmark to make subsequent searches
+   * @return The FindInfo instance that contains the entries found and the new token for future searches
+   * @throws StoreException
+   */
+  FindInfo findEntriesSince(FindToken token) throws StoreException;
+
+  /**
+   * Finds all the keys that are not present in the store from the input keys
+   * @param keys The list of keys that need to be checked for existence
+   * @return The list of keys that are not present in the store
+   * @throws StoreException
+   */
+  Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
+
+  /**
+   * Checks if the given key is deleted. Returns true is the key is deleted. Returns false if the
+   * key is present, not available, ttl expired.
+   * @param key The key that needs to be checked for deletion state
+   * @return True, if the key is deleted, false otherwise
+   * @throws StoreException
+   */
+  boolean isKeyDeleted(StoreKey key) throws StoreException;
 
   /**
    * Shutsdown the store

@@ -1,21 +1,13 @@
 package com.github.ambry.shared;
 
-import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.shared.BlockingChannelPool;
-import com.github.ambry.shared.BlockingChannelPoolFactory;
-import com.github.ambry.shared.ConnectionPool;
-
 /**
- *  Factory to create BlockingChannelPool.
+ *  Factory to create a ConnectionPool.
  */
-public class ConnectionPoolFactory implements BlockingChannelPoolFactory {
-  ConnectionPoolConfig config;
+public interface ConnectionPoolFactory {
 
-  public ConnectionPoolFactory(ConnectionPoolConfig config) {
-    this.config = config;
-  }
-
-  public BlockingChannelPool getBlockingChannelPool() {
-    return new ConnectionPool(config);
-  }
+  /**
+   * Gets a connection pool
+   * @return The connection pool that was created
+   */
+  public ConnectionPool getConnectionPool();
 }
