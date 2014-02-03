@@ -7,11 +7,9 @@ import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannelPool;
-import com.github.ambry.shared.BlockingChannelPoolFactory;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,11 +34,12 @@ public class AmbryCoordinator implements Coordinator {
   private final ClusterMap clusterMap;
 
   private int operationTimeoutMs;
+  private int connectionPoolCheckoutTimeout;
 
   private String clientId;
   private String datacenterName;
   private ExecutorService requesterPool;
-  private BlockingChannelPool connectionPool;
+  private ConnectionPool connectionPool;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -58,6 +57,7 @@ public class AmbryCoordinator implements Coordinator {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       properties.verify();
 
+      this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
@@ -67,9 +67,9 @@ public class AmbryCoordinator implements Coordinator {
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
-      BlockingChannelPoolFactory bcpFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory,
-                                                           connectionPoolConfig);
-      this.connectionPool = bcpFactory.getBlockingChannelPool();
+      ConnectionPoolFactory connectionPoolFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory,
+                                                                 connectionPoolConfig);
+      this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 
       logger.info("start completed");
@@ -112,7 +112,7 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout);
   }
 
   private PartitionId getPartitionForPut() throws CoordinatorException {
@@ -169,7 +169,8 @@ public class AmbryCoordinator implements Coordinator {
                                                  operationTimeoutMs,
                                                  blobProperties,
                                                  userMetadata,
-                                                 blobStream);
+                                                 blobStream,
+                                                 connectionPoolCheckoutTimeout);
     putOperation.execute();
     return blobId.toString();
   }

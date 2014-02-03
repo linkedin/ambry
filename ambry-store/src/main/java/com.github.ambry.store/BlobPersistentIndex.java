@@ -1,10 +1,7 @@
 package com.github.ambry.store;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,12 +17,7 @@ import java.io.FilenameFilter;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Comparator;
+import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
@@ -963,7 +955,7 @@ public class BlobPersistentIndex {
   }
 
   /**
-   * Returns the blob read info for a given key
+   * Returns the blob read info for a given key that is not deleted or expired ttl
    * @param id The id of the entry whose info is required
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
@@ -981,24 +973,25 @@ public class BlobPersistentIndex {
     else if (value.getTimeToLiveInMs() != BlobIndexValue.TTL_Infinite &&
             SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
-      throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
+      throw new StoreException("id has expired ttl in index " + id, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
   }
 
   /**
-   * Returns the list of keys that are not found in the index from the given input keys
+   * Returns the list of keys that are not found in the index from the given input keys. This also checks
+   * keys that are marked for deletion and those that have an expired ttl
    * @param keys The list of keys that needs to be tested against the index
    * @return The list of keys that are not found in the index
    * @throws StoreException
    */
-  public List<StoreKey> findMissingEntries(List<StoreKey> keys) throws StoreException {
-    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+    Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
       if (!exists(key))
-        missingEntries.add(key);
+        missingKeys.add(key);
     }
-    return missingEntries;
+    return missingKeys;
   }
 
   /**

@@ -1,113 +1,47 @@
 package com.github.ambry.shared;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.config.ConnectionPoolConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.github.ambry.utils.Time;
 import java.io.IOException;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-
-// TODO: Clean up connection pool:
-// * Decide on better names. BlockingChannel for interface and Connection for implementation is not intuitive.
-// * Add bound on connection #s to each DataNode
-// * Remove dependency on "cluster map objects" (e.g., DataNodeId)
-// * Add connection lifecycle management? E.g., destroy a connection that has been checked out for minutes or build up
-//   and shrink number of established connections based on queue depth waiting to check out connections.
 
 /**
- * Pools connections to DataNodes. This permits connections to be re-used thus avoiding connection establishment. Blocks
- * on connection establishment to a specific node. This throttles connection establishments outstanding to one. Upon
- * shutdown, checked in connections are closed but checked out connections are leaked. There are no limits on number of
- * connections that can be established...
+ * A Connection pool interface that pools a list of connections, does connection management
+ * and connection cleanup. A checkoutConnection should be followed by a checkInConnection or
+ * destroyConnection. The pool is also responsible to close and delete connections on shutdown.
+ * This includes connection that are live and idle.
  */
-public class ConnectionPool implements BlockingChannelPool {
-  private final int readBufferSizeBytes;
-  private final int writeBufferSizeBytes;
-  private final int readTimeoutMs;
+public interface ConnectionPool {
+  /**
+   * Starts the connection pool.
+   */
+  public void start();
 
-  private ConcurrentMap<DataNodeId, DataNodePool> dataNodePools;
+  /**
+   * Shutsdown the connection pool. This also includes cleaning up all idle and active connections
+   */
+  public void shutdown();
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  /**
+   * Returns a connected channel that represents the give host and port. If no connection is available, this
+   * method blocks for the timeout specified
+   * @param host The remote host to which a connection is required
+   * @param port The remote port to which a connection is required
+   * @param timeout The time up to which to wait to get a connection
+   * @return The connected channel that represents the given host and port.
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  public ConnectedChannel checkOutConnection(String host, int port, long timeout)
+          throws IOException, InterruptedException, ConnectionPoolTimeoutException;
 
-  private class DataNodePool {
-    private DataNodeId dataNodeId;
-    private Queue<BlockingChannel> openBlockingChannels;
+  /**
+   * The connected channel that needs to be put back into the pool after a successful usage
+   * @param connectedChannel The channel to check in
+   */
+  public void checkInConnection(ConnectedChannel connectedChannel);
 
-    DataNodePool(DataNodeId dataNodeId) {
-      this.dataNodeId = dataNodeId;
-      this.openBlockingChannels = new LinkedList<BlockingChannel>();
-    }
-
-    public synchronized BlockingChannel checkout() throws IOException {
-      if (openBlockingChannels.isEmpty()) {
-        logger.debug("Establish new connection to {} started.", dataNodeId);
-        BlockingChannel blockingChannel = new BlockingChannel(dataNodeId.getHostname(), dataNodeId.getPort(),
-                                                              readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs);
-        blockingChannel.connect();
-        logger.debug("Establish new connection to {} completed.", dataNodeId);
-        return blockingChannel;
-      }
-      else {
-        return openBlockingChannels.remove();
-      }
-    }
-
-    public synchronized void checkin(BlockingChannel blockingChannel) {
-      openBlockingChannels.add(blockingChannel);
-    }
-  }
-
-  public ConnectionPool(ConnectionPoolConfig config) {
-    this.readBufferSizeBytes = config.readBufferSizeBytes;
-    this.writeBufferSizeBytes = config.writeBufferSizeBytes;
-    this.readTimeoutMs = config.readTimeoutMs;
-
-    this.dataNodePools = new ConcurrentHashMap<DataNodeId, DataNodePool>();
-  }
-
-  @Override
-  public void start() {
-    logger.info("start started");
-    // Could pre-establish one connections to each local datanode.
-    logger.info("start completed");
-  }
-
-  @Override
-  public void shutdown() {
-    logger.info("shutdown started");
-    // Could disconnect all connections, including those currently checked out.
-    logger.info("shutdown completed");
-  }
-
-  @Override
-  public BlockingChannel checkOutConnection(DataNodeId dataNodeId) throws IOException {
-    logger.debug("Checking out connection for {}", dataNodeId);
-    if (!dataNodePools.containsKey(dataNodeId)) {
-      dataNodePools.putIfAbsent(dataNodeId, new DataNodePool(dataNodeId));
-    }
-    return dataNodePools.get(dataNodeId).checkout();
-  }
-
-  @Override
-  public void checkInConnection(DataNodeId dataNodeId, BlockingChannel blockingChannel) {
-    logger.debug("Checking in connection for {}", dataNodeId);
-    if (blockingChannel != null) {
-      DataNodePool dataNodePool = dataNodePools.get(dataNodeId);
-      dataNodePool.checkin(blockingChannel);
-    }
-  }
-
-  @Override
-  public void destroyConnection(DataNodeId dataNodeId, BlockingChannel blockingChannel) {
-    logger.debug("Destroying connection for {}", dataNodeId);
-    if (blockingChannel != null) {
-      blockingChannel.disconnect();
-    }
-  }
+  /**
+   * The connected channel that needs to be destroyed/disconnected after an error
+   * @param connectedChannel The channel to destroy/disconnect
+   */
+  public void destroyConnection(ConnectedChannel connectedChannel);
 }
-
-

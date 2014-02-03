@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -17,6 +18,7 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 
 public class BlobIndexTest {
@@ -437,9 +439,10 @@ public class BlobIndexTest {
       keys.add(missingId);
       keys.add(blobId1);
       keys.add(blobId2);
-      List<StoreKey> missing = index.findMissingEntries(keys);
+      Set<StoreKey> missing = index.findMissingKeys(keys);
       Assert.assertEquals(missing.size(), 1);
-      Assert.assertArrayEquals(missing.get(0).toBytes(), missingId.toBytes());
+      StoreKey missingKey = missing.iterator().next();
+      Assert.assertArrayEquals(missingKey.toBytes(), missingId.toBytes());
     }
     catch (Exception e) {
       Assert.assertTrue(false);

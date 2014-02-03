@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -18,54 +17,10 @@ import java.util.List;
  */
 public class GetResponse extends Response {
 
-  private final List<MessageInfo> messageInfoList;
   private Send toSend = null;
   private InputStream stream = null;
   private final int messageInfoListSize;
-
-  private int getMessageInfoListSize() {
-    int listcountSize = 4;
-    if(messageInfoList == null) {
-      return listcountSize;
-    }
-    int size = 0;
-    int keySize = 2;
-    int fieldSize = 8;
-    size += listcountSize;
-    if (messageInfoList != null) {
-      for (MessageInfo messageInfo : messageInfoList) {
-        size += keySize;
-        size += messageInfo.getStoreKey().sizeInBytes();
-        size += fieldSize;
-        size += fieldSize;
-      }
-    }
-    return size;
-  }
-
-  private static void serializeMessageInfoList(ByteBuffer outputBuffer, List<MessageInfo> messageInfoList) {
-    outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
-    if (messageInfoList != null) {
-      for (MessageInfo messageInfo : messageInfoList) {
-        outputBuffer.put(messageInfo.getStoreKey().toBytes());
-        outputBuffer.putLong(messageInfo.getSize());
-        outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
-      }
-    }
-  }
-
-  private static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream,
-                                                              ClusterMap map) throws IOException {
-    int messageInfoListCount = stream.readInt();
-    ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
-    for (int i = 0; i < messageInfoListCount; i++) {
-      BlobId id = new BlobId(stream, map);
-      long size = stream.readLong();
-      long ttl = stream.readLong();
-      messageListInfo.add(new MessageInfo(id, size, ttl));
-    }
-    return messageListInfo;
-  }
+  private final MessageInfoListSerde messageInfoListSerDe;
 
   public GetResponse(int correlationId,
                      String clientId,
@@ -73,8 +28,8 @@ public class GetResponse extends Response {
                      Send send,
                      ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
-    this.messageInfoList = messageInfoList;
-    this.messageInfoListSize = getMessageInfoListSize();
+    this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
+    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.toSend = send;
   }
 
@@ -84,8 +39,8 @@ public class GetResponse extends Response {
                      InputStream stream,
                      ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
-    this.messageInfoList = messageInfoList;
-    this.messageInfoListSize = getMessageInfoListSize();
+    this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
+    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.stream = stream;
   }
 
@@ -93,8 +48,8 @@ public class GetResponse extends Response {
                      String clientId,
                      ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
-    this.messageInfoList = null;
-    this.messageInfoListSize = getMessageInfoListSize();
+    this.messageInfoListSerDe = new MessageInfoListSerde(null);
+    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
   }
 
   public InputStream getInputStream() {
@@ -102,7 +57,7 @@ public class GetResponse extends Response {
   }
 
   public List<MessageInfo> getMessageInfoList() {
-    return messageInfoList;
+    return messageInfoListSerDe.getMessageInfoList();
   }
 
   public static GetResponse readFrom(DataInputStream stream, ClusterMap map) throws IOException {
@@ -116,7 +71,7 @@ public class GetResponse extends Response {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    List<MessageInfo> messageInfoList = deserializeMessageInfoList(stream, map);
+    List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, map);
     if (error != ServerErrorCode.No_Error)
       return new GetResponse(correlationId, clientId, error);
     else
@@ -128,7 +83,7 @@ public class GetResponse extends Response {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int)super.sizeInBytes() + messageInfoListSize);
       writeHeader();
-      serializeMessageInfoList(bufferToSend, messageInfoList);
+      messageInfoListSerDe.serializeMessageInfoList(bufferToSend);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {

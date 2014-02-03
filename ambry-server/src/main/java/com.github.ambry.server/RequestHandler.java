@@ -31,8 +31,11 @@ public class RequestHandler implements Runnable {
         }
         requests.handleRequests(req);
         logger.trace("Request handler {} handling request {}", id, req);
-      } catch (Exception e) {
+      } catch (Throwable e) {
+        // TODO add metric to track background threads
         logger.error("Exception when handling request", e);
+        // this is bad and we need to shutdown the app
+        System.exit(1);
       }
     }
   }

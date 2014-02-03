@@ -28,23 +28,36 @@ public class CoordinatorConfig {
    * Timeout for operations that the coordinator issues.
    */
   @Config("coordinator.operation.timeout.ms")
-  @Default("30000")
+  @Default("10000")
   public final int operationTimeoutMs;
 
   /**
    * The factory class the coordinator uses to create a connection pool.
    */
   @Config("coordinator.connection.pool.factory")
-  @Default("com.github.ambry.shared.ConnectionPoolFactory")
+  @Default("com.github.ambry.shared.BlockingChannelConnectionPoolFactory")
   public final String connectionPoolFactory;
 
+  /**
+   * Timeout for checking out a connection from the connection pool
+   */
+  @Config("coordinator.connection.pool.checkout.timeout.ms")
+  @Default("2000")
+  public final int connectionPoolCheckoutTimeoutMs;
+
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
-    this.hostname = verifiableProperties.getString("coordinator.hostname");
-    this.datacenterName = verifiableProperties.getString("coordinator.datacenter.name");
+    this.hostname =
+            verifiableProperties.getString("coordinator.hostname");
+    this.datacenterName =
+            verifiableProperties.getString("coordinator.datacenter.name");
     this.requesterPoolSize =
             verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
             verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
-    this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory", "com.github.ambry.shared.ConnectionPoolFactory");
+    this.connectionPoolFactory =
+            verifiableProperties.getString("coordinator.connection.pool.factory",
+                                           "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
+    this.connectionPoolCheckoutTimeoutMs =
+            verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
   }
 }

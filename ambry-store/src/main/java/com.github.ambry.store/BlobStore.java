@@ -11,6 +11,7 @@ import com.codahale.metrics.MetricRegistry;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.io.IOException;
 
 /**
@@ -81,6 +82,7 @@ public class BlobStore implements Store {
         index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery, metrics);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
+        metrics.initializeCapacityUsedMetric(log);
         started = true;
       }
       catch (Exception e) {
@@ -198,6 +200,25 @@ public class BlobStore implements Store {
         context.stop();
       }
     }
+  }
+
+  @Override
+  public FindInfo findEntriesSince(FindToken token) throws StoreException {
+    // TODO add metrics
+    return index.findEntriesSince(token);
+  }
+
+  @Override
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+    // TODO add metrics
+    return index.findMissingKeys(keys);
+  }
+
+  @Override
+  public boolean isKeyDeleted(StoreKey key) throws StoreException {
+    // TODO add metrics
+    BlobIndexValue value = index.findKey(key);
+    return value.isFlagSet(BlobIndexValue.Flags.Delete_Index);
   }
 
   @Override
