@@ -20,7 +20,7 @@ public class BlobProperties {
   /**
    * The size in bytes of the largest blob that can be stored.
    */
-  public static final long Max_Blob_Size_In_Bytes = 5 * 1024 * 1024;
+  public static final long Max_Blob_Size_In_Bytes = 20 * 1024 * 1024;
 
   /**
    * @param blobSize The size of the blob in bytes

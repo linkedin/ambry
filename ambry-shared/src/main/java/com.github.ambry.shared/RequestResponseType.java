@@ -13,5 +13,7 @@ public enum RequestResponseType {
   DeleteRequest,
   DeleteResponse,
   TTLRequest,
-  TTLResponse
+  TTLResponse,
+  ReplicaMetadataRequest,
+  ReplicaMetadataResponse
 }

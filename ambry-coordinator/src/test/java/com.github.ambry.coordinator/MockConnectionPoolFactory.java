@@ -1,17 +1,17 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.shared.BlockingChannelPool;
-import com.github.ambry.shared.BlockingChannelPoolFactory;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.ConnectionPoolFactory;
 
-public class MockConnectionPoolFactory implements BlockingChannelPoolFactory {
+public class MockConnectionPoolFactory implements ConnectionPoolFactory {
   ConnectionPoolConfig config;
 
   public MockConnectionPoolFactory(ConnectionPoolConfig config) {
     this.config = config;
   }
 
-  public BlockingChannelPool getBlockingChannelPool() {
+  public ConnectionPool getConnectionPool() {
     return new MockConnectionPool(config);
   }
 }

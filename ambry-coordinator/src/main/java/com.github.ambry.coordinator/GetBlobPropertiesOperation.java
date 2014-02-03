@@ -7,7 +7,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.RequestOrResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +26,7 @@ final public class GetBlobPropertiesOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName,
-                                    BlockingChannelPool connectionPool,
+                                    ConnectionPool connectionPool,
                                     ExecutorService requesterPool,
                                     OperationContext oc,
                                     BlobId blobId,
@@ -78,7 +78,7 @@ final public class GetBlobPropertiesOperation extends GetOperation {
 final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   private GetBlobPropertiesOperation getBlobPropertiesOperation;
 
-  protected GetBlobPropertiesOperationRequest(BlockingChannelPool connectionPool,
+  protected GetBlobPropertiesOperationRequest(ConnectionPool connectionPool,
                                               BlockingQueue<OperationResponse> responseQueue,
                                               OperationContext context,
                                               BlobId blobId,

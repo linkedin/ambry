@@ -14,10 +14,7 @@ import java.io.FileInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -253,13 +250,13 @@ public class BlobIndex {
    * @return The list of keys that are not found in the index
    * @throws StoreException
    */
-  public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
-    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) {
+    Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
       if (!exists(key))
-        missingEntries.add(key);
+        missingKeys.add(key);
     }
-    return missingEntries;
+    return missingKeys;
   }
 
   /**

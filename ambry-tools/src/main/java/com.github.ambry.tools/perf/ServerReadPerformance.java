@@ -5,10 +5,13 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
+import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ServerReadPerformance {
   public static void main(String args[]) {
+    Coordinator coordinator = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
@@ -64,12 +68,19 @@ public class ServerReadPerformance {
                       .ofType(Boolean.class)
                       .defaultsTo(false);
 
+      ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
+              parser.accepts("coordinatorConfigPath", "The config for the coordinator")
+                      .withRequiredArg()
+                      .describedAs("coordinator_config_path")
+                      .ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(logToReadOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
+      listOpt.add(coordinatorConfigPathOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -80,6 +91,7 @@ public class ServerReadPerformance {
       }
 
       String logToRead = options.valueOf(logToReadOpt);
+      String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
@@ -110,13 +122,22 @@ public class ServerReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       String line;
-      Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(new Properties()), map);
+      Properties props = Utils.loadProps(coordinatorConfigPath);
+      coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
+      coordinator.start();
       while ((line = br.readLine()) != null) {
         String[] id = line.split("\\|");
-        System.out.println("calling get on " + id[1]);
+        //System.out.println("calling get on " + id[1]);
         long startTime = System.currentTimeMillis();
-        BlobOutput output = coordinator.getBlob(id[1]);
-        System.out.println("Time taken to get " + (System.currentTimeMillis() - startTime));
+        BlobOutput output = null;
+        try {
+          output = coordinator.getBlob(id[1]);
+        }
+        catch (CoordinatorException e) {
+          System.out.println("Error while trying to get blob with id " + id[1] + " with exception " + e);
+          continue;
+        }
+        //System.out.println("Time taken to get blob " + (System.currentTimeMillis() - startTime));
         if (output != null) {
           long sizeRead = 0;
           byte[] outputBuffer = new byte[(int)output.getSize()];
@@ -127,7 +148,7 @@ public class ServerReadPerformance {
           }
           // compare from source if present
           if (id.length == 4) {
-            System.out.println("Comparing with source " + id[3]);
+            //System.out.println("Comparing with source " + id[3]);
             File fileSource = new File(id[3]);
             FileInputStream fileInputStream = null;
             try {
@@ -136,7 +157,7 @@ public class ServerReadPerformance {
               byte [] sourceBuffer = new byte[sourceSize];
               fileInputStream.read(sourceBuffer);
               if (Arrays.equals(sourceBuffer, outputBuffer)) {
-                System.out.println("Equals");
+                //System.out.println("Equals");
               }
               else {
                 System.out.println("Not equals");
@@ -153,12 +174,35 @@ public class ServerReadPerformance {
             }
 
           }
-          throttler.maybeThrottle(1);
         }
+        startTime = System.currentTimeMillis();
+        BlobProperties properties = null;
+        try {
+          properties = coordinator.getBlobProperties(id[1]);
+        }
+        catch (CoordinatorException e) {
+          System.out.println("Error while trying to get blob properties with id " + id[1] + " with exception " + e);
+        }
+        //System.out.println("Time to get blob properties " + (System.currentTimeMillis() - startTime));
+        //System.out.println("Blob properties size: " + properties.getBlobSize() + " : " + properties.getServiceId());
+        startTime = System.currentTimeMillis();
+        ByteBuffer userMetadata = null;
+        try {
+          userMetadata = coordinator.getBlobUserMetadata(id[1]);
+        }
+        catch (CoordinatorException e) {
+          System.out.println("Error while trying to get blob usermetadata with id " + id[1] + " with exception " + e);
+        }
+        //System.out.println("Time to get blob usermetadata " + (System.currentTimeMillis() - startTime));
+        throttler.maybeThrottle(1);
       }
     }
     catch (Exception e) {
       System.out.println("Error in server read performance " + e);
+    }
+    finally {
+      if (coordinator != null)
+        coordinator.shutdown();
     }
   }
 }

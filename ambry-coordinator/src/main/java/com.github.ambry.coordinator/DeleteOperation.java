@@ -1,13 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.DeleteResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +17,7 @@ final public class DeleteOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public DeleteOperation(String datacenterName,
-                         BlockingChannelPool connectionPool,
+                         ConnectionPool connectionPool,
                          ExecutorService requesterPool,
                          OperationContext oc,
                          BlobId blobId,
@@ -65,7 +59,7 @@ final public class DeleteOperation extends Operation {
 }
 
 final class DeleteOperationRequest extends OperationRequest {
-  protected DeleteOperationRequest(BlockingChannelPool connectionPool,
+  protected DeleteOperationRequest(ConnectionPool connectionPool,
                                    BlockingQueue<OperationResponse> responseQueue,
                                    OperationContext context,
                                    BlobId blobId,

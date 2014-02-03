@@ -103,7 +103,7 @@ public class Utils {
     thread.setDaemon(daemon);
     thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             public void uncaughtException(Thread t, Throwable e) {
-              //error("Uncaught exception in thread '" + t.getName + "':", e)
+              e.printStackTrace();
           }
         });
     return thread;

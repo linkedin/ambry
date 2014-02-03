@@ -2,13 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.TTLRequest;
-import com.github.ambry.shared.TTLResponse;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +19,7 @@ final public class CancelTTLOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public CancelTTLOperation(String datacenterName,
-                            BlockingChannelPool connectionPool,
+                            ConnectionPool connectionPool,
                             ExecutorService requesterPool,
                             OperationContext oc,
                             BlobId blobId,
@@ -43,7 +37,12 @@ final public class CancelTTLOperation extends Operation {
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     TTLRequest ttlRequest = new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId,
                                            BlobProperties.Infinite_TTL);
-    return new CancelTTLOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, ttlRequest);
+    return new CancelTTLOperationRequest(connectionPool,
+                                         responseQueue,
+                                         context,
+                                         blobId,
+                                         replicaId,
+                                         ttlRequest);
   }
 
   @Override
@@ -68,7 +67,7 @@ final public class CancelTTLOperation extends Operation {
 }
 
 final class CancelTTLOperationRequest extends OperationRequest {
-  protected CancelTTLOperationRequest(BlockingChannelPool connectionPool,
+  protected CancelTTLOperationRequest(ConnectionPool connectionPool,
                                       BlockingQueue<OperationResponse> responseQueue,
                                       OperationContext context,
                                       BlobId blobId,

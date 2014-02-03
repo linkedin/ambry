@@ -1,8 +1,4 @@
-package com.github.ambry.store;
-
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionState;
-import com.github.ambry.clustermap.ReplicaId;
+package com.github.ambry.clustermap;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -13,6 +9,11 @@ import java.util.List;
 public class MockPartitionId extends PartitionId {
 
   Long partition = 1L;
+  public List<ReplicaId> replicaIds;
+
+  public MockPartitionId(List<ReplicaId> replicaIds) {
+    this.replicaIds = replicaIds;
+  }
 
   @Override
   public byte[] getBytes() {
@@ -23,7 +24,7 @@ public class MockPartitionId extends PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIds() {
-    return null;
+    return replicaIds;
   }
 
   @Override
