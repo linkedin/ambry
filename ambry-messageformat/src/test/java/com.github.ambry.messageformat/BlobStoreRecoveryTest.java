@@ -101,13 +101,13 @@ public class BlobStoreRecoveryTest {
 
       // 1st message
       PutMessageFormatInputStream msg1 = new PutMessageFormatInputStream(keys[0],
-                                                                         new BlobProperties(9999,
-                                                                                            false,
-                                                                                            "img",
+                                                                         new BlobProperties(4000,
+                                                                                            "test",
                                                                                             "mem1",
-                                                                                            null,
-                                                                                            4000,
-                                                                                            "test"),
+                                                                                            "img",
+                                                                                            false,
+                                                                                            0,
+                                                                                            9999),
                                                                          ByteBuffer.wrap(usermetadata),
                                                                          new ByteBufferInputStream(ByteBuffer.wrap(blob)),
                                                                          4000);

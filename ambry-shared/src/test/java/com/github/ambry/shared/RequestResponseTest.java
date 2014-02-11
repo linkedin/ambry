@@ -36,13 +36,13 @@ public class RequestResponseTest {
     rnd.nextBytes(data);
 
 
-    BlobProperties blobProperties = new BlobProperties(BlobProperties.Infinite_TTL,
-                                                       false,
-                                                       "contentType",
+    BlobProperties blobProperties = new BlobProperties(dataSize,
+                                                       "serviceID",
                                                        "memberId",
-                                                       "parentBlobId",
-                                                       dataSize,
-                                                       "serviceID");
+                                                       "contentType",
+                                                       false,
+                                                       0,
+                                                       BlobProperties.Infinite_TTL);
 
     PutRequest request = new PutRequest(correlationId,
                                         clientId,
