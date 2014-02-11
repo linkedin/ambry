@@ -84,11 +84,11 @@ public class BlobStoreRecoveryTest {
 
     ByteBuffer buffer;
     public StoreKey[] keys = {
-                                new MockId("id1"),
-                                new MockId("id2"),
-                                new MockId("id3"),
-                                new MockId("id4")
-                             };
+            new MockId("id1"),
+            new MockId("id2"),
+            new MockId("id3"),
+            new MockId("id4")
+    };
 
     public void initialize() throws MessageFormatException, IOException {
       // write 3 new blob messages, and 2 ttl and delete update messages. write the last
@@ -101,50 +101,50 @@ public class BlobStoreRecoveryTest {
 
       // 1st message
       PutMessageFormatInputStream msg1 = new PutMessageFormatInputStream(keys[0],
-                                                                         new BlobProperties(9999,
-                                                                                            false,
-                                                                                            "img",
-                                                                                            "mem1",
-                                                                                            null,
-                                                                                            4000,
-                                                                                            "test"),
-                                                                         ByteBuffer.wrap(usermetadata),
-                                                                         new ByteBufferInputStream(ByteBuffer.wrap(blob)),
-                                                                         4000);
+              new BlobProperties(4000,
+                      "test",
+                      "mem1",
+                      "img",
+                      false,
+                      0,
+                      9999),
+              ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)),
+              4000);
       // 2nd message
       PutMessageFormatInputStream msg2 = new PutMessageFormatInputStream(keys[1],
-                                                                         new BlobProperties(4000, "test"),
-                                                                         ByteBuffer.wrap(usermetadata),
-                                                                         new ByteBufferInputStream(ByteBuffer.wrap(blob)),
-                                                                         4000);
+              new BlobProperties(4000, "test"),
+              ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)),
+              4000);
 
       // 3rd message
       PutMessageFormatInputStream msg3 = new PutMessageFormatInputStream(keys[2],
-                                                                         new BlobProperties(4000, "test"),
-                                                                         ByteBuffer.wrap(usermetadata),
-                                                                         new ByteBufferInputStream(ByteBuffer.wrap(blob)),
-                                                                         4000);
+              new BlobProperties(4000, "test"),
+              ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)),
+              4000);
 
       // 4th message
       TTLMessageFormatInputStream msg4 = new TTLMessageFormatInputStream(keys[0],
-                                                                         -1);
+              -1);
 
       // 5th message
       DeleteMessageFormatInputStream msg5 = new DeleteMessageFormatInputStream(keys[1]);
 
       // 6th message
       PutMessageFormatInputStream msg6 = new PutMessageFormatInputStream(keys[3],
-                                                                         new BlobProperties(4000, "test"),
-                                                                         ByteBuffer.wrap(usermetadata),
-                                                                         new ByteBufferInputStream(ByteBuffer.wrap(blob)),
-                                                                         4000);
+              new BlobProperties(4000, "test"),
+              ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)),
+              4000);
 
       buffer = ByteBuffer.allocate((int)(msg1.getSize() +
-                                         msg2.getSize() +
-                                         msg3.getSize() +
-                                         msg4.getSize() +
-                                         msg5.getSize() +
-                                         msg6.getSize() / 2));
+              msg2.getSize() +
+              msg3.getSize() +
+              msg4.getSize() +
+              msg5.getSize() +
+              msg6.getSize() / 2));
 
 
       writeToBuffer(msg1, (int)msg1.getSize());

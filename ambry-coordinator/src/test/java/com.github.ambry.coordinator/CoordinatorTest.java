@@ -566,8 +566,7 @@ public class CoordinatorTest {
 
   void PutGetDelete(AmbryCoordinator ac) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
-    BlobProperties putBlobProperties = new BlobProperties(-1, false, "contentType", "memberId", "parentId", 100,
-                                                          "serviceId");
+    BlobProperties putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, 0, -1);
     ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
     for (byte b = 0; b < 10; b++) {
       putUserMetadata.put(b);
@@ -659,8 +658,7 @@ public class CoordinatorTest {
   void PutRemoteGetDelete(AmbryCoordinator acOne,
                           AmbryCoordinator acTwo) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
-    BlobProperties putBlobProperties = new BlobProperties(-1, false, "contentType", "memberId", "parentId", 100,
-                                                          "serviceId");
+    BlobProperties putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, 0, -1);
     ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
     for (byte b = 0; b < 10; b++) {
       putUserMetadata.put(b);

@@ -36,19 +36,19 @@ public class RequestResponseTest {
     rnd.nextBytes(data);
 
 
-    BlobProperties blobProperties = new BlobProperties(BlobProperties.Infinite_TTL,
-                                                       false,
-                                                       "contentType",
-                                                       "memberId",
-                                                       "parentBlobId",
-                                                       dataSize,
-                                                       "serviceID");
+    BlobProperties blobProperties = new BlobProperties(dataSize,
+            "serviceID",
+            "memberId",
+            "contentType",
+            false,
+            0,
+            BlobProperties.Infinite_TTL);
 
     PutRequest request = new PutRequest(correlationId,
-                                        clientId,
-                                        blobId,
-                                        blobProperties, ByteBuffer.wrap(userMetadata),
-                                        new ByteBufferInputStream(ByteBuffer.wrap(data))
+            clientId,
+            blobId,
+            blobProperties, ByteBuffer.wrap(userMetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(data))
     );
 
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
