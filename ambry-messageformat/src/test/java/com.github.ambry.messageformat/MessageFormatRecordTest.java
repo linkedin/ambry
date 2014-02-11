@@ -13,7 +13,7 @@ public class MessageFormatRecordTest {
   public void deserializeTest() {
     try {
       // Test Blob property V1 Record
-      BlobProperties properties = new BlobProperties(1234, true, "test", "member", "parent", 1234, "id");
+      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 0, 1234);
       ByteBuffer stream = ByteBuffer.allocate(MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(properties));
       MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(stream, properties);
       stream.flip();
@@ -21,7 +21,7 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
       Assert.assertEquals(properties.getContentType(), result.getContentType());
       Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
-      Assert.assertEquals(properties.getMemberId(), result.getMemberId());
+      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
       Assert.assertEquals(properties.getServiceId(), result.getServiceId());
 
       // corrupt blob property V1 record

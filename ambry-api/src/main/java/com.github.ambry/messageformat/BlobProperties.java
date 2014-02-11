@@ -7,70 +7,82 @@ import com.github.ambry.utils.SystemTime;
  * must be set. The creation time is determined when this object is constructed.
  */
 public class BlobProperties {
-  protected long timeToLiveInMs;
-  protected boolean isPrivate;
-  protected String contentType;
-  protected String memberId;
-  protected String parentBlobId;
+
   protected long blobSize;
   protected String serviceId;
+  protected String ownerId;
+  protected String contentType;
+  protected boolean isPrivate;
+  protected long timeToLiveInMs;
+  protected int userMetadataSize;
   protected long creationTimeInMs;
 
+
   public static final long Infinite_TTL = -1;
-  /**
-   * The size in bytes of the largest blob that can be stored.
-   */
-  public static final long Max_Blob_Size_In_Bytes = 20 * 1024 * 1024;
-  // TODO: Determine safe value for max user metadata size in bytes.
-  /**
-   * The size in bytes of the largest blob user metadata that can be stored.
-   */
-  public static final long Max_Blob_User_Metadata_Size_In_Bytes = 64 * 1024;
 
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
    */
   public BlobProperties(long blobSize, String serviceId) {
-    this(Infinite_TTL,
-         false, // public
+    this(blobSize,
+         serviceId,
          null,
          null,
-         null,
-         blobSize,
-         serviceId);
+         false,
+         0,
+         Infinite_TTL);
   }
 
   /**
-   * @param timeToLiveInMs The System time in ms when the blob needs to be deleted
-   * @param isPrivate Is the blob secure
-   * @param contentType The content type of the blob (eg: mime). Can be Null
-   * @param memberId The user who created this blob. Can be Null
-   * @param parentBlobId If this blob was generated from another blob, the id needs to be specified. Null otherwise
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
+   * @param ownerId The owner of the blob (For example , memberId or groupId)
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate Is the blob secure
+   * @param usermetadataSize The size of the usermetadata stored with this blob.
+   *                         It is zero if there is no usermetadata
    */
-  public BlobProperties(long timeToLiveInMs, boolean isPrivate, String contentType, String memberId,
-                        String parentBlobId, long blobSize, String serviceId) {
-    this.timeToLiveInMs = timeToLiveInMs;
-    this.isPrivate = isPrivate;
-    this.contentType = contentType;
-    this.memberId = memberId;
-    this.parentBlobId = parentBlobId;
-    this.blobSize = verifiedBlobSize(blobSize);
-    this.serviceId = serviceId;
-    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
+  public BlobProperties(long blobSize,
+                        String serviceId,
+                        String ownerId,
+                        String contentType,
+                        boolean isPrivate,
+                        int usermetadataSize) {
+    this(blobSize,
+         serviceId,
+         ownerId,
+         contentType,
+         isPrivate,
+         usermetadataSize,
+         Infinite_TTL);
   }
 
-  private long verifiedBlobSize(long blobSize) {
-    if (blobSize >= Max_Blob_Size_In_Bytes) {
-      throw new IllegalArgumentException("Specified Blob size is too large. Max Blob size allowed is " +
-                                         Max_Blob_Size_In_Bytes + " bytes.");
-    }
-    if (blobSize < 0) {
-      throw new IllegalArgumentException("Specified Blob size is negative. Must be positive.");
-    }
-    return blobSize;
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   * @param ownerId The owner of the blob (For example , memberId or groupId)
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate Is the blob secure
+   * @param usermetadataSize The size of the usermetadata stored with this blob.
+   *                         It is zero if there is no usermetadata
+   * @param timeToLiveInMs The System time in ms when the blob needs to be deleted
+   */
+  public BlobProperties(long blobSize,
+                        String serviceId,
+                        String ownerId,
+                        String contentType,
+                        boolean isPrivate,
+                        int usermetadataSize,
+                        long timeToLiveInMs) {
+    this.blobSize = blobSize;
+    this.serviceId = serviceId;
+    this.ownerId = ownerId;
+    this.contentType = contentType;
+    this.isPrivate = isPrivate;
+    this.timeToLiveInMs = timeToLiveInMs;
+    this.userMetadataSize = usermetadataSize;
+    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
   public void setTimeToLiveInMs(long timeToLiveInMs) {
@@ -82,7 +94,7 @@ public class BlobProperties {
   }
 
   public void setBlobSize(long blobSize) {
-    this.blobSize = verifiedBlobSize(blobSize);
+    this.blobSize = blobSize;
   }
 
   public long getBlobSize() {
@@ -97,20 +109,12 @@ public class BlobProperties {
     return isPrivate;
   }
 
-  public void setMemberId(String id) {
-    memberId = id;
+  public void setOwnerId(String id) {
+    ownerId = id;
   }
 
-  public String getMemberId() {
-    return memberId;
-  }
-
-  public void setParentBlobId(String parentBlobId) {
-    this.parentBlobId = parentBlobId;
-  }
-
-  public String getParentBlobId() {
-    return parentBlobId;
+  public String getOwnerId() {
+    return ownerId;
   }
 
   public void setContentType(String contentType) {
@@ -127,6 +131,14 @@ public class BlobProperties {
 
   public String getServiceId() {
     return serviceId;
+  }
+
+  public void setUserMetadataSize(int usermetadataSize) {
+    this.userMetadataSize = usermetadataSize;
+  }
+
+  public int getUserMetadataSize() {
+    return userMetadataSize;
   }
 
   public long getCreationTimeInMs() {
