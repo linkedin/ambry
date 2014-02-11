@@ -26,12 +26,12 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId) {
     this(blobSize,
-            serviceId,
-            null,
-            null,
-            false,
-            0,
-            Infinite_TTL);
+         serviceId,
+         null,
+         null,
+         false,
+         0,
+         Infinite_TTL);
   }
 
   /**
@@ -50,12 +50,12 @@ public class BlobProperties {
                         boolean isPrivate,
                         int usermetadataSize) {
     this(blobSize,
-            serviceId,
-            ownerId,
-            contentType,
-            isPrivate,
-            usermetadataSize,
-            Infinite_TTL);
+         serviceId,
+         ownerId,
+         contentType,
+         isPrivate,
+         usermetadataSize,
+         Infinite_TTL);
   }
 
   /**
