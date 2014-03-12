@@ -15,7 +15,7 @@ public class ReplicationConfig {
    * The number of replica threads that need to participate in replication
    */
   @Config("replication.no.of.replica.threads")
-  @Default("3")
+  @Default("1")
   public final int replicationNoOfReplicaThreads;
 
   /**
@@ -44,7 +44,7 @@ public class ReplicationConfig {
     replicationTokenFactory =
             verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     replicationNoOfReplicaThreads =
-            verifiableProperties.getInt("replication.no.of.replica.threads", 3);
+            verifiableProperties.getInt("replication.no.of.replica.threads", 1);
     replicationConnectionPoolCheckoutTimeoutMs =
             verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);
     replicationTokenFlushIntervalSeconds =

@@ -59,7 +59,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public boolean isSendComplete() {
-    return bufferToSend.remaining() == 0;
+    return bufferToSend != null && bufferToSend.remaining() == 0;
   }
 
   @Override

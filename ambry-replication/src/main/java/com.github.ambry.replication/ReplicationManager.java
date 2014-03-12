@@ -68,6 +68,11 @@ final class RemoteReplicaInfo {
       timeTokenSet = SystemTime.getInstance().milliseconds();
     }
   }
+
+  @Override
+  public String toString() {
+    return replicaId.toString();
+  }
 }
 
 final class PartitionInfo {
@@ -92,6 +97,11 @@ final class PartitionInfo {
 
   public Store getStore() {
     return store;
+  }
+
+  @Override
+  public String toString() {
+    return partitionId.toString() + " " + remoteReplicas.toString();
   }
 }
 
@@ -185,14 +195,16 @@ public final class ReplicationManager {
       }
 
       // start replica threads and divide the partitions between them
-      // if the number of replica threads is less than the number of mount paths
-      if (partitionGroupedByMountPath.size() > replicaThreads.size()) {
-        int numberOfMountPathPerThread = partitionGroupedByMountPath.size() / replicaThreads.size();
-        int remainingMountPaths = partitionGroupedByMountPath.size() % replicaThreads.size();
+      // if the number of replica threads is less than or equal to the number of mount paths
+      logger.info("replica threads " + replicationConfig.replicationNoOfReplicaThreads);
+      if (partitionGroupedByMountPath.size() >= replicationConfig.replicationNoOfReplicaThreads) {
+        logger.info("Number of replica threads is less than or equal to the number of mount paths");
+        int numberOfMountPathPerThread =
+                partitionGroupedByMountPath.size() / replicationConfig.replicationNoOfReplicaThreads;
+        int remainingMountPaths = partitionGroupedByMountPath.size() % replicationConfig.replicationNoOfReplicaThreads;
         Iterator<Map.Entry<String, List<PartitionInfo>>> mountPathEntries =
                 partitionGroupedByMountPath.entrySet().iterator();
-        int currentMountPath = 0;
-        for (int i = 0; i < replicaThreads.size(); i++) {
+        for (int i = 0; i < replicationConfig.replicationNoOfReplicaThreads; i++) {
           // create the list of partition info for the replica thread
           List<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
           int mountPathAssignedToThread = 0;
@@ -204,7 +216,8 @@ public final class ReplicationManager {
             partitionInfoList.addAll(mountPathEntries.next().getValue());
             remainingMountPaths--;
           }
-          ReplicaThread replicaThread = new ReplicaThread(partitionInfoList,
+          ReplicaThread replicaThread = new ReplicaThread("Replica Thread " + i,
+                                                          partitionInfoList,
                                                           factory,
                                                           clusterMap,
                                                           correlationIdGenerator,
@@ -218,8 +231,11 @@ public final class ReplicationManager {
 
       }
       // start all replica threads
-      for (ReplicaThread thread : replicaThreads)
-        thread.run();
+      for (ReplicaThread thread : replicaThreads) {
+        Thread replicaThread = new Thread(thread, thread.getName());
+        logger.info("Starting replica thread " + thread.getName());
+        replicaThread.start();
+      }
 
       // start background persistent thread
       // start scheduler thread to persist index in the background
@@ -252,55 +268,58 @@ public final class ReplicationManager {
 
   private void readFromFile(String mountPath) throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
-    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(new File(mountPath, replicaTokenFileName)));
-    DataInputStream stream = new DataInputStream(crcStream);
-    try {
-      short version = stream.readShort();
-      switch (version) {
-        case 0:
-          while (stream.available() > Crc_Size) {
-            // read partition id
-            PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-            // read remote node host name
-            String hostname = Utils.readIntString(stream);
-            // read remote port
-            int port = Integer.parseInt(Utils.readIntString(stream));
-            // read replica token
-            FindToken token = factory.getFindToken(stream);
-            // update token
-            PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-            boolean updatedToken = false;
-            for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
-              if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
-                  info.getReplicaId().getDataNodeId().getPort() == port) {
-                info.setToken(token);
-                updatedToken = true;
+    File replicaTokenFile = new File(mountPath, replicaTokenFileName);
+    if (replicaTokenFile.exists()) {
+      CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
+      DataInputStream stream = new DataInputStream(crcStream);
+      try {
+        short version = stream.readShort();
+        switch (version) {
+          case 0:
+            while (stream.available() > Crc_Size) {
+              // read partition id
+              PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+              // read remote node host name
+              String hostname = Utils.readIntString(stream);
+              // read remote port
+              int port = stream.readInt();
+              // read replica token
+              FindToken token = factory.getFindToken(stream);
+              // update token
+              PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
+              boolean updatedToken = false;
+              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
+                if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
+                    info.getReplicaId().getDataNodeId().getPort() == port) {
+                  info.setToken(token);
+                  updatedToken = true;
+                }
               }
+              if (!updatedToken)
+                logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
             }
-            if (!updatedToken)
-              logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
-          }
-          long crc = crcStream.getValue();
-          if (crc != stream.readLong()) {
-            throw new ReplicationException("Crc check does not match for replica token file for mount path " + mountPath);
-          }
-          break;
-        default:
-          throw new ReplicationException("Invalid version in replica token file for mount path " + mountPath);
+            long crc = crcStream.getValue();
+            if (crc != stream.readLong()) {
+              throw new ReplicationException("Crc check does not match for replica token file for mount path " + mountPath);
+            }
+            break;
+          default:
+            throw new ReplicationException("Invalid version in replica token file for mount path " + mountPath);
+        }
       }
-    }
-    catch (IOException e) {
-      throw new ReplicationException("IO error while reading from replica token file " +  e);
-    }
-    finally {
-      stream.close();
+      catch (IOException e) {
+        throw new ReplicationException("IO error while reading from replica token file " +  e);
+      }
+      finally {
+        stream.close();
+      }
     }
   }
 
   class ReplicaTokenPersistor implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
-    private final short version = 1;
+    private final short version = 0;
     // TODO add metric to indicate existence of thread
     // TODO add metric to indicate time taken
 

@@ -66,7 +66,8 @@ public class BlobIndex {
       this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
       this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
       this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
-      this.journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements,
+      this.journal = new BlobJournal(datadir,
+                                     config.storeIndexMaxNumberOfInmemElements,
                                      config.storeMaxNumberOfEntriesToReturnForFind);
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();

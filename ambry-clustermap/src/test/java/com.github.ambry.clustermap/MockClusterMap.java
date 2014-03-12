@@ -33,7 +33,7 @@ public class MockClusterMap implements ClusterMap {
     List<ReplicaId> peerReplicaOfReplicaId3 = new ArrayList<ReplicaId>();
     peerReplicaOfReplicaId3.add(replicaId1);
     peerReplicaOfReplicaId3.add(replicaId2);
-    replicaId1.setPeerReplicas(peerReplicaOfReplicaId3);
+    replicaId3.setPeerReplicas(peerReplicaOfReplicaId3);
 
     this.replicaIds.add(replicaId1);
     this.replicaIds.add(replicaId2);
@@ -107,7 +107,10 @@ class MockReplicaId implements ReplicaId {
     File f = null;
     try {
       f = File.createTempFile("ambry", ".tmp");
-      mountPath = f.getParent();
+      File mountPathFile = new File(f.getParent(), "mountpathfile" + port);
+      mountPathFile.mkdir();
+      mountPathFile.deleteOnExit();
+      mountPath = mountPathFile.getAbsolutePath();
       File mountFile = new File(mountPath);
       File replicaFile = new File(mountFile, "replica" + port);
       replicaFile.mkdir();

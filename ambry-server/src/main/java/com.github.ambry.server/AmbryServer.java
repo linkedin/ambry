@@ -109,7 +109,7 @@ public class AmbryServer {
       logger.info("started");
     }
     catch (Exception e) {
-      logger.error("Error during startup {}", e);
+      logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
   }
@@ -138,7 +138,7 @@ public class AmbryServer {
       logger.info("shutdown completed");
     }
     catch (Exception e) {
-      logger.error("Error while shutting down server {}", e);
+      logger.error("Error while shutting down server", e);
     }
     finally {
       shutdownLatch.countDown();

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * A replica thread is responsible for handling replication for a set of partitions assigned to it
  */
-public class ReplicaThread implements Runnable {
+class ReplicaThread implements Runnable {
 
   private final List<PartitionInfo> partitionsToReplicate;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -35,15 +35,18 @@ public class ReplicaThread implements Runnable {
   private final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
   private final int connectionPoolCheckoutTimeout;
+  private final String threadName;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public ReplicaThread(List<PartitionInfo> partitionsToReplicate,
+  public ReplicaThread(String threadName,
+                       List<PartitionInfo> partitionsToReplicate,
                        FindTokenFactory findTokenFactory,
                        ClusterMap clusterMap,
                        AtomicInteger correlationIdGenerator,
                        DataNodeId dataNodeId,
                        ConnectionPool connectionPool,
                        int connectionPoolCheckoutTimeout) {
+    this.threadName = threadName;
     this.partitionsToReplicate = partitionsToReplicate;
     this.running = true;
     this.findTokenFactory = findTokenFactory;
@@ -53,13 +56,29 @@ public class ReplicaThread implements Runnable {
     this.connectionPool = connectionPool;
     this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
   }
+
+  public String getName() {
+    return threadName;
+  }
+
   @Override
   public void run() {
+    logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() + " Thread name: " + threadName);
+    for (PartitionInfo partitionInfo : partitionsToReplicate) {
+      logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                   " Thread name: " + threadName +
+                   " Partition id " + partitionInfo.getPartitionId());
+    }
     while (running) {
       for (PartitionInfo partitionInfo : partitionsToReplicate) {
         for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfo()) {
+          logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                       " Thread name " + threadName +
+                       " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                       remoteReplicaInfo.getReplicaId().getDataNodeId().getPort());
           ConnectedChannel connectedChannel = null;
           try {
+
             connectedChannel =
                     connectionPool.checkOutConnection(remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
                                                       remoteReplicaInfo.getReplicaId().getDataNodeId().getPort(),
@@ -69,10 +88,20 @@ public class ReplicaThread implements Runnable {
                     exchangeMetadata(connectedChannel, partitionInfo, remoteReplicaInfo);
             fixMissingStoreKeys(exchangeMetadataResponse.missingStoreKeys, partitionInfo, connectedChannel);
             remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+            logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                         " Thread name " + threadName +
+                         " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                         " Token after speaking to remote node " +
+                         " token " + exchangeMetadataResponse.remoteToken);
           }
           catch (Exception e) {
-            logger.error("Error while replicating for remote replica {} with error {}",
-                         remoteReplicaInfo.getReplicaId(), e);
+            logger.error("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                         " Thread name " + threadName +
+                         " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                         "Error while replicating for remote replica " +
+                         " with error ", e);
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
               connectedChannel = null;
@@ -117,6 +146,11 @@ public class ReplicaThread implements Runnable {
     ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(new DataInputStream(stream),
                                                                         findTokenFactory,
                                                                         clusterMap);
+    logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                 " Thread name " + threadName +
+                 " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                 remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                 " token from remote " + response.getFindToken());
     List<MessageInfo> messageInfoList = response.getMessageInfoList();
 
     // 2. Check the local store to find the messages that are missing locally
@@ -124,9 +158,21 @@ public class ReplicaThread implements Runnable {
     List<StoreKey> storeKeysToCheck = new ArrayList<StoreKey>(messageInfoList.size());
     for (MessageInfo messageInfo : messageInfoList) {
       storeKeysToCheck.add(messageInfo.getStoreKey());
+      logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                   " Thread name " + threadName +
+                   " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                   remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                   " key from remote " + " id " + messageInfo.getStoreKey());
     }
 
     Set<StoreKey> missingStoreKeys = partitionInfo.getStore().findMissingKeys(storeKeysToCheck);
+    for (StoreKey storeKey : missingStoreKeys) {
+      logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                   " Thread name " + threadName +
+                   " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                   remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                   " key missing id" + storeKey);
+    }
 
     // 3. For the keys that are not missing, check the deleted and ttl state. If the message in the remote
     //    replica is marked for deletion and is not deleted locally, delete it. If the message in the remote
@@ -134,7 +180,7 @@ public class ReplicaThread implements Runnable {
     //    infinite ttl
     for (MessageInfo messageInfo : messageInfoList) {
       if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
-        // the key is found. Mark it for deletion if it is deleted or update its ttl if it is set to ttl infinite
+        // the key is found. Mark it for deletion if it is deleted
         if (messageInfo.isDeleted() && partitionInfo.getStore().isKeyDeleted(messageInfo.getStoreKey())) {
           MessageFormatInputStream deleteStream = new DeleteMessageFormatInputStream(messageInfo.getStoreKey());
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize());
@@ -142,24 +188,23 @@ public class ReplicaThread implements Runnable {
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
           partitionInfo.getStore().delete(writeset);
-        }
-        // TODO remove this when cancel ttl gets removed
-        if (messageInfo.getTimeToLiveInMs() == BlobProperties.Infinite_TTL) {
-          MessageFormatInputStream ttlStream = new TTLMessageFormatInputStream(messageInfo.getStoreKey(),
-                                                                               BlobProperties.Infinite_TTL);
-          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(),
-                                             ttlStream.getSize(),
-                                             BlobProperties.Infinite_TTL);
-          ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
-          infoList.add(info);
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
-          partitionInfo.getStore().updateTTL(writeset);
+          logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                       " Thread name " + threadName +
+                       " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                       remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                       " Key deleted. mark for deletion id " + messageInfo.getStoreKey());
         }
       }
       else {
-        if (messageInfo.isDeleted())
+        if (messageInfo.isDeleted()) {
           // if the remote replica has the message in deleted state, it is not considered missing locally
           missingStoreKeys.remove(messageInfo.getStoreKey());
+          logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                       " Thread name " + threadName +
+                       " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                       remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                       " key in deleted state remotely. " + messageInfo.getStoreKey());
+        }
       }
     }
     return new ExchangeMetadataResponse(missingStoreKeys, response.getFindToken());
@@ -185,22 +230,6 @@ public class ReplicaThread implements Runnable {
       MessageFormatWriteSet writeset = new MessageFormatWriteSet(getResponse.getInputStream(),
                                                                  getResponse.getMessageInfoList());
       partitionInfo.getStore().put(writeset);
-
-      // TODO remove this when ttl goes off
-      // find all the messages that have ttl set to -1 and set them locally just in case
-      for (MessageInfo info : getResponse.getMessageInfoList()) {
-        if (info.getTimeToLiveInMs() == BlobProperties.Infinite_TTL) {
-          MessageFormatInputStream ttlStream = new TTLMessageFormatInputStream(info.getStoreKey(),
-                  BlobProperties.Infinite_TTL);
-          MessageInfo infoToWrite = new MessageInfo(info.getStoreKey(),
-                                                    ttlStream.getSize(),
-                                                    BlobProperties.Infinite_TTL);
-          ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
-          infoList.add(infoToWrite);
-          MessageFormatWriteSet ttlWriteSet = new MessageFormatWriteSet(ttlStream, infoList);
-          partitionInfo.getStore().updateTTL(ttlWriteSet);
-        }
-      }
     }
   }
 

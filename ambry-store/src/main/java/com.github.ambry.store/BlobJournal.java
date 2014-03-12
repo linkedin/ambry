@@ -1,10 +1,14 @@
 package com.github.ambry.store;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class JournalEntry {
   private long offset;
@@ -30,7 +34,9 @@ public class BlobJournal {
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
-  private int currentNumberOfEntries;
+  private AtomicInteger currentNumberOfEntries;
+  private String dataDir;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * The journal that holds the most recent entries in a store sorted by offset of the blob on disk
@@ -38,11 +44,12 @@ public class BlobJournal {
    *                            the journal after the size is reached.
    * @param maxEntriesToReturn The max number of entries to return from the journal when queried for entries.
    */
-  public BlobJournal(int maxEntriesToJournal, int maxEntriesToReturn) {
+  public BlobJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     journal = new ConcurrentSkipListMap<Long, StoreKey>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;
-    this.currentNumberOfEntries = 0;
+    this.currentNumberOfEntries = new AtomicInteger(0);
+    this.dataDir = dataDir;
   }
 
   /**
@@ -55,12 +62,14 @@ public class BlobJournal {
     if (key == null || offset < 0)
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
 
-    if (currentNumberOfEntries == maxEntriesToJournal) {
+    if (currentNumberOfEntries.get() == maxEntriesToJournal) {
       journal.remove(journal.firstKey());
-      currentNumberOfEntries--;
+      currentNumberOfEntries.decrementAndGet();
     }
     journal.put(offset, key);
-    currentNumberOfEntries++;
+    logger.trace("Journal : " + dataDir + " offset " + offset + " key " + key);
+    currentNumberOfEntries.incrementAndGet();
+    logger.trace("Journal : " + dataDir + " number of entries " + currentNumberOfEntries.get());
   }
 
   /**
@@ -89,6 +98,7 @@ public class BlobJournal {
     }
     if (!journal.containsKey(offset))
       return null;
+    logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
     return journalEntries;
   }
 }
