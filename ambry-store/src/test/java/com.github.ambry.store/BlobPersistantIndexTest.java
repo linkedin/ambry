@@ -156,7 +156,7 @@ public class BlobPersistantIndexTest {
 
       info.writeIndexToFile(9000);
       StoreMetrics metrics = new StoreMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
-      BlobJournal journal = new BlobJournal(5, 5);
+      BlobJournal journal = new BlobJournal("test", 5, 5);
       IndexSegmentInfo infonew = new IndexSegmentInfo(info.getFile(),
                                                       false,
                                                       factory,

@@ -469,7 +469,7 @@ class IndexSegmentInfo {
         temp.renameTo(getFile());
       }
       catch (IOException e) {
-        logger.error("IO error while persisting index to disk {}", indexFile.getAbsoluteFile());
+        logger.error("IO error while persisting index to disk " + indexFile.getAbsoluteFile());
         throw new StoreException("IO error while persisting index to disk " +
                 indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
       }
@@ -683,7 +683,7 @@ public class BlobPersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements, config.storeMaxNumberOfEntriesToReturnForFind);
+      journal = new BlobJournal(datadir, config.storeIndexMaxNumberOfInmemElements, config.storeMaxNumberOfEntriesToReturnForFind);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
         public int compare(File o1, File o2) {
@@ -1005,6 +1005,7 @@ public class BlobPersistentIndex {
       StoreFindToken storeToken = (StoreFindToken)token;
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
+        logger.trace("Index: " + dataDir + " Getting entries since " + storeToken.getOffset());
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
         if (entries != null) {
@@ -1015,6 +1016,7 @@ public class BlobPersistentIndex {
                                                value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                                value.getTimeToLiveInMs()));
           }
+          logger.trace("Index " + dataDir + " New offset from find info" + entries.get(entries.size() - 1).getOffset());
           return new FindInfo(messageEntries, new StoreFindToken(entries.get(entries.size() - 1).getOffset()));
         }
         else {
@@ -1182,7 +1184,7 @@ class StoreFindToken implements FindToken {
   private static final short version = 0;
 
   public StoreFindToken() {
-    this(0, 0, null);
+    this(0, -1, null);
   }
 
   public StoreFindToken(StoreKey key, long indexStartOffset) {
@@ -1256,5 +1258,17 @@ class StoreFindToken implements FindToken {
     if (storeKey != null)
       bufWrap.put(storeKey.toBytes());
     return buf;
+  }
+
+  @Override
+  public String toString() {
+    String tokenStringFormat = "version: " + version;
+    if (storeKey != null) {
+      tokenStringFormat += " indexStartOffset " + indexStartOffset + " storeKey " + storeKey;
+    }
+    else {
+      tokenStringFormat += " offset " + offset;
+    }
+    return tokenStringFormat;
   }
 }

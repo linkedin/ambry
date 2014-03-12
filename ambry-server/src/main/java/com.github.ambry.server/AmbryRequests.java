@@ -36,7 +36,7 @@ public class AmbryRequests implements RequestAPI {
   private final FindTokenFactory findTokenFactory;
 
   public AmbryRequests(StoreManager storeManager,
-                       RequestResponseChannel requestResponseChannel,
+                         RequestResponseChannel requestResponseChannel,
                        ClusterMap clusterMap,
                        DataNodeId nodeId,
                        MetricRegistry registry,
@@ -67,6 +67,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case TTLRequest:
           handleTTLRequest(request);
+          break;
+        case ReplicaMetadataRequest:
+          handleReplicaMetadataRequest(request);
           break;
         default: throw new UnsupportedOperationException("Request type not supported");
       }
@@ -173,6 +176,13 @@ public class AmbryRequests implements RequestAPI {
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataTotalTimeInMs);
+    }
+    else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
+      metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.getBlobAllRequestRate.mark();
+      responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobAllResponseQueueTimeInMs);
+      responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobAllSendTimeInMs);
+      responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobAllTotalTimeInMs);
     }
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
@@ -370,6 +380,9 @@ public class AmbryRequests implements RequestAPI {
   }
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
+    if (currentNode.getPort() == 6667) {
+      logger.info("port 6667");
+    }
     ReplicaMetadataRequest replicaMetadataRequest =
             ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();

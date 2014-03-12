@@ -483,7 +483,8 @@ public class ReplicationTest {
       replicaBuffers.put("localhost"+6668, messageBufferListLocalReplica2);
       replicaBuffers.put("localhost"+6669, messageBufferListLocalReplica3);
 
-      ReplicaThread replicaThread = new ReplicaThread(partitionInfoList,
+      ReplicaThread replicaThread = new ReplicaThread("threadtest",
+                                                      partitionInfoList,
                                                       new MockFindTokenFactory(),
                                                       clusterMap,
                                                       new AtomicInteger(0),
