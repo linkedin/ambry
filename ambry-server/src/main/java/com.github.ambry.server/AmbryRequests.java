@@ -400,7 +400,8 @@ public class AmbryRequests implements RequestAPI {
                                                error);
       }
       Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
-      FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken());
+      FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
+                                                 replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
       response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
                                              replicaMetadataRequest.getClientId(),
                                              ServerErrorCode.No_Error,

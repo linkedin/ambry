@@ -44,7 +44,6 @@ public class AmbryServer {
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap) throws IOException {
     this.properties = properties;
-    registry = new MetricRegistry();
     this.clusterMap = clusterMap;
   }
 
@@ -52,6 +51,7 @@ public class AmbryServer {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
+      registry = new MetricRegistry();
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -103,7 +103,8 @@ public class AmbryServer {
                                                   clusterMap,
                                                   scheduler,
                                                   nodeId,
-                                                  connectionPool);
+                                                  connectionPool,
+                                                  registry);
       replicationManager.start();
 
       logger.info("started");

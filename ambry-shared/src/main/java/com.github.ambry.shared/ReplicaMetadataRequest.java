@@ -17,11 +17,19 @@ import java.nio.channels.WritableByteChannel;
 public class ReplicaMetadataRequest extends RequestOrResponse {
   private FindToken token;
   private PartitionId partitionId;
+  private long maxTotalSizeOfEntriesInBytes;
 
-  public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token) {
+  private static int Max_Entries_Size_In_Bytes = 8;
+
+  public ReplicaMetadataRequest(int correlationId,
+                                String clientId,
+                                PartitionId partitionId,
+                                FindToken token,
+                                long maxTotalSizeOfEntriesInBytes) {
     super(RequestResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
     this.token = token;
     this.partitionId = partitionId;
+    this.maxTotalSizeOfEntriesInBytes = maxTotalSizeOfEntriesInBytes;
   }
 
   public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactory factory) throws IOException {
@@ -31,8 +39,9 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     String clientId = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     FindToken token = factory.getFindToken(stream);
+    long maxTotalSizeOfEntries = stream.readLong();
     // ignore version for now
-    return new ReplicaMetadataRequest(correlationId, clientId, partitionId, token);
+    return new ReplicaMetadataRequest(correlationId, clientId, partitionId, token, maxTotalSizeOfEntries);
   }
 
   public FindToken getToken() {
@@ -43,6 +52,10 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     return partitionId;
   }
 
+  public long getMaxTotalSizeOfEntriesInBytes() {
+    return maxTotalSizeOfEntriesInBytes;
+  }
+
   @Override
   public void writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
@@ -50,6 +63,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
       writeHeader();
       bufferToSend.put(partitionId.getBytes());
       bufferToSend.put(token.toBytes());
+      bufferToSend.putLong(maxTotalSizeOfEntriesInBytes);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -65,6 +79,6 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + partitionId + token
-    return super.sizeInBytes() + partitionId.getBytes().length + token.toBytes().length;
+    return super.sizeInBytes() + partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
   }
 }

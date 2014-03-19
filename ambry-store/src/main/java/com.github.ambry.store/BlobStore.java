@@ -203,9 +203,9 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     // TODO add metrics
-    return index.findEntriesSince(token);
+    return index.findEntriesSince(token, maxTotalSizeOfEntries);
   }
 
   @Override
@@ -218,6 +218,9 @@ public class BlobStore implements Store {
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     // TODO add metrics
     BlobIndexValue value = index.findKey(key);
+    if (value == null)
+      throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
+                               StoreErrorCodes.ID_Not_Found);
     return value.isFlagSet(BlobIndexValue.Flags.Delete_Index);
   }
 

@@ -1,5 +1,6 @@
 package com.github.ambry.replication;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.*;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -48,7 +49,6 @@ final class RemoteReplicaInfo {
     // not important here
     synchronized (lock) {
       this.currentToken = token;
-
     }
   }
 
@@ -125,6 +125,7 @@ public final class ReplicationManager {
   private final AtomicInteger correlationIdGenerator;
   private final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
+  private final ReplicationMetrics replicationMetrics;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -139,12 +140,16 @@ public final class ReplicationManager {
                             ClusterMap clusterMap,
                             Scheduler scheduler,
                             DataNodeId dataNode,
-                            ConnectionPool connectionPool) throws ReplicationException {
+                            ConnectionPool connectionPool,
+                            MetricRegistry metricRegistry) throws ReplicationException {
 
     try {
       this.replicationConfig = replicationConfig;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNoOfReplicaThreads);
+      this.replicationMetrics = new ReplicationMetrics("replication"+dataNode.getHostname()+":"+dataNode.getPort(),
+                                                       metricRegistry,
+                                                       replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -223,7 +228,8 @@ public final class ReplicationManager {
                                                           correlationIdGenerator,
                                                           dataNodeId,
                                                           connectionPool,
-                                                          replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+                                                          replicationConfig,
+                                                          replicationMetrics);
           replicaThreads.add(replicaThread);
         }
       }
@@ -345,6 +351,7 @@ public final class ReplicationManager {
               writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
               writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
               writer.write(remoteReplica.getTokenToPersist().toBytes());
+              remoteReplica.onTokenPersisted();
             }
           }
           long crcValue = crc.getValue();

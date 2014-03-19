@@ -84,11 +84,8 @@ public class MockClusterMap implements ClusterMap {
 
   public void cleanup() {
     for (ReplicaId replicaId : replicaIds) {
-      File replicaDir = new File(replicaId.getReplicaPath());
-      for (File replica : replicaDir.listFiles()) {
-        replica.delete();
-      }
-      replicaDir.delete();
+      MockReplicaId mockReplica = (MockReplicaId)replicaId;
+      mockReplica.cleanup();
     }
   }
 }
@@ -177,5 +174,18 @@ class MockReplicaId implements ReplicaId {
         return 100000;
       }
     };
+  }
+
+  public void cleanup() {
+    File replicaDir = new File(replicaPath);
+    for (File replica : replicaDir.listFiles()) {
+      replica.delete();
+    }
+    replicaDir.delete();
+    File mountPathDir = new File(mountPath);
+    for (File file : mountPathDir.listFiles()) {
+      file.delete();
+    }
+    mountPathDir.delete();
   }
 }

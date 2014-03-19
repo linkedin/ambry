@@ -3,7 +3,9 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.*;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Send;
 import com.github.ambry.shared.*;
 import com.github.ambry.store.*;
@@ -82,7 +84,6 @@ public class ReplicationTest {
 
     DummyLog log;
     List<MessageInfo> messageInfoList;
-    int maxEntriesToFind;
 
     class DummyLog {
       private List<ByteBuffer> logInfo;
@@ -98,12 +99,11 @@ public class ReplicationTest {
         return logInfo.get(index);
       }
     }
-    public MockStore(List<MessageInfo> messageInfo, List<ByteBuffer> buffers, int maxEntriesToFind) {
+    public MockStore(List<MessageInfo> messageInfo, List<ByteBuffer> buffers) {
       if (messageInfo.size() != buffers.size())
         throw new IllegalArgumentException("message info size and buffer size does not match");
       messageInfoList = messageInfo;
       log = new DummyLog(buffers);
-      this.maxEntriesToFind = maxEntriesToFind;
     }
 
     @Override
@@ -183,11 +183,14 @@ public class ReplicationTest {
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token) throws StoreException {
+    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
       MockFindToken tokenmock = (MockFindToken)token;
       List<MessageInfo> entriesToReturn = new ArrayList<MessageInfo>();
-      for (int i = 0; i < Math.min(maxEntriesToFind, messageInfoList.size()); i++) {
-        entriesToReturn.add(messageInfoList.get(tokenmock.getIndex() + i));
+      long currentSizeOfEntries = 0;
+      int index = 0;
+      while (currentSizeOfEntries < maxSizeOfEntries && index < messageInfoList.size()) {
+        entriesToReturn.add(messageInfoList.get(tokenmock.getIndex() + index));
+        index++;
       }
       return new FindInfo(entriesToReturn, new MockFindToken(tokenmock.getIndex() + entriesToReturn.size()));
     }
@@ -471,8 +474,7 @@ public class ReplicationTest {
       PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas,
                                                       remoteReplicas.get(0).getReplicaId().getPartitionId(),
                                                       new MockStore(messageInfoListLocalReplica,
-                                                                    messageBufferListLocalReplica,
-                                                                    4));
+                                                                    messageBufferListLocalReplica));
       ArrayList<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
       partitionInfoList.add(partitionInfo);
       Map<String, List<MessageInfo>> replicaStores = new HashMap<String, List<MessageInfo>>();
@@ -482,6 +484,7 @@ public class ReplicationTest {
       Map<String, List<ByteBuffer>> replicaBuffers = new HashMap<String, List<ByteBuffer>>();
       replicaBuffers.put("localhost"+6668, messageBufferListLocalReplica2);
       replicaBuffers.put("localhost"+6669, messageBufferListLocalReplica3);
+      ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicaThread replicaThread = new ReplicaThread("threadtest",
                                                       partitionInfoList,
@@ -490,7 +493,10 @@ public class ReplicationTest {
                                                       new AtomicInteger(0),
                                                       mockDataNode,
                                                       new MockConnectionPool(replicaStores, replicaBuffers, 3),
-                                                      1000);
+                                                      config,
+                                                      new ReplicationMetrics("replication",
+                                                                             new MetricRegistry(),
+                                                                             new ArrayList<ReplicaThread>()));
       ReplicaThread.ExchangeMetadataResponse response =
               replicaThread.exchangeMetadata(new MockConnection("localhost",
                                                                 6668,
@@ -529,7 +535,7 @@ public class ReplicationTest {
                                                            6668,
                                                            messageInfoListRemoteReplica2,
                                                            messageBufferListLocalReplica2,
-                                                           4));
+                                                           4), false);
       remoteReplicas.get(1).setToken(response.remoteToken);
       response = replicaThread.exchangeMetadata(new MockConnection("localhost",
                                                                    6668,
@@ -546,7 +552,7 @@ public class ReplicationTest {
                                                 6668,
                                                 messageInfoListRemoteReplica2,
                                                 messageBufferListLocalReplica2,
-                                                4));
+                                                4), false);
       //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
       for (MessageInfo messageInfo : messageInfoListLocalReplica) {
         boolean found = false;
