@@ -100,7 +100,7 @@ public class BlockingChannel implements ConnectedChannel {
     if(!connected)
       throw new ClosedChannelException();
 
-    // get the size and return the remaining response. Need to be done by network receive?
+    // consume the size header and return the remaining response. Need to be done by network receive?
     long toRead = 8;
     long read = 0;
     while (read < toRead) {

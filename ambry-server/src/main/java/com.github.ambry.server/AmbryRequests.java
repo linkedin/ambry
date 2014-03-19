@@ -380,9 +380,6 @@ public class AmbryRequests implements RequestAPI {
   }
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
-    if (currentNode.getPort() == 6667) {
-      logger.info("port 6667");
-    }
     ReplicaMetadataRequest replicaMetadataRequest =
             ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -419,7 +416,7 @@ public class AmbryRequests implements RequestAPI {
                                              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      logger.error("Unknown exception on replica metadata request {}", e);
+      logger.error("Unknown exception on replica metadata request ", e);
       response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
                                              replicaMetadataRequest.getClientId(),
                                              ServerErrorCode.Unknown_Error);

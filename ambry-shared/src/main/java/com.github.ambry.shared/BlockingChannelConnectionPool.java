@@ -120,7 +120,8 @@ class BlockingChannelInfo {
         throw new IllegalArgumentException("Invalid connection. Channel does not belong to this queue");
       }
       blockingChannel.disconnect();
-      // we ensure we maintain the current count of connections to the host
+      // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
+      // to create the connection
       BlockingChannel channel = new BlockingChannel(blockingChannel.getRemoteHost(),
                                                     blockingChannel.getRemotePort(),
                                                     config.connectionPoolReadBufferSizeBytes,

@@ -143,7 +143,7 @@ class ReplicaThread implements Runnable {
   }
 
   /**
-   * Gets all the messages from the remote replica since last token. Checks the messages with the local store
+   * Gets all the metadata about messages from the remote replica since last token. Checks the messages with the local store
    * and finds all the messages that are missing. For the messages that are not missing, updates the delete
    * and ttl state.
    * @param connectedChannel The connected channel that represents a connection to the remote replica
@@ -170,7 +170,7 @@ class ReplicaThread implements Runnable {
                  " Token sent to remote " + remoteReplicaInfo.getToken());
 
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
-                                                                "replication-metadata" + dataNodeId.getHostname(),
+                                                                "replication-metadata-" + dataNodeId.getHostname(),
                                                                 partitionInfo.getPartitionId(),
                                                                 remoteReplicaInfo.getToken(),
                                                                 replicationConfig.replicationMaxTotalSizeOfBlobsToFetchBytes);
@@ -219,7 +219,7 @@ class ReplicaThread implements Runnable {
     //    replica is marked for deletion and is not deleted locally, delete it.
     for (MessageInfo messageInfo : messageInfoList) {
       if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
-        // the key is found. Mark it for deletion if it is deleted
+        // the key is present in the local store. Mark it for deletion if it is deleted in the remote store
         if (messageInfo.isDeleted() && !partitionInfo.getStore().isKeyDeleted(messageInfo.getStoreKey())) {
           MessageFormatInputStream deleteStream = new DeleteMessageFormatInputStream(messageInfo.getStoreKey());
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
@@ -271,7 +271,7 @@ class ReplicaThread implements Runnable {
           keysToFetch.add((BlobId)storeKey);
       }
       GetRequest getRequest = new GetRequest(correlationIdGenerator.incrementAndGet(),
-                                             "replication-fetch",
+                                             "replication-fetch-" + dataNodeId.getHostname(),
                                              MessageFormatFlags.All,
                                              partitionInfo.getPartitionId(),
                                              keysToFetch);

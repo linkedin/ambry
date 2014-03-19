@@ -12,11 +12,11 @@ public class ReplicationConfig {
   public final String replicationTokenFactory;
 
   /**
-   * The number of replica threads that need to participate in replication
+   * The number of replica threads on each server that runs the replication protocol
    */
-  @Config("replication.no.of.replica.threads")
+  @Config("replication.num.replica.threads")
   @Default("1")
-  public final int replicationNoOfReplicaThreads;
+  public final int replicationNumReplicaThreads;
 
   /**
    * The timeout to get a connection checkout from the connection pool for replication
@@ -47,7 +47,7 @@ public class ReplicationConfig {
 
     replicationTokenFactory =
             verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationNoOfReplicaThreads =
+    replicationNumReplicaThreads =
             verifiableProperties.getInt("replication.no.of.replica.threads", 1);
     replicationConnectionPoolCheckoutTimeoutMs =
             verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);

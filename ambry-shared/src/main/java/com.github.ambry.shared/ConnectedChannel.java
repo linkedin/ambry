@@ -27,7 +27,7 @@ public interface ConnectedChannel {
   InputStream receive() throws IOException;
 
   /**
-   * Gets the remote host that is channel is connected to
+   * Gets the remote host that this channel is connected to
    * @return The remote host the channel is connected to
    */
   String getRemoteHost();

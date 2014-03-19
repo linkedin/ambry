@@ -63,7 +63,7 @@ public interface Store {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
-   * Checks if the given key is deleted. Returns true is the key is deleted. Returns false if the
+   * Checks if the key is deleted. Returns true is the key is deleted. Returns false if the
    * key is present, not available, ttl expired.
    * @param key The key that needs to be checked for deletion state
    * @return True, if the key is deleted, false otherwise
