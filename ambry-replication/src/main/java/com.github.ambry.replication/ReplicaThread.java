@@ -173,7 +173,7 @@ class ReplicaThread implements Runnable {
                                                                 "replication-metadata-" + dataNodeId.getHostname(),
                                                                 partitionInfo.getPartitionId(),
                                                                 remoteReplicaInfo.getToken(),
-                                                                replicationConfig.replicationMaxTotalSizeOfBlobsToFetchBytes);
+                                                                replicationConfig.replicationFetchSizeInBytes);
     connectedChannel.send(request);
     InputStream stream = connectedChannel.receive();
     ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(new DataInputStream(stream),

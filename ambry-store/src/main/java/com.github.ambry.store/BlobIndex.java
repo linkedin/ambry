@@ -265,7 +265,8 @@ public class BlobIndex {
    * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
-   *                              return a list of entries whose total size is close to this value.
+   *                              return a list of entries whose total size is close to this value. The size can exceed
+   *                              in cases where summing a blob could exceed the max value.
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {

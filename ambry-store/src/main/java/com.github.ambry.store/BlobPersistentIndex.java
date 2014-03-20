@@ -1071,6 +1071,7 @@ public class BlobPersistentIndex {
                                                List<MessageInfo> messageEntries,
                                                long maxTotalSizeOfEntries) throws IOException, StoreException {
     IndexSegmentInfo segment = indexes.get(offset);
+    // Use atomic long here to pass by reference
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;

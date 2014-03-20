@@ -147,7 +147,7 @@ public final class ReplicationManager {
       this.replicationConfig = replicationConfig;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
-      this.replicationMetrics = new ReplicationMetrics("replication"+dataNode.getHostname()+":"+dataNode.getPort(),
+      this.replicationMetrics = new ReplicationMetrics("replication-"+dataNode.getHostname()+":"+dataNode.getPort(),
                                                        metricRegistry,
                                                        replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();

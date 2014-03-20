@@ -30,9 +30,9 @@ public class ReplicationMetrics {
     intraColoReplicationBytesCount =
             registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBytesCount"));
     interColoBlobsReplicatedCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoBlobsReplicatedCount"));
+            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationBlobsCount"));
     intraColoBlobsReplicatedCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoBlobsReplicatedCount"));
+            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBlobsCount"));
     replicationErrors =
             registry.counter(MetricRegistry.name(ReplicaThread.class, name + "replicationErrors"));
     interColoReplicationLatency =

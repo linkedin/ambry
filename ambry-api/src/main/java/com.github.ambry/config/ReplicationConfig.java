@@ -39,9 +39,14 @@ public class ReplicationConfig {
   @Default("5")
   public final int replicationTokenFlushDelaySeconds;
 
-  @Config("replication.max.total.size.of.blobs.to.fetch.bytes")
+  /**
+   * The fetch size is an approximate total size that a remote server would return on a fetch request.
+   * This is not guaranteed to be always obeyed. For example, if a single blob is larger than the fetch size
+   * the entire blob would be returned
+   */
+  @Config("replication.fetch.size.in.bytes")
   @Default("256000")
-  public final long replicationMaxTotalSizeOfBlobsToFetchBytes;
+  public final long replicationFetchSizeInBytes;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -55,7 +60,7 @@ public class ReplicationConfig {
             verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
     replicationTokenFlushDelaySeconds =
             verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
-    replicationMaxTotalSizeOfBlobsToFetchBytes =
-            verifiableProperties.getLongInRange("replication.max.total.size.of.blobs.to.fetch.bytes", 256000, 0, 2097152);
+    replicationFetchSizeInBytes =
+            verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 256000, 0, 2097152);
   }
 }
