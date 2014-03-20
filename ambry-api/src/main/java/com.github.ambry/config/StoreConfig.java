@@ -38,15 +38,15 @@ public class StoreConfig {
    * The max number of the elements in the index that can be in memory for a single store
    */
   @Config("store.index.max.number.of.inmem.elements")
-  @Default("10000")
+  @Default("50000")
   public final int storeIndexMaxNumberOfInmemElements;
 
   /**
    * The max number of entries that the journal will return each time it is queried for entries
    */
-  @Config("store.max.number.of.entries.to.return.for.find")
+  @Config("store.max.number.of.entries.to.return.from.journal")
   @Default("5000")
-  public final int storeMaxNumberOfEntriesToReturnForFind;
+  public final int storeMaxNumberOfEntriesToReturnFromJournal;
 
 
   /**
@@ -66,8 +66,8 @@ public class StoreConfig {
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability = verifiableProperties.getDoubleInRange(
             "store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
-    storeMaxNumberOfEntriesToReturnForFind = verifiableProperties.getInt(
-            "store.max.number.of.entries.to.return.for.find", 5000);
+    storeMaxNumberOfEntriesToReturnFromJournal = verifiableProperties.getIntInRange(
+            "store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
   }
 }
 

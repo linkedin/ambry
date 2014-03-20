@@ -2,13 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.*;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,14 +29,15 @@ final public class PutOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public PutOperation(String datacenterName,
-                      BlockingChannelPool connectionPool,
+                      ConnectionPool connectionPool,
                       ExecutorService requesterPool,
                       OperationContext oc,
                       BlobId blobId,
                       long operationTimeoutMs,
                       BlobProperties blobProperties,
                       ByteBuffer userMetadata,
-                      InputStream blobStream) throws CoordinatorException {
+                      InputStream blobStream,
+                      int connectionPoolCheckoutTimeout) throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
           new PutPolicy(datacenterName, blobId.getPartition()));
     this.blobProperties = blobProperties;
@@ -65,9 +60,14 @@ final public class PutOperation extends Operation {
                                            context.getClientId(),
                                            blobId,
                                            blobProperties,
-                                           userMetadata,
+                                           userMetadata.duplicate(),
                                            materializedBlobStream.duplicate());
-    return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
+    return new PutOperationRequest(connectionPool,
+                                   responseQueue,
+                                   context,
+                                   blobId,
+                                   replicaId,
+                                   putRequest);
   }
 
   @Override
@@ -102,12 +102,12 @@ final public class PutOperation extends Operation {
 }
 
 final class PutOperationRequest extends OperationRequest {
-  PutOperationRequest(BlockingChannelPool connectionPool,
-                      BlockingQueue<OperationResponse> responseQueue,
-                      OperationContext context,
-                      BlobId blobId,
-                      ReplicaId replicaId,
-                      RequestOrResponse request) {
+  protected PutOperationRequest(ConnectionPool connectionPool,
+                                BlockingQueue<OperationResponse> responseQueue,
+                                OperationContext context,
+                                BlobId blobId,
+                                ReplicaId replicaId,
+                                RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 

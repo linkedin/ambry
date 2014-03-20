@@ -7,6 +7,7 @@ import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.utils.Utils;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -26,8 +27,10 @@ import java.util.Properties;
  */
 public class MigrationTool {
 
-  public static void directoryWalk( String path , String prefix,
-                                    boolean ignorePrefix, Coordinator coordinator,
+  public static void directoryWalk( String path ,
+                                    String prefix,
+                                    boolean ignorePrefix,
+                                    Coordinator coordinator,
                                     FileWriter writer) throws CoordinatorException, InterruptedException {
 
     File root = new File( path );
@@ -42,7 +45,7 @@ public class MigrationTool {
         }
       }
       else {
-        System.out.println( "File:" + f.getAbsoluteFile() );
+        //System.out.println( "File:" + f.getAbsoluteFile() );
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
@@ -50,8 +53,11 @@ public class MigrationTool {
           stream = new FileInputStream(f);
           long startMs = System.currentTimeMillis();
           String id = coordinator.putBlob(props, ByteBuffer.wrap(usermetadata), stream);
-          System.out.println("Time taken to put " + (System.currentTimeMillis() - startMs));
+          //System.out.println("Time taken to put " + (System.currentTimeMillis() - startMs));
           writer.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
+        }
+        catch (CoordinatorException e) {
+          System.out.println("Error from coordinator for " + f.getAbsolutePath() + " " + e);
         }
         catch (FileNotFoundException e) {
           System.out.println("File not found path : " + f.getAbsolutePath() + " exception : " + e);
@@ -74,6 +80,7 @@ public class MigrationTool {
 
   public static void main(String args[]) {
     FileWriter writer = null;
+    AmbryCoordinator coordinator = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
@@ -100,6 +107,12 @@ public class MigrationTool {
                     .describedAs("partition_layout")
                     .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
+              parser.accepts("coordinatorConfigPath", "The config for the coordinator")
+                      .withRequiredArg()
+                      .describedAs("coordinator_config_path")
+                      .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
               parser.accepts("enableVerboseLogging", "Enables verbose logging")
                     .withOptionalArg()
@@ -114,6 +127,7 @@ public class MigrationTool {
       listOpt.add(folderPrefixInRootOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
+      listOpt.add(coordinatorConfigPathOpt);
 
       for(OptionSpec opt : listOpt) {
         if(!options.has(opt)) {
@@ -127,14 +141,19 @@ public class MigrationTool {
       String folderPrefixInRoot = options.valueOf(folderPrefixInRootOpt);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
+      String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
       writer = new FileWriter(logFile);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging)
         System.out.println("Enabled verbose logging");
-      Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(new Properties()), map);
-      directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
+      Properties props = Utils.loadProps(coordinatorConfigPath);
+      coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
+      coordinator.start();
+      while (true) {
+        directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
+      }
     }
     catch (Exception e) {
       System.err.println("Error on exit " + e);
@@ -148,6 +167,8 @@ public class MigrationTool {
           System.out.println("Error when closing the writer");
         }
       }
+      if (coordinator != null)
+        coordinator.shutdown();
     }
   }
 }

@@ -36,7 +36,7 @@ public class SocketServerInputSet extends InputStream implements Receive {
 
   @Override
   public boolean isReadComplete() {
-    return !(sizeRead < sizeToRead);
+    return !(buffer == null || sizeRead < sizeToRead);
   }
 
   @Override
@@ -47,8 +47,8 @@ public class SocketServerInputSet extends InputStream implements Receive {
         sizeBuffer.flip();
         // for now we support only intmax size. We need to extend it to streaming
         sizeToRead = (int)sizeBuffer.getLong();
-        buffer = ByteBuffer.allocate(sizeToRead - 8);
         sizeRead += 8;
+        buffer = ByteBuffer.allocate(sizeToRead - 8);
       }
     }
     if (buffer != null && sizeRead < sizeToRead) {

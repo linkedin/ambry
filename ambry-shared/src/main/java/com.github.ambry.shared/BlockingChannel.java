@@ -12,7 +12,7 @@ import java.nio.channels.*;
 /**
  * A blocking channel that is used to communicate with a server
  */
-public class BlockingChannel {
+public class BlockingChannel implements ConnectedChannel {
   private final String host;
   private final int port;
   private final int readBufferSize;
@@ -86,6 +86,7 @@ public class BlockingChannel {
     return connected;
   }
 
+  @Override
   public void send(Send request) throws IOException {
     if(!connected)
       throw new ClosedChannelException();
@@ -94,11 +95,12 @@ public class BlockingChannel {
     }
   }
 
+  @Override
   public InputStream receive() throws IOException {
     if(!connected)
       throw new ClosedChannelException();
 
-    // get the size and return the remaining response. Need to be done by network receive?
+    // consume the size header and return the remaining response. Need to be done by network receive?
     long toRead = 8;
     long read = 0;
     while (read < toRead) {
@@ -106,5 +108,15 @@ public class BlockingChannel {
       read++;
     }
     return readChannel;
+  }
+
+  @Override
+  public String getRemoteHost() {
+    return host;
+  }
+
+  @Override
+  public int getRemotePort() {
+    return port;
   }
 }

@@ -599,6 +599,7 @@ public class CoordinatorTest {
 
   void simple(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
+    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
     ac.start();
     for (int i = 0; i < 20; ++i) {
@@ -634,6 +635,7 @@ public class CoordinatorTest {
 
   void multiAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
+    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
 
@@ -691,6 +693,7 @@ public class CoordinatorTest {
 
   void remoteAC(ClusterMap clusterMap) throws JSONException, InterruptedException, StoreException, IOException,
           CoordinatorException {
+    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
 

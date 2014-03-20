@@ -53,20 +53,17 @@ class SocketServerResponse implements Response {
   private final int processor;
   private final Request request;
   private final Send output;
-  private final MetricsHistogram responseQueueTime;
-  private final MetricsHistogram responseSendTime;
+  private final NetworkRequestMetrics metrics;
   private long startQueueTimeInMs;
   private long startSendTimeInMs;
 
   public SocketServerResponse(Request request,
                               Send output,
-                              MetricsHistogram responseQueueTime,
-                              MetricsHistogram responseSendTime) {
+                              NetworkRequestMetrics metrics) {
     this.request = request;
     this.output = output;
     this.processor = ((SocketServerRequest)request).getProcessor();
-    this.responseQueueTime = responseQueueTime;
-    this.responseSendTime = responseSendTime;
+    this.metrics = metrics;
   }
 
   public Send getPayload() {
@@ -90,13 +87,13 @@ class SocketServerResponse implements Response {
   }
 
   public void onDequeueFromResponseQueue() {
-    if (responseQueueTime != null)
-      responseQueueTime.update(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
+    if (metrics != null)
+      metrics.updateResponseQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
   }
 
   public void onSendComplete() {
-    if (responseSendTime != null)
-      responseSendTime.update(SystemTime.getInstance().milliseconds() - startSendTimeInMs);
+    if (metrics != null)
+      metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - startSendTimeInMs);
   }
 }
 
@@ -135,12 +132,10 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   @Override
   public void sendResponse(Send payloadToSend,
                            Request originalRequest,
-                           MetricsHistogram responseQueueTime,
-                           MetricsHistogram responseSendTime) throws InterruptedException {
+                           NetworkRequestMetrics metrics) throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest,
                                                              payloadToSend,
-                                                             responseQueueTime,
-                                                             responseSendTime);
+                                                             metrics);
     response.onEnqueueIntoResponseQueue();
     responseQueues.get(response.getProcessor()).put(response);
     for(ResponseListener listener : responseListeners)
@@ -152,7 +147,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
    */
   @Override
   public void closeConnection(Request originalRequest) throws InterruptedException {
-    SocketServerResponse response = new SocketServerResponse(originalRequest, null, null, null);
+    SocketServerResponse response = new SocketServerResponse(originalRequest, null, null);
     responseQueues.get(response.getProcessor()).put(response);
     for(ResponseListener listener : responseListeners)
       listener.onResponse(response.getProcessor());

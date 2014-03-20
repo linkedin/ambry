@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
@@ -22,6 +23,7 @@ public class StoreMetrics {
   public final Counter nonzeroMessageRecovery;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
+  public Gauge<Long> currentCapacityUsed;
 
   public StoreMetrics(String name, MetricRegistry registry) {
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeGetResponse"));
@@ -37,5 +39,14 @@ public class StoreMetrics {
     nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobPersistentIndex.class, name + "nonZeroMessageRecovery"));
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegmentInfo.class, name + "bloomPositiveCount"));
     bloomFalsePositiveCount = registry.counter(MetricRegistry.name(IndexSegmentInfo.class, name + "bloomFalsePositiveCount"));
+  }
+
+  public void initializeCapacityUsedMetric(final Log log) {
+    currentCapacityUsed = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return log.getLogEndOffset();
+      }
+    };
   }
 }

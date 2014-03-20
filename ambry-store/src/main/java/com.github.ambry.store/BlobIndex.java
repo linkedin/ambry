@@ -14,10 +14,7 @@ import java.io.FileInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,8 +66,9 @@ public class BlobIndex {
       this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
       this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
       this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
-      this.journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements,
-                                     config.storeMaxNumberOfEntriesToReturnForFind);
+      this.journal = new BlobJournal(datadir,
+                                     config.storeIndexMaxNumberOfInmemElements,
+                                     config.storeMaxNumberOfEntriesToReturnFromJournal);
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();
       this.log = log;
@@ -253,22 +251,25 @@ public class BlobIndex {
    * @return The list of keys that are not found in the index
    * @throws StoreException
    */
-  public List<StoreKey> findMissingEntries(List<StoreKey> keys) {
-    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) {
+    Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
       if (!exists(key))
-        missingEntries.add(key);
+        missingKeys.add(key);
     }
-    return missingEntries;
+    return missingKeys;
   }
 
   /**
    * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
    * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
+   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
+   *                              return a list of entries whose total size is close to this value. The size can exceed
+   *                              in cases where summing a blob could exceed the max value.
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
-  public FindInfo findEntriesSince(FindToken token) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     StoreFindToken storeToken = (StoreFindToken)token;
     List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
     List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
@@ -286,14 +287,42 @@ public class BlobIndex {
       return new FindInfo(messageEntries, new StoreFindToken(largestOffset));
     }
     else {
+      long endOffset = -1;
+      long currentTotalSize = 0;
       for (JournalEntry entry : entries) {
         BlobIndexValue value = index.get(entry.getKey());
         messageEntries.add(new MessageInfo(entry.getKey(),
                                            value.getSize(),
                                            value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                            value.getTimeToLiveInMs()));
+        endOffset = entry.getOffset();
+        currentTotalSize += value.getSize();
+        if (currentTotalSize >= maxTotalSizeOfEntries)
+          break;
       }
-      return new FindInfo(messageEntries, new StoreFindToken(entries.get(entries.size() - 1).getOffset()));
+      eliminateDuplicates(messageEntries);
+      return new FindInfo(messageEntries, new StoreFindToken(endOffset));
+    }
+  }
+
+  /**
+   * We can have duplicate entries in the message entries since updates can happen to the same key. For example,
+   * insert a key followed by a delete. This would create two entries in the journal. A single findInfo
+   * could read both the entries. The findInfo should return as clean information as possible. This method removes
+   * the oldest duplicate in the list.
+   * @param messageEntries The message entry list where duplicates need to be removed
+   */
+  private void eliminateDuplicates(List<MessageInfo> messageEntries) {
+    Set<StoreKey> setToFindDuplicate = new HashSet<StoreKey>();
+    ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator(messageEntries.size());
+    while (messageEntriesIterator.hasPrevious()) {
+      MessageInfo messageInfo = messageEntriesIterator.previous();
+      if (setToFindDuplicate.contains(messageInfo.getStoreKey())) {
+        messageEntriesIterator.remove();
+      }
+      else {
+        setToFindDuplicate.add(messageInfo.getStoreKey());
+      }
     }
   }
 

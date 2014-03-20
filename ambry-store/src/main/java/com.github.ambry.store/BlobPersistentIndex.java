@@ -1,10 +1,8 @@
 package com.github.ambry.store;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,12 +18,7 @@ import java.io.FilenameFilter;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Comparator;
+import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
@@ -477,7 +470,7 @@ class IndexSegmentInfo {
         temp.renameTo(getFile());
       }
       catch (IOException e) {
-        logger.error("IO error while persisting index to disk {}", indexFile.getAbsoluteFile());
+        logger.error("IO error while persisting index to disk " + indexFile.getAbsoluteFile());
         throw new StoreException("IO error while persisting index to disk " +
                 indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
       }
@@ -591,11 +584,15 @@ class IndexSegmentInfo {
    * Gets all the entries upto maxEntries from the start of a given key(inclusive).
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved upto maxentries
-   * @param maxEntries The max number of entries to retreive
+   * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
+   * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
    * @throws IOException
    */
-  public void getEntriesSince(StoreKey key, int maxEntries, List<MessageInfo> entries) throws IOException {
+  public void getEntriesSince(StoreKey key,
+                              long maxTotalSizeOfEntriesInBytes,
+                              List<MessageInfo> entries,
+                              AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
     if (mapped.get()) {
       int index = 0;
       if (key != null)
@@ -603,7 +600,7 @@ class IndexSegmentInfo {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (entries.size() < maxEntries && index < totalEntries) {
+        while (currentTotalSizeOfEntriesInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
@@ -613,6 +610,7 @@ class IndexSegmentInfo {
                                              newValue.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                              newValue.getTimeToLiveInMs());
           entries.add(info);
+          currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
           index++;
         }
       }
@@ -627,8 +625,10 @@ class IndexSegmentInfo {
                                            entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                            entry.getValue().getTimeToLiveInMs());
         entries.add(info);
-        if (entries.size() == maxEntries)
+        currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
+        if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
           break;
+        }
       }
     }
   }
@@ -643,7 +643,6 @@ public class BlobPersistentIndex {
 
   private long maxInMemoryIndexSizeInBytes;
   private int maxInMemoryNumElements;
-  private int maxNumberOfEntriesToReturnForFind;
   private Log log;
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -691,7 +690,7 @@ public class BlobPersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      journal = new BlobJournal(config.storeIndexMaxNumberOfInmemElements, config.storeMaxNumberOfEntriesToReturnForFind);
+      journal = new BlobJournal(datadir, config.storeIndexMaxNumberOfInmemElements, config.storeMaxNumberOfEntriesToReturnFromJournal);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
         public int compare(File o1, File o2) {
@@ -752,7 +751,6 @@ public class BlobPersistentIndex {
                               TimeUnit.SECONDS);
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
-      this.maxNumberOfEntriesToReturnForFind = config.storeMaxNumberOfEntriesToReturnForFind;
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
@@ -871,8 +869,9 @@ public class BlobPersistentIndex {
     else {
       indexes.lastEntry().getValue().addEntries(entries, fileSpan.getEndOffset());
     }
-    for (BlobIndexEntry entry : entries)
+    for (BlobIndexEntry entry : entries) {
       journal.addEntry(entry.getValue().getOffset(), entry.getKey());
+    }
   }
 
   /**
@@ -963,7 +962,7 @@ public class BlobPersistentIndex {
   }
 
   /**
-   * Returns the blob read info for a given key
+   * Returns the blob read info for a given key that is not deleted or expired ttl
    * @param id The id of the entry whose info is required
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
@@ -981,63 +980,83 @@ public class BlobPersistentIndex {
     else if (value.getTimeToLiveInMs() != BlobIndexValue.TTL_Infinite &&
             SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
-      throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
+      throw new StoreException("id has expired ttl in index " + id, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
   }
 
   /**
-   * Returns the list of keys that are not found in the index from the given input keys
+   * Returns the list of keys that are not found in the index from the given input keys. This also checks
+   * keys that are marked for deletion and those that have an expired ttl
    * @param keys The list of keys that needs to be tested against the index
    * @return The list of keys that are not found in the index
    * @throws StoreException
    */
-  public List<StoreKey> findMissingEntries(List<StoreKey> keys) throws StoreException {
-    List<StoreKey> missingEntries = new ArrayList<StoreKey>();
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+    Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
-      if (!exists(key))
-        missingEntries.add(key);
+      if (!exists(key)) {
+        missingKeys.add(key);
+      }
     }
-    return missingEntries;
+    return missingKeys;
   }
 
   /**
    * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
    * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
+   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
+   *                              return a list of entries whose total size is close to this value.
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
-  public FindInfo findEntriesSince(FindToken token) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     try {
       StoreFindToken storeToken = (StoreFindToken)token;
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
+        logger.trace("Index: " + dataDir + " Getting entries since " + storeToken.getOffset());
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
         if (entries != null) {
+          long offsetEnd = -1;
+          long currentTotalSizeOfEntries = 0;
           for (JournalEntry entry : entries) {
             BlobIndexValue value = findKey(entry.getKey());
             messageEntries.add(new MessageInfo(entry.getKey(),
                                                value.getSize(),
                                                value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                                value.getTimeToLiveInMs()));
+            currentTotalSizeOfEntries += value.getSize();
+            offsetEnd = entry.getOffset();
+            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries)
+              break;
           }
-          return new FindInfo(messageEntries, new StoreFindToken(entries.get(entries.size() - 1).getOffset()));
+          logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
+          eliminateDuplicates(messageEntries);
+          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd));
         }
         else {
           // find index segment closest to the offset. get all entries after that
+
           Map.Entry<Long, IndexSegmentInfo> entry = indexes.floorEntry(storeToken.getOffset());
           StoreFindToken newToken = null;
           if (entry != null)
-            newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries);
+            newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
           else
             newToken = storeToken;
+          eliminateDuplicates(messageEntries);
+          logger.trace("Index: " + dataDir +
+                       " New offset from find info" +
+                       " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset() :
+                                       newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           return new FindInfo(messageEntries, newToken);
         }
       }
       else {
         long prevOffset = storeToken.getIndexStartOffset();
-        StoreFindToken newToken = findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries);
+        StoreFindToken newToken = findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
+        eliminateDuplicates(messageEntries);
         return new FindInfo(messageEntries, newToken);
       }
     }
@@ -1049,17 +1068,20 @@ public class BlobPersistentIndex {
 
   private StoreFindToken findEntriesFromOffset(long offset,
                                                StoreKey key,
-                                               List<MessageInfo> messageEntries) throws IOException, StoreException {
+                                               List<MessageInfo> messageEntries,
+                                               long maxTotalSizeOfEntries) throws IOException, StoreException {
     IndexSegmentInfo segment = indexes.get(offset);
-    segment.getEntriesSince(key, maxNumberOfEntriesToReturnForFind, messageEntries);
+    // Use atomic long here to pass by reference
+    AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
+    segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;
     long offsetEnd = -1;
-    while (messageEntries.size() < maxNumberOfEntriesToReturnForFind) {
+    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
       IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
       if (segment != lastSegment) {
-        segment.getEntriesSince(null, maxNumberOfEntriesToReturnForFind, messageEntries);
+        segment.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
         lastSegmentIndex = segment.getStartOffset();
       }
       else {
@@ -1072,7 +1094,8 @@ public class BlobPersistentIndex {
                                                value.getSize(),
                                                value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                                value.getTimeToLiveInMs()));
-            if (messageEntries.size() == maxNumberOfEntriesToReturnForFind)
+            currentTotalSizeOfEntries.addAndGet(value.getSize());
+            if (currentTotalSizeOfEntries.get() >= maxTotalSizeOfEntries)
               break;
           }
         }
@@ -1083,6 +1106,27 @@ public class BlobPersistentIndex {
       return new StoreFindToken(offsetEnd);
     else
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex);
+  }
+
+  /**
+   * We can have duplicate entries in the message entries since updates can happen to the same key. For example,
+   * insert a key followed by a delete. This would create two entries in the journal or the index. A single findInfo
+   * could read both the entries. The findInfo should return as clean information as possible. This method removes
+   * the oldest duplicate in the list.
+   * @param messageEntries The message entry list where duplicates need to be removed
+   */
+  private void eliminateDuplicates(List<MessageInfo> messageEntries) {
+    Set<StoreKey> setToFindDuplicate = new HashSet<StoreKey>();
+    ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator(messageEntries.size());
+    while (messageEntriesIterator.hasPrevious()) {
+      MessageInfo messageInfo = messageEntriesIterator.previous();
+      if (setToFindDuplicate.contains(messageInfo.getStoreKey())) {
+        messageEntriesIterator.remove();
+      }
+      else {
+        setToFindDuplicate.add(messageInfo.getStoreKey());
+      }
+    }
   }
 
   /**
@@ -1189,7 +1233,7 @@ class StoreFindToken implements FindToken {
   private static final short version = 0;
 
   public StoreFindToken() {
-    this(0, 0, null);
+    this(0, -1, null);
   }
 
   public StoreFindToken(StoreKey key, long indexStartOffset) {
@@ -1263,5 +1307,17 @@ class StoreFindToken implements FindToken {
     if (storeKey != null)
       bufWrap.put(storeKey.toBytes());
     return buf;
+  }
+
+  @Override
+  public String toString() {
+    String tokenStringFormat = "version: " + version;
+    if (storeKey != null) {
+      tokenStringFormat += " indexStartOffset " + indexStartOffset + " storeKey " + storeKey;
+    }
+    else {
+      tokenStringFormat += " offset " + offset;
+    }
+    return tokenStringFormat;
   }
 }

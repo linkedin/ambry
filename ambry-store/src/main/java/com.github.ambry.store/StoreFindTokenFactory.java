@@ -17,4 +17,9 @@ public class StoreFindTokenFactory implements FindTokenFactory {
   public FindToken getFindToken(DataInputStream stream) throws IOException {
     return StoreFindToken.fromBytes(stream, factory);
   }
+
+  @Override
+  public FindToken getNewFindToken() {
+    return new StoreFindToken();
+  }
 }

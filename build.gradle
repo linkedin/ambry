@@ -48,6 +48,20 @@ project(':ambry-api') {
   }
 }
 
+project(':ambry-clustermap') {
+  apply plugin: 'java'
+
+  dependencies {
+    compile project(':ambry-api')
+    compile project(':ambry-utils')
+    compile "log4j:log4j:$log4jVersion"
+    compile "org.json:json:$jsonVersion"
+    compile "org.slf4j:slf4j-api:$slf4jVersion"
+    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    testCompile "junit:junit:$junitVersion"
+  }
+}
+
 project(':ambry-shared') {
   apply plugin: 'java'
   
@@ -89,11 +103,13 @@ project(':ambry-server') {
     compile project(':ambry-shared')
     compile project(':ambry-store')
     compile project(':ambry-utils')
+    compile project(':ambry-replication')
     compile "com.codahale.metrics:metrics-core:$metricsVersion"
     compile "log4j:log4j:$log4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
+    testCompile project(':ambry-clustermap').sourceSets.test.output
   }
 }
 
@@ -110,6 +126,7 @@ project(':ambry-store') {
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
+    testCompile project(':ambry-clustermap').sourceSets.test.output
   }
 }
 
@@ -133,22 +150,14 @@ project(':ambry-replication') {
   dependencies {
     compile project(':ambry-api')
     compile project(':ambry-utils')
+    compile project(':ambry-store')
+    compile project(':ambry-shared')
     compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
-}
-
-project(':ambry-clustermap') {
-  apply plugin: 'java'
-
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-utils')
     compile "log4j:log4j:$log4jVersion"
-    compile "org.json:json:$jsonVersion"
     compile "org.slf4j:slf4j-api:$slf4jVersion"
     compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
     testCompile "junit:junit:$junitVersion"
+    testCompile project(':ambry-clustermap').sourceSets.test.output
   }
 }
 

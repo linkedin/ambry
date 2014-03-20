@@ -14,14 +14,12 @@ public interface RequestResponseChannel {
    * Queue's the response into the channel for the network server to pick up
    * @param payloadToSend The payload to be sent over the network
    * @param originalRequest The original request this response belongs to
-   * @param responseQueueTime The time spent by the response in the response queue is measured using this metric
-   * @param responseSendTime The time spent sending the response is measured using this metric
+   * @param metrics The set of metrics tracked at the network layer
    * @throws InterruptedException
    */
   public void sendResponse(Send payloadToSend,
                            Request originalRequest,
-                           MetricsHistogram responseQueueTime,
-                           MetricsHistogram responseSendTime) throws InterruptedException;
+                           NetworkRequestMetrics metrics) throws InterruptedException;
 
   /**
    * Receives the request from the channel

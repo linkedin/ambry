@@ -11,6 +11,7 @@ import com.codahale.metrics.MetricRegistry;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.io.IOException;
 
 /**
@@ -81,11 +82,12 @@ public class BlobStore implements Store {
         index = new BlobPersistentIndex(dataDir, scheduler, log, config, factory, recovery, metrics);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
+        metrics.initializeCapacityUsedMetric(log);
         started = true;
       }
       catch (Exception e) {
-        logger.error("Error while starting store for directory {} with exception {}",dataDir, e);
-        throw new StoreException("Error while starting store for dir " + dataDir, StoreErrorCodes.Initialization_Error);
+        logger.error("Error while starting store for directory " + dataDir, e);
+        throw new StoreException("Error while starting store for dir " + dataDir, e, StoreErrorCodes.Initialization_Error);
       }
       finally {
         context.stop();
@@ -110,7 +112,7 @@ public class BlobStore implements Store {
       return new StoreInfo(readSet, messageInfo);
     }
     catch (IOException e) {
-      throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);
+      throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
     }
     finally {
       context.stop();
@@ -128,7 +130,7 @@ public class BlobStore implements Store {
         // if any of the keys alreadys exist in the store, we fail
         for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
           if (index.exists(info.getStoreKey())) {
-            throw new StoreException("key {} already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+            throw new StoreException("key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
           }
         }
         long writeStartOffset = log.getLogEndOffset();
@@ -148,7 +150,7 @@ public class BlobStore implements Store {
         index.addToIndex(indexEntries, fileSpan);
       }
       catch (IOException e) {
-        throw new StoreException("io error while trying to fetch blobs : " + e, StoreErrorCodes.IOError);
+        throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
       }
       finally {
         context.stop();
@@ -201,6 +203,28 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+    // TODO add metrics
+    return index.findEntriesSince(token, maxTotalSizeOfEntries);
+  }
+
+  @Override
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+    // TODO add metrics
+    return index.findMissingKeys(keys);
+  }
+
+  @Override
+  public boolean isKeyDeleted(StoreKey key) throws StoreException {
+    // TODO add metrics
+    BlobIndexValue value = index.findKey(key);
+    if (value == null)
+      throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
+                               StoreErrorCodes.ID_Not_Found);
+    return value.isFlagSet(BlobIndexValue.Flags.Delete_Index);
+  }
+
+  @Override
   public void shutdown() throws StoreException {
     synchronized (lock) {
       checkStarted();
@@ -210,14 +234,14 @@ public class BlobStore implements Store {
         started = false;
       }
       catch (Exception e) {
-        logger.error("Shutdown of store failed for directory {}", dataDir);
+        logger.error("Shutdown of store failed for directory " + dataDir, e);
       }
       finally {
         try {
           fileLock.destroy();
         }
         catch (IOException e) {
-          logger.error("IO Exception while trying to close the file lock {}", e);
+          logger.error("IO Exception while trying to close the file lock", e);
         }
       }
     }

@@ -33,7 +33,7 @@ public class Utils {
     // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
     int read = input.read(bytes);
     if (read != size) {
-      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+      throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size");
     }
     return new String(bytes, "UTF-8");
   }
@@ -45,7 +45,7 @@ public class Utils {
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
     if (read != size) {
-      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+      throw new IllegalArgumentException("readIntString : the size of the input does not match the actual data size");
     }
     return new String(bytes, "UTF-8");
   }
@@ -57,7 +57,7 @@ public class Utils {
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
-      throw new IllegalArgumentException("the size of the input does not match the actual data size");
+      throw new IllegalArgumentException("readIntBuffer : the size of the input does not match the actual data size");
     }
     return buffer;
   }
@@ -69,7 +69,7 @@ public class Utils {
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
-        throw new IllegalArgumentException("the size of the input does not match the actual data size");
+        throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
     }
     return buffer;
   }
@@ -103,7 +103,7 @@ public class Utils {
     thread.setDaemon(daemon);
     thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             public void uncaughtException(Thread t, Throwable e) {
-              //error("Uncaught exception in thread '" + t.getName + "':", e)
+              e.printStackTrace();
           }
         });
     return thread;

@@ -5,13 +5,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.GetRequest;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.BlockingChannelPool;
+import com.github.ambry.shared.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,14 +40,14 @@ public abstract class GetOperation extends Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  GetOperation(String datacenterName,
-               BlockingChannelPool connectionPool,
-               ExecutorService requesterPool,
-               OperationContext oc,
-               BlobId blobId,
-               long operationTimeoutMs,
-               ClusterMap clusterMap,
-               MessageFormatFlags flags) throws CoordinatorException {
+  public GetOperation(String datacenterName,
+                      ConnectionPool connectionPool,
+                      ExecutorService requesterPool,
+                      OperationContext oc,
+                      BlobId blobId,
+                      long operationTimeoutMs,
+                      ClusterMap clusterMap,
+                      MessageFormatFlags flags) throws CoordinatorException {
     super(datacenterName,
           connectionPool,
           requesterPool,
@@ -117,13 +111,13 @@ public abstract class GetOperation extends Operation {
 abstract class GetOperationRequest extends OperationRequest {
   private final ClusterMap clusterMap;
 
-  GetOperationRequest(BlockingChannelPool connectionPool,
-                      BlockingQueue<OperationResponse> responseQueue,
-                      OperationContext context,
-                      BlobId blobId,
-                      ReplicaId replicaId,
-                      RequestOrResponse request,
-                      ClusterMap clusterMap) {
+  protected GetOperationRequest(ConnectionPool connectionPool,
+                                BlockingQueue<OperationResponse> responseQueue,
+                                OperationContext context,
+                                BlobId blobId,
+                                ReplicaId replicaId,
+                                RequestOrResponse request,
+                                ClusterMap clusterMap) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
     this.clusterMap = clusterMap;
   }

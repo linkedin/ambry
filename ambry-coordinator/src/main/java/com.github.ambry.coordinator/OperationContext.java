@@ -8,13 +8,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class OperationContext {
   // currentCount wrapping around from MAX_VALUE to MIN_VALUE is OK. This should take long enough that log files
   // close together in time (days to weeks) contain only unique correlation ids.
-  static private AtomicInteger currentCount = new AtomicInteger(Integer.MIN_VALUE);
+  private static final AtomicInteger currentCount = new AtomicInteger(Integer.MIN_VALUE);
   private String clientId;
   private int correlationId;
+  private int connectionPoolCheckoutTimeout;
 
-  public OperationContext(String clientId) {
+  public OperationContext(String clientId, int connectionPoolCheckoutTimeout) {
     this.clientId = clientId;
     this.correlationId = currentCount.incrementAndGet();
+    this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
   }
 
   public String getClientId() {
@@ -23,6 +25,10 @@ public class OperationContext {
 
   public int getCorrelationId() {
     return correlationId;
+  }
+
+  public int getConnectionPoolCheckoutTimeout() {
+    return connectionPoolCheckoutTimeout;
   }
 
   @Override

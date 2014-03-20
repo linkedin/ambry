@@ -34,13 +34,13 @@ public class BlobPropertySerDe {
 
   public static int getBlobPropertySize(BlobProperties properties) {
     return TTL_Field_Size_In_Bytes +
-            Private_Field_Size_In_Bytes +
-            CreationTime_Field_Size_In_Bytes +
-            BlobSize_Field_Size_In_Bytes +
-            UserMetadataSize_Field_Size_In_Bytes +
-            Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getContentType()) +
-            Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getOwnerId()) +
-            Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getServiceId());
+           Private_Field_Size_In_Bytes +
+           CreationTime_Field_Size_In_Bytes +
+           BlobSize_Field_Size_In_Bytes +
+           UserMetadataSize_Field_Size_In_Bytes +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getContentType()) +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getOwnerId()) +
+           Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getServiceId());
   }
 
   public static BlobProperties getBlobPropertyFromStream(DataInputStream stream) throws IOException {

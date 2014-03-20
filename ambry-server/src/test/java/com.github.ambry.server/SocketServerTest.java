@@ -1,6 +1,8 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -57,7 +59,7 @@ public class SocketServerTest {
 
     PutRequest emptyRequest = new PutRequest(correlationId,
                                              "test",
-                                             new BlobId(new MockPartitionId()),
+                                             new BlobId(new MockPartitionId(null)),
                                              new BlobProperties(10, "id"), ByteBuffer.wrap(bufmetadata), stream
     );
 
@@ -93,7 +95,7 @@ public class SocketServerTest {
 
     // send response back and ensure response is received
     PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);
-    requestResponseChannel.sendResponse(response, request, null, null);
+    requestResponseChannel.sendResponse(response, request, null);
     InputStream streamResponse = channel.receive();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);

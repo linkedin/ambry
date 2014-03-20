@@ -1,6 +1,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -17,6 +18,7 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 
 public class BlobIndexTest {
@@ -437,9 +439,10 @@ public class BlobIndexTest {
       keys.add(missingId);
       keys.add(blobId1);
       keys.add(blobId2);
-      List<StoreKey> missing = index.findMissingEntries(keys);
+      Set<StoreKey> missing = index.findMissingKeys(keys);
       Assert.assertEquals(missing.size(), 1);
-      Assert.assertArrayEquals(missing.get(0).toBytes(), missingId.toBytes());
+      StoreKey missingKey = missing.iterator().next();
+      Assert.assertArrayEquals(missingKey.toBytes(), missingId.toBytes());
     }
     catch (Exception e) {
       Assert.assertTrue(false);
@@ -502,16 +505,16 @@ public class BlobIndexTest {
 
       index.addToIndex(list, new FileSpan(0, 1200));
       StoreFindToken token = new StoreFindToken(900);
-      FindInfo info1 = index.findEntriesSince(token);
+      FindInfo info1 = index.findEntriesSince(token, 100000);
       List<MessageInfo> entries = info1.getMessageEntries();
       Assert.assertEquals(entries.size(), 3);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId10);
       Assert.assertEquals(entries.get(1).getStoreKey(), blobId11);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId12);
-      info1 = index.findEntriesSince(info1.getFindToken());
+      info1 = index.findEntriesSince(info1.getFindToken(), 100000);
       Assert.assertEquals(info1.getMessageEntries().size(), 1);
       token = new StoreFindToken();
-      info1 = index.findEntriesSince(token);
+      info1 = index.findEntriesSince(token, 100000);
       Assert.assertEquals(info1.getMessageEntries().size(), 12);
     }
     catch (Exception e) {
