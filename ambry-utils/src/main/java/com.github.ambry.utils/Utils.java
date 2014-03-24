@@ -24,10 +24,17 @@ import java.util.Random;
  * A set of utility methods
  */
 public class Utils {
+  /**
+   * Constant to define "infinite" time.
+   * <p/>
+   * Currently used in lieu of either an epoch based ms expiration time or a seconds based TTL (relative to creation
+   * time).
+   */
+  public static final long Infinite_Time = -1;
 
   public static String readShortString(DataInputStream input) throws IOException {
     Short size = input.readShort();
-    if(size <= 0)
+    if (size <= 0)
       return null;
     byte[] bytes = new byte[size];
     // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
@@ -40,7 +47,7 @@ public class Utils {
 
   public static String readIntString(DataInputStream input) throws IOException {
     int size = input.readInt();
-    if(size <= 0)
+    if (size <= 0)
       return null;
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
@@ -65,17 +72,18 @@ public class Utils {
   public static ByteBuffer readShortBuffer(DataInputStream input) throws IOException {
     short size = input.readShort();
     if (size < 0)
-        return null;
+      return null;
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
-        throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
+      throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
     }
     return buffer;
   }
 
   /**
    * Create a new thread
+   *
    * @param runnable The work for the thread to do
    * @param daemon Should the thread block JVM shutdown?
    * @return The unstarted thread
@@ -84,15 +92,16 @@ public class Utils {
     Thread thread = new Thread(runnable);
     thread.setDaemon(daemon);
     thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            public void uncaughtException(Thread t, Throwable e) {
-              //error("Uncaught exception in thread '" + t.getName + "':", e)
-          }
-        });
+      public void uncaughtException(Thread t, Throwable e) {
+        //error("Uncaught exception in thread '" + t.getName + "':", e)
+      }
+    });
     return thread;
   }
 
   /**
    * Create a new thread
+   *
    * @param name The name of the thread
    * @param runnable The work for the thread to do
    * @param daemon Should the thread block JVM shutdown?
@@ -102,15 +111,16 @@ public class Utils {
     Thread thread = new Thread(runnable, name);
     thread.setDaemon(daemon);
     thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            public void uncaughtException(Thread t, Throwable e) {
-              e.printStackTrace();
-          }
-        });
+      public void uncaughtException(Thread t, Throwable e) {
+        e.printStackTrace();
+      }
+    });
     return thread;
   }
 
   /**
    * Create a daemon thread
+   *
    * @param runnable The runnable to execute in the background
    * @return The unstarted thread
    */
@@ -120,6 +130,7 @@ public class Utils {
 
   /**
    * Create a daemon thread
+   *
    * @param name The name of the thread
    * @param runnable The runnable to execute in the background
    * @return The unstarted thread
@@ -132,7 +143,7 @@ public class Utils {
    * Open a channel for the given file
    */
   public static FileChannel openChannel(File file, boolean mutable) throws FileNotFoundException {
-    if(mutable)
+    if (mutable)
       return new RandomAccessFile(file, "rw").getChannel();
     else
       return new FileInputStream(file).getChannel();
@@ -141,18 +152,16 @@ public class Utils {
   /**
    * Instantiate a class instance from a given className with an arg
    */
-   public static <T> T getObj(String className, Object arg)
-           throws ClassNotFoundException, InstantiationException,
-           IllegalAccessException, NoSuchMethodException, InvocationTargetException {
-     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors())
-     {
-       if (ctor.getParameterTypes().length == 1 && ctor.getParameterTypes()[0].isAssignableFrom(arg.getClass()))
-       {
-         return (T)ctor.newInstance(arg);
-       }
-     }
-     return null;
-   }
+  public static <T> T getObj(String className, Object arg)
+          throws ClassNotFoundException, InstantiationException,
+          IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+    for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
+      if (ctor.getParameterTypes().length == 1 && ctor.getParameterTypes()[0].isAssignableFrom(arg.getClass())) {
+        return (T)ctor.newInstance(arg);
+      }
+    }
+    return null;
+  }
 
   /**
    * Instantiate a class instance from a given className.
@@ -166,22 +175,23 @@ public class Utils {
   /**
    * Compute the hash code for the given items
    */
-   public static int hashcode(Object[] items) {
-     if(items == null)
-       return 0;
-     int h = 1;
-     int i = 0;
-     while(i < items.length) {
-       if(items[i] != null) {
-         h = 31 * h + items[i].hashCode();
-         i += 1;
-       }
-     }
-     return h;
-   }
+  public static int hashcode(Object[] items) {
+    if (items == null)
+      return 0;
+    int h = 1;
+    int i = 0;
+    while (i < items.length) {
+      if (items[i] != null) {
+        h = 31 * h + items[i].hashCode();
+        i += 1;
+      }
+    }
+    return h;
+  }
 
   /**
    * Compute the CRC32 of the byte array
+   *
    * @param bytes The array to compute the checksum for
    * @return The CRC32
    */
@@ -191,6 +201,7 @@ public class Utils {
 
   /**
    * Compute the CRC32 of the segment of the byte array given by the specificed size and offset
+   *
    * @param bytes The bytes to checksum
    * @param offset the offset at which to begin checksumming
    * @param size the number of bytes to checksum
@@ -204,6 +215,7 @@ public class Utils {
 
   /**
    * Read a properties file from the given path
+   *
    * @param filename The path of the file to read
    */
   public static Properties loadProps(String filename) throws FileNotFoundException, IOException {
@@ -215,6 +227,7 @@ public class Utils {
 
   /**
    * Serializes a nullable string into byte buffer
+   *
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
    */
@@ -229,6 +242,7 @@ public class Utils {
 
   /**
    * Returns the length of a nullable string
+   *
    * @param value The string whose length is needed
    * @return The length of the string. 0 if null.
    */
@@ -249,7 +263,8 @@ public class Utils {
       File clusterFile = new File(path);
       fileWriter = new FileWriter(clusterFile);
       fileWriter.write(string);
-    } finally {
+    }
+    finally {
       if (fileWriter != null) {
         fileWriter.close();
       }
@@ -322,7 +337,7 @@ public class Utils {
       RandomAccessFile rfile = null;
       try {
         rfile = new RandomAccessFile(file, "rw");
-     }
+      }
       finally {
         if (rfile != null)
           rfile.close();
@@ -331,23 +346,36 @@ public class Utils {
   }
 
   /**
-   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from
-   * {@link java.util.Random#nextInt()}.
+   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from {@link java.util.Random#nextInt()}.
    *
    * @param n the bound
    * @return a value select randomly from the range {@code [0..n)}.
    */
   public static long getRandomLong(long n) {
-    if (n<=0) {
+    if (n <= 0) {
       throw new IllegalArgumentException("Cannot generate random long in range [0,n) for n<=0.");
     }
 
     final int BITS_PER_LONG = 63;
-      long bits, val;
-      do {
-        bits = new Random().nextLong() & (~(1L << BITS_PER_LONG));
-        val = bits % n;
-      } while (bits - val + (n - 1) < 0L);
-      return val;
+    long bits, val;
+    do {
+      bits = new Random().nextLong() & (~(1L << BITS_PER_LONG));
+      val = bits % n;
+    } while (bits - val + (n - 1) < 0L);
+    return val;
+  }
+
+  /**
+   * Adds some number of seconds to an epoch time in ms.
+   *
+   * @param epochTimeInMs
+   * @param deltaTimeInSeconds
+   * @return epoch time in milliseconds or Infinite_Time.
+   */
+  public static long addSecondsToEpochTime(long epochTimeInMs, long deltaTimeInSeconds) {
+    if (deltaTimeInSeconds == Infinite_Time || epochTimeInMs == Infinite_Time) {
+      return Infinite_Time;
+    }
+    return epochTimeInMs + (deltaTimeInSeconds * Time.MsPerSec);
   }
 }

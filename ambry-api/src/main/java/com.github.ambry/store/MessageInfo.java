@@ -6,22 +6,22 @@ package com.github.ambry.store;
 public class MessageInfo {
   private StoreKey key;
   private long size;
-  private long timeToLiveInMs;
+  private long expirationTimeInMs;
   private boolean isDeleted;
 
-  public MessageInfo(StoreKey key, long size, long timeToLiveInMs) {
-    this(key, size, false, timeToLiveInMs);
+  public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
+    this(key, size, false, expirationTimeInMs);
   }
 
   public MessageInfo(StoreKey key, long size, boolean deleted) {
     this(key, size, deleted, -1);
   }
 
-  public MessageInfo(StoreKey key, long size, boolean deleted, long timeToLiveInMs) {
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;
-    this.timeToLiveInMs = timeToLiveInMs;
+    this.expirationTimeInMs = expirationTimeInMs;
   }
 
   public MessageInfo(StoreKey key, long size) {
@@ -36,8 +36,8 @@ public class MessageInfo {
     return size;
   }
 
-  public long getTimeToLiveInMs() {
-    return timeToLiveInMs;
+  public long getExpirationTimeInMs() {
+    return expirationTimeInMs;
   }
 
   public boolean isDeleted() {

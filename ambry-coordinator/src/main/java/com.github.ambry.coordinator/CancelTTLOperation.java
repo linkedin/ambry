@@ -1,8 +1,8 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.shared.*;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +36,7 @@ final public class CancelTTLOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     TTLRequest ttlRequest = new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId,
-                                           BlobProperties.Infinite_TTL);
+                                           Utils.Infinite_Time);
     return new CancelTTLOperationRequest(connectionPool,
                                          responseQueue,
                                          context,

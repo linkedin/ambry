@@ -1,8 +1,5 @@
 package com.github.ambry.utils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -10,10 +7,13 @@ import java.nio.channels.Channels;
 
 public class ByteBufferInputStream extends InputStream {
   private ByteBuffer byteBuffer;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private int mark;
+  private int readLimit;
 
   public ByteBufferInputStream(ByteBuffer byteBuffer) {
     this.byteBuffer = byteBuffer;
+    this.mark = -1;
+    this.readLimit = -1;
   }
 
   public ByteBufferInputStream(InputStream stream, int size) throws IOException {
@@ -23,6 +23,8 @@ public class ByteBufferInputStream extends InputStream {
       read += Channels.newChannel(stream).read(byteBuffer);
     }
     byteBuffer.flip();
+    this.mark = -1;
+    this.readLimit = -1;
   }
 
   @Override
@@ -44,10 +46,31 @@ public class ByteBufferInputStream extends InputStream {
     return byteBuffer.remaining();
   }
 
+  @Override
+  public synchronized void reset() throws IOException {
+    if (readLimit == -1 || mark == -1 ) {
+      throw new IOException("Mark not set before reset invoked.");
+    }
+    if (byteBuffer.position() - mark > readLimit) {
+      throw new IOException("Read limit exceeded before reset invoked.");
+    }
+    byteBuffer.reset();
+  }
+
+  @Override
+  public synchronized void mark(int readLimit) {
+    this.mark = byteBuffer.position();
+    this.readLimit = readLimit;
+    byteBuffer.mark();
+  }
+
+  @Override
+  public boolean markSupported() {
+    return true;
+  }
+
   public ByteBufferInputStream duplicate() {
     return new ByteBufferInputStream(byteBuffer.duplicate());
   }
 }
-
-
 

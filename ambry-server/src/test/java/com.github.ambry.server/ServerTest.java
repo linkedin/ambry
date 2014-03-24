@@ -1,14 +1,32 @@
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
-import com.github.ambry.messageformat.*;
-import com.github.ambry.replication.ReplicationException;
-import com.github.ambry.shared.*;
-import com.github.ambry.store.*;
+import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlockingChannel;
+import com.github.ambry.shared.DeleteRequest;
+import com.github.ambry.shared.DeleteResponse;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.PutResponse;
+import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
@@ -16,12 +34,16 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
-import java.util.List;
 
 public class ServerTest {
 
@@ -410,7 +432,7 @@ public class ServerTest {
             FindToken token = factory.getFindToken(dataInputStream);
             ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
             Assert.assertEquals(bytebufferToken.getShort(), 0);
-            Assert.assertEquals(bytebufferToken.getLong(), 13086);
+            Assert.assertEquals(bytebufferToken.getLong(), 13062);
           }
           long crc = crcStream.getValue();
           Assert.assertEquals(crc, dataInputStream.readLong());

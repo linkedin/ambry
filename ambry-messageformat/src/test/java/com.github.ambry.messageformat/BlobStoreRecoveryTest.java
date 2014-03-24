@@ -89,6 +89,7 @@ public class BlobStoreRecoveryTest {
             new MockId("id3"),
             new MockId("id4")
     };
+    long expectedExpirationTimeMs = 0;
 
     public void initialize() throws MessageFormatException, IOException {
       // write 3 new blob messages, and 2 ttl and delete update messages. write the last
@@ -100,17 +101,20 @@ public class BlobStoreRecoveryTest {
       long sizeToWrite = 0;
 
       // 1st message
+      BlobProperties blobProperties =  new BlobProperties(4000,
+                                                          "test",
+                                                          "mem1",
+                                                          "img",
+                                                          false,
+                                                          9999);
+      expectedExpirationTimeMs = Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(),
+                                                             blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 = new PutMessageFormatInputStream(keys[0],
-                                                                         new BlobProperties(4000,
-                                                                                            "test",
-                                                                                            "mem1",
-                                                                                            "img",
-                                                                                            false,
-                                                                                            0,
-                                                                                            9999),
+                                                                         blobProperties,
                                                                          ByteBuffer.wrap(usermetadata),
                                                                          new ByteBufferInputStream(ByteBuffer.wrap(blob)),
                                                                          4000);
+
       // 2nd message
       PutMessageFormatInputStream msg2 = new PutMessageFormatInputStream(keys[1],
               new BlobProperties(4000, "test"),
@@ -174,6 +178,7 @@ public class BlobStoreRecoveryTest {
       return buffer.capacity();
     }
   }
+
   @Test
   public void recoveryTest() throws MessageFormatException, IOException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
@@ -183,11 +188,11 @@ public class BlobStoreRecoveryTest {
     List<MessageInfo> recoveredMessages = recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
     Assert.assertEquals(recoveredMessages.size(), 5);
     Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
-    Assert.assertEquals(recoveredMessages.get(0).getTimeToLiveInMs(), 9999);
+    Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);
     Assert.assertEquals(recoveredMessages.get(1).getStoreKey(), readrecovery.keys[1]);
     Assert.assertEquals(recoveredMessages.get(2).getStoreKey(), readrecovery.keys[2]);
     Assert.assertEquals(recoveredMessages.get(3).getStoreKey(), readrecovery.keys[0]);
-    Assert.assertEquals(recoveredMessages.get(3).getTimeToLiveInMs(), BlobProperties.Infinite_TTL);
+    Assert.assertEquals(recoveredMessages.get(3).getExpirationTimeInMs(), Utils.Infinite_Time);
     Assert.assertEquals(recoveredMessages.get(4).getStoreKey(), readrecovery.keys[1]);
     Assert.assertEquals(recoveredMessages.get(4).isDeleted(), true);
   }

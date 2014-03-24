@@ -1,6 +1,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.*;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,9 +54,11 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               // for validity
               MessageFormatRecord.deserializeUserMetadata(stream);
               MessageFormatRecord.deserializeBlob(stream);
-              MessageInfo info = new MessageInfo(key,
-                                                 header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                                                 properties.getTimeToLiveInMs());
+              MessageInfo info =
+                      new MessageInfo(key,
+                                      header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                                      Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(),
+                                                                  properties.getTimeToLiveInSeconds()));
               messageRecovered.add(info);
             }
             else if (headerFormat.getTTLRecordRelativeOffset() != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
@@ -93,7 +96,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
     if (logger.isInfoEnabled()) {
       for (MessageInfo messageInfo : messageRecovered)
         logger.info("Message Recovered key {} size {} ttl {} deleted {}",
-                messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.getTimeToLiveInMs(), messageInfo.isDeleted());
+                messageInfo.getStoreKey(), messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted());
     }
     return messageRecovered;
   }

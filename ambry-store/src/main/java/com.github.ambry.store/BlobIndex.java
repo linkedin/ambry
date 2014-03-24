@@ -108,9 +108,9 @@ public class BlobIndex {
             FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
             markAsDeleted(info.getStoreKey(), fileSpan);
           }
-          else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite) {
+          else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
             FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
-            updateTTL(info.getStoreKey(), BlobIndexValue.TTL_Infinite, fileSpan);
+            updateTTL(info.getStoreKey(), Utils.Infinite_Time, fileSpan);
           }
           else
             throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
@@ -119,12 +119,12 @@ public class BlobIndex {
         }
         else {
           // add a new entry to the index
-          BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getTimeToLiveInMs());
+          BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
           verifyFileEndOffset(new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize()));
           FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
           addToIndex(new BlobIndexEntry(info.getStoreKey(), newValue), fileSpan);
           logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
-                  info.getStoreKey(), info.getSize(), info.getTimeToLiveInMs(), info.isDeleted());
+                  info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
         }
         runningOffset += info.getSize();
       }
@@ -237,8 +237,7 @@ public class BlobIndex {
       logger.error("id {} has been deleted", id);
       throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
     }
-    else if (value.getTimeToLiveInMs() != BlobIndexValue.TTL_Infinite &&
-             SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
+    else if (value.isExpired()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
     }

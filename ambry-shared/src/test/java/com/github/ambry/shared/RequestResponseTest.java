@@ -5,6 +5,7 @@ import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Utils;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -41,8 +42,7 @@ public class RequestResponseTest {
                                                        "memberId",
                                                        "contentType",
                                                        false,
-                                                       0,
-                                                       BlobProperties.Infinite_TTL);
+                                                       Utils.Infinite_Time);
 
     PutRequest request = new PutRequest(correlationId,
             clientId,
