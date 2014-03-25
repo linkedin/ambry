@@ -1,19 +1,19 @@
 package com.github.ambry.messageformat;
 
-import java.nio.ByteBuffer;
-import java.util.Random;
-
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.nio.ByteBuffer;
+import java.util.Random;
 
 public class MessageFormatRecordTest {
   @Test
   public void deserializeTest() {
     try {
       // Test Blob property V1 Record
-      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 0, 1234);
+      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
       ByteBuffer stream = ByteBuffer.allocate(MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(properties));
       MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(stream, properties);
       stream.flip();

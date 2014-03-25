@@ -57,6 +57,8 @@ public interface Coordinator {
    */
   ByteBuffer getBlobUserMetadata(String blobId) throws CoordinatorException;
 
+  // TODO: Add interface 'BlobInfo getBlobInfo(String blobId)' to coordinator
+
   /**
    * Gets the blob that corresponds to the specified blob id.
    *

@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.*;
@@ -800,8 +799,8 @@ public class BlobPersistentIndex {
         logger.info("Msg already exist with key {}", info.getStoreKey());
         if (info.isDeleted())
           value.setFlag(BlobIndexValue.Flags.Delete_Index);
-        else if (info.getTimeToLiveInMs() == BlobIndexValue.TTL_Infinite)
-          value.setTimeToLive(BlobIndexValue.TTL_Infinite);
+        else if (info.getExpirationTimeInMs() == Utils.Infinite_Time)
+          value.setTimeToLive(Utils.Infinite_Time);
         else
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
@@ -811,12 +810,12 @@ public class BlobPersistentIndex {
       }
       else {
         // create a new entry in the index
-        BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getTimeToLiveInMs());
+        BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), newValue),
                                   runningOffset + info.getSize());
         logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
-                info.getStoreKey(), info.getSize(), info.getTimeToLiveInMs(), info.isDeleted());
+                info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
       }
       runningOffset += info.getSize();
     }
@@ -977,8 +976,7 @@ public class BlobPersistentIndex {
       logger.error("id {} has been deleted", id);
       throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
     }
-    else if (value.getTimeToLiveInMs() != BlobIndexValue.TTL_Infinite &&
-            SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
+    else if (value.isExpired()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id has expired ttl in index " + id, StoreErrorCodes.TTL_Expired);
     }

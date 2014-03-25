@@ -23,7 +23,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class BlobPersistantIndexTest {
+public class BlobPersistentIndexTest {
 
   @Rule
   public ExpectedException exception = ExpectedException.none();
@@ -363,14 +363,14 @@ public class BlobPersistantIndexTest {
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));
-          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
+          infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
           return infos;
         }
       });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(BlobIndexValue.Flags.Delete_Index), true);
-      Assert.assertEquals(value5.getTimeToLiveInMs(), BlobIndexValue.TTL_Infinite);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), Utils.Infinite_Time);
       Assert.assertEquals(value4.getSize(), 1000);
       Assert.assertEquals(value4.getOffset(), 5000);
       Assert.assertEquals(value5.getSize(), 1000);
@@ -444,7 +444,7 @@ public class BlobPersistantIndexTest {
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));
-          infos.add(new MessageInfo(blobId5, 100, BlobIndexValue.TTL_Infinite));
+          infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
           return infos;
 
         }
@@ -881,7 +881,7 @@ public class BlobPersistantIndexTest {
       List<MessageInfo> messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
-      Assert.assertEquals(messageEntries.get(0).getTimeToLiveInMs(), 12345);
+      Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
       Assert.assertEquals(messageEntries.size(), 12);
       Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId12);
 

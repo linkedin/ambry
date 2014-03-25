@@ -1,6 +1,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Utils;
 
 import java.nio.ByteBuffer;
 
@@ -20,7 +21,7 @@ import java.nio.ByteBuffer;
 public class TTLMessageFormatInputStream extends MessageFormatInputStream {
 
   public TTLMessageFormatInputStream(StoreKey key, long timeToLiveInMs) throws MessageFormatException {
-    if (timeToLiveInMs < BlobProperties.Infinite_TTL) {
+    if (timeToLiveInMs < Utils.Infinite_Time) {
       logger.error("Invalid TTL {}", timeToLiveInMs);
       throw new IllegalArgumentException("Invalid TTL " + timeToLiveInMs);
     }

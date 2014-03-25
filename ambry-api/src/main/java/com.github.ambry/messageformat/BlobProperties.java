@@ -1,6 +1,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 
 /**
  * The properties of a blob that the client can set at time of put. The blob size and serviceId are mandatory fields and
@@ -13,12 +14,8 @@ public class BlobProperties {
   protected String ownerId;
   protected String contentType;
   protected boolean isPrivate;
-  protected long timeToLiveInMs;
-  protected int userMetadataSize;
+  protected long timeToLiveInSeconds;
   protected long creationTimeInMs;
-
-
-  public static final long Infinite_TTL = -1;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -30,8 +27,7 @@ public class BlobProperties {
          null,
          null,
          false,
-         0,
-         Infinite_TTL);
+         Utils.Infinite_Time);
   }
 
   /**
@@ -40,22 +36,18 @@ public class BlobProperties {
    * @param ownerId The owner of the blob (For example , memberId or groupId)
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
-   * @param usermetadataSize The size of the usermetadata stored with this blob.
-   *                         It is zero if there is no usermetadata
    */
   public BlobProperties(long blobSize,
                         String serviceId,
                         String ownerId,
                         String contentType,
-                        boolean isPrivate,
-                        int usermetadataSize) {
+                        boolean isPrivate) {
     this(blobSize,
          serviceId,
          ownerId,
          contentType,
          isPrivate,
-         usermetadataSize,
-         Infinite_TTL);
+         Utils.Infinite_Time);
   }
 
   /**
@@ -64,81 +56,45 @@ public class BlobProperties {
    * @param ownerId The owner of the blob (For example , memberId or groupId)
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
-   * @param usermetadataSize The size of the usermetadata stored with this blob.
-   *                         It is zero if there is no usermetadata
-   * @param timeToLiveInMs The System time in ms when the blob needs to be deleted
+   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
    */
   public BlobProperties(long blobSize,
                         String serviceId,
                         String ownerId,
                         String contentType,
                         boolean isPrivate,
-                        int usermetadataSize,
-                        long timeToLiveInMs) {
+                        long timeToLiveInSeconds) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
     this.contentType = contentType;
     this.isPrivate = isPrivate;
-    this.timeToLiveInMs = timeToLiveInMs;
-    this.userMetadataSize = usermetadataSize;
+    this.timeToLiveInSeconds = timeToLiveInSeconds;
     this.creationTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
-  public void setTimeToLiveInMs(long timeToLiveInMs) {
-    this.timeToLiveInMs = timeToLiveInMs;
-  }
-
-  public long getTimeToLiveInMs() {
-    return timeToLiveInMs;
-  }
-
-  public void setBlobSize(long blobSize) {
-    this.blobSize = blobSize;
+  public long getTimeToLiveInSeconds() {
+    return timeToLiveInSeconds;
   }
 
   public long getBlobSize() {
     return blobSize;
   }
 
-  public void setPrivate() {
-    isPrivate = true;
-  }
-
   public boolean isPrivate() {
     return isPrivate;
-  }
-
-  public void setOwnerId(String id) {
-    ownerId = id;
   }
 
   public String getOwnerId() {
     return ownerId;
   }
 
-  public void setContentType(String contentType) {
-    this.contentType = contentType;
-  }
-
   public String getContentType() {
     return contentType;
   }
 
-  public void setServiceId(String serviceId) {
-    this.serviceId = serviceId;
-  }
-
   public String getServiceId() {
     return serviceId;
-  }
-
-  public void setUserMetadataSize(int usermetadataSize) {
-    this.userMetadataSize = usermetadataSize;
-  }
-
-  public int getUserMetadataSize() {
-    return userMetadataSize;
   }
 
   public long getCreationTimeInMs() {
