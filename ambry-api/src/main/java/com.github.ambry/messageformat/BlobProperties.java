@@ -100,4 +100,35 @@ public class BlobProperties {
   public long getCreationTimeInMs() {
     return creationTimeInMs;
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("BlobProperties[");
+    sb.append("BlobSize=").append(getBlobSize());
+    if(getContentType()!=null) {
+      sb.append(", ").append("ContentType=").append(getContentType());
+    } else {
+      sb.append(", ").append("ContentType=Null");
+    }
+    if(getOwnerId()!=null) {
+      sb.append(", ").append("OwnerId=").append(getOwnerId());
+    } else {
+      sb.append(", ").append("OwnerId=Null");
+    }
+    if(getServiceId()!=null) {
+      sb.append(", ").append("ServiceId=").append(getServiceId());
+    } else {
+      sb.append(", ").append("ServiceId=Null");
+    }
+    sb.append(", ").append("IsPrivate=").append(isPrivate());
+    sb.append(", ").append("CreationTimeInMs=").append(getCreationTimeInMs());
+    if(getTimeToLiveInSeconds() != Utils.Infinite_Time) {
+      sb.append(", ").append("TimeToLiveInSeconds=").append(getTimeToLiveInSeconds());
+    } else {
+      sb.append(", ").append("TimeToLiveInSeconds=Infinite");
+    }
+    sb.append("]");
+    return sb.toString();
+  }
 }
