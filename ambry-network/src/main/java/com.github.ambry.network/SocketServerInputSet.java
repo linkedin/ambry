@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.*;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.ByteBuffer;
 
 /**

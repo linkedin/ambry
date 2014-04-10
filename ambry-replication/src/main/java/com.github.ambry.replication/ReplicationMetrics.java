@@ -46,6 +46,7 @@ public class ReplicationMetrics {
         return getLiveThreads();
       }
     };
+    registry.register("numberOfReplicaThreads", numberOfReplicaThreads);
   }
 
   private int getLiveThreads() {

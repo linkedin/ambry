@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -8,11 +9,20 @@ import java.util.List;
  */
 public class MockPartitionId extends PartitionId {
 
-  Long partition = 1L;
+  Long partition;
   public List<ReplicaId> replicaIds;
 
-  public MockPartitionId(List<ReplicaId> replicaIds) {
-    this.replicaIds = replicaIds;
+  public MockPartitionId(long partition, List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
+    this.partition = partition;
+
+    this.replicaIds = new ArrayList<ReplicaId>(dataNodes.size());
+    for (MockDataNodeId dataNode : dataNodes) {
+      MockReplicaId replicaId = new MockReplicaId(dataNode.getPort(), this, dataNode, mountPathIndexToUse);
+      replicaIds.add(replicaId);
+    }
+    for (ReplicaId replicaId : replicaIds) {
+      ((MockReplicaId)replicaId).setPeerReplicas(replicaIds);
+    }
   }
 
   @Override
@@ -57,5 +67,11 @@ public class MockPartitionId extends PartitionId {
   @Override
   public String toString() {
     return partition.toString();
+  }
+
+  public void cleanUp() {
+    for (ReplicaId replicaId : replicaIds) {
+      ((MockReplicaId)replicaId).cleanup();
+    }
   }
 }

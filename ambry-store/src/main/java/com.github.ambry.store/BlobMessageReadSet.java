@@ -48,7 +48,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
  * An implementation of MessageReadSet that maintains a list of
  * offsets from the underlying file channel
  */
-public class BlobMessageReadSet implements MessageReadSet {
+class BlobMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private final FileChannel fileChannel;

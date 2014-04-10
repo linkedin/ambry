@@ -372,9 +372,11 @@ public class BlobPersistantIndexTest {
       Assert.assertEquals(value4.isFlagSet(BlobIndexValue.Flags.Delete_Index), true);
       Assert.assertEquals(value5.getTimeToLiveInMs(), BlobIndexValue.TTL_Infinite);
       Assert.assertEquals(value4.getSize(), 1000);
-      Assert.assertEquals(value4.getOffset(), 5000);
+      Assert.assertEquals(value4.getOriginalMessageOffset(), 5000);
+      Assert.assertEquals(value4.getOffset(), 7000);
       Assert.assertEquals(value5.getSize(), 1000);
-      Assert.assertEquals(value5.getOffset(), 6000);
+      Assert.assertEquals(value5.getOriginalMessageOffset(), 6000);
+      Assert.assertEquals(value5.getOffset(), 7100);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();

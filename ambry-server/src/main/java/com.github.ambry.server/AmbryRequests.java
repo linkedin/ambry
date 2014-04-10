@@ -1,23 +1,55 @@
 package com.github.ambry.server;
 
-import java.io.DataInputStream;
-
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
-import com.github.ambry.messageformat.*;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatMetrics;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatSend;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.messageformat.TTLMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.shared.*;
+import com.github.ambry.shared.DeleteRequest;
+import com.github.ambry.shared.DeleteResponse;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataResponse;
+import com.github.ambry.shared.RequestResponseType;
+import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.PutResponse;
+import com.github.ambry.shared.TTLRequest;
+import com.github.ambry.shared.TTLResponse;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.Send;
-import com.github.ambry.store.*;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
+
+import com.codahale.metrics.MetricRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.io.DataInputStream;
 
 /**
  * The main request implementation class. All requests to the server are
@@ -75,6 +107,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (Exception e) {
+      e.printStackTrace();
       logger.error("Error while handling request" + request + "Closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
@@ -208,6 +241,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
+      e.printStackTrace();
       logger.error("Store exception on a get with error code {} and exception {}", e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
         metrics.idNotFoundError.inc();
@@ -222,6 +256,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (MessageFormatException e) {
+      e.printStackTrace();
       logger.error("Message format exception on a get with error code {} and exception {}", e.getErrorCode(), e);
       if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt)
         metrics.dataCorruptError.inc();
@@ -232,6 +267,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
+      e.printStackTrace();
       logger.error("Unknown exception on a get {}", e);
       response = new GetResponse(getRequest.getCorrelationId(),
                                  getRequest.getClientId(),
@@ -406,6 +442,7 @@ public class AmbryRequests implements RequestAPI {
                                              findInfo.getMessageEntries());
     }
     catch (StoreException e) {
+      e.printStackTrace();
       logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.IOError)
         metrics.storeIOError.inc();
@@ -416,6 +453,7 @@ public class AmbryRequests implements RequestAPI {
                                              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
+      e.printStackTrace();
       logger.error("Unknown exception on replica metadata request ", e);
       response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
                                              replicaMetadataRequest.getClientId(),

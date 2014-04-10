@@ -15,9 +15,13 @@ public class BlobIndexValue {
   private static int Offset_Size_In_Bytes = 8;
   private static int Flag_Size_In_Bytes = 1;
   private static int Time_To_Live_Size_In_Bytes = 8;
+  private static int Original_Message_Offset_Size_In_Bytes = 8;
 
-  public static int Index_Value_Size_In_Bytes = Blob_Size_In_Bytes + Offset_Size_In_Bytes +
-                                                Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes;
+  public static int Index_Value_Size_In_Bytes = Blob_Size_In_Bytes +
+                                                Offset_Size_In_Bytes +
+                                                Flag_Size_In_Bytes +
+                                                Time_To_Live_Size_In_Bytes +
+                                                Original_Message_Offset_Size_In_Bytes;
 
   public static final int TTL_Infinite = -1;
 
@@ -30,11 +34,16 @@ public class BlobIndexValue {
   }
 
   public BlobIndexValue(long size, long offset, byte flags, long timeToLiveInMs) {
+    this(size, offset, flags, timeToLiveInMs, offset);
+  }
+
+  public BlobIndexValue(long size, long offset, byte flags, long timeToLiveInMs, long originalMessageOffset) {
     value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
     value.putLong(size);
     value.putLong(offset);
     value.put(flags);
     value.putLong(timeToLiveInMs);
+    value.putLong(originalMessageOffset);
     value.position(0);
   }
 
@@ -66,12 +75,22 @@ public class BlobIndexValue {
     return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes);
   }
 
+  public long getOriginalMessageOffset() {
+    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes);
+  }
+
   public void setTimeToLive(long timeToLiveInMs) {
     value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes, timeToLiveInMs);
   }
 
   public void setFlag(Flags flag) {
     value.put(Blob_Size_In_Bytes + Offset_Size_In_Bytes, (byte)(getFlags() | (1 << flag.ordinal())));
+  }
+
+  public void setNewOffset(long newOffset) {
+    long oldOffset = getOffset();
+    value.putLong(Blob_Size_In_Bytes, newOffset);
+    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes, oldOffset);
   }
 
   public ByteBuffer getBytes() {

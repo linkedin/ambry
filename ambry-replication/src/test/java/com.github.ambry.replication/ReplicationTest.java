@@ -2,13 +2,36 @@ package com.github.ambry.replication;
 
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Send;
-import com.github.ambry.shared.*;
-import com.github.ambry.store.*;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.ConnectionPoolTimeoutException;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataResponse;
+import com.github.ambry.shared.Response;
+import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.MessageStoreRecovery;
+import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreManager;
+import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
@@ -21,8 +44,17 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.*;
+
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
+import java.util.Set;
 
 public class ReplicationTest {
 
@@ -421,8 +453,7 @@ public class ReplicationTest {
     try {
       MockClusterMap clusterMap = new MockClusterMap();
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
-      MockDataNodeId mockDataNode = new MockDataNodeId(6667);
-      for (ReplicaId replicaId : clusterMap.getReplicaIds(mockDataNode)) {
+      for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 6667))) {
         if (replicaId.getDataNodeId().getPort() == 6667) {
           for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
             RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, new MockFindToken(0), 1000000);
@@ -491,7 +522,7 @@ public class ReplicationTest {
                                                       new MockFindTokenFactory(),
                                                       clusterMap,
                                                       new AtomicInteger(0),
-                                                      mockDataNode,
+                                                      clusterMap.getDataNodeId("localhost", 6667),
                                                       new MockConnectionPool(replicaStores, replicaBuffers, 3),
                                                       config,
                                                       new ReplicationMetrics("replication",

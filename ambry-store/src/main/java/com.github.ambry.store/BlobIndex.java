@@ -30,15 +30,18 @@ public class BlobIndex {
   private AtomicLong logEndOffset;
   private File indexFile;
   private static final String indexFileName = "index_current";
+  private static final String Clean_Shutdown_Filename = "cleanshutdown";
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
   private BlobJournal journal;
   private Log log;
+  private UUID sessionId;
+  private boolean cleanShutdown;
+  private long logEndOffsetOnStartup;
   private Logger logger = LoggerFactory.getLogger(getClass());
   public static final Short version = 0;
 
   // metrics
-  private final MetricRegistry registry;
   private final Timer recoveryTime;
   private final Timer indexFlushTime;
   private final Counter nonzeroMessageRecovery;
@@ -62,7 +65,6 @@ public class BlobIndex {
                    MessageStoreRecovery recovery,
                    MetricRegistry registry) throws StoreException  {
     try {
-      this.registry = registry;
       this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
       this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
       this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
@@ -128,8 +130,17 @@ public class BlobIndex {
         }
         runningOffset += info.getSize();
       }
+      log.setLogEndOffset(runningOffset);
+      logEndOffsetOnStartup = log.getLogEndOffset();
       context.stop();
       logger.info("read index from file {}", datadir);
+      this.sessionId = UUID.randomUUID();
+      // delete the shutdown file
+      File cleanShutdownFile = new File(datadir, Clean_Shutdown_Filename);
+      if (cleanShutdownFile.exists()) {
+        cleanShutdown = true;
+        cleanShutdownFile.delete();
+      }
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
@@ -196,6 +207,7 @@ public class BlobIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
+    value.setNewOffset(fileSpan.getStartOffset());
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
@@ -216,6 +228,7 @@ public class BlobIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setTimeToLive(ttl);
+    value.setNewOffset(fileSpan.getStartOffset());
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
@@ -271,6 +284,22 @@ public class BlobIndex {
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     StoreFindToken storeToken = (StoreFindToken)token;
+    // validate token
+    if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
+      // the session has changed. check if we had an unclean shutdown on startup
+      if (!cleanShutdown) {
+        // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup
+        // we reset the token to logEndOffsetOnStartup
+        if (storeToken.getOffset() > logEndOffsetOnStartup) {
+          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId);
+        }
+      }
+      else if (storeToken.getOffset() > logEndOffsetOnStartup) {
+        logger.error("Invalid token. Provided offset is outside the log range after clean shutdown");
+        // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
+        throw new IllegalArgumentException("Invalid token. Provided offset is outside the log range after clean shutdown");
+      }
+    }
     List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
     List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
     if (entries == null) {
@@ -284,7 +313,7 @@ public class BlobIndex {
         if (entry.getValue().getOffset() > largestOffset)
           largestOffset = entry.getValue().getOffset();
       }
-      return new FindInfo(messageEntries, new StoreFindToken(largestOffset));
+      return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
     }
     else {
       long endOffset = -1;
@@ -301,7 +330,7 @@ public class BlobIndex {
           break;
       }
       eliminateDuplicates(messageEntries);
-      return new FindInfo(messageEntries, new StoreFindToken(endOffset));
+      return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
     }
   }
 
@@ -332,6 +361,13 @@ public class BlobIndex {
    */
   public void close() throws StoreException, IOException {
     persistor.write();
+    File cleanShutdownFile = new File(indexFile.getAbsolutePath(), Clean_Shutdown_Filename);
+    try {
+      cleanShutdownFile.createNewFile();
+    }
+    catch (IOException e) {
+      logger.error("Index " + indexFile.getAbsolutePath() + " error while creating clean shutdown file ", e);
+    }
   }
 
   /**
@@ -468,7 +504,6 @@ public class BlobIndex {
                 BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
                 if (blobValue.getOffset() < logEndOffset.get()) {
                   index.put(key, blobValue);
-                  journal.addEntry(blobValue.getOffset(), key);
                 }
                 else
                   logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
