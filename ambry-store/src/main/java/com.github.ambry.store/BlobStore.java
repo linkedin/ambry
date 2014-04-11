@@ -141,7 +141,7 @@ public class BlobStore implements Store {
           BlobIndexValue value = new BlobIndexValue(info.getSize(),
                                                     writeStartOffset,
                                                     (byte)0,
-                                                    info.getTimeToLiveInMs());
+                                                    info.getExpirationTimeInMs());
           BlobIndexEntry entry = new BlobIndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
@@ -190,7 +190,7 @@ public class BlobStore implements Store {
         List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
-          index.updateTTL(info.getStoreKey(), info.getTimeToLiveInMs(), fileSpan);
+          index.updateTTL(info.getStoreKey(), info.getExpirationTimeInMs(), fileSpan);
         }
       }
       catch (IOException e) {

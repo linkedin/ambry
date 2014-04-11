@@ -229,14 +229,14 @@ public class BlobIndexTest {
                 throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 1000, true));
-          infos.add(new MessageInfo(blobId5, 1000, BlobIndexValue.TTL_Infinite));
+          infos.add(new MessageInfo(blobId5, 1000, Utils.Infinite_Time));
           return infos;
         }
       });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(BlobIndexValue.Flags.Delete_Index), true);
-      Assert.assertEquals(value5.getTimeToLiveInMs(), BlobIndexValue.TTL_Infinite);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), Utils.Infinite_Time);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();

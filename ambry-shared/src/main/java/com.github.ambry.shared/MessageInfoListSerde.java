@@ -1,13 +1,13 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.store.MessageInfo;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.store.MessageInfo;
 
 /**
  * A serde for serializing and deserializing list of message info
@@ -45,7 +45,7 @@ public class MessageInfoListSerde {
       for (MessageInfo messageInfo : messageInfoList) {
         outputBuffer.put(messageInfo.getStoreKey().toBytes());
         outputBuffer.putLong(messageInfo.getSize());
-        outputBuffer.putLong(messageInfo.getTimeToLiveInMs());
+        outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? (byte)1 : 0);
       }
     }

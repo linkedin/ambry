@@ -1,5 +1,8 @@
 package com.github.ambry.store;
 
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
+
 import java.nio.ByteBuffer;
 
 /**
@@ -22,8 +25,6 @@ public class BlobIndexValue {
                                                 Flag_Size_In_Bytes +
                                                 Time_To_Live_Size_In_Bytes +
                                                 Original_Message_Offset_Size_In_Bytes;
-
-  public static final int TTL_Infinite = -1;
 
   private ByteBuffer value;
 
@@ -52,7 +53,7 @@ public class BlobIndexValue {
   }
 
   public BlobIndexValue(long size, long offset) {
-    this(size, offset, (byte)0, TTL_Infinite);
+    this(size, offset, (byte)0, Utils.Infinite_Time);
   }
 
   public long getSize() {
@@ -77,6 +78,14 @@ public class BlobIndexValue {
 
   public long getOriginalMessageOffset() {
     return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes);
+  }
+
+  public boolean isExpired() {
+    if (getTimeToLiveInMs() != Utils.Infinite_Time &&
+        SystemTime.getInstance().milliseconds() > getTimeToLiveInMs()) {
+      return true;
+    }
+    return false;
   }
 
   public void setTimeToLive(long timeToLiveInMs) {

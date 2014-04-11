@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Utils;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -566,7 +567,12 @@ public class CoordinatorTest {
 
   void PutGetDelete(AmbryCoordinator ac) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
-    BlobProperties putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, 0, -1);
+    BlobProperties putBlobProperties = new BlobProperties(100,
+                                                          "serviceId",
+                                                          "memberId",
+                                                          "contentType",
+                                                          false,
+                                                          Utils.Infinite_Time);
     ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
     for (byte b = 0; b < 10; b++) {
       putUserMetadata.put(b);
@@ -660,7 +666,12 @@ public class CoordinatorTest {
   void PutRemoteGetDelete(AmbryCoordinator acOne,
                           AmbryCoordinator acTwo) throws InterruptedException, StoreException, IOException,
           CoordinatorException {
-    BlobProperties putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, 0, -1);
+    BlobProperties putBlobProperties = new BlobProperties(100,
+                                                          "serviceId",
+                                                          "memberId",
+                                                          "contentType",
+                                                          false,
+                                                          Utils.Infinite_Time);
     ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
     for (byte b = 0; b < 10; b++) {
       putUserMetadata.put(b);

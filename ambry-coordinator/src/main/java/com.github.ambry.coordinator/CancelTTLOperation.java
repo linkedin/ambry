@@ -9,6 +9,7 @@ import com.github.ambry.shared.Response;
 import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.shared.TTLResponse;
 import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +43,7 @@ final public class CancelTTLOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     TTLRequest ttlRequest = new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId,
-                                           BlobProperties.Infinite_TTL);
+                                           Utils.Infinite_Time);
     return new CancelTTLOperationRequest(connectionPool,
                                          responseQueue,
                                          context,

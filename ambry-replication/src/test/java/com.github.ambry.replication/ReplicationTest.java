@@ -195,7 +195,7 @@ public class ReplicationTest {
       messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(),
               messageInfoFound.getSize(),
               true,
-              messageInfoFound.getTimeToLiveInMs()));
+              messageInfoFound.getExpirationTimeInMs()));
     }
 
     @Override
