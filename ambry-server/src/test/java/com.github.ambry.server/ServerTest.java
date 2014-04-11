@@ -43,9 +43,12 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 
 public class ServerTest {
 
@@ -451,7 +454,7 @@ public class ServerTest {
               bytebufferToken.position(bytebufferToken.position() + size);
               long parsedToken = bytebufferToken.getLong();
               System.out.println("The parsed token is " + parsedToken);
-              Assert.assertTrue(parsedToken == 0 || parsedToken == 13086);
+              Assert.assertTrue(parsedToken == 0 || parsedToken == 13062);
             }
             long crc = crcStream.getValue();
             Assert.assertEquals(crc, dataInputStream.readLong());
