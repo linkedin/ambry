@@ -48,7 +48,7 @@ public class SocketServerTest {
 
   @Test
   public void simpleRequest() throws IOException, InterruptedException {
-    MockClusterMap map = null;
+    MockClusterMap map = new MockClusterMap();
     int correlationId = 1;
     byte[] bufdata = new byte[10];
     new Random().nextBytes(bufdata);
@@ -59,7 +59,7 @@ public class SocketServerTest {
 
     PutRequest emptyRequest = new PutRequest(correlationId,
                                              "test",
-                                             new BlobId(new MockPartitionId(null)),
+                                             new BlobId(map.getWritablePartitionIdAt(0)),
                                              new BlobProperties(10, "id"), ByteBuffer.wrap(bufmetadata), stream
     );
 
@@ -70,13 +70,13 @@ public class SocketServerTest {
     Request request = requestResponseChannel.receiveRequest();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
     Assert.assertEquals(requestStream.readShort(), 0); // read type
-    map = new MockClusterMap();
+
     PutRequest requestFromNetwork = PutRequest.readFrom(requestStream, map);
     Assert.assertEquals(1, requestFromNetwork.getVersionId());
     Assert.assertEquals(correlationId, requestFromNetwork.getCorrelationId());
     Assert.assertEquals("test", requestFromNetwork.getClientId());
     ByteBuffer partition = ByteBuffer.allocate(8);
-    partition.putLong(1);
+    partition.putLong(0);
     Assert.assertArrayEquals(partition.array(), requestFromNetwork.getBlobId().getPartition().getBytes());
     Assert.assertArrayEquals(bufmetadata, requestFromNetwork.getUsermetadata().array());
     Assert.assertEquals(10, requestFromNetwork.getDataSize());

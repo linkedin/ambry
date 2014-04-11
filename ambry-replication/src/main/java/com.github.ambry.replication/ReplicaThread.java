@@ -4,8 +4,19 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.messageformat.*;
-import com.github.ambry.shared.*;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataResponse;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -293,6 +304,12 @@ class ReplicaThread implements Runnable {
       long totalSizeInBytesReplicated = 0;
       for (MessageInfo messageInfo : getResponse.getMessageInfoList()) {
         totalSizeInBytesReplicated += messageInfo.getSize();
+        logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+                     " Thread name " + threadName +
+                     " Remote " + connectedChannel.getRemoteHost() + ":" + connectedChannel.getRemotePort() +
+                     " Message Replicated " + messageInfo.getStoreKey() +
+                     " Partition " + partitionInfo.getPartitionId() +
+                     " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath());
       }
       if (remoteColo) {
         replicationMetrics.interColoReplicationBytesCount.inc(totalSizeInBytesReplicated);

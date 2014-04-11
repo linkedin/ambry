@@ -3,25 +3,31 @@ package com.github.ambry.server;
 import com.codahale.metrics.JmxReporter;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.config.*;
+import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.MetricsConfig;
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.store.*;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.codahale.metrics.MetricRegistry;
 
-import java.util.HashMap;
 import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Ambry server
@@ -74,8 +80,6 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      networkServer = new SocketServer(networkConfig, registry);
-      networkServer.start();
       storeManager = new StoreManager(storeConfig,
                                       scheduler,
                                       registry,
@@ -83,6 +87,9 @@ public class AmbryServer {
                                       storeKeyFactory,
                                       new BlobStoreRecovery());
       storeManager.start();
+
+
+      networkServer = new SocketServer(networkConfig, registry);
       requests = new AmbryRequests(storeManager,
                                    networkServer.getRequestResponseChannel(),
                                    clusterMap,
@@ -92,6 +99,7 @@ public class AmbryServer {
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
                                                   networkServer.getRequestResponseChannel(),
                                                   requests);
+      networkServer.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
       connectionPool.start();
@@ -118,6 +126,9 @@ public class AmbryServer {
   public void shutdown() {
     try {
       logger.info("shutdown started");
+      if (scheduler != null) {
+        scheduler.shutdown();
+      }
       if (networkServer != null)
         networkServer.shutdown();
       if (requestHandlerPool != null)
@@ -126,9 +137,6 @@ public class AmbryServer {
         replicationManager.shutdown();
       if (storeManager != null) {
         storeManager.shutdown();
-      }
-      if (scheduler != null) {
-        scheduler.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();

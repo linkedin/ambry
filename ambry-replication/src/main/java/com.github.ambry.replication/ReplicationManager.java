@@ -1,30 +1,55 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
-import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.StoreConfig;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.store.*;
-import com.github.ambry.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.util.*;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreManager;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final Object lock = new Object();
+
+  // tracks the point up to which a node is in sync with a remote replica
   private final long tokenPersistIntervalInMs;
   private FindToken currentToken = null;
   private FindToken tokenToPersist = null;
   private long timeTokenSet;
   private FindToken tokenPersisted = null;
 
-  public RemoteReplicaInfo(ReplicaId replicaId, FindToken token, long tokenPersistIntervalInMs) {
+  public RemoteReplicaInfo(ReplicaId replicaId,
+                           FindToken token,
+                           long tokenPersistIntervalInMs) {
     this.replicaId = replicaId;
     this.currentToken = token;
     if (tokenToPersist == null) {
@@ -169,9 +194,10 @@ public final class ReplicationManager {
             // We need to ensure that replica tokens gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica,
-                                                                        factory.getNewFindToken(),
-                                                                        storeConfig.storeDataFlushIntervalSeconds * Replication_Delay_Multiplier);
+            RemoteReplicaInfo remoteReplicaInfo =
+                    new RemoteReplicaInfo(remoteReplica,
+                                          factory.getNewFindToken(),
+                                          storeConfig.storeDataFlushIntervalSeconds * Replication_Delay_Multiplier);
             remoteReplicas.add(remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas,
@@ -241,7 +267,7 @@ public final class ReplicationManager {
       }
       // start all replica threads
       for (ReplicaThread thread : replicaThreads) {
-        Thread replicaThread = new Thread(thread, thread.getName());
+        Thread replicaThread = Utils.newThread(thread.getName(), thread, false);
         logger.info("Starting replica thread " + thread.getName());
         replicaThread.start();
       }
@@ -301,6 +327,8 @@ public final class ReplicationManager {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
                     info.getReplicaId().getDataNodeId().getPort() == port) {
                   info.setToken(token);
+                  logger.trace("Read token for partition {} remote host {} port {} token {}",
+                               partitionId, hostname, port, token);
                   updatedToken = true;
                 }
               }

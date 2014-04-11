@@ -229,6 +229,7 @@ public class BlobStore implements Store {
     synchronized (lock) {
       checkStarted();
       try {
+        logger.info("Shutting down store " + dataDir);
         index.close();
         log.close();
         started = false;

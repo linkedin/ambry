@@ -35,7 +35,7 @@ public class BlobIndexTest {
     return f;
   }
 
-  public BlobIndexTest() throws InstantiationException {
+  public BlobIndexTest() throws InstantiationException, IOException {
     map = new MockClusterMap();
     try {
       factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -131,7 +131,7 @@ public class BlobIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log log = new Log(logFile, 5000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 7000, new StoreMetrics(logFile, new MetricRegistry()));
       log.setLogEndOffset(3000);
       Properties props = new Properties();
       props.put("store.data.flush.delay.seconds", "999999");
@@ -220,6 +220,7 @@ public class BlobIndexTest {
       Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
       log.setLogEndOffset(5000);
       indexNew.close();
+      log.setLogEndOffset(7000);
 
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
               new MessageStoreRecovery() {
@@ -504,8 +505,11 @@ public class BlobIndexTest {
       list.add(entry12);
 
       index.addToIndex(list, new FileSpan(0, 1200));
-      StoreFindToken token = new StoreFindToken(900);
+      StoreFindToken token = new StoreFindToken(900, null);
       FindInfo info1 = index.findEntriesSince(token, 100000);
+      StoreFindToken newToken = (StoreFindToken)info1.getFindToken();
+      newToken.setOffset(900);
+      info1 = index.findEntriesSince(newToken, 100000);
       List<MessageInfo> entries = info1.getMessageEntries();
       Assert.assertEquals(entries.size(), 3);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId10);

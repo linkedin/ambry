@@ -321,11 +321,12 @@ class IndexSegmentInfo {
       if (mapped.get())
         throw new StoreException("Cannot add to a mapped index " +
                 indexFile.getAbsolutePath(), StoreErrorCodes.Illegal_Index_Operation);
-      logger.trace("Inserting key {} value offset {} size {} ttl {} fileEndOffset {}",
+      logger.trace("Inserting key {} value offset {} size {} ttl {} originalMessageOffset {} fileEndOffset {}",
               entry.getKey(),
               entry.getValue().getOffset(),
               entry.getValue().getSize(),
               entry.getValue().getTimeToLiveInMs(),
+              entry.getValue().getOriginalMessageOffset(),
               fileEndOffset);
       index.put(entry.getKey(), entry.getValue());
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getSize());
@@ -361,11 +362,12 @@ class IndexSegmentInfo {
       if (entries.size() == 0)
         throw new IllegalArgumentException("No entries to add to the index. The entries provided is empty");
       for (BlobIndexEntry entry : entries) {
-        logger.trace("Inserting key {} value offset {} size {} ttl {} fileEndOffset {}",
+        logger.trace("Inserting key {} value offset {} size {} ttl {} originalMessageOffset {} fileEndOffset {}",
                 entry.getKey(),
                 entry.getValue().getOffset(),
                 entry.getValue().getSize(),
                 entry.getValue().getTimeToLiveInMs(),
+                entry.getValue().getOriginalMessageOffset(),
                 fileEndOffset);
         index.put(entry.getKey(), entry.getValue());
         sizeWritten.addAndGet(entry.getKey().sizeInBytes() + BlobIndexValue.Index_Value_Size_In_Bytes);
@@ -457,6 +459,8 @@ class IndexSegmentInfo {
         for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
           writer.write(entry.getKey().toBytes());
           writer.write(entry.getValue().getBytes().array());
+          logger.trace("Index {} writing key {} offset {} size {}",
+                       getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset());
           numOfEntries++;
         }
         prevNumOfEntriesWritten = numOfEntries;
@@ -546,14 +550,19 @@ class IndexSegmentInfo {
             // ignore entries that have offsets outside the log end offset that this index represents
             if (blobValue.getOffset() < endOffset.get()) {
               index.put(key, blobValue);
+              logger.trace("Index {} putting key {} in index offset {} size {}",
+                           indexFile.getPath(), key, blobValue.getOffset(), blobValue.getSize());
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
               // add to the journal
               journal.addEntry(blobValue.getOffset(), key);
+              sizeWritten.addAndGet(key.sizeInBytes() + BlobIndexValue.Index_Value_Size_In_Bytes);
+              numberOfItems.incrementAndGet();
             }
-            else
-              logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
-                      endOffset.get(), key);
+            else {
+              logger.info("Index {} ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}" +
+                          indexFile.getPath(), endOffset.get(), key);
+            }
           }
           long crc = crcStream.getValue();
           if (crc != stream.readLong()) {
@@ -649,12 +658,18 @@ public class BlobPersistentIndex {
   private StoreKeyFactory factory;
   private StoreConfig config;
   private BlobJournal journal;
+  private UUID sessionId;
+  private boolean cleanShutdown;
+  private long logEndOffsetOnStartup;
+  private static final String Clean_Shutdown_Filename = "cleanshutdown";
+  private final StoreMetrics metrics;
+
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegmentInfo> indexes = new ConcurrentSkipListMap<Long, IndexSegmentInfo>();
+
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   public static final Short version = 0;
-  private final StoreMetrics metrics;
 
   private class IndexFilter implements FilenameFilter {
     @Override
@@ -740,6 +755,17 @@ public class BlobPersistentIndex {
 
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(getCurrentEndOffset());
+      logEndOffsetOnStartup = log.getLogEndOffset();
+
+      this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
+      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
+      this.sessionId = UUID.randomUUID();
+      // delete the shutdown file
+      File cleanShutdownFile = new File(datadir, Clean_Shutdown_Filename);
+      if (cleanShutdownFile.exists()) {
+        cleanShutdown = true;
+        cleanShutdownFile.delete();
+      }
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
@@ -748,8 +774,6 @@ public class BlobPersistentIndex {
                               config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
                               config.storeDataFlushIntervalSeconds,
                               TimeUnit.SECONDS);
-      this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
-      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
     }
     catch (Exception e) {
       logger.error("Error while creating index {}", e);
@@ -781,6 +805,8 @@ public class BlobPersistentIndex {
     long runningOffset = startOffsetForRecovery;
     // Iterate through the recovered messages and update the index
     for (MessageInfo info : messagesRecovered) {
+      logger.trace("Index {} recovering key {} offset {} size {}",
+                   dataDir, info.getStoreKey(), runningOffset, info.getSize());
       if (segmentToRecover == null) {
         // if there was no segment passed in, create a new one
 
@@ -797,14 +823,18 @@ public class BlobPersistentIndex {
       if (value != null) {
         // if the key already exist in the index, update it if it is deleted or ttl updated
         logger.info("Msg already exist with key {}", info.getStoreKey());
-        if (info.isDeleted())
+        if (info.isDeleted()) {
           value.setFlag(BlobIndexValue.Flags.Delete_Index);
-        else if (info.getExpirationTimeInMs() == Utils.Infinite_Time)
+        }
+        else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
           value.setTimeToLive(Utils.Infinite_Time);
+        }
         else
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        value.setNewOffset(runningOffset);
         segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
+        journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Updated message with key {} size {} ttl {} deleted {}",
                 info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
       }
@@ -812,8 +842,8 @@ public class BlobPersistentIndex {
         // create a new entry in the index
         BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
-        segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), newValue),
-                                  runningOffset + info.getSize());
+        segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
+        journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
                 info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
       }
@@ -937,6 +967,7 @@ public class BlobPersistentIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setFlag(BlobIndexValue.Flags.Delete_Index);
+    value.setNewOffset(fileSpan.getStartOffset());
     indexes.lastEntry().getValue().addEntry(new BlobIndexEntry(id, value), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }
@@ -956,6 +987,7 @@ public class BlobPersistentIndex {
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
     value.setTimeToLive(ttl);
+    value.setNewOffset(fileSpan.getStartOffset());
     indexes.lastEntry().getValue().addEntry(new BlobIndexEntry(id, value), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }
@@ -1011,6 +1043,25 @@ public class BlobPersistentIndex {
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     try {
       StoreFindToken storeToken = (StoreFindToken)token;
+      // validate token
+      if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
+        // the session has changed. check if we had an unclean shutdown on startup
+        if (!cleanShutdown) {
+          // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup
+          // we reset the token to logEndOffsetOnStartup
+          if ((storeToken.getStoreKey() != null && storeToken.getIndexStartOffset() > logEndOffsetOnStartup) ||
+              (storeToken.getOffset() > logEndOffsetOnStartup)) {
+            logger.info("Index: " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup + " before offset " + storeToken.getOffset());
+            storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId);
+          }
+        }
+        else if ((storeToken.getStoreKey() != null && storeToken.getIndexStartOffset() > logEndOffsetOnStartup) ||
+                 (storeToken.getOffset() > logEndOffsetOnStartup)){
+          logger.error("Index: " + dataDir + " Invalid token. Provided offset is outside the log range after clean shutdown");
+          // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
+          throw new IllegalArgumentException("Invalid token. Provided offset is outside the log range after clean shutdown");
+        }
+      }
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
         logger.trace("Index: " + dataDir + " Getting entries since " + storeToken.getOffset());
@@ -1032,11 +1083,10 @@ public class BlobPersistentIndex {
           }
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
           eliminateDuplicates(messageEntries);
-          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd));
+          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId));
         }
         else {
           // find index segment closest to the offset. get all entries after that
-
           Map.Entry<Long, IndexSegmentInfo> entry = indexes.floorEntry(storeToken.getOffset());
           StoreFindToken newToken = null;
           if (entry != null)
@@ -1045,13 +1095,14 @@ public class BlobPersistentIndex {
             newToken = storeToken;
           eliminateDuplicates(messageEntries);
           logger.trace("Index: " + dataDir +
-                       " New offset from find info" +
+                       " 2. New offset from find info" +
                        " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset() :
                                        newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           return new FindInfo(messageEntries, newToken);
         }
       }
       else {
+        // find index segment closest to the offset. get all entries after that
         long prevOffset = storeToken.getIndexStartOffset();
         StoreFindToken newToken = findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
         eliminateDuplicates(messageEntries);
@@ -1074,7 +1125,7 @@ public class BlobPersistentIndex {
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;
     long offsetEnd = -1;
-    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries) {
+    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
       IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
@@ -1101,9 +1152,11 @@ public class BlobPersistentIndex {
       }
     }
     if (offsetEnd != -1)
-      return new StoreFindToken(offsetEnd);
+      return new StoreFindToken(offsetEnd, sessionId);
     else
-      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex);
+      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(),
+                                lastSegmentIndex,
+                                sessionId);
   }
 
   /**
@@ -1133,6 +1186,13 @@ public class BlobPersistentIndex {
    */
   public void close() throws StoreException {
     persistor.write();
+    File cleanShutdownFile = new File(dataDir, Clean_Shutdown_Filename);
+    try {
+      cleanShutdownFile.createNewFile();
+    }
+    catch (IOException e) {
+      logger.error("Index " + dataDir + " error while creating clean shutdown file ", e);
+    }
   }
 
   /**
@@ -1228,38 +1288,50 @@ class StoreFindToken implements FindToken {
   private long offset;
   private long indexStartOffset;
   private StoreKey storeKey;
+  private UUID sessionId;
+
   private static final short version = 0;
+  private static final int Version_Size = 2;
+  private static final int SessionId_Size = 4;
+  private static final int Offset_Size = 8;
+  private static final int Start_Offset_Size = 8;
 
   public StoreFindToken() {
-    this(0, -1, null);
+    this(0, -1, null, null);
   }
 
-  public StoreFindToken(StoreKey key, long indexStartOffset) {
-    this(-1, indexStartOffset, key);
+  public StoreFindToken(StoreKey key, long indexStartOffset, UUID sessionId) {
+    this(-1, indexStartOffset, key, sessionId);
   }
 
-  public StoreFindToken(long offset) {
-    this(offset, -1, null);
+  public StoreFindToken(long offset, UUID sessionId) {
+    this(offset, -1, null, sessionId);
   }
 
-  private StoreFindToken(long offset, long indexStartOffset, StoreKey key) {
+  private StoreFindToken(long offset, long indexStartOffset, StoreKey key, UUID sessionId) {
     this.offset = offset;
     this.indexStartOffset = indexStartOffset;
     this.storeKey = key;
+    this.sessionId = sessionId;
   }
 
   public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
     // read version
     short version = stream.readShort();
+    // read sessionId
+    String sessionId = Utils.readIntString(stream);
+    UUID sessionIdUUID = null;
+    if (sessionId != null)
+      sessionIdUUID = UUID.fromString(sessionId);
     // read offset
     long offset = stream.readLong();
     // read index start offset
     long indexStartOffset = stream.readLong();
     // read store key if needed
     if (indexStartOffset != -1)
-      return new StoreFindToken(factory.getStoreKey(stream), indexStartOffset);
+      return new StoreFindToken(factory.getStoreKey(stream), indexStartOffset, sessionIdUUID);
     else
-      return new StoreFindToken(offset);
+      return new StoreFindToken(offset, sessionIdUUID);
   }
 
   public long getOffset() {
@@ -1272,6 +1344,10 @@ class StoreFindToken implements FindToken {
 
   public long getIndexStartOffset() {
     return indexStartOffset;
+  }
+
+  public UUID getSessionId() {
+    return sessionId;
   }
 
   public void setOffset(long offset) {
@@ -1292,11 +1368,16 @@ class StoreFindToken implements FindToken {
 
   @Override
   public byte[] toBytes() {
-    int size = 2 + 8 + 8 + (storeKey == null ? 0 : storeKey.sizeInBytes());
+    int size = Version_Size + SessionId_Size + (sessionId == null ? 0 : sessionId.toString().getBytes().length) +
+               Offset_Size + Start_Offset_Size + (storeKey == null ? 0 : storeKey.sizeInBytes());
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(version);
+    // add sessionId
+    bufWrap.putInt(sessionId == null ? 0 : sessionId.toString().length());
+    if (sessionId != null)
+      bufWrap.put(sessionId.toString().getBytes());
     // add offset
     bufWrap.putLong(offset);
     // add index start offset
@@ -1310,6 +1391,9 @@ class StoreFindToken implements FindToken {
   @Override
   public String toString() {
     String tokenStringFormat = "version: " + version;
+    if (sessionId != null) {
+      tokenStringFormat += " sessionId " + sessionId;
+    }
     if (storeKey != null) {
       tokenStringFormat += " indexStartOffset " + indexStartOffset + " storeKey " + storeKey;
     }

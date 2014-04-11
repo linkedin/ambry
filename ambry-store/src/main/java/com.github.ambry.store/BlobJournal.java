@@ -30,7 +30,7 @@ class JournalEntry {
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-public class BlobJournal {
+class BlobJournal {
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
