@@ -1,7 +1,5 @@
 package com.github.ambry.store;
 
-import java.util.Map;
-
 /**
  * The find token used to search entries in the store
  */

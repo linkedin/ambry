@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Mock cluster map for unit tests
+ * Mock cluster map for unit tests. This sets up a three node cluster
+ * with 3 mount points in each. Each mount point has three partitions
+ * and each partition has 3 replicas on each node.
  */
 public class MockClusterMap implements ClusterMap {
 

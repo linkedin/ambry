@@ -132,7 +132,6 @@ class ReplicaThread implements Runnable {
                            " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
                            remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
                            " Error while replicating with remote replica ", e);
-              e.printStackTrace();
               replicationMetrics.replicationErrors.inc();
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);

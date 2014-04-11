@@ -107,7 +107,6 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (Exception e) {
-      e.printStackTrace();
       logger.error("Error while handling request" + request + "Closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
@@ -241,7 +240,6 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
-      e.printStackTrace();
       logger.error("Store exception on a get with error code {} and exception {}", e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
         metrics.idNotFoundError.inc();
@@ -256,7 +254,6 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (MessageFormatException e) {
-      e.printStackTrace();
       logger.error("Message format exception on a get with error code {} and exception {}", e.getErrorCode(), e);
       if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt)
         metrics.dataCorruptError.inc();
@@ -267,7 +264,6 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      e.printStackTrace();
       logger.error("Unknown exception on a get {}", e);
       response = new GetResponse(getRequest.getCorrelationId(),
                                  getRequest.getClientId(),
@@ -442,7 +438,6 @@ public class AmbryRequests implements RequestAPI {
                                              findInfo.getMessageEntries());
     }
     catch (StoreException e) {
-      e.printStackTrace();
       logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.IOError)
         metrics.storeIOError.inc();
@@ -453,7 +448,6 @@ public class AmbryRequests implements RequestAPI {
                                              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      e.printStackTrace();
       logger.error("Unknown exception on replica metadata request ", e);
       response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
                                              replicaMetadataRequest.getClientId(),
