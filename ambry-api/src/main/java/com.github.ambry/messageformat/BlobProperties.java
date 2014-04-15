@@ -97,6 +97,10 @@ public class BlobProperties {
     return serviceId;
   }
 
+  public void setServiceId(String serviceId) {
+    this.serviceId = serviceId;
+  }
+
   public long getCreationTimeInMs() {
     return creationTimeInMs;
   }

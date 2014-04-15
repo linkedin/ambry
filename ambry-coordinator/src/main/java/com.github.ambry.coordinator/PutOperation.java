@@ -55,7 +55,7 @@ final public class PutOperation extends Operation {
     catch (IOException e) {
       CoordinatorException ce = new CoordinatorException("Error processing blob passed into PutOperation.", e,
                                                          CoordinatorError.UnexpectedInternalError);
-      logger.error("Could not materialize blob: {}", ce);
+      logger.error("Could not materialize blob ", ce);
       throw ce;
     }
   }
@@ -87,8 +87,7 @@ final public class PutOperation extends Operation {
       case Blob_Already_Exists:
         CoordinatorException e = new CoordinatorException("BlobId already exists.",
                                                           CoordinatorError.UnexpectedInternalError);
-        logger.error("{} Put issued to BlobId {} that already exists on ReplicaId {}: {}",
-                     context, blobId, replicaId, e);
+        logger.error(context + " Put issued to BlobId " + blobId + " that already exists on ReplicaId " + replicaId, e);
         throw e;
       /*
       case Replica_Not_Writable:
@@ -100,8 +99,9 @@ final public class PutOperation extends Operation {
       default:
         e = new CoordinatorException("Server returned unexpected error for PutOperation.",
                                      CoordinatorError.UnexpectedInternalError);
-        logger.error("{} PutResponse for BlobId {} received from ReplicaId {} had unexpected error code {} : {}",
-                     context, blobId, replicaId, serverErrorCode, e);
+        logger.error(context + " PutResponse for BlobId " +
+                     blobId + " received from ReplicaId " +
+                     replicaId + " had unexpected error code " + serverErrorCode, e);
         throw e;
     }
   }
