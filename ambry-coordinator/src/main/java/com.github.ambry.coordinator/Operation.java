@@ -106,7 +106,7 @@ public abstract class Operation {
         if (!requestsInFlight.remove(replicaId)) {
           CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
                                                             CoordinatorError.UnexpectedInternalError);
-          logger.error("Response received from replica ({}) to which no request is in flight: {}", replicaId, e);
+          logger.error("Response received from replica (" + replicaId + ") to which no request is in flight: ", e);
           throw e;
         }
 
@@ -142,14 +142,14 @@ public abstract class Operation {
       }
       catch (CoordinatorException e) {
         operationComplete.set(true);
-        logger.debug("{} operation throwing CoordinatorException during ({}).", context, e.getErrorCode());
+        logger.error(context + " operation throwing CoordinatorException during ", e);
         throw e;
       }
       catch (InterruptedException e) {
         operationComplete.set(true);
         // Slightly abuse the notion of "unexpected" internal error since InterruptedException does not indicate
         // something truly unexpected.
-        logger.info("{} operation interrupted during execute", context);
+        logger.error(context + " operation interrupted during execute");
         throw new CoordinatorException("Operation interrupted.", CoordinatorError.UnexpectedInternalError);
       }
     }
@@ -206,7 +206,7 @@ abstract class OperationRequest implements Runnable {
       Response response = getResponse(new DataInputStream(responseStream));
 
       if (response == null) {
-        logger.error("{} {} Response to request is null. BlobId {}.", context, replicaId, blobId);
+        logger.error(context + " " + replicaId + " Response to request is null. BlobId " + blobId);
         enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
         return;
       }
@@ -221,23 +221,19 @@ abstract class OperationRequest implements Runnable {
       enqueueOperationResponse(new OperationResponse(replicaId, response));
     }
     catch (IOException e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : {}.",
-                   context, replicaId, blobId, e.getCause());
+      logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
     }
     catch (MessageFormatException e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : {} - {}.",
-                   context, replicaId, blobId, e.getErrorCode(), e.getCause());
+      logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
     }
     catch (ConnectionPoolTimeoutException e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : connectionpooltimeout - {}.",
-                   context, replicaId, blobId, e.getCause());
+      logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
     }
     catch (Exception e) {
-      logger.error("{} {} Error processing request-response for BlobId {} : unexpected error - {}.",
-                   context, replicaId, blobId, e.getCause());
+      logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
     }
     finally {
@@ -250,8 +246,8 @@ abstract class OperationRequest implements Runnable {
 
   private void enqueueOperationResponse(OperationResponse operationResponse) {
     if (!responseQueue.offer(operationResponse)) {
-      logger.error("{} {} responseQueue incorrectly sized since offer() returned false.  BlobId {}.", context,
-                   replicaId, blobId);
+      logger.error(context + " " + replicaId +
+                   " responseQueue incorrectly sized since offer() returned false.  BlobId ", blobId);
     }
   }
 }
