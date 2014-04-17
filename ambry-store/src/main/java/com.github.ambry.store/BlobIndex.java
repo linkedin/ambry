@@ -325,7 +325,8 @@ public class BlobIndex {
                                            value.getTimeToLiveInMs()));
         endOffset = entry.getOffset();
         currentTotalSize += value.getSize();
-        if (currentTotalSize >= maxTotalSizeOfEntries)
+        if (currentTotalSize >= maxTotalSizeOfEntries &&
+            messageEntries.size() >= BlobPersistentIndex.Minimum_Find_Info_Entries)
           break;
       }
       eliminateDuplicates(messageEntries);

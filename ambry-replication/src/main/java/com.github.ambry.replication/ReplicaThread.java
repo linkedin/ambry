@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
@@ -51,6 +52,7 @@ class ReplicaThread implements Runnable {
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
   private final String threadName;
+  private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public ReplicaThread(String threadName,
@@ -61,7 +63,8 @@ class ReplicaThread implements Runnable {
                        DataNodeId dataNodeId,
                        ConnectionPool connectionPool,
                        ReplicationConfig replicationConfig,
-                       ReplicationMetrics replicationMetrics) {
+                       ReplicationMetrics replicationMetrics,
+                       NotificationSystem notification) {
     this.threadName = threadName;
     this.partitionsToReplicate = partitionsToReplicate;
     this.running = true;
@@ -72,6 +75,7 @@ class ReplicaThread implements Runnable {
     this.connectionPool = connectionPool;
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
+    this.notification = notification;
   }
 
   public String getName() {
@@ -243,6 +247,9 @@ class ReplicaThread implements Runnable {
                        " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
                        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
                        " Key deleted. mark for deletion id " + messageInfo.getStoreKey());
+          if (notification != null) {
+            notification.onDeleteReplicated(messageInfo.getStoreKey().toString());
+          }
         }
       }
       else {
@@ -254,6 +261,9 @@ class ReplicaThread implements Runnable {
                        " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
                        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
                        " key in deleted state remotely. " + messageInfo.getStoreKey());
+          if (notification != null) {
+            notification.onDeleteReplicated(messageInfo.getStoreKey().toString());
+          }
         }
       }
     }
@@ -310,6 +320,9 @@ class ReplicaThread implements Runnable {
                      " Message Replicated " + messageInfo.getStoreKey() +
                      " Partition " + partitionInfo.getPartitionId() +
                      " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath());
+        if (notification != null) {
+          notification.onBlobReplicated(messageInfo.getStoreKey().toString());
+        }
       }
       if (remoteColo) {
         replicationMetrics.interColoReplicationBytesCount.inc(totalSizeInBytesReplicated);

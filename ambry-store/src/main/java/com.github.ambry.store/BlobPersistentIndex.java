@@ -608,7 +608,8 @@ class IndexSegmentInfo {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (currentTotalSizeOfEntriesInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
+        while ((currentTotalSizeOfEntriesInBytes.get() < maxTotalSizeOfEntriesInBytes ||
+                entries.size() < BlobPersistentIndex.Minimum_Find_Info_Entries) && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
@@ -634,7 +635,8 @@ class IndexSegmentInfo {
                                            entry.getValue().getTimeToLiveInMs());
         entries.add(info);
         currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
-        if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
+        if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes &&
+            entries.size() >= BlobPersistentIndex.Minimum_Find_Info_Entries) {
           break;
         }
       }
@@ -670,6 +672,9 @@ public class BlobPersistentIndex {
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   public static final Short version = 0;
+  // This is to ensure that we actually move forward while finding elements and not get
+  // stuck in a loop
+  public static final Short Minimum_Find_Info_Entries = 2;
 
   private class IndexFilter implements FilenameFilter {
     @Override
@@ -1078,7 +1083,7 @@ public class BlobPersistentIndex {
                                                value.getTimeToLiveInMs()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
-            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries)
+            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries && messageEntries.size() >= Minimum_Find_Info_Entries)
               break;
           }
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
@@ -1095,7 +1100,7 @@ public class BlobPersistentIndex {
             newToken = storeToken;
           eliminateDuplicates(messageEntries);
           logger.trace("Index: " + dataDir +
-                       " 2. New offset from find info" +
+                       " New offset from find info" +
                        " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset() :
                                        newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           return new FindInfo(messageEntries, newToken);
@@ -1125,7 +1130,8 @@ public class BlobPersistentIndex {
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;
     long offsetEnd = -1;
-    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
+    while ((currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries || messageEntries.size() < Minimum_Find_Info_Entries) &&
+            indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
       IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
@@ -1144,7 +1150,7 @@ public class BlobPersistentIndex {
                                                value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
                                                value.getTimeToLiveInMs()));
             currentTotalSizeOfEntries.addAndGet(value.getSize());
-            if (currentTotalSizeOfEntries.get() >= maxTotalSizeOfEntries)
+            if (currentTotalSizeOfEntries.get() >= maxTotalSizeOfEntries && messageEntries.size() >= Minimum_Find_Info_Entries)
               break;
           }
         }

@@ -19,6 +19,7 @@ import com.github.ambry.messageformat.TTLMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
@@ -32,20 +33,7 @@ import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.shared.TTLResponse;
 import com.github.ambry.network.Request;
-import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
-import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.DeleteResponse;
-import com.github.ambry.shared.GetRequest;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.ReplicaMetadataRequest;
-import com.github.ambry.shared.ReplicaMetadataResponse;
-import com.github.ambry.shared.RequestResponseType;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.TTLRequest;
-import com.github.ambry.shared.TTLResponse;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
@@ -55,7 +43,6 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +51,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.DataInputStream;
 
 /**
  * The main request implementation class. All requests to the server are
@@ -81,13 +67,15 @@ public class AmbryRequests implements RequestAPI {
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
   private final FindTokenFactory findTokenFactory;
+  private final NotificationSystem notification;
 
   public AmbryRequests(StoreManager storeManager,
-                         RequestResponseChannel requestResponseChannel,
+                       RequestResponseChannel requestResponseChannel,
                        ClusterMap clusterMap,
                        DataNodeId nodeId,
                        MetricRegistry registry,
-                       FindTokenFactory findTokenFactory) {
+                       FindTokenFactory findTokenFactory,
+                       NotificationSystem operationNotification) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -95,6 +83,7 @@ public class AmbryRequests implements RequestAPI {
     this.metrics = new ServerMetrics(registry);
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
     this.findTokenFactory = findTokenFactory;
+    this.notification = operationNotification;
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -164,6 +153,9 @@ public class AmbryRequests implements RequestAPI {
                                    ServerErrorCode.No_Error);
         metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
+        if (notification != null) {
+          notification.onBlobReplicated(putRequest.getBlobId().toString());
+        }
       }
     }
     catch (StoreException e) {
@@ -329,6 +321,9 @@ public class AmbryRequests implements RequestAPI {
         response = new DeleteResponse(deleteRequest.getCorrelationId(),
                                       deleteRequest.getClientId(),
                                       ServerErrorCode.No_Error);
+        if (notification != null) {
+          notification.onBlobDeleted(deleteRequest.getBlobId().toString());
+        }
       }
     }
     catch (StoreException e) {
