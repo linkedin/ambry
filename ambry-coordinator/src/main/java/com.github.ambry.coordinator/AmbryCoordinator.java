@@ -7,6 +7,7 @@ import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolFactory;
@@ -32,6 +33,7 @@ public class AmbryCoordinator implements Coordinator {
   private final VerifiableProperties properties;
   private final AtomicBoolean shuttingDown;
   private final ClusterMap clusterMap;
+  private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
   private int connectionPoolCheckoutTimeout;
@@ -44,9 +46,16 @@ public class AmbryCoordinator implements Coordinator {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap) {
+    this(properties, clusterMap, null);
+  }
+
+  public AmbryCoordinator(VerifiableProperties properties,
+                          ClusterMap clusterMap,
+                          NotificationSystem notificationSystem) {
     this.properties = properties;
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
+    this.notificationSystem = notificationSystem;
   }
 
   @Override
@@ -172,6 +181,10 @@ public class AmbryCoordinator implements Coordinator {
                                                  blobStream,
                                                  connectionPoolCheckoutTimeout);
     putOperation.execute();
+    if (notificationSystem != null) {
+      notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata);
+    }
+
     return blobId.toString();
   }
 
@@ -185,6 +198,9 @@ public class AmbryCoordinator implements Coordinator {
                                                           blobId,
                                                           operationTimeoutMs);
     deleteOperation.execute();
+    if (notificationSystem != null) {
+      notificationSystem.onBlobDeleted(blobIdString);
+    }
   }
 
   @Override
