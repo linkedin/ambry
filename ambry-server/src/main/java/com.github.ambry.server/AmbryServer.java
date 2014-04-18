@@ -13,6 +13,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.SocketServer;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectionPool;
@@ -47,10 +48,19 @@ public class AmbryServer {
   private MetricRegistry registry;
   private JmxReporter reporter;
   private ConnectionPool connectionPool = null;
+  private NotificationSystem notificationSystem = null;
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap) throws IOException {
+  public AmbryServer(VerifiableProperties properties,
+                     ClusterMap clusterMap) throws IOException {
+    this(properties, clusterMap, null);
+  }
+
+  public AmbryServer(VerifiableProperties properties,
+                     ClusterMap clusterMap,
+                     NotificationSystem notificationSystem) throws IOException {
     this.properties = properties;
     this.clusterMap = clusterMap;
+    this.notificationSystem = notificationSystem;
   }
 
   public void startup() throws InstantiationException {
@@ -95,7 +105,8 @@ public class AmbryServer {
                                    clusterMap,
                                    nodeId,
                                    registry,
-                                   findTokenFactory);
+                                   findTokenFactory,
+                                   notificationSystem);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
                                                   networkServer.getRequestResponseChannel(),
                                                   requests);
@@ -112,7 +123,8 @@ public class AmbryServer {
                                                   scheduler,
                                                   nodeId,
                                                   connectionPool,
-                                                  registry);
+                                                  registry,
+                                                  notificationSystem);
       replicationManager.start();
 
       logger.info("started");
@@ -126,6 +138,7 @@ public class AmbryServer {
   public void shutdown() {
     try {
       logger.info("shutdown started");
+
       if (scheduler != null) {
         scheduler.shutdown();
       }

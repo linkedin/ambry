@@ -1,6 +1,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.notification.NotificationSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,6 +152,7 @@ public final class ReplicationManager {
   private final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
   private final ReplicationMetrics replicationMetrics;
+  private final NotificationSystem notification;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -166,7 +168,8 @@ public final class ReplicationManager {
                             Scheduler scheduler,
                             DataNodeId dataNode,
                             ConnectionPool connectionPool,
-                            MetricRegistry metricRegistry) throws ReplicationException {
+                            MetricRegistry metricRegistry,
+                            NotificationSystem requestNotification) throws ReplicationException {
 
     try {
       this.replicationConfig = replicationConfig;
@@ -184,6 +187,7 @@ public final class ReplicationManager {
       this.dataNodeId = dataNode;
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
       this.connectionPool = connectionPool;
+      this.notification = requestNotification;
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -258,7 +262,8 @@ public final class ReplicationManager {
                                                           dataNodeId,
                                                           connectionPool,
                                                           replicationConfig,
-                                                          replicationMetrics);
+                                                          replicationMetrics,
+                                                          notification);
           replicaThreads.add(replicaThread);
         }
       }

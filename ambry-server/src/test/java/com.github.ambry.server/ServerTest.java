@@ -312,6 +312,7 @@ public class ServerTest {
       channel2.send(getRequest1);
       InputStream stream = channel2.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 1000);
@@ -328,6 +329,7 @@ public class ServerTest {
       channel1.send(getRequest2);
       stream = channel1.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      Assert.assertEquals(resp2.getError(), ServerErrorCode.No_Error);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
@@ -448,13 +450,14 @@ public class ServerTest {
               setToCheck.remove(partitionId.toString()+hostname+port);
               // read replica token
               FindToken token = factory.getFindToken(dataInputStream);
+              System.out.println("partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
               ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
               Assert.assertEquals(bytebufferToken.getShort(), 0);
               int size = bytebufferToken.getInt();
               bytebufferToken.position(bytebufferToken.position() + size);
               long parsedToken = bytebufferToken.getLong();
               System.out.println("The parsed token is " + parsedToken);
-              Assert.assertTrue(parsedToken == 0 || parsedToken == 13062);
+              Assert.assertTrue(parsedToken == -1 || parsedToken == 13062);
             }
             long crc = crcStream.getValue();
             Assert.assertEquals(crc, dataInputStream.readLong());

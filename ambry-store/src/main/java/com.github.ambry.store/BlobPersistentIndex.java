@@ -612,13 +612,15 @@ class IndexSegmentInfo {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
-          BlobIndexValue newValue = new BlobIndexValue(ByteBuffer.wrap(buf));
-          MessageInfo info = new MessageInfo(newKey,
-                                             newValue.getSize(),
-                                             newValue.isFlagSet(BlobIndexValue.Flags.Delete_Index),
-                                             newValue.getTimeToLiveInMs());
-          entries.add(info);
-          currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
+          if (key == null || newKey.compareTo(key) != 0) {
+            BlobIndexValue newValue = new BlobIndexValue(ByteBuffer.wrap(buf));
+            MessageInfo info = new MessageInfo(newKey,
+                                               newValue.getSize(),
+                                               newValue.isFlagSet(BlobIndexValue.Flags.Delete_Index),
+                                               newValue.getTimeToLiveInMs());
+            entries.add(info);
+            currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
+          }
           index++;
         }
       }
@@ -628,14 +630,16 @@ class IndexSegmentInfo {
       if (key != null)
         tempMap = index.tailMap(key, true);
       for (Map.Entry<StoreKey, BlobIndexValue> entry : tempMap.entrySet()) {
-        MessageInfo info = new MessageInfo(entry.getKey(),
-                                           entry.getValue().getSize(),
-                                           entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
-                                           entry.getValue().getTimeToLiveInMs());
-        entries.add(info);
-        currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
-        if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
-          break;
+        if (key == null || entry.getKey().compareTo(key) != 0) {
+          MessageInfo info = new MessageInfo(entry.getKey(),
+                                             entry.getValue().getSize(),
+                                             entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
+                                             entry.getValue().getTimeToLiveInMs());
+          entries.add(info);
+          currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
+          if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
+            break;
+          }
         }
       }
     }
@@ -1064,11 +1068,17 @@ public class BlobPersistentIndex {
       }
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
-        logger.trace("Index: " + dataDir + " Getting entries since " + storeToken.getOffset());
+        boolean inclusive = false;
+        long offsetToStart = storeToken.getOffset();
+        if (storeToken.getOffset() == -1) {
+          inclusive = true;
+          offsetToStart = 0;
+        }
+        logger.trace("Index: " + dataDir + " Getting entries since " + offsetToStart);
         // check journal
-        List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
+        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
         if (entries != null) {
-          long offsetEnd = -1;
+          long offsetEnd = offsetToStart;
           long currentTotalSizeOfEntries = 0;
           for (JournalEntry entry : entries) {
             BlobIndexValue value = findKey(entry.getKey());
@@ -1087,7 +1097,7 @@ public class BlobPersistentIndex {
         }
         else {
           // find index segment closest to the offset. get all entries after that
-          Map.Entry<Long, IndexSegmentInfo> entry = indexes.floorEntry(storeToken.getOffset());
+          Map.Entry<Long, IndexSegmentInfo> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
           if (entry != null)
             newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
@@ -1095,7 +1105,7 @@ public class BlobPersistentIndex {
             newToken = storeToken;
           eliminateDuplicates(messageEntries);
           logger.trace("Index: " + dataDir +
-                       " 2. New offset from find info" +
+                       " New offset from find info" +
                        " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset() :
                                        newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           return new FindInfo(messageEntries, newToken);
@@ -1134,7 +1144,7 @@ public class BlobPersistentIndex {
         lastSegmentIndex = segment.getStartOffset();
       }
       else {
-        List<JournalEntry> entries = journal.getEntriesSince(lastSegment.getStartOffset());
+        List<JournalEntry> entries = journal.getEntriesSince(lastSegment.getStartOffset(), true);
         if (entries != null) {
           for (JournalEntry entry : entries) {
             offsetEnd = entry.getOffset();
@@ -1297,7 +1307,7 @@ class StoreFindToken implements FindToken {
   private static final int Start_Offset_Size = 8;
 
   public StoreFindToken() {
-    this(0, -1, null, null);
+    this(-1, -1, null, null);
   }
 
   public StoreFindToken(StoreKey key, long indexStartOffset, UUID sessionId) {
@@ -1353,16 +1363,6 @@ class StoreFindToken implements FindToken {
   public void setOffset(long offset) {
     this.offset = offset;
     this.storeKey = null;
-  }
-
-  public void setIndexStartOffset(long indexStartOffset) {
-    this.indexStartOffset = indexStartOffset;
-    this.storeKey = null;
-  }
-
-  public void setStoreKey(StoreKey key) {
-    this.storeKey = key;
-    this.offset = -1;
     this.indexStartOffset = -1;
   }
 

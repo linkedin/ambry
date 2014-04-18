@@ -511,12 +511,11 @@ public class BlobIndexTest {
       newToken.setOffset(900);
       info1 = index.findEntriesSince(newToken, 100000);
       List<MessageInfo> entries = info1.getMessageEntries();
-      Assert.assertEquals(entries.size(), 3);
-      Assert.assertEquals(entries.get(0).getStoreKey(), blobId10);
-      Assert.assertEquals(entries.get(1).getStoreKey(), blobId11);
-      Assert.assertEquals(entries.get(2).getStoreKey(), blobId12);
+      Assert.assertEquals(entries.size(), 2);
+      Assert.assertEquals(entries.get(0).getStoreKey(), blobId11);
+      Assert.assertEquals(entries.get(1).getStoreKey(), blobId12);
       info1 = index.findEntriesSince(info1.getFindToken(), 100000);
-      Assert.assertEquals(info1.getMessageEntries().size(), 1);
+      Assert.assertEquals(info1.getMessageEntries().size(), 0);
       token = new StoreFindToken();
       info1 = index.findEntriesSince(token, 100000);
       Assert.assertEquals(info1.getMessageEntries().size(), 12);

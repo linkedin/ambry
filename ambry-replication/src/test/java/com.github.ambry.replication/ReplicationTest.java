@@ -517,6 +517,9 @@ public class ReplicationTest {
       replicaBuffers.put("localhost"+6669, messageBufferListLocalReplica3);
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
+      ReplicationMetrics replicationMetrics = new ReplicationMetrics("replication",
+                                                                     new MetricRegistry(),
+                                                                     new ArrayList<ReplicaThread>());
       ReplicaThread replicaThread = new ReplicaThread("threadtest",
                                                       partitionInfoList,
                                                       new MockFindTokenFactory(),
@@ -525,9 +528,8 @@ public class ReplicationTest {
                                                       clusterMap.getDataNodeId("localhost", 6667),
                                                       new MockConnectionPool(replicaStores, replicaBuffers, 3),
                                                       config,
-                                                      new ReplicationMetrics("replication",
-                                                                             new MetricRegistry(),
-                                                                             new ArrayList<ReplicaThread>()));
+                                                      replicationMetrics,
+                                                      null);
       ReplicaThread.ExchangeMetadataResponse response =
               replicaThread.exchangeMetadata(new MockConnection("localhost",
                                                                 6668,
