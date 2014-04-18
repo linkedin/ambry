@@ -79,22 +79,26 @@ class BlobJournal {
    * @return The entries in the journal starting from offset. If the offset is outside the range of the journal,
    *         it returns null.
    */
-  public List<JournalEntry> getEntriesSince(long offset) {
+  public List<JournalEntry> getEntriesSince(long offset, boolean inclusive) {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
     // The offset may not be present in the journal as it could be removed.
-    if (!journal.containsKey(offset))
+
+    if (!journal.containsKey(offset)) {
       return null;
+    }
     ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
     int entriesAdded = 0;
     for (Map.Entry<Long, StoreKey> entries : subsetMap.entrySet()) {
-      journalEntries.add(new JournalEntry(entries.getKey(), entries.getValue()));
-      entriesAdded++;
-      if (entriesAdded == entriesToReturn)
-        break;
+      if (inclusive || entries.getKey() != offset) {
+        journalEntries.add(new JournalEntry(entries.getKey(), entries.getValue()));
+        entriesAdded++;
+        if (entriesAdded == entriesToReturn)
+          break;
+      }
     }
     if (!journal.containsKey(offset))
       return null;

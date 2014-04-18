@@ -450,7 +450,7 @@ public class AmbryRequests implements RequestAPI {
                                              findInfo.getMessageEntries());
     }
     catch (StoreException e) {
-      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.IOError)
         metrics.storeIOError.inc();
       else

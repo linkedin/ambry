@@ -299,23 +299,34 @@ public class BlobIndex {
         throw new IllegalArgumentException("Invalid token. Provided offset is outside the log range after clean shutdown");
       }
     }
-    List<JournalEntry> entries = journal.getEntriesSince(storeToken.getOffset());
+    boolean inclusive = false;
+    long startOffset = storeToken.getOffset();
+    if (storeToken.getOffset() == -1) {
+      startOffset = 0;
+      inclusive = true;
+    }
+    List<JournalEntry> entries = journal.getEntriesSince(startOffset, inclusive);
     List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
     if (entries == null) {
       // read the entire index and return it
-      long largestOffset = 0;
-      for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
-        messageEntries.add(new MessageInfo(entry.getKey(),
-                                           entry.getValue().getSize(),
-                                           entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
-                                           entry.getValue().getTimeToLiveInMs()));
-        if (entry.getValue().getOffset() > largestOffset)
-          largestOffset = entry.getValue().getOffset();
+      if (index.entrySet().size() > 0) {
+        long largestOffset = 0;
+        for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
+          messageEntries.add(new MessageInfo(entry.getKey(),
+                                             entry.getValue().getSize(),
+                                             entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
+                                             entry.getValue().getTimeToLiveInMs()));
+          if (entry.getValue().getOffset() > largestOffset)
+            largestOffset = entry.getValue().getOffset();
+        }
+        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
       }
-      return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
+      else {
+        return new FindInfo(messageEntries, storeToken);
+      }
     }
     else {
-      long endOffset = -1;
+      long endOffset = storeToken.getOffset();
       long currentTotalSize = 0;
       for (JournalEntry entry : entries) {
         BlobIndexValue value = index.get(entry.getKey());
@@ -325,8 +336,7 @@ public class BlobIndex {
                                            value.getTimeToLiveInMs()));
         endOffset = entry.getOffset();
         currentTotalSize += value.getSize();
-        if (currentTotalSize >= maxTotalSizeOfEntries &&
-            messageEntries.size() >= BlobPersistentIndex.Minimum_Find_Info_Entries)
+        if (currentTotalSize >= maxTotalSizeOfEntries)
           break;
       }
       eliminateDuplicates(messageEntries);
