@@ -182,7 +182,7 @@ public class AmbryCoordinator implements Coordinator {
                                                  connectionPoolCheckoutTimeout);
     putOperation.execute();
     if (notificationSystem != null) {
-      notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata);
+      notificationSystem.onBlobCreated(clientId, blobId.toString(), blobProperties, userMetadata.array());
     }
 
     return blobId.toString();
@@ -199,7 +199,7 @@ public class AmbryCoordinator implements Coordinator {
                                                           operationTimeoutMs);
     deleteOperation.execute();
     if (notificationSystem != null) {
-      notificationSystem.onBlobDeleted(blobIdString);
+      notificationSystem.onBlobDeleted(clientId, blobIdString);
     }
   }
 

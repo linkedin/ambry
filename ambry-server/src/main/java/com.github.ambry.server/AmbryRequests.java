@@ -19,6 +19,7 @@ import com.github.ambry.messageformat.TTLMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
@@ -154,7 +155,9 @@ public class AmbryRequests implements RequestAPI {
         metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
-          notification.onBlobReplicated(putRequest.getBlobId().toString());
+          notification.onBlobReplicaCreated(currentNode.getHostname(),
+                                            putRequest.getBlobId().toString(),
+                                            BlobReplicaSourceType.PRIMARY);
         }
       }
     }
@@ -322,7 +325,9 @@ public class AmbryRequests implements RequestAPI {
                                       deleteRequest.getClientId(),
                                       ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobDeleted(deleteRequest.getBlobId().toString());
+          notification.onBlobReplicaDeleted(currentNode.getHostname(),
+                                            deleteRequest.getBlobId().toString(),
+                                            BlobReplicaSourceType.PRIMARY);
         }
       }
     }
