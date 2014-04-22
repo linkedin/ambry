@@ -125,18 +125,18 @@ class ReplicaThread implements Runnable {
               fixMissingStoreKeys(exchangeMetadataResponse.missingStoreKeys, partitionInfo, connectedChannel, remoteColo);
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
               logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
-                      " Thread name " + threadName +
-                      " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
-                      remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
-                      " Token after speaking to remote node " +
-                      exchangeMetadataResponse.remoteToken);
+                           " Thread name " + threadName +
+                           " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                           remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                           " Token after speaking to remote node " +
+                           exchangeMetadataResponse.remoteToken);
             }
             catch (Exception e) {
               logger.error("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
-                      " Thread name " + threadName +
-                      " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
-                      remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
-                      " Error while replicating with remote replica ", e);
+                           " Thread name " + threadName +
+                           " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                           remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                           " Error while replicating with remote replica ", e);
               replicationMetrics.replicationErrors.inc();
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);
@@ -180,10 +180,10 @@ class ReplicaThread implements Runnable {
     // 1. Sends a ReplicaMetadataRequest to the remote replica and gets all the message entries since the last
     //    token
     logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
-            " Thread name " + threadName +
-            " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
-            remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
-            " Token sent to remote " + remoteReplicaInfo.getToken());
+                 " Thread name " + threadName +
+                 " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                 remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                 " Token sent to remote " + remoteReplicaInfo.getToken());
 
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
                                                                 "replication-metadata-" + dataNodeId.getHostname(),
@@ -324,7 +324,8 @@ class ReplicaThread implements Runnable {
                      " Remote " + connectedChannel.getRemoteHost() + ":" + connectedChannel.getRemotePort() +
                      " Message Replicated " + messageInfo.getStoreKey() +
                      " Partition " + partitionInfo.getPartitionId() +
-                     " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath());
+                     " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath() +
+                     " Message size " + messageInfo.getSize());
         if (notification != null) {
           notification.onBlobReplicaCreated(dataNodeId.getHostname(),
                                             messageInfo.getStoreKey().toString(),

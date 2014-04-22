@@ -22,13 +22,28 @@ public class MockClusterMap implements ClusterMap {
   public MockClusterMap() throws IOException {
 
     // create 3 nodes with each having 3 mount paths
-    MockDataNodeId dataNodeId1 = createDataNode(6667);
-    MockDataNodeId dataNodeId2 = createDataNode(6668);
-    MockDataNodeId dataNodeId3 = createDataNode(6669);
-    dataNodes = new ArrayList<MockDataNodeId>(3);
+    MockDataNodeId dataNodeId1 = createDataNode(6667, "DC1");
+    MockDataNodeId dataNodeId2 = createDataNode(6668, "DC1");
+    MockDataNodeId dataNodeId3 = createDataNode(6669, "DC1");
+
+    MockDataNodeId dataNodeId4 = createDataNode(7000, "DC2");
+    MockDataNodeId dataNodeId5 = createDataNode(7001, "DC2");
+    MockDataNodeId dataNodeId6 = createDataNode(7002, "DC2");
+
+    MockDataNodeId dataNodeId7 = createDataNode(7003, "DC3");
+    MockDataNodeId dataNodeId8 = createDataNode(7004, "DC3");
+    MockDataNodeId dataNodeId9 = createDataNode(7005, "DC3");
+
+    dataNodes = new ArrayList<MockDataNodeId>(9);
     dataNodes.add(dataNodeId1);
     dataNodes.add(dataNodeId2);
     dataNodes.add(dataNodeId3);
+    dataNodes.add(dataNodeId4);
+    dataNodes.add(dataNodeId5);
+    dataNodes.add(dataNodeId6);
+    dataNodes.add(dataNodeId7);
+    dataNodes.add(dataNodeId8);
+    dataNodes.add(dataNodeId9);
     partitions = new HashMap<Long, PartitionId>();
 
     // create three partitions on each mount path
@@ -42,7 +57,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private MockDataNodeId createDataNode(int port) throws IOException {
+  private MockDataNodeId createDataNode(int port, String datacenter) throws IOException {
     File f = null;
     try {
       List<String> mountPaths = new ArrayList<String>(3);
@@ -61,7 +76,7 @@ public class MockClusterMap implements ClusterMap {
       mountPaths.add(mountPath1);
       mountPaths.add(mountPath2);
       mountPaths.add(mountPath3);
-      MockDataNodeId dataNode = new MockDataNodeId(port, mountPaths);
+      MockDataNodeId dataNode = new MockDataNodeId(port, mountPaths, datacenter);
       return dataNode;
     }
     finally {
@@ -116,6 +131,10 @@ public class MockClusterMap implements ClusterMap {
       }
     }
     return replicaIdsToReturn;
+  }
+
+  public List<MockDataNodeId> getDataNodes() {
+    return dataNodes;
   }
 
   public void cleanup() {
@@ -192,7 +211,7 @@ class MockReplicaId implements ReplicaId {
 
   @Override
   public long getCapacityInBytes() {
-    return 100000;
+    return 10000000;
   }
 
   @Override
@@ -213,6 +232,11 @@ class MockReplicaId implements ReplicaId {
         return 100000;
       }
     };
+  }
+
+  @Override
+  public String toString() {
+    return "Mount Path " + mountPath + " Replica Path " + replicaPath;
   }
 
   public void cleanup() {

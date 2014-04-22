@@ -61,9 +61,11 @@ public class ReplicationTest {
   class MockMessageReadSet implements MessageReadSet {
 
     List<ByteBuffer> bytebuffers;
+    List<StoreKey> storeKeys;
 
-    public MockMessageReadSet(List<ByteBuffer> bytebuffers) {
+    public MockMessageReadSet(List<ByteBuffer> bytebuffers, List<StoreKey> storeKeys) {
       this.bytebuffers = bytebuffers;
+      this.storeKeys = storeKeys;
     }
 
     @Override
@@ -85,6 +87,11 @@ public class ReplicationTest {
     @Override
     public long sizeInBytes(int index) {
       return bytebuffers.get(0).limit();
+    }
+
+    @Override
+    public StoreKey getKeyAt(int index) {
+      return storeKeys.get(index);
     }
   }
 
@@ -147,17 +154,19 @@ public class ReplicationTest {
     public StoreInfo get(List<? extends StoreKey> ids) throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
+      List<StoreKey> keys = new ArrayList<StoreKey>();
       int index = 0;
       for (MessageInfo info : messageInfoList) {
         for (StoreKey id : ids) {
           if (info.getStoreKey().equals(id)) {
             infoOutput.add(info);
             buffers.add(log.getData(index));
+            keys.add(info.getStoreKey());
           }
         }
         index++;
       }
-      return new StoreInfo(new MockMessageReadSet(buffers), messageInfoList);
+      return new StoreInfo(new MockMessageReadSet(buffers, keys), messageInfoList);
     }
 
     @Override

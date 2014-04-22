@@ -10,7 +10,10 @@ import com.codahale.metrics.MetricRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.io.IOException;
 
@@ -102,14 +105,20 @@ public class BlobStore implements Store {
     try {
       checkStarted();
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
-      List<MessageInfo> messageInfo = new ArrayList<MessageInfo>(ids.size());
+      Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(ids.size());
       for (StoreKey key : ids) {
         BlobReadOptions readInfo = index.getBlobReadInfo(key);
         readOptions.add(readInfo);
-        messageInfo.add(new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
+        indexMessages.put(key, new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
       }
       MessageReadSet readSet = log.getView(readOptions);
-      return new StoreInfo(readSet, messageInfo);
+      // We ensure that the metadata list is ordered with the order of the message read set view that the
+      // log provides. This ensures ordering of all messages across the log and metadata from the index.
+      List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(readSet.count());
+      for (int i = 0; i < readSet.count(); i++) {
+        messageInfoList.add(indexMessages.get(readSet.getKeyAt(i)));
+      }
+      return new StoreInfo(readSet, messageInfoList);
     }
     catch (IOException e) {
       throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
@@ -146,7 +155,7 @@ public class BlobStore implements Store {
           indexEntries.add(entry) ;
           writeStartOffset += info.getSize();
         }
-        FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - messageInfo.get(0).getSize(), log.getLogEndOffset());
+        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), log.getLogEndOffset());
         index.addToIndex(indexEntries, fileSpan);
       }
       catch (IOException e) {

@@ -17,13 +17,15 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long offset;
   private final Long size;
   private final Long ttl;
+  private final StoreKey storeKey;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  BlobReadOptions(long offset, long size, long ttl) {
+  BlobReadOptions(long offset, long size, long ttl, StoreKey storeKey) {
     this.offset = offset;
     this.size = size;
     this.ttl = ttl;
-    logger.trace("BlobReadOption offset {} size {} ttl {}",offset, size, ttl);
+    this.storeKey = storeKey;
+    logger.trace("BlobReadOption offset {} size {} ttl {} storeKey {}",offset, size, ttl, storeKey);
   }
 
   public long getOffset() {
@@ -36,6 +38,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 
   public long getTTL() {
     return ttl;
+  }
+
+  public StoreKey getStoreKey() {
+    return storeKey;
   }
 
   @Override
@@ -81,7 +87,7 @@ class BlobMessageReadSet implements MessageReadSet {
     logger.trace("Blob Message Read Set position {} count {}",
                  startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
     long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
-    logger.trace("Written {} bytes to the write channel from the file channel : ", written, file.getAbsolutePath());
+    logger.trace("Written {} bytes to the write channel from the file channel : {}", written, file.getAbsolutePath());
     return written;
   }
 
@@ -96,5 +102,13 @@ class BlobMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index out of the messageset for file " + file.getAbsolutePath());
     }
     return readOptions.get(index).getSize();
+  }
+
+  @Override
+  public StoreKey getKeyAt(int index) {
+    if (index >= readOptions.size()) {
+      throw new IndexOutOfBoundsException("index out of the messageset for file " + file.getAbsolutePath());
+    }
+    return readOptions.get(index).getStoreKey();
   }
 }

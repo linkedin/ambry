@@ -2,6 +2,7 @@ package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
 import org.junit.Assert;
@@ -19,9 +20,11 @@ public class MessageFormatSendTest {
   class MockMessageReadSet implements MessageReadSet {
 
     ArrayList<ByteBuffer> buffers;
+    ArrayList<StoreKey> keys;
 
-    public MockMessageReadSet(ArrayList<ByteBuffer> buffers) {
+    public MockMessageReadSet(ArrayList<ByteBuffer> buffers, ArrayList<StoreKey> keys) {
       this.buffers = buffers;
+      this.keys = keys;
     }
 
     @Override
@@ -41,6 +44,11 @@ public class MessageFormatSendTest {
     @Override
     public long sizeInBytes(int index) {
       return buffers.get(index).remaining();
+    }
+
+    @Override
+    public StoreKey getKeyAt(int index) {
+      return keys.get(index);
     }
   }
 
@@ -95,7 +103,9 @@ public class MessageFormatSendTest {
 
       ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
       listbuf.add(buf1);
-      MessageReadSet readSet = new MockMessageReadSet(listbuf);
+      ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+      storeKeys.add(new MockId("012345678910123456789012"));
+      MessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
 
       MetricRegistry registry = new MetricRegistry();
       MessageFormatMetrics metrics = new MessageFormatMetrics(registry);

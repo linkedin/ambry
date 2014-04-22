@@ -45,7 +45,7 @@ final class RemoteReplicaInfo {
   private final long tokenPersistIntervalInMs;
   private FindToken currentToken = null;
   private FindToken tokenToPersist = null;
-  private long timeTokenSet;
+  private long timeTokenSetInMs;
   private FindToken tokenPersisted = null;
 
   public RemoteReplicaInfo(ReplicaId replicaId,
@@ -55,7 +55,7 @@ final class RemoteReplicaInfo {
     this.currentToken = token;
     if (tokenToPersist == null) {
       this.tokenToPersist = token;
-      timeTokenSet = SystemTime.getInstance().milliseconds();
+      timeTokenSetInMs = SystemTime.getInstance().milliseconds();
     }
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
   }
@@ -80,7 +80,7 @@ final class RemoteReplicaInfo {
 
   public FindToken getTokenToPersist() {
     synchronized (lock) {
-      if (SystemTime.getInstance().milliseconds() - timeTokenSet > tokenPersistIntervalInMs) {
+      if ((SystemTime.getInstance().milliseconds() - timeTokenSetInMs) > tokenPersistIntervalInMs) {
         return tokenToPersist;
       }
       return tokenPersisted;
@@ -91,7 +91,7 @@ final class RemoteReplicaInfo {
     synchronized (lock) {
       this.tokenPersisted = tokenToPersist;
       this.tokenToPersist = currentToken;
-      timeTokenSet = SystemTime.getInstance().milliseconds();
+      timeTokenSetInMs = SystemTime.getInstance().milliseconds();
     }
   }
 
@@ -201,7 +201,8 @@ public final class ReplicationManager {
             RemoteReplicaInfo remoteReplicaInfo =
                     new RemoteReplicaInfo(remoteReplica,
                                           factory.getNewFindToken(),
-                                          storeConfig.storeDataFlushIntervalSeconds * Replication_Delay_Multiplier);
+                                          storeConfig.storeDataFlushIntervalSeconds *
+                                                  SystemTime.MsPerSec * Replication_Delay_Multiplier);
             remoteReplicas.add(remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas,
@@ -382,12 +383,15 @@ public final class ReplicationManager {
           // Get all partitions for the mount path and persist the tokens for them
           for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
             for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfo()) {
-              writer.write(info.getPartitionId().getBytes());
-              writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().length());
-              writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
-              writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
-              writer.write(remoteReplica.getTokenToPersist().toBytes());
-              remoteReplica.onTokenPersisted();
+              FindToken tokenToPersist = remoteReplica.getTokenToPersist();
+              if (tokenToPersist != null) {
+                writer.write(info.getPartitionId().getBytes());
+                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().length());
+                writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
+                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
+                writer.write(remoteReplica.getTokenToPersist().toBytes());
+                remoteReplica.onTokenPersisted();
+              }
             }
           }
           long crcValue = crc.getValue();

@@ -9,10 +9,12 @@ public class MockDataNodeId implements DataNodeId {
   int port;
   List<String> mountPaths;
   String hostname = "localhost";
+  String datacenter;
 
-  public MockDataNodeId(int port, List<String> mountPaths) {
+  public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
     this.port = port;
     this.mountPaths = mountPaths;
+    this.datacenter = dataCenter;
   }
 
   @Override
@@ -27,7 +29,7 @@ public class MockDataNodeId implements DataNodeId {
 
   @Override
   public String getDatacenterName() {
-    return "Datacenter";
+    return datacenter;
   }
 
   @Override

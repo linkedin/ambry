@@ -162,7 +162,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
-      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist)
         metrics.idAlreadyExistError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.IOError)
@@ -174,7 +174,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      logger.error("Unknown exception on a put {} ", e);
+      logger.error("Unknown exception on a put ", e);
       response = new PutResponse(putRequest.getCorrelationId(),
                                  putRequest.getClientId(),
                                  ServerErrorCode.Unknown_Error);
@@ -252,7 +252,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
-      logger.error("Store exception on a get with error code {} and exception {}", e.getErrorCode(), e);
+      logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
         metrics.idNotFoundError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
@@ -266,7 +266,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (MessageFormatException e) {
-      logger.error("Message format exception on a get with error code {} and exception {}", e.getErrorCode(), e);
+      logger.error("Message format exception on a get with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt)
         metrics.dataCorruptError.inc();
       else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version)
@@ -276,7 +276,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      logger.error("Unknown exception on a get {}", e);
+      logger.error("Unknown exception on a get ", e);
       response = new GetResponse(getRequest.getCorrelationId(),
                                  getRequest.getClientId(),
                                  ServerErrorCode.Unknown_Error);
@@ -332,7 +332,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
-      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
         metrics.idNotFoundError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
@@ -346,7 +346,7 @@ public class AmbryRequests implements RequestAPI {
                                     ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      logger.error("Unknown exception on delete {}", e);
+      logger.error("Unknown exception on delete ", e);
       response = new DeleteResponse(deleteRequest.getCorrelationId(),
                                     deleteRequest.getClientId(),
                                     ServerErrorCode.Unknown_Error);
@@ -395,7 +395,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     catch (StoreException e) {
-      logger.error("Store exception on a put with error code {} and exception {}",e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
         metrics.idNotFoundError.inc();
       else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
@@ -409,7 +409,7 @@ public class AmbryRequests implements RequestAPI {
                                  ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     }
     catch (Exception e) {
-      logger.error("Unknown exception on ttl {}", e);
+      logger.error("Unknown exception on ttl ", e);
       response = new TTLResponse(ttlRequest.getCorrelationId(),
                                  ttlRequest.getClientId(),
                                  ServerErrorCode.Unknown_Error);

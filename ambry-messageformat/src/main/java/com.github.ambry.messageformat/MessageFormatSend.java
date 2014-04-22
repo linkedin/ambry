@@ -74,7 +74,6 @@ public class MessageFormatSend implements Send {
         // have to read any data to deserialize anything.
         infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
         totalSizeToWrite += readSet.sizeInBytes(i);
-
       }
       else {
         // read header version
@@ -82,7 +81,8 @@ public class MessageFormatSend implements Send {
         readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
                                                MessageFormatRecord.Version_Field_Size_In_Bytes);
         headerVersion.flip();
-        switch (headerVersion.getShort()) {
+        short version = headerVersion.getShort();
+        switch (version) {
           case MessageFormatRecord.Message_Header_Version_V1:
 
             // read the header
@@ -107,7 +107,7 @@ public class MessageFormatSend implements Send {
             }
             else if (flag == MessageFormatFlags.BlobUserMetadata) {
               int userMetadataRecordSize = headerFormat.getBlobRecordRelativeOffset() -
-                                     headerFormat.getUserMetadataRecordRelativeOffset();
+                                           headerFormat.getUserMetadataRecordRelativeOffset();
 
               infoList.add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
               totalSizeToWrite += userMetadataRecordSize;
@@ -132,7 +132,7 @@ public class MessageFormatSend implements Send {
             }
             break;
           default:
-            throw new MessageFormatException("Version not known while reading message - " + headerVersion.getShort(),
+            throw new MessageFormatException("Version not known while reading message - " + version,
                                              MessageFormatErrorCodes.Unknown_Format_Version);
         }
       }
