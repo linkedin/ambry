@@ -780,7 +780,7 @@ public class BlobPersistentIndex {
                               TimeUnit.SECONDS);
     }
     catch (Exception e) {
-      logger.error("Error while creating index {}", e);
+      logger.error("Error while creating index ", e);
       throw new StoreException("Error while creating index " + e.getMessage(), StoreErrorCodes.Index_Creation_Failure);
     }
   }
@@ -1016,7 +1016,7 @@ public class BlobPersistentIndex {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id has expired ttl in index " + id, StoreErrorCodes.TTL_Expired);
     }
-    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
+    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
   }
 
   /**

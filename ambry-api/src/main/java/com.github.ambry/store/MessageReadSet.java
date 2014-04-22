@@ -33,4 +33,11 @@ public interface MessageReadSet {
    * @return The size in bytes of the message represented by the index
    */
   long sizeInBytes(int index);
+
+  /**
+   * Returns the key of the ith message
+   * @param index The index into the message set
+   * @return The key of the message represented by the index
+   */
+  StoreKey getKeyAt(int index);
 }

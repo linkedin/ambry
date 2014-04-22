@@ -31,9 +31,9 @@ public class BlobMessageReadSetTest {
   public void testMessageRead() throws IOException {
     File tempFile = tempFile();
     try {
-      BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1);
-      BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1);
-      BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1);
+      BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1, null);
+      BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1, null);
+      BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1, null);
       List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
       options.add(0, readOptions1);
       options.add(1, readOptions2);
@@ -80,9 +80,9 @@ public class BlobMessageReadSetTest {
       }
 
       // verify args
-      readOptions1 = new BlobReadOptions(500, 30, 1);
-      readOptions2 = new BlobReadOptions(100, 15, 1);
-      readOptions3 = new BlobReadOptions(200, 100, 1);
+      readOptions1 = new BlobReadOptions(500, 30, 1, null);
+      readOptions2 = new BlobReadOptions(100, 15, 1, null);
+      readOptions3 = new BlobReadOptions(200, 100, 1, null);
       options = new ArrayList<BlobReadOptions>(3);
       options.add(0, readOptions1);
       options.add(1, readOptions2);

@@ -9,6 +9,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
+import com.github.ambry.coordinator.CoordinatorError;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -35,12 +36,14 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,47 +52,28 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerTest {
 
-  private List<AmbryServer> serverList = null;
-  private MockClusterMap clusterMap = null;
+  private MockCluster cluster;
 
   public ServerTest() throws InterruptedException, IOException, StoreException, InstantiationException {
-
-    clusterMap = new MockClusterMap();
-    serverList = new ArrayList<AmbryServer>();
-    DataNodeId dataNodeId1 = clusterMap.getDataNodeId("localhost", 6667);
-    startServer(dataNodeId1);
-
-    DataNodeId dataNodeId2 = clusterMap.getDataNodeId("localhost", 6668);
-    startServer(dataNodeId2);
-
-    DataNodeId dataNodeId3 = clusterMap.getDataNodeId("localhost", 6669);
-    startServer(dataNodeId3);
-  }
-
-  private void startServer(DataNodeId dataNodeId) throws IOException, InstantiationException {
-    Properties props = new Properties();
-    props.setProperty("host.name", dataNodeId.getHostname());
-    props.setProperty("port", Integer.toString(dataNodeId.getPort()));
-    VerifiableProperties propverify = new VerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, clusterMap);
-    server.startup();
-    serverList.add(server);
+    cluster = new MockCluster();
   }
 
   @After
   public void cleanup() {
-    for (AmbryServer server : serverList)
-      server.shutdown();
-    clusterMap.cleanup();
+    cluster.cleanup();
   }
 
   @Test
   public void endToEndTest() throws InterruptedException, IOException {
 
     try {
+      MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
       byte[] data = new byte[31870];
       BlobProperties properties = new BlobProperties(31870, "serviceid1");
@@ -205,6 +189,7 @@ public class ServerTest {
    public void endToEndReplicationWithMultiNodeSinglePartitionTest() throws InterruptedException, IOException {
 
     try {
+      MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
       byte[] data = new byte[1000];
       BlobProperties properties = new BlobProperties(1000, "serviceid1");
@@ -302,7 +287,7 @@ public class ServerTest {
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // wait till replication can complete
-      Thread.sleep(4000);
+      Thread.sleep(1000);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -396,7 +381,7 @@ public class ServerTest {
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
-      Thread.sleep(3000);
+      Thread.sleep(1000);
 
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
@@ -406,11 +391,11 @@ public class ServerTest {
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp5.getError(), ServerErrorCode.Blob_Deleted);
 
-      Thread.sleep(3000);
+      Thread.sleep(1000);
       // persist and restore to check state
 
-      serverList.get(0).shutdown();
-      serverList.get(0).awaitShutdown();
+      cluster.getServers().get(0).shutdown();
+      cluster.getServers().get(0).awaitShutdown();
 
       // read the replica file and check correctness
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 6667);
@@ -535,9 +520,9 @@ public class ServerTest {
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
-      serverList.get(0).startup();
+      cluster.getServers().get(0).startup();
       // wait for server to recover
-      Thread.sleep(3000);
+      Thread.sleep(2000);
       channel1.disconnect();
       channel1.connect();
 
@@ -560,16 +545,16 @@ public class ServerTest {
       }
 
       // Shutdown server 1. Remove all its data from all mount path. Recover server 1 and ensure node is built
-      serverList.get(0).shutdown();
-      serverList.get(0).awaitShutdown();
+      cluster.getServers().get(0).shutdown();
+      cluster.getServers().get(0).awaitShutdown();
 
       File mountFile = new File(clusterMap.getReplicaIds(dataNodeId).get(0).getMountPath());
       for (File toDelete: mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
 
-      serverList.get(0).startup();
-      Thread.sleep(3000);
+      cluster.getServers().get(0).startup();
+      Thread.sleep(2000);
       channel1.disconnect();
       channel1.connect();
 
@@ -616,6 +601,7 @@ public class ServerTest {
                                byte[] usermetadata,
                                BlobProperties blobProperties,
                                CountDownLatch latch) {
+      MockClusterMap clusterMap = cluster.getClusterMap();
       this.channel = channel;
       blobIds = new ArrayList<BlobId>(totalBlobsToPut);
       for (int i = 0; i < totalBlobsToPut; i++) {
@@ -663,6 +649,8 @@ public class ServerTest {
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws InterruptedException, IOException {
 
     try {
+      MockClusterMap clusterMap = cluster.getClusterMap();
+      List<AmbryServer> serverList = cluster.getServers();
       byte[] usermetadata = new byte[100];
       byte[] data = new byte[100];
       BlobProperties properties = new BlobProperties(100, "serviceid1");
@@ -702,7 +690,7 @@ public class ServerTest {
       latch.await();
 
       // wait till replication can complete
-      Thread.sleep(4000);
+      Thread.sleep(2000);
       List<BlobId> blobIds = new ArrayList<BlobId>();
       for (int i = 0; i < runnables.size(); i++) {
         blobIds.addAll(runnables.get(i).getBlobIds());
@@ -732,7 +720,6 @@ public class ServerTest {
           channel.send(getRequest);
           InputStream stream = channel.receive();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-          System.out.println("Response from blob property " + resp.getError());
           try {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             Assert.assertEquals(propertyOutput.getBlobSize(), 100);
@@ -809,7 +796,7 @@ public class ServerTest {
       }
 
       // wait for deleted state to replicate
-      Thread.sleep(5000);
+      Thread.sleep(2000);
 
       Iterator<BlobId> iterator = blobsDeleted.iterator();
       while (iterator.hasNext()) {
@@ -849,7 +836,7 @@ public class ServerTest {
       deleteFolderContent(new File(dataNode.getMountPaths().get(0)), false);
       serverList.get(0).startup();
 
-      Thread.sleep(10000);
+      Thread.sleep(2000);
       channel1.disconnect();
       channel1.connect();
 
@@ -947,7 +934,7 @@ public class ServerTest {
 
       serverList.get(0).startup();
 
-      Thread.sleep(5000);
+      Thread.sleep(2000);
       channel1.disconnect();
       channel1.connect();
 
@@ -1038,6 +1025,230 @@ public class ServerTest {
     }
   }
 
+  class Payload {
+    public byte[] blob;
+    public byte[] metadata;
+    public BlobProperties blobProperties;
+    public String blobId;
+
+    public Payload(BlobProperties blobProperties, byte[] metadata, byte[] blob, String blobId) {
+      this.blobProperties = blobProperties;
+      this.metadata = metadata;
+      this.blob = blob;
+      this.blobId = blobId;
+    }
+  }
+
+  class Sender implements Runnable {
+
+    BlockingQueue<Payload> blockingQueue;
+    CountDownLatch completedLatch;
+    int numberOfRequests;
+    Coordinator coordinator;
+
+    public Sender(LinkedBlockingQueue<Payload> blockingQueue,
+                  CountDownLatch completedLatch,
+                  int numberOfRequests,
+                  Coordinator coordinator) {
+      this.blockingQueue = blockingQueue;
+      this.completedLatch = completedLatch;
+      this.numberOfRequests = numberOfRequests;
+      this.coordinator = coordinator;
+    }
+
+    @Override
+    public void run() {
+      try {
+        for (int i = 0; i < numberOfRequests; i++) {
+          int size = new Random().nextInt(5000);
+          BlobProperties properties = new BlobProperties(size, "service1", "owner id check", "image/jpeg", false);
+          byte[] metadata = new byte[new Random().nextInt(1000)];
+          byte[] blob = new byte[size];
+          new Random().nextBytes(metadata);
+          new Random().nextBytes(blob);
+          try {
+            String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
+            blockingQueue.put(new Payload(properties, metadata, blob, blobId));
+          }
+          catch (CoordinatorException e) {
+            if (e.getErrorCode() != CoordinatorError.UnexpectedInternalError) {
+              throw e;
+            }
+          }
+        }
+      }
+      catch (Exception e) {
+        e.printStackTrace();
+      }
+      finally {
+        completedLatch.countDown();
+      }
+    }
+  }
+
+  class Verifier implements Runnable {
+
+    BlockingQueue<Payload> blockingQueue;
+    CountDownLatch completedLatch;
+    AtomicInteger totalRequests;
+    AtomicInteger requestsVerified;
+    MockClusterMap clusterMap;
+
+    public Verifier(BlockingQueue<Payload> blockingQueue,
+                    CountDownLatch completedLatch,
+                    AtomicInteger totalRequests,
+                    AtomicInteger requestsVerified,
+                    MockClusterMap clusterMap) {
+      this.blockingQueue = blockingQueue;
+      this.completedLatch = completedLatch;
+      this.totalRequests = totalRequests;
+      this.requestsVerified = requestsVerified;
+      this.clusterMap = clusterMap;
+    }
+
+    @Override
+    public void run() {
+      try {
+        Thread.sleep(4000);
+        while (requestsVerified.get() != totalRequests.get()) {
+          Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
+          if (payload != null) {
+            for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
+              BlockingChannel channel1 = new BlockingChannel(dataNodeId.getHostname(),
+                                                             dataNodeId.getPort(),
+                                                             10000,
+                                                             10000,
+                                                             10000);
+              channel1.connect();
+              ArrayList<BlobId> ids = new ArrayList<BlobId>();
+              ids.add(new BlobId(payload.blobId, clusterMap));
+              GetRequest getRequest = new GetRequest(1,
+                                                     "clientid2",
+                                                     MessageFormatFlags.BlobProperties,
+                                                     ids.get(0).getPartition(),
+                                                     ids);
+              channel1.send(getRequest);
+              InputStream stream = channel1.receive();
+              GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              if (resp.getError() != ServerErrorCode.No_Error ) {
+                System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
+                throw new IllegalStateException();
+              }
+              else {
+                try {
+                  BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
+                  if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
+                    System.out.println("blob size not matching " + " expected " +
+                            payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
+                    throw new IllegalStateException();
+                  }
+                  if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
+                    System.out.println("service id not matching " + " expected " +
+                            payload.blobProperties.getServiceId() + " actual " + propertyOutput.getBlobSize());
+                    throw new IllegalStateException();
+                  }
+                }
+                catch (MessageFormatException e) {
+                  e.printStackTrace();
+                  throw new IllegalStateException();
+                }
+              }
+
+              // get user metadata
+              ids.clear();
+              ids.add(new BlobId(payload.blobId, clusterMap));
+              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, ids.get(0).getPartition(), ids);
+              channel1.send(getRequest);
+              stream = channel1.receive();
+              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              if (resp.getError() != ServerErrorCode.No_Error) {
+                System.out.println("Error after get user metadata " + resp.getError());
+                throw new IllegalStateException();
+              }
+              else {
+                try {
+                  ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
+                  Assert.assertArrayEquals(userMetadataOutput.array(), payload.metadata);
+                }
+                catch (MessageFormatException e) {
+                  e.printStackTrace();
+                  throw new IllegalStateException();
+                }
+              }
+
+              // get blob
+              ids.clear();
+              ids.add(new BlobId(payload.blobId, clusterMap));
+              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, ids.get(0).getPartition(), ids);
+              channel1.send(getRequest);
+              stream = channel1.receive();
+              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              //System.out.println("response from get " + resp.getError());
+              if (resp.getError() != ServerErrorCode.No_Error) {
+                System.out.println("Error after get blob " + resp.getError());
+                throw new IllegalStateException();
+              }
+              else {
+                try {
+                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+                  byte[] blobout = new byte[(int)blobOutput.getSize()];
+                  int readsize = 0;
+                  while (readsize < blobOutput.getSize()) {
+                    readsize += blobOutput.getStream().read(blobout, readsize, (int)blobOutput.getSize() - readsize);
+                  }
+                  Assert.assertArrayEquals(blobout, payload.blob);
+                }
+                catch (MessageFormatException e) {
+                  e.printStackTrace();
+                  throw new IllegalStateException();
+                }
+              }
+              channel1.disconnect();
+            }
+            requestsVerified.incrementAndGet();
+          }
+        }
+      }
+      catch (Exception e) {
+        e.printStackTrace();
+      }
+      finally {
+        completedLatch.countDown();
+      }
+    }
+  }
+
+  @Test
+  public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest() throws InterruptedException, IOException {
+    Properties props = new Properties();
+    props.setProperty("coordinator.hostname", "localhost");
+    props.setProperty("coordinator.datacenter.name", "DC1");
+    VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
+    coordinator.start();
+    Thread[] senderThreads = new Thread[3];
+    LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
+    int numberOfSenderThreads = 3;
+    int numberOfVerifierThreads = 3;
+    CountDownLatch latch = new CountDownLatch(numberOfSenderThreads + numberOfVerifierThreads);
+    int numberOfRequestsToSendPerThread = 10;
+    for (int i = 0; i < numberOfSenderThreads; i++) {
+      senderThreads[i] = new Thread(new Sender(blockingQueue, latch, numberOfRequestsToSendPerThread, coordinator));
+      senderThreads[i].start();
+    }
+    AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
+    AtomicInteger verifiedRequests = new AtomicInteger(0);
+    for (int i = 0; i < numberOfVerifierThreads; i++) {
+      Thread thread = new Thread(new Verifier(blockingQueue, latch, totalRequests, verifiedRequests, cluster.getClusterMap()));
+      thread.start();
+    }
+    latch.await();
+    Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
+    coordinator.shutdown();
+  }
+
+
+
   private void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data) throws CoordinatorException, IOException {
     BlobOutput output = coordinator.getBlob(blobId.toString());
     Assert.assertEquals(output.getSize(), 1000);
@@ -1053,7 +1264,7 @@ public class ServerTest {
     GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, blobId.getPartition(), listIds);
     channel.send(getRequest3);
     InputStream stream = channel.receive();
-    GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+    GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), cluster.getClusterMap());
     BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
     byte[] blobout = new byte[(int)blobOutput.getSize()];
     int readsize = 0;

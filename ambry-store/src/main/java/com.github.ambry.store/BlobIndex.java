@@ -254,7 +254,7 @@ public class BlobIndex {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
     }
-    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
+    return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
   }
 
   /**

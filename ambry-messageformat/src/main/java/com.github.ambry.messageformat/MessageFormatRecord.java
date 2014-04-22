@@ -347,9 +347,10 @@ public class MessageFormatRecord {
       try {
         DataInputStream dataStream = new DataInputStream(crcStream);
         BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(dataStream);
-        long crc = crcStream.getValue();
-        if (crc != dataStream.readLong()) {
-          logger.error("corrupt data while parsing blob properties");
+        long actualCRC = crcStream.getValue();
+        long expectedCRC = dataStream.readLong();
+        if (actualCRC != expectedCRC) {
+          logger.error("corrupt data while parsing blob properties Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
           throw new MessageFormatException("Blob property data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
         }
         return properties;
@@ -400,9 +401,10 @@ public class MessageFormatRecord {
     public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
-      long crc = crcStream.getValue();
-      if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing delete record");
+      long actualCRC = crcStream.getValue();
+      long expectedCRC = dataStream.readLong();
+      if (actualCRC != expectedCRC) {
+        logger.error("corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return isDeleted;
@@ -445,9 +447,10 @@ public class MessageFormatRecord {
     public static long deserializeTTLRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long ttl = dataStream.readLong();
-      long crc = crcStream.getValue();
-      if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing ttl record");
+      long actualCRC = crcStream.getValue();
+      long expectedCRC = dataStream.readLong();
+      if (actualCRC != expectedCRC) {
+        logger.error("corrupt data while parsing ttl record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("ttl record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return ttl;
@@ -497,9 +500,10 @@ public class MessageFormatRecord {
       int usermetadataSize = dataStream.readInt();
       byte[] userMetadaBuffer = new byte[usermetadataSize];
       dataStream.read(userMetadaBuffer);
-      long crc = crcStream.getValue();
-      if (crc != dataStream.readLong()) {
-        logger.error("corrupt data while parsing user metadata");
+      long actualCRC = crcStream.getValue();
+      long expectedCRC = dataStream.readLong();
+      if (actualCRC != expectedCRC) {
+        logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return ByteBuffer.wrap(userMetadaBuffer);
