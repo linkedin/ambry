@@ -363,7 +363,6 @@ public final class ReplicationManager {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
-    private int numberOfTimes = 0;
     // TODO add metric to indicate existence of thread
     // TODO add metric to indicate time taken
 
