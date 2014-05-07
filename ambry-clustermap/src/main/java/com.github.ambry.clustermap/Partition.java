@@ -33,6 +33,7 @@ public class Partition extends PartitionId {
 
   // For constructing new Partition
   public Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
+    logger.trace("Partition " + id + ", " + partitionState + ", " + replicaCapacityInBytes);
     this.id = id;
     this.partitionState = partitionState;
     this.replicaCapacityInBytes = replicaCapacityInBytes;
@@ -46,6 +47,7 @@ public class Partition extends PartitionId {
   }
 
   public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    logger.trace("Partition " + jsonObject.toString());
     this.id = jsonObject.getLong("id");
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
@@ -81,7 +83,7 @@ public class Partition extends PartitionId {
     return partitionState;
   }
 
-  public long getCapacityInBytes() {
+  public long getAllocatedRawCapacityInBytes() {
     return replicaCapacityInBytes * replicas.size();
   }
 
@@ -158,7 +160,7 @@ public class Partition extends PartitionId {
 
   @Override
   public String toString() {
-    return "Partition: " + toPathString();
+    return "Partition[" + toPathString() + "]";
   }
 
   @Override

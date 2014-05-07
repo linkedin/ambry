@@ -42,8 +42,7 @@ final public class PutOperation extends Operation {
                       long operationTimeoutMs,
                       BlobProperties blobProperties,
                       ByteBuffer userMetadata,
-                      InputStream blobStream,
-                      int connectionPoolCheckoutTimeout) throws CoordinatorException {
+                      InputStream blobStream) throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
           new PutPolicy(datacenterName, blobId.getPartition()));
     this.blobProperties = blobProperties;
@@ -115,6 +114,17 @@ final class PutOperationRequest extends OperationRequest {
                                 ReplicaId replicaId,
                                 RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
+  }
+
+  @Override
+  protected void markRequest() throws CoordinatorException {
+    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestRate.mark();
+  }
+
+  @Override
+  protected void updateRequest(long durationInMs) throws CoordinatorException {
+    context.getCoordinatorMetrics().
+            getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestLatencyInMs.update(durationInMs);
   }
 
   @Override

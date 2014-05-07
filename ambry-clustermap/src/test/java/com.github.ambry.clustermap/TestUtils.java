@@ -118,9 +118,17 @@ public class TestUtils {
     return datacenterJSONArray;
   }
 
+  public static final long defaultHardwareLayoutVersion = 321;
   public static JSONObject getJsonHardwareLayout(String clusterName, JSONArray datacenters) throws JSONException {
+    return getJsonHardwareLayout(clusterName, defaultHardwareLayoutVersion, datacenters);
+  }
+
+  public static JSONObject getJsonHardwareLayout(String clusterName,
+                                                 long version,
+                                                 JSONArray datacenters) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("clusterName", clusterName);
+    jsonObject.put("version", version);
     jsonObject.put("datacenters", datacenters);
     return jsonObject;
   }
@@ -215,16 +223,17 @@ public class TestUtils {
   }
 
   public static JSONObject getJsonPartitionLayout(String clusterName,
+                                                  long version,
                                                   long partitionCount,
                                                   JSONArray partitions) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("clusterName", clusterName);
+    jsonObject.put("version", version);
     jsonObject.put("partitionIdFactory", partitionCount);
     jsonObject.put("partitions", partitions);
     return jsonObject;
   }
 
-  // TODO: Better name? Extract into own file?
   public static class TestHardwareLayout {
     private static final int defaultDiskCount = 10; // per DataNode
     private static final long defaultDiskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
@@ -232,6 +241,7 @@ public class TestUtils {
     private static final int defaultDatacenterCount = 3;
     private static final int defaultBasePort = 6666;
 
+    private long version;
     private int diskCount;
     private long diskCapacityInBytes;
     private int dataNodeCount;
@@ -382,8 +392,8 @@ public class TestUtils {
     }
   }
 
-  // TODO: Better name? Extract into own file?
   public static class TestPartitionLayout {
+    protected static final long defaultVersion = 2468;
     protected static final int defaultPartitionCount = 10;
     protected static final PartitionState defaultPartitionState = PartitionState.READ_WRITE;
     protected static final long defaultReplicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
@@ -404,6 +414,7 @@ public class TestUtils {
                                                    replicaCount,
                                                    testHardwareLayout);
       return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(),
+                                    defaultVersion,
                                     partitionCount,
                                     jsonPartitions);
     }
@@ -456,6 +467,7 @@ public class TestUtils {
                                                             replicaCount,
                                                             testHardwareLayout);
       return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(),
+                                    defaultVersion,
                                     partitionCount,
                                     jsonPartitions);
     }
@@ -474,6 +486,7 @@ public class TestUtils {
                                                           replicaCount,
                                                           testHardwareLayout);
       return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(),
+                                    defaultVersion,
                                     partitionCount,
                                     jsonPartitions);
     }

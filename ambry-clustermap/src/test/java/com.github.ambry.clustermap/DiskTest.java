@@ -26,7 +26,7 @@ class TestDisk extends Disk {
     TestDisk testDisk = (TestDisk)o;
 
     if (!getMountPath().equals(testDisk.getMountPath())) return false;
-    if (getCapacityInBytes() != testDisk.getCapacityInBytes()) return false;
+    if (getRawCapacityInBytes() != testDisk.getRawCapacityInBytes()) return false;
     return getHardwareState() == testDisk.getHardwareState();
   }
 }
@@ -43,7 +43,7 @@ public class DiskTest {
 
     assertEquals(testDisk.getMountPath(), "/mnt1");
     assertEquals(testDisk.getHardwareState(), HardwareState.AVAILABLE);
-    assertEquals(testDisk.getCapacityInBytes(), 100 * 1024 * 1024 * 1024L);
+    assertEquals(testDisk.getRawCapacityInBytes(), 100 * 1024 * 1024 * 1024L);
     assertEquals(testDisk.toJSONObject().toString(), jsonObject.toString());
     assertEquals(testDisk, new TestDisk(testDisk.toJSONObject()));
   }
@@ -80,6 +80,4 @@ public class DiskTest {
                                          HardwareState.UNAVAILABLE,
                                          1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
   }
-
-  // TODO: Add tests of disk for complete hardware map. E.g., make sure getHWState works that reasons about datanode state.
 }

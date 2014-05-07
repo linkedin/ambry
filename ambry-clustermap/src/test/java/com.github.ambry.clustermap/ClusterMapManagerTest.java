@@ -27,16 +27,20 @@ public class ClusterMapManagerTest {
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
     StringBuilder sb = new StringBuilder();
     sb.append("Free space dump for cluster.").append(System.getProperty("line.separator"));
-    sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager.getFreeCapacityInBytes())
+    sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager
+                                                                            .getUnallocatedRawCapacityInBytes())
             .append(System.getProperty("line.separator"));
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(datacenter))
+      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes(
+              datacenter))
               .append(System.getProperty("line.separator"));
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(dataNode))
+        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes(
+                dataNode))
                 .append(System.getProperty("line.separator"));
         for (Disk disk : dataNode.getDisks()) {
-          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getFreeCapacityInBytes(disk))
+          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes
+                  (disk))
                   .append(System.getProperty("line.separator"));
         }
       }
@@ -146,18 +150,18 @@ public class ClusterMapManagerTest {
 
     // Confirm initial capacity is available for use
     long raw = clusterMapManager.getRawCapacityInBytes();
-    long allocated = clusterMapManager.getAllocatedCapacityInBytes();
-    long free = clusterMapManager.getFreeCapacityInBytes();
+    long allocated = clusterMapManager.getAllocatedRawCapacityInBytes();
+    long free = clusterMapManager.getUnallocatedRawCapacityInBytes();
 
     assertEquals(free, raw);
     assertEquals(allocated, 0);
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        long dataNodeFree = clusterMapManager.getFreeCapacityInBytes(dataNode);
+        long dataNodeFree = clusterMapManager.getUnallocatedRawCapacityInBytes(dataNode);
         assertEquals(dataNodeFree, testHardwareLayout.getDiskCapacityInBytes() * testHardwareLayout.getDiskCount());
         for (Disk disk : dataNode.getDisks()) {
-          long diskFree = clusterMapManager.getFreeCapacityInBytes(disk);
+          long diskFree = clusterMapManager.getUnallocatedRawCapacityInBytes(disk);
           assertEquals(diskFree, testHardwareLayout.getDiskCapacityInBytes());
         }
       }
@@ -167,17 +171,17 @@ public class ClusterMapManagerTest {
 
     // Confirm 100GB has been used on 6 distinct DataNodes / Disks.
     assertEquals(clusterMapManager.getRawCapacityInBytes(), raw);
-    assertEquals(clusterMapManager.getAllocatedCapacityInBytes(), 6 * 100 * 1024 * 1024 * 1024L);
-    assertEquals(clusterMapManager.getFreeCapacityInBytes(), free - (6 * 100 * 1024 * 1024 * 1024L));
+    assertEquals(clusterMapManager.getAllocatedRawCapacityInBytes(), 6 * 100 * 1024 * 1024 * 1024L);
+    assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), free - (6 * 100 * 1024 * 1024 * 1024L));
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        long dataNodeFree = clusterMapManager.getFreeCapacityInBytes(dataNode);
+        long dataNodeFree = clusterMapManager.getUnallocatedRawCapacityInBytes(dataNode);
         assertTrue(dataNodeFree <= testHardwareLayout.getDiskCapacityInBytes() * testHardwareLayout.getDiskCount());
         assertTrue(dataNodeFree >= testHardwareLayout.getDiskCapacityInBytes() *
                                    testHardwareLayout.getDiskCount() - (100 * 1024 * 1024 * 1024L));
         for (Disk disk : dataNode.getDisks()) {
-          long diskFree = clusterMapManager.getFreeCapacityInBytes(disk);
+          long diskFree = clusterMapManager.getUnallocatedRawCapacityInBytes(disk);
           assertTrue(diskFree <= testHardwareLayout.getDiskCapacityInBytes());
           assertTrue(diskFree >= testHardwareLayout.getDiskCapacityInBytes() - (100 * 1024 * 1024 * 1024L));
         }
@@ -197,11 +201,13 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerSer = TestUtils.getTestClusterMap();
     clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
-    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
+    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer,
+                                                                  partitionLayoutSer);
     assertEquals(clusterMapManagerSer, clusterMapManagerDe);
 
     clusterMapManagerDe.persist(hardwareLayoutDe, partitionLayoutDe);
-    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe);
+    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe,
+                                                                    partitionLayoutDe);
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
@@ -216,9 +222,10 @@ public class ClusterMapManagerTest {
     configDir += "/config";
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
-    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
+    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer,
+                                                                partitionLayoutSer);
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
-    assertEquals(clusterMapManager.getFreeCapacityInBytes(), 10737418240L);
+    assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }
 }

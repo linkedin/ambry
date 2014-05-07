@@ -163,9 +163,9 @@ public abstract class Operation {
 abstract class OperationRequest implements Runnable {
   private final ConnectionPool connectionPool;
   private final BlockingQueue<OperationResponse> responseQueue;
-  private final OperationContext context;
+  protected final OperationContext context;
   private final BlobId blobId;
-  private final ReplicaId replicaId;
+  protected final ReplicaId replicaId;
   private final RequestOrResponse request;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -186,6 +186,9 @@ abstract class OperationRequest implements Runnable {
 
   protected abstract Response getResponse(DataInputStream dataInputStream) throws IOException;
 
+  protected abstract void markRequest() throws CoordinatorException;
+  protected abstract void updateRequest(long durationInMs) throws CoordinatorException;
+
   void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
   }
@@ -193,6 +196,8 @@ abstract class OperationRequest implements Runnable {
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
+    long startTimeInMs = System.currentTimeMillis();
+
     try {
       logger.debug("{} {} checking out connection", context, replicaId);
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
@@ -219,28 +224,43 @@ abstract class OperationRequest implements Runnable {
       connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
+      markRequest();
+      updateRequest(System.currentTimeMillis() - startTimeInMs);
     }
     catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
+      countError(RequestResponseError.IO_ERROR);
     }
     catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
+      countError(RequestResponseError.MESSAGE_FORMAT_ERROR);
     }
     catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
+      countError(RequestResponseError.TIMEOUT_ERROR);
     }
     catch (Exception e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
+      countError(RequestResponseError.UNEXPECTED_ERROR);
     }
     finally {
       if (connectedChannel != null) {
         logger.debug("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
+    }
+  }
+
+  private void countError(RequestResponseError error) {
+    try {
+      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
+    }
+    catch (CoordinatorException e) {
+      logger.error("Swallowing exception fetching RequestMetrics: ", e);
     }
   }
 

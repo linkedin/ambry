@@ -23,6 +23,7 @@ public class Disk implements DiskId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
+    logger.trace("Disk " + jsonObject.toString());
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
@@ -46,7 +47,7 @@ public class Disk implements DiskId {
   }
 
   @Override
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
     return capacityInBytes;
   }
 
@@ -101,7 +102,7 @@ public class Disk implements DiskId {
 
   @Override
   public String toString() {
-    return "Disk: " + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath();
+    return "Disk[" + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath() + "]";
   }
 
   @Override

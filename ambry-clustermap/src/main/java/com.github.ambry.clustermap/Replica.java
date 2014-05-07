@@ -21,6 +21,7 @@ public class Replica implements ReplicaId {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Replica(Partition partition, Disk disk) {
+    logger.trace("Replica " + partition + ", " + disk);
     this.partition = partition;
     this.disk = disk;
 
@@ -115,8 +116,6 @@ public class Replica implements ReplicaId {
 
   @Override
   public String toString() {
-    return "Replica: " + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath();
+    return "Replica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
   }
-
-
 }

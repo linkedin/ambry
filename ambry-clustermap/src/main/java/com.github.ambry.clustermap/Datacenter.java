@@ -22,6 +22,7 @@ public class Datacenter {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    logger.trace("Datacenter " + jsonObject.toString());
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
 
@@ -40,10 +41,10 @@ public class Datacenter {
     return name;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (DataNode dataNode : dataNodes) {
-      capacityInBytes += dataNode.getCapacityInBytes();
+      capacityInBytes += dataNode.getRawCapacityInBytes();
     }
     return capacityInBytes;
   }
@@ -86,7 +87,7 @@ public class Datacenter {
 
   @Override
   public String toString() {
-    return "Datacenter: " + getName();
+    return "Datacenter[" + getName() + "]";
   }
 
   @Override

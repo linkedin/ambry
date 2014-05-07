@@ -1,5 +1,7 @@
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
+
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -15,9 +17,8 @@ import java.util.Map;
  */
 public class MockClusterMap implements ClusterMap {
 
-  private Map<Long, PartitionId> partitions;
-  private List<MockDataNodeId> dataNodes;
-
+  private final Map<Long, PartitionId> partitions;
+  private final List<MockDataNodeId> dataNodes;
 
   public MockClusterMap() throws IOException {
 
@@ -133,8 +134,19 @@ public class MockClusterMap implements ClusterMap {
     return replicaIdsToReturn;
   }
 
+  @Override
+  public List<DataNodeId> getDataNodeIds() {
+    return new ArrayList<DataNodeId>(dataNodes);
+  }
+
   public List<MockDataNodeId> getDataNodes() {
     return dataNodes;
+  }
+
+  @Override
+  public MetricRegistry getMetricRegistry() {
+    // Each server that calls this mocked interface needs its own metric registry.
+    return new MetricRegistry();
   }
 
   public void cleanup() {
@@ -228,7 +240,7 @@ class MockReplicaId implements ReplicaId {
       }
 
       @Override
-      public long getCapacityInBytes() {
+      public long getRawCapacityInBytes() {
         return 100000;
       }
     };

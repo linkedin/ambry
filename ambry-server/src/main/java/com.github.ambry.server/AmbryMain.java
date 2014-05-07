@@ -1,14 +1,14 @@
 package com.github.ambry.server;
 
 
-import java.util.Properties;
-
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Properties;
 
 /**
  * Ambry main
@@ -25,6 +25,7 @@ public class AmbryMain {
     try {
       Properties props = Utils.loadProps(args[0]);
       VerifiableProperties vprops = new VerifiableProperties(props);
+
       ClusterMap clusterMap = new ClusterMapManager(args[1], args[2]);
 
       final AmbryServer server = new AmbryServer(vprops, clusterMap);

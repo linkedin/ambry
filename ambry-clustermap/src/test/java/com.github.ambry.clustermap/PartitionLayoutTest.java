@@ -18,7 +18,7 @@ public class PartitionLayoutTest {
 
     assertEquals(partitionLayout.getClusterName(), "Alpha");
     assertEquals(partitionLayout.getPartitions().size(), testPartitionLayout.getPartitionCount());
-    assertEquals(partitionLayout.getCapacityInBytes(), testPartitionLayout.getCapacityInBytes());
+    assertEquals(partitionLayout.getAllocatedRawCapacityInBytes(), testPartitionLayout.getCapacityInBytes());
   }
 
   @Test

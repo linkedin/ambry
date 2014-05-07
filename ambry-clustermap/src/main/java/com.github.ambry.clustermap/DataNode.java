@@ -28,6 +28,7 @@ public class DataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
+    logger.trace("DataNode " + jsonObject.toString());
     this.datacenter = datacenter;
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
@@ -89,10 +90,10 @@ public class DataNode implements DataNodeId {
     return datacenter;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (Disk disk : disks) {
-      capacityInBytes += disk.getCapacityInBytes();
+      capacityInBytes += disk.getRawCapacityInBytes();
     }
     return capacityInBytes;
   }
@@ -149,7 +150,7 @@ public class DataNode implements DataNodeId {
 
   @Override
   public String toString() {
-    return "DataNode: " + getHostname() + ":" + getPort();
+    return "DataNode[" + getHostname() + ":" + getPort() + "]";
   }
 
   @Override

@@ -25,6 +25,7 @@ public class PartitionLayout {
 
   private final HardwareLayout hardwareLayout;
   private String clusterName;
+  private long version;
   private long maxPartitionId;
   private Map<ByteBuffer, Partition> partitionMap;
 
@@ -34,6 +35,7 @@ public class PartitionLayout {
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = jsonObject.getString("clusterName");
+    this.version = jsonObject.getLong("version");
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
 
     for (int i = 0; i < jsonObject.getJSONArray("partitions").length(); ++i) {
@@ -48,6 +50,7 @@ public class PartitionLayout {
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = hardwareLayout.getClusterName();
+    this.version = 1;
     this.maxPartitionId = MinPartitionId;
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
 
@@ -60,6 +63,24 @@ public class PartitionLayout {
 
   public String getClusterName() {
     return clusterName;
+  }
+
+  public long getVersion() {
+    return version;
+  }
+
+  public long getPartitionCount() {
+    return partitionMap.size();
+  }
+
+  public long getPartitionInStateCount(PartitionState partitionState) {
+    int count = 0;
+    for (Partition partition : partitionMap.values()) {
+      if (partition.getPartitionState() == partitionState) {
+        count++;
+      }
+    }
+    return count;
   }
 
   public List<Partition> getPartitions() {
@@ -78,12 +99,20 @@ public class PartitionLayout {
     return writablePartitions;
   }
 
-  public long getCapacityInBytes() {
-    long capacityInBytes = 0;
+  public long getAllocatedRawCapacityInBytes() {
+    long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionMap.values()) {
-      capacityInBytes += partition.getCapacityInBytes();
+      allocatedRawCapacityInBytes += partition.getAllocatedRawCapacityInBytes();
     }
-    return capacityInBytes;
+    return allocatedRawCapacityInBytes;
+  }
+
+  public long getAllocatedUsableCapacityInBytes() {
+    long allocatedUsableCapacityInBytes = 0;
+    for (Partition partition : partitionMap.values()) {
+      allocatedUsableCapacityInBytes += partition.getReplicaCapacityInBytes();
+    }
+    return allocatedUsableCapacityInBytes;
   }
 
   /**
@@ -178,6 +207,7 @@ public class PartitionLayout {
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
             .put("clusterName", hardwareLayout.getClusterName())
+            .put("version", version)
             .put("partitions", new JSONArray());
     for (Partition partition : partitionMap.values()) {
       jsonObject.accumulate("partitions", partition.toJSONObject());

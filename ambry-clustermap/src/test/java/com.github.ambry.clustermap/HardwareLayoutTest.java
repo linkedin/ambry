@@ -102,7 +102,6 @@ public class HardwareLayoutTest {
     return TestUtils.getJsonArrayDatacenters(names, dataNodes);
   }
 
-
   @Test
   public void basics() throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonHardwareLayout("Alpha", getDatacenters());
@@ -111,7 +110,7 @@ public class HardwareLayoutTest {
 
     assertEquals(hardwareLayout.getClusterName(), "Alpha");
     assertEquals(hardwareLayout.getDatacenters().size(), datacenterCount);
-    assertEquals(hardwareLayout.getCapacityInBytes(),
+    assertEquals(hardwareLayout.getRawCapacityInBytes(),
                  datacenterCount * dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(hardwareLayout.toJSONObject().toString(), jsonObject.toString());
   }

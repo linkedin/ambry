@@ -15,13 +15,16 @@ import java.util.List;
  * An Ambry hardwareLayout consists of a set of {@link Datacenter}s.
  */
 public class HardwareLayout {
-  private String clusterName;
-  private ArrayList<Datacenter> datacenters;
+  private final String clusterName;
+  private final long version;
+  private final ArrayList<Datacenter> datacenters;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public HardwareLayout(JSONObject jsonObject) throws JSONException {
+    logger.trace("HardwareLayout " + jsonObject.toString());
     this.clusterName = jsonObject.getString("clusterName");
+    this.version = jsonObject.getLong("version");
 
     this.datacenters = new ArrayList<Datacenter>(jsonObject.getJSONArray("datacenters").length());
     for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
@@ -35,16 +38,68 @@ public class HardwareLayout {
     return clusterName;
   }
 
+  public long getVersion() {
+    return version;
+  }
+
   public List<Datacenter> getDatacenters() {
     return datacenters;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (Datacenter datacenter : datacenters) {
-      capacityInBytes += datacenter.getCapacityInBytes();
+      capacityInBytes += datacenter.getRawCapacityInBytes();
     }
     return capacityInBytes;
+  }
+
+  public long getDatacenterCount() {
+    return datacenters.size();
+  }
+
+  public long getDataNodeCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      count += datacenter.getDataNodes().size();
+    }
+    return count;
+  }
+
+  public long getDiskCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        count += dataNode.getDisks().size();
+      }
+    }
+    return count;
+  }
+
+  public long getDataNodeInStateCount(HardwareState hardwareState) {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        if (dataNode.getState() == hardwareState) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  public long getDiskInStateCount(HardwareState hardwareState) {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        for (Disk disk : dataNode.getDisks()) {
+          if (disk.getState() == hardwareState) {
+            count++;
+          }
+        }
+      }
+    }
+    return count;
   }
 
   /**
@@ -147,6 +202,7 @@ public class HardwareLayout {
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
             .put("clusterName", clusterName)
+            .put("version", version)
             .put("datacenters", new JSONArray());
     for (Datacenter datacenter : datacenters) {
       jsonObject.accumulate("datacenters", datacenter.toJSONObject());

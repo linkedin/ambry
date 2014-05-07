@@ -1,14 +1,13 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.shared.TTLResponse;
-import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +80,16 @@ final class CancelTTLOperationRequest extends OperationRequest {
                                       ReplicaId replicaId,
                                       RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
+  }
+
+  @Override
+  protected void markRequest() throws CoordinatorException {
+    // Do nothing
+  }
+
+  @Override
+  protected void updateRequest(long durationInMs) throws CoordinatorException {
+    // Do nothing
   }
 
   @Override
