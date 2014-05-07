@@ -91,6 +91,17 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   }
 
   @Override
+  protected void markRequest() throws CoordinatorException {
+    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestRate.mark();
+  }
+
+  @Override
+  protected void updateRequest(long durationInMs) throws CoordinatorException {
+    context.getCoordinatorMetrics().
+            getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestLatencyInMs.update(durationInMs);
+  }
+
+  @Override
   protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
     getBlobUserMetadataOperation.setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream));
   }

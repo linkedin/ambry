@@ -27,7 +27,7 @@ class TestDatacenter extends Datacenter {
     TestDatacenter testDatacenter = (TestDatacenter)o;
 
     if (!getName().equals(testDatacenter.getName())) return false;
-    return getCapacityInBytes() == testDatacenter.getCapacityInBytes();
+    return getRawCapacityInBytes() == testDatacenter.getRawCapacityInBytes();
   }
 }
 
@@ -60,7 +60,7 @@ public class DatacenterTest {
 
     assertEquals(datacenter.getName(), "XYZ1");
     assertEquals(datacenter.getDataNodes().size(), dataNodeCount);
-    assertEquals(datacenter.getCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
+    assertEquals(datacenter.getRawCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
     assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject()));
   }

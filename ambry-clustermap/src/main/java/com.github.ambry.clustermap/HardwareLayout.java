@@ -7,26 +7,43 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 
 /**
  * An Ambry hardwareLayout consists of a set of {@link Datacenter}s.
  */
 public class HardwareLayout {
-  private String clusterName;
-  private ArrayList<Datacenter> datacenters;
+  private final String clusterName;
+  private final long version;
+  private final ArrayList<Datacenter> datacenters;
+  private final long rawCapacityInBytes;
+  private final long dataNodeCount;
+  private final long diskCount;
+  private final Map<HardwareState, Long> dataNodeInHardStateCount;
+  private final Map<HardwareState, Long> diskInHardStateCount;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public HardwareLayout(JSONObject jsonObject) throws JSONException {
+    if (logger.isTraceEnabled())
+      logger.trace("HardwareLayout " + jsonObject.toString());
     this.clusterName = jsonObject.getString("clusterName");
+    this.version = jsonObject.getLong("version");
 
     this.datacenters = new ArrayList<Datacenter>(jsonObject.getJSONArray("datacenters").length());
     for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
       this.datacenters.add(i, new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i)));
     }
+
+    this.rawCapacityInBytes = calculateRawCapacityInBytes();
+    this.dataNodeCount = calculateDataNodeCount();
+    this.diskCount = calculateDiskCount();
+    this.dataNodeInHardStateCount = calculateDataNodeInHardStateCount();
+    this.diskInHardStateCount = calculateDiskInHardStateCount();
 
     validate();
   }
@@ -35,16 +52,116 @@ public class HardwareLayout {
     return clusterName;
   }
 
+  public long getVersion() {
+    return version;
+  }
+
   public List<Datacenter> getDatacenters() {
     return datacenters;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
+    return rawCapacityInBytes;
+  }
+
+  private long calculateRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (Datacenter datacenter : datacenters) {
-      capacityInBytes += datacenter.getCapacityInBytes();
+      capacityInBytes += datacenter.getRawCapacityInBytes();
     }
     return capacityInBytes;
+  }
+
+  public long getDatacenterCount() {
+    return datacenters.size();
+  }
+
+  public long getDataNodeCount() {
+    return dataNodeCount;
+  }
+
+  private long calculateDataNodeCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      count += datacenter.getDataNodes().size();
+    }
+    return count;
+  }
+
+  public long getDiskCount() {
+    return diskCount;
+  }
+
+  private long calculateDiskCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        count += dataNode.getDisks().size();
+      }
+    }
+    return count;
+  }
+
+  public long getDataNodeInHardStateCount(HardwareState hardwareState) {
+    return dataNodeInHardStateCount.get(hardwareState);
+  }
+
+  private Map<HardwareState, Long> calculateDataNodeInHardStateCount() {
+    Map<HardwareState, Long> dataNodeInStateCount = new HashMap<HardwareState, Long>();
+    for (HardwareState hardwareState : HardwareState.values()) {
+      dataNodeInStateCount.put(hardwareState, new Long(0));
+    }
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        dataNodeInStateCount.put(dataNode.getState(), dataNodeInStateCount.get(dataNode.getState()) + 1);
+      }
+    }
+    return dataNodeInStateCount;
+  }
+
+  public long calculateSoftDownDataNodeCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        if (dataNode.isSoftDown()) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  public long getDiskInHardStateCount(HardwareState hardwareState) {
+    return diskInHardStateCount.get(hardwareState);
+  }
+
+  private Map<HardwareState, Long> calculateDiskInHardStateCount() {
+    Map<HardwareState, Long> diskInStateCount = new HashMap<HardwareState, Long>();
+    for (HardwareState hardwareState : HardwareState.values()) {
+      diskInStateCount.put(hardwareState, new Long(0));
+    }
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        for (Disk disk : dataNode.getDisks()) {
+        diskInStateCount.put(dataNode.getState(), diskInStateCount.get(dataNode.getState()) + 1);
+        }
+      }
+    }
+    return diskInStateCount;
+  }
+
+  public long calculateSoftDownDiskCount() {
+    long count = 0;
+    for (Datacenter datacenter : datacenters) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        for (Disk disk : dataNode.getDisks()) {
+          if (disk.isSoftDown()) {
+            count++;
+          }
+        }
+      }
+    }
+    return count;
   }
 
   /**
@@ -147,6 +264,7 @@ public class HardwareLayout {
   public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject()
             .put("clusterName", clusterName)
+            .put("version", version)
             .put("datacenters", new JSONArray());
     for (Datacenter datacenter : datacenters) {
       jsonObject.accumulate("datacenters", datacenter.toJSONObject());

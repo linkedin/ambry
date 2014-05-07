@@ -91,6 +91,17 @@ final class GetBlobOperationRequest extends GetOperationRequest {
   }
 
   @Override
+  protected void markRequest() throws CoordinatorException {
+    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).getBlobRequestRate.mark();
+  }
+
+  @Override
+  protected void updateRequest(long durationInMs) throws CoordinatorException {
+    context.getCoordinatorMetrics().
+            getRequestMetrics(replicaId.getDataNodeId()).getBlobRequestLatencyInMs.update(durationInMs);
+  }
+
+  @Override
   protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
     getBlobOperation.setBlobOutput(MessageFormatRecord.deserializeBlob(inputStream));
   }

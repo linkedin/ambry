@@ -20,24 +20,30 @@ public class DataNode implements DataNodeId {
   private static final int MaxPort = 65535;
 
   private final Datacenter datacenter;
-  private String hostname;
-  private int port;
-  private HardwareState hardwareState;
-  private ArrayList<Disk> disks;
+  private final String hostname;
+  private final int port;
+  private final HardwareState hardState;
+  private HardwareState softState;
+  private final ArrayList<Disk> disks;
+  private final long rawCapacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public DataNode(Datacenter datacenter, JSONObject jsonObject) throws JSONException {
+    if (logger.isTraceEnabled())
+      logger.trace("DataNode " + jsonObject.toString());
     this.datacenter = datacenter;
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
+    this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
+    this.softState = hardState;
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
     for (int i = 0; i < diskJSONArray.length(); ++i) {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i)));
     }
+    this.rawCapacityInBytes = calculateRawCapacityInBytes();
 
     validate();
   }
@@ -77,7 +83,23 @@ public class DataNode implements DataNodeId {
 
   @Override
   public HardwareState getState() {
-    return hardwareState;
+    if (hardState == HardwareState.UNAVAILABLE) {
+      return HardwareState.UNAVAILABLE;
+    }
+    return softState;
+  }
+
+  public boolean isSoftDown() {
+    return (hardState == HardwareState.AVAILABLE && softState == HardwareState.UNAVAILABLE);
+  }
+
+  public void setSoftState(HardwareState hardwareState) {
+    if (hardState == HardwareState.AVAILABLE) {
+      softState = hardwareState;
+    }
+    else {
+      logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
+    }
   }
 
   @Override
@@ -89,10 +111,14 @@ public class DataNode implements DataNodeId {
     return datacenter;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
+    return rawCapacityInBytes;
+  }
+
+  private long calculateRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (Disk disk : disks) {
-      capacityInBytes += disk.getCapacityInBytes();
+      capacityInBytes += disk.getRawCapacityInBytes();
     }
     return capacityInBytes;
   }
@@ -139,7 +165,7 @@ public class DataNode implements DataNodeId {
     JSONObject jsonObject = new JSONObject()
             .put("hostname", hostname)
             .put("port", port)
-            .put("hardwareState", hardwareState)
+            .put("hardwareState", hardState)
             .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
@@ -149,7 +175,7 @@ public class DataNode implements DataNodeId {
 
   @Override
   public String toString() {
-    return "DataNode: " + getHostname() + ":" + getPort();
+    return "DataNode[" + getHostname() + ":" + getPort() + "]";
   }
 
   @Override
