@@ -56,6 +56,9 @@ public class ClusterMapManagerTest {
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(testPartitionLayout.getPartitionLayout());
+    for (String metricName : clusterMapManager.getMetricRegistry().getNames()) {
+      System.out.println(metricName);
+    }
 
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), testPartitionLayout.getPartitionCount());
     for (int i = 0; i < clusterMapManager.getWritablePartitionIdsCount(); i++) {

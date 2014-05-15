@@ -6,6 +6,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,12 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
+
+  public final Counter putBlobError;
+  public final Counter deleteBlobError;
+  public final Counter getBlobPropertiesError;
+  public final Counter getBlobUserMetadataError;
+  public final Counter getBlobError;
 
   public final Counter unexpectedInternalError;
   public final Counter ambryUnavailableError;
@@ -71,6 +78,17 @@ public class CoordinatorMetrics {
     operationExceptionRate =
             registry.meter(MetricRegistry.name(AmbryCoordinator.class, "operationExceptionRate"));
 
+    putBlobError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "putBlobError"));
+    deleteBlobError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobError"));
+    getBlobPropertiesError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesError"));
+    getBlobUserMetadataError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataError"));
+    getBlobError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobError"));
+
     unexpectedInternalError =
             registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unexpectedInternalError"));
     ambryUnavailableError =
@@ -102,8 +120,39 @@ public class CoordinatorMetrics {
     }
   }
 
-  public void countError(CoordinatorError error) {
+  public enum CoordinatorOperationType {
+    PutBlob,
+    DeleteBlob,
+    GetBlobProperties,
+    GetBlobUserMetadata,
+    GetBlob
+  }
+
+  public void countError(CoordinatorOperationType operation, CoordinatorError error) {
     operationExceptionRate.mark();
+
+    switch (operation) {
+      case PutBlob:
+        putBlobError.inc();
+        break;
+      case DeleteBlob:
+        deleteBlobError.inc();
+        break;
+      case GetBlobProperties:
+        getBlobPropertiesError.inc();
+        break;
+      case GetBlobUserMetadata:
+        getBlobUserMetadataError.inc();
+        break;
+      case GetBlob:
+        getBlobError.inc();
+        break;
+      default:
+        logger.warn("Error for unknown CoordinatorOperationType being counted: " + operation);
+        unknownError.inc();
+        break;
+    }
+
     switch (error) {
       case UnexpectedInternalError:
         unexpectedInternalError.inc();
@@ -168,9 +217,11 @@ public class CoordinatorMetrics {
 
     public final Counter unexpectedError;
     public final Counter ioError;
-    public final Counter messageFormatError;
     public final Counter timeoutError;
     public final Counter unknownError;
+    public final Counter messageFormatDataCorruptError;
+    public final Counter messageFormatHeaderConstraintError;
+    public final Counter messageFormatUnknownFormatError;
 
     RequestMetrics(MetricRegistry registry, DataNodeId dataNodeId) {
       putBlobRequestLatencyInMs =
@@ -253,12 +304,6 @@ public class CoordinatorMetrics {
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "ioError"));
-      messageFormatError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "messageFormatError"));
       timeoutError =
               registry.counter(MetricRegistry.name(AmbryCoordinator.class,
                                                    dataNodeId.getDatacenterName(),
@@ -271,6 +316,43 @@ public class CoordinatorMetrics {
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "unknownError"));
+      messageFormatDataCorruptError =
+              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+                                                   dataNodeId.getDatacenterName(),
+                                                   dataNodeId.getHostname(),
+                                                   Integer.toString(dataNodeId.getPort()),
+                                                   "messageFormatDataCorruptError"));
+      messageFormatHeaderConstraintError =
+              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+                                                   dataNodeId.getDatacenterName(),
+                                                   dataNodeId.getHostname(),
+                                                   Integer.toString(dataNodeId.getPort()),
+                                                   "messageFormatHeaderConstraintError"));
+      messageFormatUnknownFormatError =
+              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+                                                   dataNodeId.getDatacenterName(),
+                                                   dataNodeId.getHostname(),
+                                                   Integer.toString(dataNodeId.getPort()),
+                                                   "messageFormatUnknownFormatError"));
+    }
+
+    public void countError(MessageFormatErrorCodes error) {
+      requestErrorRate.mark();
+      switch (error) {
+        case Data_Corrupt:
+          messageFormatHeaderConstraintError.inc();
+          break;
+        case Header_Constraint_Error:
+          messageFormatHeaderConstraintError.inc();
+          break;
+        case Unknown_Format_Version:
+          messageFormatUnknownFormatError.inc();
+          break;
+        default:
+          logger.warn("Unknown MessageFormatErrorCodes: " + error);
+          unknownError.inc();
+          break;
+      }
     }
 
     public void countError(RequestResponseError error) {
@@ -282,14 +364,11 @@ public class CoordinatorMetrics {
         case IO_ERROR:
           ioError.inc();
           break;
-        case MESSAGE_FORMAT_ERROR:
-          messageFormatError.inc();
-          break;
         case TIMEOUT_ERROR:
           timeoutError.inc();
           break;
         default:
-          logger.warn("Unknown RequestResponseError being counted: " + error);
+          logger.warn("Unknown RequestResponseError: " + error);
           unknownError.inc();
           break;
       }

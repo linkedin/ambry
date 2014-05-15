@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectedChannel;
@@ -235,7 +236,7 @@ abstract class OperationRequest implements Runnable {
     catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
-      countError(RequestResponseError.MESSAGE_FORMAT_ERROR);
+      countError(e.getErrorCode());
     }
     catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
@@ -252,6 +253,15 @@ abstract class OperationRequest implements Runnable {
         logger.debug("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
+    }
+  }
+
+  private void countError(MessageFormatErrorCodes error) {
+    try {
+      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
+    }
+    catch (CoordinatorException e) {
+      logger.error("Swallowing exception fetching RequestMetrics: ", e);
     }
   }
 

@@ -47,7 +47,8 @@ public class Partition extends PartitionId {
   }
 
   public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    logger.trace("Partition " + jsonObject.toString());
+    if (logger.isTraceEnabled())
+      logger.trace("Partition " + jsonObject.toString());
     this.id = jsonObject.getLong("id");
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");

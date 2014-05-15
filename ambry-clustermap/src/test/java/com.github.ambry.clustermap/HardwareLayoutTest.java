@@ -108,11 +108,20 @@ public class HardwareLayoutTest {
 
     HardwareLayout hardwareLayout = new HardwareLayout(jsonObject);
 
+    assertEquals(hardwareLayout.getVersion(), TestUtils.defaultHardwareLayoutVersion);
     assertEquals(hardwareLayout.getClusterName(), "Alpha");
     assertEquals(hardwareLayout.getDatacenters().size(), datacenterCount);
     assertEquals(hardwareLayout.getRawCapacityInBytes(),
                  datacenterCount * dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(hardwareLayout.toJSONObject().toString(), jsonObject.toString());
+
+    assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.AVAILABLE), datacenterCount * dataNodeCount);
+    assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.UNAVAILABLE), 0);
+    assertEquals(hardwareLayout.calculateSoftDownDataNodeCount(), 0);
+    assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.AVAILABLE),
+                 datacenterCount * dataNodeCount * diskCount);
+    assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.UNAVAILABLE), 0);
+    assertEquals(hardwareLayout.calculateSoftDownDiskCount(), 0);
   }
 
   public void failValidation(JSONObject jsonObject) throws JSONException {

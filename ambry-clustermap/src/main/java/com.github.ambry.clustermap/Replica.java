@@ -21,7 +21,8 @@ public class Replica implements ReplicaId {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Replica(Partition partition, Disk disk) {
-    logger.trace("Replica " + partition + ", " + disk);
+    if (logger.isTraceEnabled())
+      logger.trace("Replica " + partition + ", " + disk);
     this.partition = partition;
     this.disk = disk;
 
@@ -30,10 +31,8 @@ public class Replica implements ReplicaId {
 
   public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
     this.partition = partition;
-
     this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"),
                                         jsonObject.getInt("port"), jsonObject.getString("mountPath"));
-
     validate();
   }
 

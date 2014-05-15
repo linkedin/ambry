@@ -18,8 +18,10 @@ public class ClusterMapMetrics {
   public final Gauge<Long> diskCount;
   public final Gauge<Long> dataNodesHardUpCount;
   public final Gauge<Long> dataNodesHardDownCount;
+  public final Gauge<Long> dataNodesSoftDownCount;
   public final Gauge<Long> disksHardUpCount;
   public final Gauge<Long> disksHardDownCount;
+  public final Gauge<Long> disksSoftDownCount;
 
   public final Gauge<Long> partitionCount;
   public final Gauge<Long> partitionsReadWrite;
@@ -35,115 +37,133 @@ public class ClusterMapMetrics {
     this.hardwareLayout = hardwareLayout;
     this.partitionLayout = partitionLayout;
 
-    this.hardwareLayoutVersion = new com.codahale.metrics.Gauge<Long>() {
+    // Metrics based on HardwareLayout
+
+    this.hardwareLayoutVersion = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return getHardwareLayoutVersion();
       }
     };
-    this.partitionLayoutVersion = new com.codahale.metrics.Gauge<Long>() {
+    this.partitionLayoutVersion = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return getPartitionLayoutVersion();
       }
     };
-    registry.register("hardwareLayoutVersion", hardwareLayoutVersion);
-    registry.register("partitionLayoutVersion", partitionLayoutVersion);
+    registry.register(MetricRegistry.name(ClusterMap.class, "hardwareLayoutVersion"), hardwareLayoutVersion);
+    registry.register(MetricRegistry.name(ClusterMap.class, "partitionLayoutVersion"), partitionLayoutVersion);
 
-    this.datacenterCount = new com.codahale.metrics.Gauge<Long>() {
+    this.datacenterCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countDatacenters();
       }
     };
-    this.dataNodeCount = new com.codahale.metrics.Gauge<Long>() {
+    this.dataNodeCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countDataNodes();
       }
     };
-    this.diskCount = new com.codahale.metrics.Gauge<Long>() {
+    this.diskCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countDisks();
       }
     };
-    registry.register("datacenterCount", datacenterCount);
-    registry.register("dataNodeCount", dataNodeCount);
-    registry.register("diskCount", diskCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "datacenterCount"), datacenterCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodeCount"), dataNodeCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "diskCount"), diskCount);
 
-    this.dataNodesHardUpCount = new com.codahale.metrics.Gauge<Long>() {
+    this.dataNodesHardUpCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countDataNodesInState(HardwareState.AVAILABLE);
+        return countDataNodesInHardState(HardwareState.AVAILABLE);
       }
     };
-    this.dataNodesHardDownCount = new com.codahale.metrics.Gauge<Long>() {
+    this.dataNodesHardDownCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countDataNodesInState(HardwareState.UNAVAILABLE);
+        return countDataNodesInHardState(HardwareState.UNAVAILABLE);
       }
     };
-    this.disksHardUpCount = new com.codahale.metrics.Gauge<Long>() {
+    this.dataNodesSoftDownCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countDisksInState(HardwareState.AVAILABLE);
+        return countSoftDownDataNodes();
       }
     };
-    this.disksHardDownCount = new com.codahale.metrics.Gauge<Long>() {
+    this.disksHardUpCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countDisksInState(HardwareState.UNAVAILABLE);
+        return countDisksInHardState(HardwareState.AVAILABLE);
       }
     };
-    registry.register("dataNodesHardUpCount", dataNodesHardUpCount);
-    registry.register("dataNodesHardDownCount", dataNodesHardDownCount);
-    registry.register("disksHardUpCount", disksHardUpCount);
-    registry.register("disksHardDownCount", disksHardDownCount);
+    this.disksHardDownCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return countDisksInHardState(HardwareState.UNAVAILABLE);
+      }
+    };
+    this.disksSoftDownCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return countSoftDownDisks();
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardUpCount"), dataNodesHardUpCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardDownCount"), dataNodesHardDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesSoftDownCount"), dataNodesSoftDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "disksHardUpCount"), disksHardUpCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "disksHardDownCount"), disksHardDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "disksSoftDownCount"), disksSoftDownCount);
 
-    this.partitionCount = new com.codahale.metrics.Gauge<Long>() {
+    // Metrics based on PartitionLayout
+
+    this.partitionCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countPartitions();
       }
     };
-    this.partitionsReadWrite = new com.codahale.metrics.Gauge<Long>() {
+    this.partitionsReadWrite = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countPartitionsInState(PartitionState.READ_WRITE);
       }
     };
-    this.partitionsReadOnly = new com.codahale.metrics.Gauge<Long>() {
+    this.partitionsReadOnly = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return countPartitionsInState(PartitionState.READ_ONLY);
       }
     };
-    registry.register("numberOfPartitions", partitionCount);
-    registry.register("numberOfReadWritePartitions", partitionsReadWrite);
-    registry.register("numberOfReadOnlyPartitions", partitionsReadOnly);
+    registry.register(MetricRegistry.name(ClusterMap.class, "numberOfPartitions"), partitionCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadWritePartitions"), partitionsReadWrite);
+    registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadOnlyPartitions"), partitionsReadOnly);
 
-    this.rawCapacityInBytes = new com.codahale.metrics.Gauge<Long>() {
+    this.rawCapacityInBytes = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return getRawCapacity();
       }
     };
-    this.allocatedRawCapacityInBytes = new com.codahale.metrics.Gauge<Long>() {
+    this.allocatedRawCapacityInBytes = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return getAllocatedRawCapacity();
       }
     };
-    this.allocatedUsableCapacityInBytes = new com.codahale.metrics.Gauge<Long>() {
+    this.allocatedUsableCapacityInBytes = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return getAllocatedUsableCapacity();
       }
     };
-    registry.register("rawCapacityInBytes", rawCapacityInBytes);
-    registry.register("allocatedRawCapacityInBytes", allocatedRawCapacityInBytes);
-    registry.register("allocatedUsableCapacityInBytes", allocatedUsableCapacityInBytes);
+    registry.register(MetricRegistry.name(ClusterMap.class, "rawCapacityInBytes"), rawCapacityInBytes);
+    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
+    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"), allocatedUsableCapacityInBytes);
   }
 
   private long getHardwareLayoutVersion() {
@@ -166,12 +186,20 @@ public class ClusterMapMetrics {
     return hardwareLayout.getDiskCount();
   }
 
-  private long countDataNodesInState(HardwareState hardwareState) {
-    return hardwareLayout.getDataNodeInStateCount(hardwareState);
+  private long countDataNodesInHardState(HardwareState hardwareState) {
+    return hardwareLayout.getDataNodeInHardStateCount(hardwareState);
   }
 
-  private long countDisksInState(HardwareState hardwareState) {
-    return hardwareLayout.getDiskInStateCount(hardwareState);
+  private long countSoftDownDataNodes() {
+    return hardwareLayout.calculateSoftDownDataNodeCount();
+  }
+
+  private long countDisksInHardState(HardwareState hardwareState) {
+    return hardwareLayout.getDiskInHardStateCount(hardwareState);
+  }
+
+  private long countSoftDownDisks() {
+    return hardwareLayout.calculateSoftDownDiskCount();
   }
 
   private long countPartitions() {

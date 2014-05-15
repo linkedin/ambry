@@ -65,7 +65,6 @@ public interface ClusterMap {
    */
   public List<DataNodeId> getDataNodeIds();
 
-
   /**
    * Gets the MetricRegistry that other users of the ClusterMap ought to use for metrics.
    *

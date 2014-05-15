@@ -24,14 +24,19 @@ public class PartitionLayout {
   private static final long MinPartitionId = 0;
 
   private final HardwareLayout hardwareLayout;
-  private String clusterName;
-  private long version;
+  private final String clusterName;
+  private final long version;
+  private final Map<ByteBuffer, Partition> partitionMap;
+
   private long maxPartitionId;
-  private Map<ByteBuffer, Partition> partitionMap;
+  private long allocatedRawCapacityInBytes;
+  private long allocatedUsableCapacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    if (logger.isTraceEnabled())
+      logger.trace("PartitionLayout " + hardwareLayout + ", " + jsonObject.toString());
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = jsonObject.getString("clusterName");
@@ -47,6 +52,8 @@ public class PartitionLayout {
 
   // Constructor for initial PartitionLayout.
   public PartitionLayout(HardwareLayout hardwareLayout) {
+    if (logger.isTraceEnabled())
+      logger.trace("PartitionLayout " + hardwareLayout);
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = hardwareLayout.getClusterName();
@@ -100,6 +107,10 @@ public class PartitionLayout {
   }
 
   public long getAllocatedRawCapacityInBytes() {
+    return allocatedRawCapacityInBytes;
+  }
+
+  private long calculateAllocatedRawCapacityInBytes() {
     long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionMap.values()) {
       allocatedRawCapacityInBytes += partition.getAllocatedRawCapacityInBytes();
@@ -108,6 +119,10 @@ public class PartitionLayout {
   }
 
   public long getAllocatedUsableCapacityInBytes() {
+    return allocatedUsableCapacityInBytes;
+  }
+
+  private long calculateAllocatedUsableCapacityInBytes() {
     long allocatedUsableCapacityInBytes = 0;
     for (Partition partition : partitionMap.values()) {
       allocatedUsableCapacityInBytes += partition.getReplicaCapacityInBytes();
@@ -168,6 +183,8 @@ public class PartitionLayout {
     validateClusterName();
     validatePartitionIds();
     validateUniqueness();
+    this.allocatedRawCapacityInBytes = calculateAllocatedRawCapacityInBytes();
+    this.allocatedUsableCapacityInBytes = calculateAllocatedUsableCapacityInBytes();
     logger.trace("complete validate.");
   }
 

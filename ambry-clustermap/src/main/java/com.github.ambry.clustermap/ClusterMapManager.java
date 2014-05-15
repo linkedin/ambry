@@ -29,29 +29,20 @@ public class ClusterMapManager implements ClusterMap {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
-    this(partitionLayout, new MetricRegistry());
-  }
-
-  public ClusterMapManager(PartitionLayout partitionLayout, MetricRegistry metricRegistry) {
-    logger.trace("ClusterMapManager " + partitionLayout);
+    if (logger.isTraceEnabled())
+      logger.trace("ClusterMapManager " + partitionLayout);
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
-    this.metricRegistry = metricRegistry;
+    this.metricRegistry = new MetricRegistry();
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
   public ClusterMapManager(String hardwareLayoutPath,
                            String partitionLayoutPath) throws IOException, JSONException {
-    this(hardwareLayoutPath, partitionLayoutPath, new MetricRegistry());
-  }
-
-  public ClusterMapManager(String hardwareLayoutPath,
-                           String partitionLayoutPath,
-                           MetricRegistry metricRegistry) throws IOException, JSONException {
     logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
     this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
-    this.metricRegistry = metricRegistry;
+    this.metricRegistry = new MetricRegistry();
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 

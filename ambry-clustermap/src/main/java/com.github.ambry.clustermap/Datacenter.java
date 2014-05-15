@@ -16,13 +16,15 @@ import java.util.List;
  */
 public class Datacenter {
   private final HardwareLayout hardwareLayout;
-  private String name; // E.g., "ELA4"
-  private ArrayList<DataNode> dataNodes;
+  private final String name; // E.g., "ELA4"
+  private final ArrayList<DataNode> dataNodes;
+  private final long rawCapacityInBytes;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    logger.trace("Datacenter " + jsonObject.toString());
+    if (logger.isTraceEnabled())
+      logger.trace("Datacenter " + jsonObject.toString());
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
 
@@ -30,6 +32,7 @@ public class Datacenter {
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
       this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i)));
     }
+    this.rawCapacityInBytes = calculateRawCapacityInBytes();
     validate();
   }
 
@@ -42,6 +45,10 @@ public class Datacenter {
   }
 
   public long getRawCapacityInBytes() {
+    return rawCapacityInBytes;
+  }
+
+  private long calculateRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (DataNode dataNode : dataNodes) {
       capacityInBytes += dataNode.getRawCapacityInBytes();

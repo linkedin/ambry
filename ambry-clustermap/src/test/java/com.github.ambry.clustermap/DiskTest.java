@@ -27,7 +27,7 @@ class TestDisk extends Disk {
 
     if (!getMountPath().equals(testDisk.getMountPath())) return false;
     if (getRawCapacityInBytes() != testDisk.getRawCapacityInBytes()) return false;
-    return getHardwareState() == testDisk.getHardwareState();
+    return getHardState() == testDisk.getHardState();
   }
 }
 
@@ -42,7 +42,7 @@ public class DiskTest {
     Disk testDisk = new TestDisk(jsonObject);
 
     assertEquals(testDisk.getMountPath(), "/mnt1");
-    assertEquals(testDisk.getHardwareState(), HardwareState.AVAILABLE);
+    assertEquals(testDisk.getHardState(), HardwareState.AVAILABLE);
     assertEquals(testDisk.getRawCapacityInBytes(), 100 * 1024 * 1024 * 1024L);
     assertEquals(testDisk.toJSONObject().toString(), jsonObject.toString());
     assertEquals(testDisk, new TestDisk(testDisk.toJSONObject()));

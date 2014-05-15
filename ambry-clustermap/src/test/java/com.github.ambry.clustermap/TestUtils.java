@@ -453,8 +453,19 @@ public class TestUtils {
       return replicaCount;
     }
 
-    public long getCapacityInBytes() {
+    public long getAllocatedRawCapacityInBytes() {
       return partitionCount * replicaCount * replicaCapacityInBytes;
+    }
+
+    public long getAllocatedUsableCapacityInBytes() {
+      return partitionCount * replicaCapacityInBytes;
+    }
+
+    public long countPartitionsInState(PartitionState partitionStateToCount) {
+      if (partitionState == partitionStateToCount) {
+        return partitionCount;
+      }
+      return 0;
     }
   }
 
