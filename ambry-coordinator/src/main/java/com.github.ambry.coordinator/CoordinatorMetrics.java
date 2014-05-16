@@ -30,23 +30,25 @@ public class CoordinatorMetrics {
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
 
-  public final Counter putBlobError;
-  public final Counter deleteBlobError;
-  public final Counter getBlobPropertiesError;
-  public final Counter getBlobUserMetadataError;
-  public final Counter getBlobError;
+  private final Counter putBlobError;
+  private final Counter deleteBlobError;
+  private final Counter getBlobPropertiesError;
+  private final Counter getBlobUserMetadataError;
+  private final Counter getBlobError;
 
-  public final Counter unexpectedInternalError;
-  public final Counter ambryUnavailableError;
-  public final Counter operationTimedOutError;
-  public final Counter invalidBlobIdError;
-  public final Counter invalidPutArgumentError;
-  public final Counter insufficientCapacityError;
-  public final Counter blobTooLargeError;
-  public final Counter blobDoesNotExistError;
-  public final Counter blobDeletedError;
-  public final Counter blobExpiredError;
-  public final Counter unknownError;
+  private final Counter unexpectedInternalError;
+  private final Counter ambryUnavailableError;
+  private final Counter operationTimedOutError;
+  private final Counter invalidBlobIdError;
+  private final Counter invalidPutArgumentError;
+  private final Counter insufficientCapacityError;
+  private final Counter blobTooLargeError;
+  private final Counter blobDoesNotExistError;
+  private final Counter blobDeletedError;
+  private final Counter blobExpiredError;
+  private final Counter unknownError;
+
+  public final Counter corruptionError;
 
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
@@ -111,6 +113,8 @@ public class CoordinatorMetrics {
             registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
     unknownError =
             registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownError"));
+    corruptionError =
+            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "corruptionError"));
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.
@@ -215,13 +219,13 @@ public class CoordinatorMetrics {
     public final Meter getBlobRequestRate;
     public final Meter requestErrorRate;
 
-    public final Counter unexpectedError;
-    public final Counter ioError;
-    public final Counter timeoutError;
-    public final Counter unknownError;
-    public final Counter messageFormatDataCorruptError;
-    public final Counter messageFormatHeaderConstraintError;
-    public final Counter messageFormatUnknownFormatError;
+    private final Counter unexpectedError;
+    private final Counter ioError;
+    private final Counter timeoutError;
+    private final Counter unknownError;
+    private final Counter messageFormatDataCorruptError;
+    private final Counter messageFormatHeaderConstraintError;
+    private final Counter messageFormatUnknownFormatError;
 
     RequestMetrics(MetricRegistry registry, DataNodeId dataNodeId) {
       putBlobRequestLatencyInMs =

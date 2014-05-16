@@ -217,7 +217,7 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   // Determine if there is enough capacity to allocate a PartitionId.
-  private boolean enoughUnallocatedRawCapacity(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
+  private boolean checkEnoughUnallocatedRawCapacity(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       if (getUnallocatedRawCapacityInBytes(datacenter) < replicaCountPerDatacenter * replicaCapacityInBytes) {
         logger.warn("Insufficient unallocated space in datacenter {} ({} bytes unallocated)", datacenter.getName(),
@@ -270,7 +270,7 @@ public class ClusterMapManager implements ClusterMap {
                                               long replicaCapacityInBytes) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
-    while (enoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
+    while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
       List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes);
       if (disks.size() == 0) {
         System.err.println("numPartitions: " + numPartitions);

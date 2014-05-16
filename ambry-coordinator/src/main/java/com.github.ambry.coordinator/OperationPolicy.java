@@ -34,6 +34,15 @@ public interface OperationPolicy {
    */
   public boolean isComplete();
 
+  // TODO: HERE
+  /**
+   * Determines if an operation may have failed because of cluster wide corrupt state (blob, blob properties, user
+   * metadata, on-the-wire, or on-the-disk corruption issues, as well as serde issues).
+   *
+   * @return true if the operation is failed and all responses fail due to some form of corruption.
+   */
+  public boolean isCorrupt();
+
   /**
    * Determines if an operation may complete in the future.
    *
@@ -51,13 +60,21 @@ public interface OperationPolicy {
   public void onSuccessfulResponse(ReplicaId replicaId);
 
   /**
-   * Accounts for failed request-response pairs. Operation must invoke this method so that sendMoreRequests and
-   * isComplete has necessary information. A failed request-response pair is any request-response pair that experienced
-   * an exception or that returned are response with an error.
+   * Accounts for failed request-response pairs not due to corruption. Operation must invoke this method so that
+   * sendMoreRequests and isComplete has necessary information. A failed request-response pair is any request-response
+   * pair that experienced an exception or that returned a response with an error (modulo corruption).
    *
    * @param replicaId ReplicaId that did not successfully handle request.
    */
   public void onFailedResponse(ReplicaId replicaId);
+
+  /**
+   * Accounts for failed request-response pairs due to corrupt replica or corrupt response. Operation must invoke this
+   * method so that sendMoreRequests and isComplete has necessary information.
+   *
+   * @param replicaId ReplicaId that has corrupt replica or returned corrupt response.
+   */
+  public void onCorruptResponse(ReplicaId replicaId);
 
   /**
    * Determines the next replica to which to send a request. This method embodies the "probing" policy for the
@@ -83,6 +100,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   int replicaIdCount;
   Queue<ReplicaId> orderedReplicaIds;
 
+  List<ReplicaId> corruptRequests;
   List<ReplicaId> failedRequests;
   List<ReplicaId> successfulRequests;
 
@@ -98,6 +116,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     }
     this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds());
 
+    this.corruptRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.failedRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.successfulRequests = new ArrayList<ReplicaId>(replicaIdCount);
   }
@@ -131,8 +150,19 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   public abstract boolean isComplete();
 
   @Override
+  public boolean isCorrupt() {
+    return (corruptRequests.size() == failedRequests.size());
+  }
+
+  @Override
   public void onSuccessfulResponse(ReplicaId replicaId) {
     successfulRequests.add(replicaId);
+  }
+
+  @Override
+  public void onCorruptResponse(ReplicaId replicaId) {
+    corruptRequests.add(replicaId);
+    failedRequests.add(replicaId);
   }
 
   @Override

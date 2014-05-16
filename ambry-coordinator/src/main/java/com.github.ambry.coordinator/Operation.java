@@ -116,22 +116,28 @@ public abstract class Operation {
             operationPolicy.onSuccessfulResponse(replicaId);
           }
           else {
-            operationPolicy.onFailedResponse(replicaId);
+            if (operationResponse.getResponse().getError() == ServerErrorCode.Data_Corrupt) {
+              operationPolicy.onCorruptResponse(replicaId);
+            }
+            else {
+              operationPolicy.onFailedResponse(replicaId);
+            }
           }
         }
         else {
-          // Currently, no actions taken based upon specific RequestResponseError returned. Possible actions include
-          // retrying request, updating soft-state, notifying datanode and so forth. Specific action may depend on
-          // operation type.
-          // At the least, need metric for each error type here. And, need to make sure that 'data corrupt' tracked
-          // on its own since that indicates possibly issues with server-side state. If multiple responses return
-          // corrupt, we need to signal a serious alert because we likely have a software bug corrupting state on
-          // servers.
-          operationPolicy.onFailedResponse(replicaId);
+          if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
+            operationPolicy.onCorruptResponse(replicaId);
+          }
+          else {
+            operationPolicy.onFailedResponse(replicaId);
+          }
         }
 
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
+          if (operationPolicy.isCorrupt()) {
+            context.getCoordinatorMetrics().corruptionError.inc();
+          }
           logger.debug("{} operation successfully completing execute", context);
           return;
         }
