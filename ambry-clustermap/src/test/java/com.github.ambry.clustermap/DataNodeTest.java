@@ -29,7 +29,7 @@ class TestDataNode extends DataNode {
     if (!getHostname().equals(testDataNode.getHostname())) return false;
     if (getPort() != testDataNode.getPort()) return false;
     if (getState() != testDataNode.getState()) return false;
-    return getCapacityInBytes() == testDataNode.getCapacityInBytes();
+    return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
   }
 }
 
@@ -58,7 +58,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
     assertEquals(dataNode.getDisks().size(), diskCount);
-    assertEquals(dataNode.getCapacityInBytes(), diskCount * diskCapacityInBytes);
+    assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject()));

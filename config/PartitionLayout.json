@@ -1,5 +1,6 @@
 {
   "clusterName": "OneDiskOneReplica",
+  "version": 88,
   "partitions": [
     {
       "id": 0,

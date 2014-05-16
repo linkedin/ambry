@@ -12,11 +12,13 @@ public class OperationContext {
   private String clientId;
   private int correlationId;
   private int connectionPoolCheckoutTimeout;
+  private CoordinatorMetrics coordinatorMetrics;
 
-  public OperationContext(String clientId, int connectionPoolCheckoutTimeout) {
+  public OperationContext(String clientId, int connectionPoolCheckoutTimeout, CoordinatorMetrics coordinatorMetrics) {
     this.clientId = clientId;
     this.correlationId = currentCount.incrementAndGet();
     this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
+    this.coordinatorMetrics = coordinatorMetrics;
   }
 
   public String getClientId() {
@@ -29,6 +31,10 @@ public class OperationContext {
 
   public int getConnectionPoolCheckoutTimeout() {
     return connectionPoolCheckoutTimeout;
+  }
+
+  public CoordinatorMetrics getCoordinatorMetrics() {
+    return coordinatorMetrics;
   }
 
   @Override

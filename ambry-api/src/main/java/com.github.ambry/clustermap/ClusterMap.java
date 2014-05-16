@@ -1,5 +1,7 @@
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.List;
@@ -55,4 +57,18 @@ public interface ClusterMap {
    * @return list of ReplicaIds on the specified dataNodeId
    */
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId);
+
+  /**
+   * Gets the DataNodeIds for all nodes in the cluster.
+   *
+   * @return list of all DataNodeIds
+   */
+  public List<DataNodeId> getDataNodeIds();
+
+  /**
+   * Gets the MetricRegistry that other users of the ClusterMap ought to use for metrics.
+   *
+   * @return MetricRegistry
+   */
+  public MetricRegistry getMetricRegistry();
 }
