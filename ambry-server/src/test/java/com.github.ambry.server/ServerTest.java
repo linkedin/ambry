@@ -185,7 +185,6 @@ public class ServerTest {
     }
   }
 
-  /*
   @Test
    public void endToEndReplicationWithMultiNodeSinglePartitionTest() throws InterruptedException, IOException {
 
@@ -1247,7 +1246,6 @@ public class ServerTest {
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
     coordinator.shutdown();
   }
-  */
 
   private void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data) throws CoordinatorException, IOException {
     BlobOutput output = coordinator.getBlob(blobId.toString());
