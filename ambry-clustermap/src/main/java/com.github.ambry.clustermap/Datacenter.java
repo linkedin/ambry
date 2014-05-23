@@ -11,17 +11,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A Datacenter in an Ambry cluster. A Datacenter is uniquely identifiable by its name. A Datacenter is the primary unit
- * at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link DataNode}s.
+ * A Datacenter in an Ambry cluster. A Datacenter must be uniquely identifiable by its name. A Datacenter is the primary
+ * unit at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link
+ * DataNode}s.
  */
 public class Datacenter {
   private final HardwareLayout hardwareLayout;
-  private String name; // E.g., "ELA4"
-  private ArrayList<DataNode> dataNodes;
+  private final String name;
+  private final ArrayList<DataNode> dataNodes;
+  private final long rawCapacityInBytes;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+    if (logger.isTraceEnabled())
+      logger.trace("Datacenter " + jsonObject.toString());
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
 
@@ -29,6 +33,7 @@ public class Datacenter {
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
       this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i)));
     }
+    this.rawCapacityInBytes = calculateRawCapacityInBytes();
     validate();
   }
 
@@ -40,10 +45,14 @@ public class Datacenter {
     return name;
   }
 
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
+    return rawCapacityInBytes;
+  }
+
+  private long calculateRawCapacityInBytes() {
     long capacityInBytes = 0;
     for (DataNode dataNode : dataNodes) {
-      capacityInBytes += dataNode.getCapacityInBytes();
+      capacityInBytes += dataNode.getRawCapacityInBytes();
     }
     return capacityInBytes;
   }
@@ -86,7 +95,7 @@ public class Datacenter {
 
   @Override
   public String toString() {
-    return "Datacenter: " + getName();
+    return "Datacenter[" + getName() + "]";
   }
 
   @Override

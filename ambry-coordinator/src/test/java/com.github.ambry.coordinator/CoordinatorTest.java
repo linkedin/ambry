@@ -31,6 +31,7 @@ public class CoordinatorTest {
   ClusterMap getClusterMapOneDCOneNodeOneDiskOnePartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCOneNodeOneDiskOnePartition\",\n" +
+                "    \"version\": 2,\n" +
                 "          \"datacenters\": [\n" +
                 "    {\n" +
                 "      \"dataNodes\": [\n" +
@@ -54,6 +55,7 @@ public class CoordinatorTest {
 
     String PL = "{\n" +
                 "    \"clusterName\": \"OneDCOneNodeOneDiskOnePartition\",\n" +
+                "    \"version\": 3,\n" +
                 "          \"partitions\": [\n" +
                 "    {\n" +
                 "      \"id\": 0,\n" +
@@ -78,6 +80,7 @@ public class CoordinatorTest {
   ClusterMap getClusterMapOneDCThreeNodeOneDiskOnePartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCThreeNodeOneDiskOnePartition\",\n" +
+                "    \"version\": 4,\n" +
                 "          \"datacenters\": [\n" +
                 "    {\n" +
                 "      \"dataNodes\": [\n" +
@@ -125,6 +128,7 @@ public class CoordinatorTest {
 
     String PL = "{\n" +
                 "    \"clusterName\": \"OneDCThreeNodeOneDiskOnePartition\",\n" +
+                "    \"version\": 5,\n" +
                 "          \"partitions\": [\n" +
                 "    {\n" +
                 "      \"id\": 0,\n" +
@@ -159,6 +163,7 @@ public class CoordinatorTest {
   ClusterMap getClusterMapOneDCFourNodeOneDiskTwoPartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"OneDCFourNodeOneDiskTwoPartition\",\n" +
+                "    \"version\": 6,\n" +
                 "          \"datacenters\": [\n" +
                 "    {\n" +
                 "      \"dataNodes\": [\n" +
@@ -218,6 +223,7 @@ public class CoordinatorTest {
 
     String PL = "{\n" +
                 "    \"clusterName\": \"OneDCFourNodeOneDiskTwoPartition\",\n" +
+                "    \"version\": 7,\n" +
                 "          \"partitions\": [\n" +
                 "    {\n" +
                 "      \"id\": 0,\n" +
@@ -274,6 +280,7 @@ public class CoordinatorTest {
   ClusterMap getClusterMapTwoDCFourNodeOneDiskFourPartition() throws JSONException {
     String HL = "  {\n" +
                 "    \"clusterName\": \"TwoDCFourNodeOneDiskFourPartition\",\n" +
+                "    \"version\": 8,\n" +
                 "          \"datacenters\": [\n" +
                 "    {\n" +
                 "      \"dataNodes\": [\n" +
@@ -386,6 +393,7 @@ public class CoordinatorTest {
 
     String PL = "{\n" +
                 "    \"clusterName\": \"TwoDCFourNodeOneDiskFourPartition\",\n" +
+                "    \"version\": 9,\n" +
                 "          \"partitions\": [\n" +
                 "    {\n" +
                 "      \"id\": 0,\n" +

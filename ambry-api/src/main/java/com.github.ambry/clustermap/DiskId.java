@@ -21,8 +21,9 @@ public interface DiskId {
   public HardwareState getState();
 
   /**
-   * Gets the capacity in bytes for this DiskId.
-   * @return the capacity in bytes
+   * Gets the raw capacity in bytes for this DiskId.
+   *
+   * @return the raw capacity in bytes
    */
-  public long getCapacityInBytes();
+  public long getRawCapacityInBytes();
 }

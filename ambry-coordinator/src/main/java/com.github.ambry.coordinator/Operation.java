@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectedChannel;
@@ -115,22 +116,28 @@ public abstract class Operation {
             operationPolicy.onSuccessfulResponse(replicaId);
           }
           else {
-            operationPolicy.onFailedResponse(replicaId);
+            if (operationResponse.getResponse().getError() == ServerErrorCode.Data_Corrupt) {
+              operationPolicy.onCorruptResponse(replicaId);
+            }
+            else {
+              operationPolicy.onFailedResponse(replicaId);
+            }
           }
         }
         else {
-          // Currently, no actions taken based upon specific RequestResponseError returned. Possible actions include
-          // retrying request, updating soft-state, notifying datanode and so forth. Specific action may depend on
-          // operation type.
-          // At the least, need metric for each error type here. And, need to make sure that 'data corrupt' tracked
-          // on its own since that indicates possibly issues with server-side state. If multiple responses return
-          // corrupt, we need to signal a serious alert because we likely have a software bug corrupting state on
-          // servers.
-          operationPolicy.onFailedResponse(replicaId);
+          if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
+            operationPolicy.onCorruptResponse(replicaId);
+          }
+          else {
+            operationPolicy.onFailedResponse(replicaId);
+          }
         }
 
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
+          if (operationPolicy.isCorrupt()) {
+            context.getCoordinatorMetrics().corruptionError.inc();
+          }
           logger.debug("{} operation successfully completing execute", context);
           return;
         }
@@ -163,9 +170,9 @@ public abstract class Operation {
 abstract class OperationRequest implements Runnable {
   private final ConnectionPool connectionPool;
   private final BlockingQueue<OperationResponse> responseQueue;
-  private final OperationContext context;
+  protected final OperationContext context;
   private final BlobId blobId;
-  private final ReplicaId replicaId;
+  protected final ReplicaId replicaId;
   private final RequestOrResponse request;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -186,6 +193,9 @@ abstract class OperationRequest implements Runnable {
 
   protected abstract Response getResponse(DataInputStream dataInputStream) throws IOException;
 
+  protected abstract void markRequest() throws CoordinatorException;
+  protected abstract void updateRequest(long durationInMs) throws CoordinatorException;
+
   void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
   }
@@ -193,6 +203,8 @@ abstract class OperationRequest implements Runnable {
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
+    long startTimeInMs = System.currentTimeMillis();
+
     try {
       logger.debug("{} {} checking out connection", context, replicaId);
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
@@ -219,28 +231,52 @@ abstract class OperationRequest implements Runnable {
       connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
+      markRequest();
+      updateRequest(System.currentTimeMillis() - startTimeInMs);
     }
     catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
+      countError(RequestResponseError.IO_ERROR);
     }
     catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
+      countError(e.getErrorCode());
     }
     catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
+      countError(RequestResponseError.TIMEOUT_ERROR);
     }
     catch (Exception e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
+      countError(RequestResponseError.UNEXPECTED_ERROR);
     }
     finally {
       if (connectedChannel != null) {
         logger.debug("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
+    }
+  }
+
+  private void countError(MessageFormatErrorCodes error) {
+    try {
+      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
+    }
+    catch (CoordinatorException e) {
+      logger.error("Swallowing exception fetching RequestMetrics: ", e);
+    }
+  }
+
+  private void countError(RequestResponseError error) {
+    try {
+      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
+    }
+    catch (CoordinatorException e) {
+      logger.error("Swallowing exception fetching RequestMetrics: ", e);
     }
   }
 

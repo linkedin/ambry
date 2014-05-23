@@ -1,6 +1,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -22,13 +23,11 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.codahale.metrics.MetricRegistry;
 
-import java.util.concurrent.CountDownLatch;
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Ambry server
@@ -45,10 +44,10 @@ public class AmbryServer {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterMap clusterMap;
-  private MetricRegistry registry;
-  private JmxReporter reporter;
+  private MetricRegistry registry = null;
+  private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
-  private NotificationSystem notificationSystem = null;
+  private final NotificationSystem notificationSystem;
 
   public AmbryServer(VerifiableProperties properties,
                      ClusterMap clusterMap) throws IOException {
@@ -67,7 +66,7 @@ public class AmbryServer {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
-      registry = new MetricRegistry();
+      registry = clusterMap.getMetricRegistry();
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 

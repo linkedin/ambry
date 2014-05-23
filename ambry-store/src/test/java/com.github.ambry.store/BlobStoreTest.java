@@ -2,7 +2,6 @@ package com.github.ambry.store;
 
 
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;

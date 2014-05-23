@@ -16,16 +16,20 @@ public class Disk implements DiskId {
   private static final long MaxCapacityInBytes = 1024 * 1024 * 1024 * 1024L; // 1 PB
 
   private final DataNode dataNode;
-  private String mountPath;
-  private HardwareState hardwareState;
+  private final String mountPath;
+  private final HardwareState hardState;
+  private HardwareState softState;
   private long capacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
+    if (logger.isTraceEnabled())
+      logger.trace("Disk " + jsonObject.toString());
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
-    this.hardwareState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
+    this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
+    this.softState = hardState;
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
 
     validate();
@@ -42,11 +46,27 @@ public class Disk implements DiskId {
     if (dataNode.getState() == HardwareState.UNAVAILABLE) {
       return HardwareState.UNAVAILABLE;
     }
-    return hardwareState;
+    if (hardState == HardwareState.UNAVAILABLE) {
+      return HardwareState.UNAVAILABLE;
+    }
+    return softState;
+  }
+
+  public boolean isSoftDown() {
+    return (hardState == HardwareState.AVAILABLE && softState == HardwareState.UNAVAILABLE);
+  }
+
+  public void setSoftState(HardwareState hardwareState) {
+    if (hardState == HardwareState.AVAILABLE) {
+      softState = hardwareState;
+    }
+    else {
+      logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
+    }
   }
 
   @Override
-  public long getCapacityInBytes() {
+  public long getRawCapacityInBytes() {
     return capacityInBytes;
   }
 
@@ -54,8 +74,8 @@ public class Disk implements DiskId {
     return dataNode;
   }
 
-  public HardwareState getHardwareState() {
-    return hardwareState;
+  public HardwareState getHardState() {
+    return hardState;
   }
 
   protected void validateDataNode() {
@@ -95,13 +115,13 @@ public class Disk implements DiskId {
   public JSONObject toJSONObject() throws JSONException {
     return new JSONObject()
             .put("mountPath", mountPath)
-            .put("hardwareState", hardwareState)
+            .put("hardwareState", hardState)
             .put("capacityInBytes", capacityInBytes);
   }
 
   @Override
   public String toString() {
-    return "Disk: " + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath();
+    return "Disk[" + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath() + "]";
   }
 
   @Override

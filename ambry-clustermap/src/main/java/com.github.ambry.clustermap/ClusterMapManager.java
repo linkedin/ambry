@@ -1,5 +1,6 @@
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -20,22 +21,33 @@ import static com.github.ambry.utils.Utils.writeJsonToFile;
  * {@link PartitionLayout}.
  */
 public class ClusterMapManager implements ClusterMap {
-  protected HardwareLayout hardwareLayout;
-  protected PartitionLayout partitionLayout;
+  protected final HardwareLayout hardwareLayout;
+  protected final PartitionLayout partitionLayout;
+  private final MetricRegistry metricRegistry;
+  private final ClusterMapMetrics clusterMapMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
+    if (logger.isTraceEnabled())
+      logger.trace("ClusterMapManager " + partitionLayout);
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
+    this.metricRegistry = new MetricRegistry();
+    this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+  public ClusterMapManager(String hardwareLayoutPath,
+                           String partitionLayoutPath) throws IOException, JSONException {
+    logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
     this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
+    this.metricRegistry = new MetricRegistry();
+    this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
   public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+    logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
     writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
@@ -90,91 +102,110 @@ public class ClusterMapManager implements ClusterMap {
     return replicas;
   }
 
+  @Override
+  public List<DataNodeId> getDataNodeIds() {
+    List<DataNodeId> dataNodeIds = new ArrayList<DataNodeId>();
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+        dataNodeIds.addAll(datacenter.getDataNodes());
+    }
+    return dataNodeIds;
+  }
+
+  @Override
+  public MetricRegistry getMetricRegistry() {
+    return metricRegistry;
+  }
 
   // Administrative API
   // -----------------------
 
   public long getRawCapacityInBytes() {
-    return hardwareLayout.getCapacityInBytes();
+    return hardwareLayout.getRawCapacityInBytes();
   }
 
-  public long getAllocatedCapacityInBytes() {
-    return partitionLayout.getCapacityInBytes();
+  public long getAllocatedRawCapacityInBytes() {
+    return partitionLayout.getAllocatedRawCapacityInBytes();
   }
 
-  public long getAllocatedCapacityInBytes(Datacenter datacenter) {
-    long allocatedCapacityInBytes = 0;
+  public long getAllocatedUsableCapacityInBytes() {
+    return partitionLayout.getAllocatedUsableCapacityInBytes();
+  }
+
+  public long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
+    long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         Disk disk = (Disk)replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
-          allocatedCapacityInBytes += replica.getCapacityInBytes();
+          allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityInBytes;
+    return allocatedRawCapacityInBytes;
   }
 
-  public long getAllocatedCapacityInBytes(DataNodeId dataNode) {
-    long allocatedCapacityInBytes = 0;
+  public long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
+    long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         Disk disk = (Disk)replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
-          allocatedCapacityInBytes += replica.getCapacityInBytes();
+          allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityInBytes;
+    return allocatedRawCapacityInBytes;
   }
 
-  public long getAllocatedCapacityInBytes(Disk disk) {
-    long allocatedCapacityInBytes = 0;
+  public long getAllocatedRawCapacityInBytes(Disk disk) {
+    long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
         Disk currentDisk = (Disk)replica.getDiskId();
         if (currentDisk.equals(disk)) {
-          allocatedCapacityInBytes += replica.getCapacityInBytes();
+          allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
       }
     }
-    return allocatedCapacityInBytes;
+    return allocatedRawCapacityInBytes;
   }
 
-  public long getFreeCapacityInBytes() {
-    return getRawCapacityInBytes() - getAllocatedCapacityInBytes();
+  public long getUnallocatedRawCapacityInBytes() {
+    return getRawCapacityInBytes() - getAllocatedRawCapacityInBytes();
   }
 
-  public long getFreeCapacityInBytes(Datacenter datacenter) {
-    return datacenter.getCapacityInBytes() - getAllocatedCapacityInBytes(datacenter);
+  public long getUnallocatedRawCapacityInBytes(Datacenter datacenter) {
+    return datacenter.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(datacenter);
   }
 
-  public long getFreeCapacityInBytes(DataNode dataNode) {
-    return dataNode.getCapacityInBytes() - getAllocatedCapacityInBytes(dataNode);
+  public long getUnallocatedRawCapacityInBytes(DataNode dataNode) {
+    return dataNode.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(dataNode);
   }
 
-  public long getFreeCapacityInBytes(Disk disk) {
-    return disk.getCapacityInBytes() - getAllocatedCapacityInBytes(disk);
+  public long getUnallocatedRawCapacityInBytes(Disk disk) {
+    return disk.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(disk);
   }
 
-  public DataNode getDataNodeWithMostFreeCapacity(Datacenter dc, Set nodesToExclude) {
+  public DataNode getDataNodeWithMostUnallocatedRawCapacity(Datacenter dc, Set nodesToExclude) {
     DataNode maxCapacityNode = null;
     List<DataNode> dataNodes = dc.getDataNodes();
     for (DataNode dataNode : dataNodes) {
       if (!nodesToExclude.contains(dataNode) &&
-          (maxCapacityNode == null || getFreeCapacityInBytes(dataNode) > getFreeCapacityInBytes(maxCapacityNode))) {
+          (maxCapacityNode == null || getUnallocatedRawCapacityInBytes(dataNode) > getUnallocatedRawCapacityInBytes(
+                  maxCapacityNode))) {
         maxCapacityNode = dataNode;
       }
     }
     return maxCapacityNode;
   }
 
-  public Disk getDiskWithMostFreeCapacity(DataNode node, long minCapacity) {
+  public Disk getDiskWithMostUnallocatedRawCapacity(DataNode node, long minCapacity) {
     Disk maxCapacityDisk = null;
     List<Disk> disks = node.getDisks();
     for (Disk disk : disks) {
-      if ((maxCapacityDisk == null || getFreeCapacityInBytes(disk) > getFreeCapacityInBytes(maxCapacityDisk)) &&
-          getFreeCapacityInBytes(disk) >= minCapacity) {
+      if ((maxCapacityDisk == null || getUnallocatedRawCapacityInBytes(disk) > getUnallocatedRawCapacityInBytes(
+              maxCapacityDisk)) &&
+          getUnallocatedRawCapacityInBytes(disk) >= minCapacity) {
         maxCapacityDisk = disk;
       }
     }
@@ -186,25 +217,25 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   // Determine if there is enough capacity to allocate a PartitionId.
-  private boolean enoughFreeCapacity(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
+  private boolean checkEnoughUnallocatedRawCapacity(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      if (getFreeCapacityInBytes(datacenter) < replicaCountPerDatacenter * replicaCapacityInBytes) {
-        logger.warn("Insufficient free space in datacenter {} ({} bytes free)", datacenter.getName(),
-                    getFreeCapacityInBytes(datacenter));
+      if (getUnallocatedRawCapacityInBytes(datacenter) < replicaCountPerDatacenter * replicaCapacityInBytes) {
+        logger.warn("Insufficient unallocated space in datacenter {} ({} bytes unallocated)", datacenter.getName(),
+                    getUnallocatedRawCapacityInBytes(datacenter));
         return false;
       }
 
       int rcpd = replicaCountPerDatacenter;
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-          if (getFreeCapacityInBytes(disk) >= replicaCapacityInBytes) {
+          if (getUnallocatedRawCapacityInBytes(disk) >= replicaCapacityInBytes) {
             rcpd--;
             break; // Only one replica per DataNodeId.
           }
         }
       }
       if (rcpd > 0) {
-        logger.warn("Insufficient DataNodes ({}) with free space in datacenter {} for {} Replicas)", rcpd,
+        logger.warn("Insufficient DataNodes ({}) with unallocated space in datacenter {} for {} Replicas)", rcpd,
                     datacenter.getName(), replicaCountPerDatacenter);
         return false;
       }
@@ -222,8 +253,8 @@ public class ClusterMapManager implements ClusterMap {
       int rcpd = replicaCountPerDatacenter;
       Set<DataNode> nodesToExclude = new HashSet<DataNode>();
       for (int i = 0; i < rcpd; i++) {
-        DataNode nodeWithMostCapacity = getDataNodeWithMostFreeCapacity(datacenter, nodesToExclude);
-        Disk diskWithMostCapacity = getDiskWithMostFreeCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
+        DataNode nodeWithMostCapacity = getDataNodeWithMostUnallocatedRawCapacity(datacenter, nodesToExclude);
+        Disk diskWithMostCapacity = getDiskWithMostUnallocatedRawCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
         allocatedDisks.add(diskWithMostCapacity);
         nodesToExclude.add(nodeWithMostCapacity);
       }
@@ -239,7 +270,7 @@ public class ClusterMapManager implements ClusterMap {
                                               long replicaCapacityInBytes) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
-    while (enoughFreeCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
+    while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
       List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes);
       if (disks.size() == 0) {
         System.err.println("numPartitions: " + numPartitions);
