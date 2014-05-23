@@ -344,7 +344,7 @@ public class CoordinatorMetrics {
       requestErrorRate.mark();
       switch (error) {
         case Data_Corrupt:
-          messageFormatHeaderConstraintError.inc();
+          messageFormatDataCorruptError.inc();
           break;
         case Header_Constraint_Error:
           messageFormatHeaderConstraintError.inc();
