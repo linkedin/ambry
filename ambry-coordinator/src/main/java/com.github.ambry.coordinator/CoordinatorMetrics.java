@@ -290,50 +290,50 @@ public class CoordinatorMetrics {
                                                  Integer.toString(dataNodeId.getPort()),
                                                  "getBlobRequestRate"));
       requestErrorRate =
-              registry.meter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.meter(MetricRegistry.name(OperationRequest.class,
                                                  dataNodeId.getDatacenterName(),
                                                  dataNodeId.getHostname(),
                                                  Integer.toString(dataNodeId.getPort()),
                                                  "requestErrorRate"));
 
       unexpectedError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "unexpectedError"));
       ioError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "ioError"));
       timeoutError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "timeoutError"));
       unknownError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "unknownError"));
       messageFormatDataCorruptError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "messageFormatDataCorruptError"));
       messageFormatHeaderConstraintError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
                                                    "messageFormatHeaderConstraintError"));
       messageFormatUnknownFormatError =
-              registry.counter(MetricRegistry.name(AmbryCoordinator.class,
+              registry.counter(MetricRegistry.name(OperationRequest.class,
                                                    dataNodeId.getDatacenterName(),
                                                    dataNodeId.getHostname(),
                                                    Integer.toString(dataNodeId.getPort()),
