@@ -165,7 +165,7 @@ class IndexSegmentInfo {
       }
     }
     catch (Exception e) {
-      logger.error("Error while loading index from file {}", e);
+      logger.error("Error while loading index from file", e);
       throw new StoreException("Error while loading index from file Exception: " + e, StoreErrorCodes.Index_Creation_Failure);
     }
     this.metrics = metrics;
@@ -459,6 +459,14 @@ class IndexSegmentInfo {
         for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
           writer.write(entry.getKey().toBytes());
           writer.write(entry.getValue().getBytes().array());
+          if (entry.getValue().getOffset() >= fileEndPointer) {
+            logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}",
+                         getFile().getAbsolutePath(),
+                         entry.getKey(),
+                         entry.getValue().getOffset(),
+                         entry.getValue().getOffset(),
+                         fileEndPointer);
+          }
           logger.trace("Index {} writing key {} offset {} size {}",
                        getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset());
           numOfEntries++;
@@ -560,7 +568,7 @@ class IndexSegmentInfo {
               numberOfItems.incrementAndGet();
             }
             else {
-              logger.info("Index {} ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}" +
+              logger.info("Index {} ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
                           indexFile.getPath(), endOffset.get(), key);
             }
           }
@@ -737,10 +745,12 @@ public class BlobPersistentIndex {
         if (i < indexFiles.length - 2)
           map = true;
         IndexSegmentInfo info = new IndexSegmentInfo(indexFiles[i], map, factory, config, metrics, journal);
-        logger.info("Loaded index {}", indexFiles[i]);
+        logger.info("Loaded index segment {} with start offset {} and end offset {} ",
+                    indexFiles[i], info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
+      logger.info("log end offset of index " + datadir + " before recovery " + log.getLogEndOffset());
 
       // perform recovery if required
       final Timer.Context context = metrics.recoveryTime.time();
@@ -748,6 +758,8 @@ public class BlobPersistentIndex {
         IndexSegmentInfo lastSegment = indexes.lastEntry().getValue();
         Map.Entry<Long, IndexSegmentInfo> entry = indexes.lowerEntry(lastSegment.getStartOffset());
         if (entry != null) {
+          logger.info("recovering last but one segment of index {} with start offset {} and end offset {} ",
+                  entry.getValue().getFile().getAbsolutePath(), entry.getValue().getStartOffset(), entry.getValue().getEndOffset());
           recover(entry.getValue(), lastSegment.getStartOffset(), recovery);
         }
         // recover last segment
@@ -840,7 +852,7 @@ public class BlobPersistentIndex {
         segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Updated message with key {} size {} ttl {} deleted {}",
-                info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
+                    info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
       }
       else {
         // create a new entry in the index
@@ -849,7 +861,7 @@ public class BlobPersistentIndex {
         segmentToRecover.addEntry(new BlobIndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
-                info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
+                    info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
       }
       runningOffset += info.getSize();
     }
@@ -946,7 +958,7 @@ public class BlobPersistentIndex {
         BlobIndexValue value = entry.getValue().find(key);
         if (value != null) {
           logger.trace("found value offset {} size {} ttl {}",
-                  value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
+                       value.getOffset(), value.getSize(), value.getTimeToLiveInMs());
           return value;
         }
       }
@@ -1239,30 +1251,35 @@ public class BlobPersistentIndex {
      */
     public void write() throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
+      long startTime = SystemTime.getInstance().milliseconds();
+      logger.info("Starting persistence of index " + dataDir + " at " + startTime);
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
-          IndexSegmentInfo currentInfo = indexes.lastEntry().getValue();
-          long fileEndPointer = log.getLogEndOffset();
+          Map.Entry<Long, IndexSegmentInfo> lastEntry = indexes.lastEntry();
+          IndexSegmentInfo currentInfo = lastEntry.getValue();
+          long fileEndPointerBeforeFlush = log.getLogEndOffset();
 
-          // flush the log to ensure everything till the fileEndPointer is flushed
+          // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
-          long lastOffset = indexes.lastEntry().getKey();
+          long lastOffset = lastEntry.getKey();
           IndexSegmentInfo prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
+          long currentLogEndPointer = log.getLogEndOffset();
           while (prevInfo != null && !prevInfo.isMapped()) {
-            if (prevInfo.getEndOffset() > fileEndPointer) {
+            if (prevInfo.getEndOffset() > currentLogEndPointer) {
               String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
-                               " greater than the log end offset " + fileEndPointer;
+                               " greater than the log end offset " + currentLogEndPointer;
               logger.error(message);
               throw new StoreException(message, StoreErrorCodes.IOError);
             }
+            logger.info("Writing prev index " + dataDir + " with end offset " + prevInfo.getEndOffset());
             prevInfo.writeIndexToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
             Map.Entry<Long, IndexSegmentInfo> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-          currentInfo.writeIndexToFile(fileEndPointer);
+          currentInfo.writeIndexToFile(fileEndPointerBeforeFlush);
         }
       }
       catch (IOException e) {
@@ -1278,7 +1295,7 @@ public class BlobPersistentIndex {
         write();
       }
       catch (Exception e) {
-        logger.info("Error while persisting the index to disk {}", e);
+        logger.error("Error while persisting the index to disk ", e);
       }
     }
   }

@@ -25,7 +25,6 @@ public class Log implements Write, Read {
 
   private AtomicLong currentWriteOffset;
   private final FileChannel fileChannel;
-  private final FileInputStream readOnlyStream;
   private final File file;
   private final long capacityInBytes;
   private static final String Log_File_Name = "log_current";
@@ -40,7 +39,6 @@ public class Log implements Write, Read {
     }
     this.capacityInBytes = capacityInBytes;
     fileChannel = Utils.openChannel(file, true);
-    readOnlyStream = new FileInputStream(file);
     // A log's write offset will always be set to the start of the log.
     // External components is responsible for setting it the right value
     currentWriteOffset = new AtomicLong(0);
@@ -106,7 +104,6 @@ public class Log implements Write, Read {
    */
   void close() throws IOException {
     fileChannel.close();
-    readOnlyStream.close();
   }
 
   public void flush() throws IOException {

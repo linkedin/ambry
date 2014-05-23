@@ -496,7 +496,7 @@ public class BlobIndex {
      * @throws StoreException
      */
     public void read() throws IOException, StoreException {
-      logger.info("Reading index from file {}", indexFile.getPath());
+      logger.info("Reading index from file ", indexFile.getPath());
       synchronized(lock) {
         indexFile.createNewFile();
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(indexFile));
@@ -517,7 +517,7 @@ public class BlobIndex {
                 }
                 else
                   logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
-                          logEndOffset.get(), key);
+                              logEndOffset.get(), key);
               }
               long crc = crcStream.getValue();
               if (crc != stream.readLong()) {
@@ -532,7 +532,7 @@ public class BlobIndex {
         }
         catch (IOException e) {
           throw new StoreException("IO error while reading from file " +
-                  indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
+                                   indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
         }
         finally {
           stream.close();

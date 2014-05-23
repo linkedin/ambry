@@ -4,13 +4,13 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.codahale.metrics.MetricRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +37,6 @@ public class BlobStore implements Store {
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
   private StoreMetrics metrics;
-
 
   public BlobStore(StoreConfig config,
                    Scheduler scheduler,
@@ -111,6 +110,7 @@ public class BlobStore implements Store {
         readOptions.add(readInfo);
         indexMessages.put(key, new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
       }
+
       MessageReadSet readSet = log.getView(readOptions);
       // We ensure that the metadata list is ordered with the order of the message read set view that the
       // log provides. This ensures ordering of all messages across the log and metadata from the index.
@@ -130,18 +130,19 @@ public class BlobStore implements Store {
 
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
-    synchronized (lock) {
-      final Timer.Context context = metrics.putResponse.time();
-      checkStarted();
-      try {
-        if (messageSetToWrite.getMessageSetInfo().size() == 0)
-          throw new IllegalArgumentException("Message write set cannot be empty");
-        // if any of the keys alreadys exist in the store, we fail
-        for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-          if (index.exists(info.getStoreKey())) {
-            throw new StoreException("key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
-          }
+    final Timer.Context context = metrics.putResponse.time();
+    checkStarted();
+    try {
+      if (messageSetToWrite.getMessageSetInfo().size() == 0)
+        throw new IllegalArgumentException("Message write set cannot be empty");
+      long startTimeIndexFind = SystemTime.getInstance().nanoseconds();
+      // if any of the keys alreadys exist in the store, we fail
+      for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+        if (index.exists(info.getStoreKey())) {
+          throw new StoreException("key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
         }
+      }
+      synchronized (lock) {
         long writeStartOffset = log.getLogEndOffset();
         messageSetToWrite.writeTo(log);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
@@ -158,12 +159,12 @@ public class BlobStore implements Store {
         FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), log.getLogEndOffset());
         index.addToIndex(indexEntries, fileSpan);
       }
-      catch (IOException e) {
-        throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
-      }
-      finally {
-        context.stop();
-      }
+    }
+    catch (IOException e) {
+      throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
+    }
+    finally {
+      context.stop();
     }
   }
 

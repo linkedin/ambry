@@ -931,6 +931,7 @@ public class BlobPersistentIndexTest {
       log.close();
     }
     catch (Exception e) {
+      e.printStackTrace();
       org.junit.Assert.assertEquals(false, true);
     }
     finally {

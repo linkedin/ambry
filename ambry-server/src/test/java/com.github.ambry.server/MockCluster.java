@@ -43,6 +43,7 @@ public class MockCluster {
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("replication.token.flush.interval.seconds", "5");
+    props.setProperty("replication.wait.time.between.replicas.ms", "0");
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap);
     server.startup();

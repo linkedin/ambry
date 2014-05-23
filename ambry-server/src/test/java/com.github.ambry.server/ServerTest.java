@@ -185,6 +185,7 @@ public class ServerTest {
     }
   }
 
+  /*
   @Test
    public void endToEndReplicationWithMultiNodeSinglePartitionTest() throws InterruptedException, IOException {
 
@@ -1246,6 +1247,7 @@ public class ServerTest {
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
     coordinator.shutdown();
   }
+  */
 
 
 

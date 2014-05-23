@@ -1,0 +1,74 @@
+package com.github.ambry.tools.perf;
+
+import com.github.ambry.utils.SystemTime;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.util.Random;
+
+/**
+ * Measures the file system performance using system cache and sync writes
+ */
+public class FileSystemWritePerformance {
+  public static void main(String[] args) {
+    if (args.length != 1) {
+      System.out.println("The number of args is not equal to 1. The path is required");
+    }
+    try {
+      byte[] dataToWrite = new byte[1073741824];
+      new Random().nextBytes(dataToWrite);
+      File fileToWrite = new File(args[0], "Sample");
+      WritableByteChannel fileChannelToWrite = Files.newByteChannel(fileToWrite.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+
+      long startTimeToWriteCache = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.write(ByteBuffer.wrap(dataToWrite));
+      long endTimeToWriteCache = SystemTime.getInstance().nanoseconds() - startTimeToWriteCache;
+      System.out.println("Time taken to write to cache in us for 1 " + endTimeToWriteCache * .001);
+      long startTimeToClose = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.close();
+      long endTimeToClose = SystemTime.getInstance().nanoseconds() - startTimeToClose;
+      System.out.println("Time taken to close to cache in us for 1 " + endTimeToClose * .001);
+
+      fileChannelToWrite = Files.newByteChannel(fileToWrite.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+      startTimeToWriteCache = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.write(ByteBuffer.wrap(dataToWrite));
+      endTimeToWriteCache = SystemTime.getInstance().nanoseconds() - startTimeToWriteCache;
+      System.out.println("Time taken to write to cache in us for 2 " + endTimeToWriteCache * .001);
+      startTimeToClose = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.close();
+      endTimeToClose = SystemTime.getInstance().nanoseconds() - startTimeToClose;
+      System.out.println("Time taken to close to cache in us for 2 " + endTimeToClose * .001);
+
+
+      fileToWrite = new File(args[0], "Sample1");
+      fileChannelToWrite = Files.newByteChannel(fileToWrite.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
+
+      startTimeToWriteCache = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.write(ByteBuffer.wrap(dataToWrite));
+      endTimeToWriteCache = SystemTime.getInstance().nanoseconds() - startTimeToWriteCache;
+      System.out.println("Time taken to write to cache in us for 1 with sync " + endTimeToWriteCache * .001);
+      startTimeToClose = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.close();
+      endTimeToClose = SystemTime.getInstance().nanoseconds() - startTimeToClose;
+      System.out.println("Time taken to close to cache in us for 1 with sync " + endTimeToClose * .001);
+
+      fileChannelToWrite = Files.newByteChannel(fileToWrite.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
+      startTimeToWriteCache = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.write(ByteBuffer.wrap(dataToWrite));
+      endTimeToWriteCache = SystemTime.getInstance().nanoseconds() - startTimeToWriteCache;
+      System.out.println("Time taken to write to cache in us for 2 with sync " + endTimeToWriteCache * .001);
+      startTimeToClose = SystemTime.getInstance().nanoseconds();
+      fileChannelToWrite.close();
+      endTimeToClose = SystemTime.getInstance().nanoseconds() - startTimeToClose;
+      System.out.println("Time taken to close to cache in us for 2 " + endTimeToClose * .001);
+    }
+    catch (IOException e) {
+      System.out.println("Exception of writing to file " + e);
+    }
+
+  }
+}

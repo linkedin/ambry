@@ -74,7 +74,6 @@ public class AmbryServer {
       logger.info("creating configs");
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
-      MetricsConfig metricsConfig = new MetricsConfig(properties);
       ServerConfig serverConfig = new ServerConfig(properties);
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
@@ -86,7 +85,8 @@ public class AmbryServer {
       logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null)
-        throw new IllegalArgumentException("The node is not present in the clustermap. Failing to start the datanode");
+        throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port +
+                "is not present in the clustermap. Failing to start the datanode");
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);

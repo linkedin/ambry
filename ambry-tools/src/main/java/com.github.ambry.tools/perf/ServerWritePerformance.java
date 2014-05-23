@@ -2,11 +2,20 @@ package com.github.ambry.tools.perf;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlockingChannelConnectionPool;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.PutResponse;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -16,15 +25,19 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.ByteBuffer;
+import java.rmi.UnexpectedException;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.github.ambry.utils.Utils.getRandomLong;
 
 /**
  * Generates load for write performance test
@@ -142,13 +155,13 @@ public class ServerWritePerformance {
 
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
+      ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
+      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
 
-      Properties props = Utils.loadProps(coordinatorConfigPath);
-      coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
-      coordinator.start();
 
       for (int i = 0; i < numberOfWriters; i++) {
-        threadIndexPerf[i] = new Thread(new ServerWritePerfRun(throttler,
+        threadIndexPerf[i] = new Thread(new ServerWritePerfRun(i,
+                                                               throttler,
                                                                shutdown,
                                                                latch,
                                                                minBlobSize,
@@ -157,7 +170,8 @@ public class ServerWritePerformance {
                                                                totalTimeTaken,
                                                                totalWrites,
                                                                enableVerboseLogging,
-                                                               coordinator));
+                                                               map,
+                                                               connectionPool));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -187,7 +201,7 @@ public class ServerWritePerformance {
     private Throttler throttler;
     private AtomicBoolean isShutdown;
     private CountDownLatch latch;
-    private Coordinator coordinator;
+    private ClusterMap clusterMap;
     private Random rand = new Random();
     private int minBlobSize;
     private int maxBlobSize;
@@ -195,8 +209,11 @@ public class ServerWritePerformance {
     private AtomicLong totalTimeTaken;
     private AtomicLong totalWrites;
     private boolean enableVerboseLogging;
+    private int threadIndex;
+    private ConnectionPool connectionPool;
 
-    public ServerWritePerfRun(Throttler throttler,
+    public ServerWritePerfRun(int threadIndex,
+                              Throttler throttler,
                               AtomicBoolean isShutdown,
                               CountDownLatch latch,
                               int minBlobSize,
@@ -205,50 +222,87 @@ public class ServerWritePerformance {
                               AtomicLong totalTimeTaken,
                               AtomicLong totalWrites,
                               boolean enableVerboseLogging,
-                              AmbryCoordinator coordinator) {
+                              ClusterMap clusterMap,
+                              ConnectionPool connectionPool) {
+      this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
-      this.coordinator = coordinator;
+      this.clusterMap = clusterMap;
       this.minBlobSize = minBlobSize;
       this.maxBlobSize = maxBlobSize;
       this.writer = writer;
       this.totalTimeTaken = totalTimeTaken;
       this.totalWrites = totalWrites;
       this.enableVerboseLogging = enableVerboseLogging;
+      this.connectionPool = connectionPool;
     }
 
     public void run() {
       try {
         System.out.println("Starting write server performance");
         long numberOfPuts = 0;
-        long timePassedInMs = 0;
+        long timePassedInNanoSeconds = 0;
+        long maxLatencyInNanoSeconds = 0;
+        long minLatencyInNanoSeconds = Long.MAX_VALUE;
+        long totalLatencyInNanoSeconds = 0;
         while (!isShutdown.get()) {
 
           int randomNum = rand.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
           byte[] blob = new byte[randomNum];
           byte[] usermetadata = new byte[new Random().nextInt(1024)];
           BlobProperties props = new BlobProperties(randomNum, "test");
-          long startTime = System.currentTimeMillis();
+          ConnectedChannel channel = null;
+
           try {
-            String id = coordinator.putBlob(props, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)));
-            long endTime = System.currentTimeMillis();
-            writer.write("Blob-" + id + "\n");
+            long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+            PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
+            BlobId blobId = new BlobId(partitionId);
+            PutRequest putRequest =
+                    new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)));
+            channel = connectionPool.checkOutConnection(partitionId.getReplicaIds().get(0).getDataNodeId().getHostname(),
+                    partitionId.getReplicaIds().get(0).getDataNodeId().getPort(),
+                    10000);
+            long startTime = SystemTime.getInstance().nanoseconds();
+            channel.send(putRequest);
+            PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive()));
+            if (putResponse.getError() != ServerErrorCode.No_Error) {
+              throw new UnexpectedException("error " + putResponse.getError());
+            }
+            long endTime = SystemTime.getInstance().nanoseconds();
+            timePassedInNanoSeconds += (endTime - startTime);
+            writer.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging)
-              System.out.println("Time taken to put " + (endTime - startTime) + " for blob of size " + blob.length);
-            timePassedInMs += (endTime - startTime);
+              System.out.println("Time taken to put blob id " + blobId + " in us " + (endTime - startTime) * .001 + " for blob of size " + blob.length);
             numberOfPuts++;
-            if (timePassedInMs >= 1000) {
-              System.out.println("Number of puts " + numberOfPuts + " in " + timePassedInMs + " ms");
+            if (maxLatencyInNanoSeconds < (endTime - startTime)) {
+              maxLatencyInNanoSeconds = (endTime - startTime);
+            }
+            if (minLatencyInNanoSeconds > (endTime - startTime)) {
+              minLatencyInNanoSeconds = (endTime - startTime);
+            }
+            totalLatencyInNanoSeconds += (endTime - startTime);
+            if (timePassedInNanoSeconds >= 1000000000) {
+              System.out.println(threadIndex + "    " + numberOfPuts + "    " + timePassedInNanoSeconds * .001 +
+                                 "    " + maxLatencyInNanoSeconds * .001 + "    " + minLatencyInNanoSeconds * .001 +
+                                 "    " + (((double)totalLatencyInNanoSeconds) / numberOfPuts) * .001);
               numberOfPuts = 0;
-              timePassedInMs = 0;
+              timePassedInNanoSeconds = 0;
+              maxLatencyInNanoSeconds = 0;
+              minLatencyInNanoSeconds = Long.MAX_VALUE;
+              totalLatencyInNanoSeconds = 0;
             }
             totalTimeTaken.addAndGet(endTime - startTime);
             throttler.maybeThrottle(1);
           }
-          catch (CoordinatorException e) {
+          catch (Exception e) {
             System.out.println("Exception when putting blob " + e);
+          }
+          finally {
+            if (channel != null) {
+              connectionPool.checkInConnection(channel);
+            }
           }
         }
       }

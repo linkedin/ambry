@@ -48,6 +48,13 @@ public class ReplicationConfig {
   @Default("256000")
   public final long replicationFetchSizeInBytes;
 
+  /**
+   * The time for which replication waits between replication of remote replicas of a partition
+   */
+  @Config("replication.wait.time.between.replicas.ms")
+  @Default("1000")
+  public final int replicaWaitTimeBetweenReplicasMs;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -62,5 +69,7 @@ public class ReplicationConfig {
             verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
             verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 256000, 0, 2097152);
+    replicaWaitTimeBetweenReplicasMs =
+            verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
   }
 }
