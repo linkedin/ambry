@@ -2,12 +2,22 @@ package com.github.ambry.tools.perf;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.BlockingChannelConnectionPool;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -18,9 +28,11 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 import java.io.BufferedReader;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,7 +45,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ServerReadPerformance {
   public static void main(String args[]) {
-    Coordinator coordinator = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
@@ -122,87 +133,95 @@ public class ServerReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       Throttler throttler = new Throttler(readsPerSecond, 100, true, SystemTime.getInstance());
       String line;
-      Properties props = Utils.loadProps(coordinatorConfigPath);
-      coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
-      coordinator.start();
+      ConnectedChannel channel = null;
+      ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
+      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
+      long totalNumberOfGetBlobs = 0;
+      long totalLatencyForGetBlobs = 0;
+      long maxLatencyForGetBlobs = 0;
+      long minLatencyForGetBlobs = Long.MAX_VALUE;
+
       while ((line = br.readLine()) != null) {
-        String[] id = line.split("\\|");
-        //System.out.println("calling get on " + id[1]);
-        long startTime = System.currentTimeMillis();
+        String[] id = line.split("-");
         BlobOutput output = null;
-        try {
-          output = coordinator.getBlob(id[1]);
-        }
-        catch (CoordinatorException e) {
-          System.out.println("Error while trying to get blob with id " + id[1] + " with exception " + e);
-          continue;
-        }
-        //System.out.println("Time taken to get blob " + (System.currentTimeMillis() - startTime));
-        if (output != null) {
-          long sizeRead = 0;
-          byte[] outputBuffer = new byte[(int)output.getSize()];
-          ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-          while (sizeRead < output.getSize()) {
-            streamOut.write(output.getStream().read());
-            sizeRead++;
-          }
-          // compare from source if present
-          if (id.length == 4) {
-            //System.out.println("Comparing with source " + id[3]);
-            File fileSource = new File(id[3]);
-            FileInputStream fileInputStream = null;
-            try {
-              fileInputStream = new FileInputStream(fileSource);
-              int sourceSize = (int)output.getSize();
-              byte [] sourceBuffer = new byte[sourceSize];
-              fileInputStream.read(sourceBuffer);
-              if (Arrays.equals(sourceBuffer, outputBuffer)) {
-                //System.out.println("Equals");
-              }
-              else {
-                System.out.println("Not equals");
-              }
-
+        BlobId blobId = new BlobId(id[1], map);
+        ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
+        blobIds.add(blobId);
+        for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
+          long startTimeGetBlob = 0;
+          try {
+            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, blobId.getPartition(), blobIds);
+            channel =  connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+                                                         replicaId.getDataNodeId().getPort(),
+                                                         10000);
+            startTimeGetBlob = SystemTime.getInstance().nanoseconds();
+            channel.send(getRequest);
+            InputStream receiveStream = channel.receive();
+            GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
+            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+            long sizeRead = 0;
+            byte[] outputBuffer = new byte[(int)output.getSize()];
+            ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
+            while (sizeRead < output.getSize()) {
+              streamOut.write(output.getStream().read());
+              sizeRead++;
             }
-            catch (Exception e) {
-              System.out.println("Error while reading from source file " + e);
+            long endTimeGetBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
+            totalNumberOfGetBlobs++;
+            totalLatencyForGetBlobs += endTimeGetBlob;
+            if (endTimeGetBlob > maxLatencyForGetBlobs) {
+              maxLatencyForGetBlobs = endTimeGetBlob;
             }
-            finally {
-              if (fileInputStream != null) {
-                fileInputStream.close();
-              }
+            if (endTimeGetBlob < minLatencyForGetBlobs) {
+              minLatencyForGetBlobs = endTimeGetBlob;
+            }
+            if (totalLatencyForGetBlobs >= 1000000000) {
+              System.out.println(totalNumberOfGetBlobs + "    " + totalLatencyForGetBlobs * .001 + "    " +
+                                 maxLatencyForGetBlobs * .001 + "    " + minLatencyForGetBlobs * .001 + "    " +
+                                 ((double)totalLatencyForGetBlobs / totalNumberOfGetBlobs) * .001);
+              totalLatencyForGetBlobs = 0;
+              totalNumberOfGetBlobs = 0;
+              maxLatencyForGetBlobs = 0;
+              minLatencyForGetBlobs = Long.MAX_VALUE;
             }
 
+
+            GetRequest getRequestProperties =
+                    new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, blobId.getPartition(), blobIds);
+            long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
+            channel.send(getRequestProperties);
+            InputStream receivePropertyStream = channel.receive();
+            GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
+            BlobProperties blobProperties =
+                    MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
+            long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
+
+
+
+
+            GetRequest getRequestUserMetadata =
+                    new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, blobId.getPartition(), blobIds);
+
+            long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
+            channel.send(getRequestUserMetadata);
+            InputStream receiveUserMetadataStream = channel.receive();
+            GetResponse getResponseUserMetadata = GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
+            ByteBuffer userMetadata =
+                    MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
+            long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
+            throttler.maybeThrottle(1);
+          }
+          finally {
+            if (channel != null) {
+              connectionPool.checkInConnection(channel);
+              channel = null;
+            }
           }
         }
-        startTime = System.currentTimeMillis();
-        BlobProperties properties = null;
-        try {
-          properties = coordinator.getBlobProperties(id[1]);
-        }
-        catch (CoordinatorException e) {
-          System.out.println("Error while trying to get blob properties with id " + id[1] + " with exception " + e);
-        }
-        //System.out.println("Time to get blob properties " + (System.currentTimeMillis() - startTime));
-        //System.out.println("Blob properties size: " + properties.getBlobSize() + " : " + properties.getServiceId());
-        startTime = System.currentTimeMillis();
-        ByteBuffer userMetadata = null;
-        try {
-          userMetadata = coordinator.getBlobUserMetadata(id[1]);
-        }
-        catch (CoordinatorException e) {
-          System.out.println("Error while trying to get blob usermetadata with id " + id[1] + " with exception " + e);
-        }
-        //System.out.println("Time to get blob usermetadata " + (System.currentTimeMillis() - startTime));
-        throttler.maybeThrottle(1);
       }
     }
     catch (Exception e) {
       System.out.println("Error in server read performance " + e);
-    }
-    finally {
-      if (coordinator != null)
-        coordinator.shutdown();
     }
   }
 }

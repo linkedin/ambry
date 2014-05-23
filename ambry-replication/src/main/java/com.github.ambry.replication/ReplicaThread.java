@@ -24,6 +24,8 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Throttler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,13 +132,14 @@ class ReplicaThread implements Runnable {
                            remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
                            " Token after speaking to remote node " +
                            exchangeMetadataResponse.remoteToken);
+
             }
             catch (Exception e) {
               logger.error("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
                            " Thread name " + threadName +
                            " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
                            remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
-                           " Error while replicating with remote replica ", e);
+                           " Error while replicating with remote replica " + e);
               replicationMetrics.replicationErrors.inc();
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);
@@ -171,11 +174,12 @@ class ReplicaThread implements Runnable {
    * @throws StoreException
    * @throws MessageFormatException
    * @throws ReplicationException
+   * @throws InterruptedException
    */
   protected ExchangeMetadataResponse exchangeMetadata(ConnectedChannel connectedChannel,
                                                       PartitionInfo partitionInfo,
                                                       RemoteReplicaInfo remoteReplicaInfo)
-          throws IOException, StoreException, MessageFormatException, ReplicationException {
+          throws IOException, StoreException, MessageFormatException, ReplicationException, InterruptedException {
 
     // 1. Sends a ReplicaMetadataRequest to the remote replica and gets all the message entries since the last
     //    token
@@ -204,11 +208,16 @@ class ReplicaThread implements Runnable {
       throw new ReplicationException("Replica Metadata Response Error " + response.getError());
     }
     logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
-            " Thread name " + threadName +
-            " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
-            remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
-            " Token from remote " + response.getFindToken());
+                 " Thread name " + threadName +
+                 " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+                 remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+                 " Token from remote " + response.getFindToken());
     List<MessageInfo> messageInfoList = response.getMessageInfoList();
+
+    // We apply the wait time between replication from remote replicas here. Any new objects that get written
+    // in the remote replica are given time to be written to the local replica and avoids failing the request
+    // from the client.
+    Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
 
     // 2. Check the local store to find the messages that are missing locally
     // find ids that are missing

@@ -4,8 +4,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.github.ambry.store.BlobStore;
-import com.github.ambry.store.Log;
 
 import java.util.List;
 
@@ -46,7 +44,7 @@ public class ReplicationMetrics {
         return getLiveThreads();
       }
     };
-    registry.register("numberOfReplicaThreads", numberOfReplicaThreads);
+    registry.register(MetricRegistry.name(ReplicaThread.class, "numberOfReplicaThreads"), numberOfReplicaThreads);
   }
 
   private int getLiveThreads() {

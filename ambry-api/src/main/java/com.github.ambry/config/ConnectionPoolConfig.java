@@ -27,7 +27,7 @@ public class ConnectionPoolConfig {
   public final int connectionPoolReadTimeoutMs;
 
   @Config("connectionpool.max.connections.per.host")
-  @Default("5")
+  @Default("40")
   public final int connectionPoolMaxConnectionsPerHost;
 
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {

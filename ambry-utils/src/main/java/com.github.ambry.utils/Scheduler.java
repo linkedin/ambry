@@ -65,7 +65,7 @@ public class Scheduler {
         try {
           func.run();
         } catch (Exception e) {
-          logger.error("The scheduled job {} failed with the following error {}", name, e);
+          logger.error("The scheduled job " + name + " failed", e);
         } finally {
           logger.trace("Completed execution of the task {}", name);
         }

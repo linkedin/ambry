@@ -348,7 +348,7 @@ class Processor extends AbstractServerThread {
               // handle InvalidRequestException
             }
             catch (Throwable e) {
-              logger.error("closing key on exception remote host {} exception {}",
+              logger.error("closing key on exception remote host " +
                            ((SocketChannel) key.channel()).socket().getRemoteSocketAddress(), e);
               close(key);
             }
@@ -356,6 +356,7 @@ class Processor extends AbstractServerThread {
         }
       }
       logger.debug("Closing server socket and selector.");
+      closeAll();
       selector.close();
       shutdownComplete();
     } catch (Exception e) {
@@ -413,6 +414,17 @@ class Processor extends AbstractServerThread {
     key.cancel();
   }
 
+  /*
+   * Close all open connections
+   */
+  private void closeAll() throws IOException {
+    Iterator<SelectionKey> iter = this.selector.keys().iterator();
+    while (iter.hasNext()) {
+      SelectionKey key = iter.next();
+      close(key);
+    }
+  }
+
   /**
    * Register any new connections that have been queued up
    */
@@ -439,8 +451,7 @@ class Processor extends AbstractServerThread {
     }
     input.readFrom(socketChannel);
 
-    SocketAddress address = socketChannel.socket().getRemoteSocketAddress();
-    logger.trace("bytes read from {}", address);
+    logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
 
     if(input.isReadComplete()) {
       SocketServerRequest req =
@@ -454,8 +465,10 @@ class Processor extends AbstractServerThread {
     }
     else {
       // more reading to be done
-      logger.trace("Did not finish reading, registering for read again on connection {}",
-              socketChannel.socket().getRemoteSocketAddress());
+      if (logger.isTraceEnabled()) {
+        logger.trace("Did not finish reading, registering for read again on connection {}",
+                     socketChannel.socket().getRemoteSocketAddress());
+      }
       key.interestOps(SelectionKey.OP_READ);
       wakeup();
     }
@@ -472,10 +485,15 @@ class Processor extends AbstractServerThread {
     if(responseSend == null)
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     responseSend.writeTo(socketChannel);
-    logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
+    }
 
     if(responseSend.isSendComplete()) {
-      logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
+      if (logger.isTraceEnabled()) {
+        logger.trace("Finished writing, registering for read on connection {}",
+                     socketChannel.socket().getRemoteSocketAddress());
+      }
       response.onSendComplete();
       metrics.sendInFlight.dec();
       key.attach(null);
@@ -483,8 +501,10 @@ class Processor extends AbstractServerThread {
       key.interestOps(SelectionKey.OP_READ);
     }
     else {
-      logger.trace("Did not finish writing, registering for write again on connection {}",
-              socketChannel.socket().getRemoteSocketAddress());
+      if (logger.isTraceEnabled()) {
+        logger.trace("Did not finish writing, registering for write again on connection {}",
+                     socketChannel.socket().getRemoteSocketAddress());
+      }
       key.interestOps(SelectionKey.OP_WRITE);
       wakeup();
     }

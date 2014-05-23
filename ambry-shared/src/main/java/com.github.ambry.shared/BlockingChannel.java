@@ -52,10 +52,10 @@ public class BlockingChannel implements ConnectedChannel {
         readChannel = channel.socket().getInputStream();
         connected = true;
         logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), " +
-                "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})",
-                channel.socket().getSoTimeout(), readTimeoutMs,
-                channel.socket().getReceiveBufferSize(),
-                readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
+                     "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})",
+                     channel.socket().getSoTimeout(), readTimeoutMs,
+                     channel.socket().getReceiveBufferSize(),
+                     readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
       }
     }
   }
@@ -68,11 +68,15 @@ public class BlockingChannel implements ConnectedChannel {
           // but let's do it to be sure.
           channel.close();
           channel.socket().close();
-          readChannel.close();
-          writeChannel.close();
+          if (readChannel != null) {
+            readChannel.close();
+            readChannel = null;
+          }
+          if (writeChannel != null) {
+            writeChannel.close();
+            writeChannel = null;
+          }
           channel = null;
-          readChannel = null;
-          writeChannel = null;
           connected = false;
         }
       }

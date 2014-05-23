@@ -24,8 +24,12 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public Gauge<Long> currentCapacityUsed;
+  private final MetricRegistry registry;
+  private final String name;
 
   public StoreMetrics(String name, MetricRegistry registry) {
+    this.registry = registry;
+    this.name = name;
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeDeleteResponse"));
@@ -48,5 +52,6 @@ public class StoreMetrics {
         return log.getLogEndOffset();
       }
     };
+    registry.register(MetricRegistry.name(Log.class, name + "currentCapacityUsed"), currentCapacityUsed);
   }
 }

@@ -44,8 +44,9 @@ class BlockingChannelInfo {
     try {
       blockingChannelActiveConnections.remove(blockingChannel);
       blockingChannelAvailableConnections.add(blockingChannel);
-      logger.trace("Adding connection back to pool. Current available connections {} Current active connections {}",
-              blockingChannelAvailableConnections.size(), blockingChannelActiveConnections.size());
+      logger.trace("Adding connection to {}:{} back to pool. Current available connections {} Current active connections {}",
+                   blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
+                   blockingChannelAvailableConnections.size(), blockingChannelActiveConnections.size());
     }
     finally {
       rwlock.readLock().unlock();
@@ -68,6 +69,7 @@ class BlockingChannelInfo {
           throw new ConnectionPoolTimeoutException("Could not get a connection to host " + host + " and port " + port);
         }
         blockingChannelActiveConnections.add(channel);
+        logger.trace("Returning connection to " + channel.getRemoteHost() + ":" + channel.getRemotePort());
         return channel;
       }
       synchronized (lock) {
@@ -83,7 +85,7 @@ class BlockingChannelInfo {
           blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
           logger.trace("Creating a new connection for host {} and port {}. Number of connections {}",
-                  host, port, numberOfConnections.get());
+                       host, port, numberOfConnections.get());
         }
       }
       BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
@@ -115,8 +117,8 @@ class BlockingChannelInfo {
       boolean changed = blockingChannelActiveConnections.remove(blockingChannel);
       if (!changed) {
         logger.error("Invalid connection being destroyed. " +
-                "Channel does not belong to this queue. queue host {} port {} channel host {} port {}",
-                host, port, blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
+                     "Channel does not belong to this queue. queue host {} port {} channel host {} port {}",
+                     host, port, blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
         throw new IllegalArgumentException("Invalid connection. Channel does not belong to this queue");
       }
       blockingChannel.disconnect();
