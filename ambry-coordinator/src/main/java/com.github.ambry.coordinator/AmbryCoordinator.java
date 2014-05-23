@@ -1,5 +1,7 @@
 package com.github.ambry.coordinator;
 
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -39,6 +41,7 @@ public class AmbryCoordinator implements Coordinator {
   private int operationTimeoutMs;
   private int connectionPoolCheckoutTimeout;
 
+  private JmxReporter reporter = null;
   private String clientId;
   private String datacenterName;
   private ExecutorService requesterPool;
@@ -62,8 +65,14 @@ public class AmbryCoordinator implements Coordinator {
 
   @Override
   public void start() {
-    logger.info("start started");
+    logger.info("coordinator starting");
     try {
+      logger.info("Setting up JMX.");
+      MetricRegistry registry = clusterMap.getMetricRegistry();
+      this.reporter = JmxReporter.forRegistry(registry).build();
+      reporter.start();
+
+      logger.info("Creating configs");
       CoordinatorConfig coordinatorConfig = new CoordinatorConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       properties.verify();
@@ -76,14 +85,16 @@ public class AmbryCoordinator implements Coordinator {
                                         "Coordinator cannot start.");
       }
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
+      logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
+      logger.info("Getting connection pool");
       ConnectionPoolFactory connectionPoolFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory,
                                                                  connectionPoolConfig);
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 
-      logger.info("start completed");
+      logger.info("coordinator started");
     }
     catch (Exception e) {
       logger.error("Error during start {}", e);
