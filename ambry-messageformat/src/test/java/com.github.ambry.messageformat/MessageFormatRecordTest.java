@@ -103,7 +103,8 @@ public class MessageFormatRecordTest {
 
       // corrupt usermetadata record V1
       output.flip();
-      output.put(10, (byte)1);
+      Byte currentRandomByte = output.get(10);
+      output.put(10, (byte)(currentRandomByte+1));
       try {
         MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
         Assert.assertEquals(true, false);
@@ -131,7 +132,8 @@ public class MessageFormatRecordTest {
 
       // corrupt blob record V1
       sData.flip();
-      sData.put(10, (byte)10);
+      currentRandomByte = sData.get(10);
+      sData.put(10, (byte)(currentRandomByte+1));
       try {
         MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
         Assert.assertEquals(true, false);

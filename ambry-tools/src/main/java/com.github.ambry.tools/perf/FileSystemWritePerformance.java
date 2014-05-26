@@ -1,19 +1,10 @@
 package com.github.ambry.tools.perf;
 
-import com.github.ambry.utils.SystemTime;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.util.Random;
-
 /**
  * Measures the file system performance using system cache and sync writes
  */
 public class FileSystemWritePerformance {
+  /* TODO: Remove dependency on Java 7
   public static void main(String[] args) {
     if (args.length != 1) {
       System.out.println("The number of args is not equal to 1. The path is required");
@@ -71,4 +62,5 @@ public class FileSystemWritePerformance {
     }
 
   }
+  */
 }
