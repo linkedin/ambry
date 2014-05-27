@@ -4,7 +4,11 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.*;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -14,18 +18,26 @@ import java.io.FileInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
 
 /**
  * An in memory index implementation that is responsible for adding and modifying index entries,
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  */
-public class BlobIndex {
-  protected ConcurrentHashMap<StoreKey, BlobIndexValue> index = new ConcurrentHashMap<StoreKey, BlobIndexValue>();
+public class InMemoryIndex {
+  protected ConcurrentHashMap<StoreKey, IndexValue> index = new ConcurrentHashMap<StoreKey, IndexValue>();
   protected Scheduler scheduler;
   private AtomicLong logEndOffset;
   private File indexFile;
@@ -33,7 +45,7 @@ public class BlobIndex {
   private static final String Clean_Shutdown_Filename = "cleanshutdown";
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
-  private BlobJournal journal;
+  private InMemoryJournal journal;
   private Log log;
   private UUID sessionId;
   private boolean cleanShutdown;
@@ -57,20 +69,16 @@ public class BlobIndex {
    * @param recovery The recovery handle to perform recovery on startup
    * @throws StoreException
    */
-  public BlobIndex(String datadir,
-                   Scheduler scheduler,
-                   Log log,
-                   StoreConfig config,
-                   StoreKeyFactory factory,
-                   MessageStoreRecovery recovery,
-                   MetricRegistry registry) throws StoreException  {
+  public InMemoryIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MetricRegistry registry)
+      throws StoreException {
     try {
-      this.recoveryTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexRecoveryTime"));
-      this.indexFlushTime = registry.timer(MetricRegistry.name(BlobIndex.class, "indexFlushTime"));
-      this.nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobIndex.class, "nonZeroMessageRecovery"));
-      this.journal = new BlobJournal(datadir,
-                                     config.storeIndexMaxNumberOfInmemElements,
-                                     config.storeMaxNumberOfEntriesToReturnFromJournal);
+      this.recoveryTime = registry.timer(MetricRegistry.name(InMemoryIndex.class, "indexRecoveryTime"));
+      this.indexFlushTime = registry.timer(MetricRegistry.name(InMemoryIndex.class, "indexFlushTime"));
+      this.nonzeroMessageRecovery =
+          registry.counter(MetricRegistry.name(InMemoryIndex.class, "nonZeroMessageRecovery"));
+      this.journal = new InMemoryJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
+          config.storeMaxNumberOfEntriesToReturnFromJournal);
       logEndOffset = new AtomicLong(0);
       //indexJournal = new BlobJournal();
       this.log = log;
@@ -81,27 +89,27 @@ public class BlobIndex {
       if (indexFile.exists()) {
         try {
           persistor.read();
-        }
-        catch (StoreException e) {
-          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure ||
-              e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
+        } catch (StoreException e) {
+          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
+              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
             logger.error("Error while reading from index {}", e);
-          }
-          else
+          } else {
             throw e;
+          }
         }
       }
       // do recovery
       final Timer.Context context = recoveryTime.time();
       List<MessageInfo> messagesRecovered = recovery.recover(log, logEndOffset.get(), log.sizeInBytes(), factory);
-      if (messagesRecovered.size() > 0)
+      if (messagesRecovered.size() > 0) {
         nonzeroMessageRecovery.inc(1);
+      }
       long runningOffset = logEndOffset.get();
       // iterate through the recovered messages and restore the state of the index
       for (MessageInfo info : messagesRecovered) {
-        BlobIndexValue value = index.get(info.getStoreKey());
+        IndexValue value = index.get(info.getStoreKey());
         // if the key already exist, update the delete state or ttl value if required
         if (value != null) {
           logger.info("Message already exists with key {}", info.getStoreKey());
@@ -109,24 +117,22 @@ public class BlobIndex {
           if (info.isDeleted()) {
             FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
             markAsDeleted(info.getStoreKey(), fileSpan);
-          }
-          else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
+          } else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
             FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
             updateTTL(info.getStoreKey(), Utils.Infinite_Time, fileSpan);
-          }
-          else
+          } else {
             throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
-          logger.info("Updated message with key {} size {} ttl {} deleted {}",
-                      info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
-        }
-        else {
+          }
+          logger.info("Updated message with key {} size {} ttl {} deleted {}", info.getStoreKey(), value.getSize(),
+              value.getTimeToLiveInMs(), info.isDeleted());
+        } else {
           // add a new entry to the index
-          BlobIndexValue newValue = new BlobIndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
+          IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
           verifyFileEndOffset(new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize()));
           FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
-          addToIndex(new BlobIndexEntry(info.getStoreKey(), newValue), fileSpan);
-          logger.info("Adding new message to index with key {} size {} ttl {} deleted {}",
-                  info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
+          addToIndex(new IndexEntry(info.getStoreKey(), newValue), fileSpan);
+          logger.info("Adding new message to index with key {} size {} ttl {} deleted {}", info.getStoreKey(),
+              info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
         }
         runningOffset += info.getSize();
       }
@@ -144,13 +150,10 @@ public class BlobIndex {
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
-      this.scheduler.schedule("index persistor",
-                              persistor,
-                              config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
-                              config.storeDataFlushIntervalSeconds,
-                              TimeUnit.SECONDS);
-    }
-    catch (Exception e) {
+      this.scheduler.schedule("index persistor", persistor,
+          config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
+          config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+    } catch (Exception e) {
       throw new StoreException("Error while creating index", e, StoreErrorCodes.Index_Creation_Failure);
     }
   }
@@ -161,7 +164,7 @@ public class BlobIndex {
    * @param fileSpan The file span that this entry represents in the log
    * @throws StoreException
    */
-  public void addToIndex(BlobIndexEntry entry, FileSpan fileSpan) {
+  public void addToIndex(IndexEntry entry, FileSpan fileSpan) {
     verifyFileEndOffset(fileSpan);
     index.put(entry.getKey(), entry.getValue());
     this.logEndOffset.set(fileSpan.getEndOffset());
@@ -174,9 +177,9 @@ public class BlobIndex {
    * @param fileSpan The file span that the entries represent in the log
    * @throws StoreException
    */
-  public void addToIndex(ArrayList<BlobIndexEntry> entries, FileSpan fileSpan) {
+  public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan) {
     verifyFileEndOffset(fileSpan);
-    for (BlobIndexEntry entry : entries) {
+    for (IndexEntry entry : entries) {
       index.put(entry.getKey(), entry.getValue());
       journal.addEntry(entry.getValue().getOffset(), entry.getKey());
     }
@@ -199,14 +202,15 @@ public class BlobIndex {
    * @param fileSpan The file range represented by this entry in the log
    * @throws StoreException
    */
-  public void markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
+  public void markAsDeleted(StoreKey id, FileSpan fileSpan)
+      throws StoreException {
     verifyFileEndOffset(fileSpan);
-    BlobIndexValue value = index.get(id);
+    IndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. marking id as deleted failed", id);
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
     }
-    value.setFlag(BlobIndexValue.Flags.Delete_Index);
+    value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
@@ -220,9 +224,10 @@ public class BlobIndex {
    * @param fileSpan The file range represented by this entry in the log
    * @throws StoreException
    */
-  public void updateTTL(StoreKey id, long ttl, FileSpan fileSpan) throws StoreException {
+  public void updateTTL(StoreKey id, long ttl, FileSpan fileSpan)
+      throws StoreException {
     verifyFileEndOffset(fileSpan);
-    BlobIndexValue value = index.get(id);
+    IndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. updating ttl failed", id);
       throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
@@ -240,17 +245,16 @@ public class BlobIndex {
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
    */
-  public BlobReadOptions getBlobReadInfo(StoreKey id) throws StoreException {
-    BlobIndexValue value = index.get(id);
+  public BlobReadOptions getBlobReadInfo(StoreKey id)
+      throws StoreException {
+    IndexValue value = index.get(id);
     if (value == null) {
       logger.error("id {} not present in index. cannot find blob", id);
       throw new StoreException("id not present in index " + id, StoreErrorCodes.ID_Not_Found);
-    }
-    else if (value.isFlagSet(BlobIndexValue.Flags.Delete_Index)) {
+    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       logger.error("id {} has been deleted", id);
       throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
-    }
-    else if (value.isExpired()) {
+    } else if (value.isExpired()) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
     }
@@ -266,8 +270,9 @@ public class BlobIndex {
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) {
     Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
-      if (!exists(key))
+      if (!exists(key)) {
         missingKeys.add(key);
+      }
     }
     return missingKeys;
   }
@@ -281,8 +286,9 @@ public class BlobIndex {
    *                              in cases where summing a blob could exceed the max value.
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
-    StoreFindToken storeToken = (StoreFindToken)token;
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
+      throws StoreException {
+    StoreFindToken storeToken = (StoreFindToken) token;
     // validate token
     if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
       // the session has changed. check if we had an unclean shutdown on startup
@@ -292,11 +298,11 @@ public class BlobIndex {
         if (storeToken.getOffset() > logEndOffsetOnStartup) {
           storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId);
         }
-      }
-      else if (storeToken.getOffset() > logEndOffsetOnStartup) {
+      } else if (storeToken.getOffset() > logEndOffsetOnStartup) {
         logger.error("Invalid token. Provided offset is outside the log range after clean shutdown");
         // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
-        throw new IllegalArgumentException("Invalid token. Provided offset is outside the log range after clean shutdown");
+        throw new IllegalArgumentException(
+            "Invalid token. Provided offset is outside the log range after clean shutdown");
       }
     }
     boolean inclusive = false;
@@ -311,33 +317,30 @@ public class BlobIndex {
       // read the entire index and return it
       if (index.entrySet().size() > 0) {
         long largestOffset = 0;
-        for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
-          messageEntries.add(new MessageInfo(entry.getKey(),
-                                             entry.getValue().getSize(),
-                                             entry.getValue().isFlagSet(BlobIndexValue.Flags.Delete_Index),
-                                             entry.getValue().getTimeToLiveInMs()));
-          if (entry.getValue().getOffset() > largestOffset)
+        for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
+          messageEntries.add(new MessageInfo(entry.getKey(), entry.getValue().getSize(),
+              entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs()));
+          if (entry.getValue().getOffset() > largestOffset) {
             largestOffset = entry.getValue().getOffset();
+          }
         }
         return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
-      }
-      else {
+      } else {
         return new FindInfo(messageEntries, storeToken);
       }
-    }
-    else {
+    } else {
       long endOffset = storeToken.getOffset();
       long currentTotalSize = 0;
       for (JournalEntry entry : entries) {
-        BlobIndexValue value = index.get(entry.getKey());
-        messageEntries.add(new MessageInfo(entry.getKey(),
-                                           value.getSize(),
-                                           value.isFlagSet(BlobIndexValue.Flags.Delete_Index),
-                                           value.getTimeToLiveInMs()));
+        IndexValue value = index.get(entry.getKey());
+        messageEntries.add(
+            new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+                value.getTimeToLiveInMs()));
         endOffset = entry.getOffset();
         currentTotalSize += value.getSize();
-        if (currentTotalSize >= maxTotalSizeOfEntries)
+        if (currentTotalSize >= maxTotalSizeOfEntries) {
           break;
+        }
       }
       eliminateDuplicates(messageEntries);
       return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
@@ -358,8 +361,7 @@ public class BlobIndex {
       MessageInfo messageInfo = messageEntriesIterator.previous();
       if (setToFindDuplicate.contains(messageInfo.getStoreKey())) {
         messageEntriesIterator.remove();
-      }
-      else {
+      } else {
         setToFindDuplicate.add(messageInfo.getStoreKey());
       }
     }
@@ -369,13 +371,13 @@ public class BlobIndex {
    * Closes the index
    * @throws StoreException
    */
-  public void close() throws StoreException, IOException {
+  public void close()
+      throws StoreException, IOException {
     persistor.write();
     File cleanShutdownFile = new File(indexFile.getAbsolutePath(), Clean_Shutdown_Filename);
     try {
       cleanShutdownFile.createNewFile();
-    }
-    catch (IOException e) {
+    } catch (IOException e) {
       logger.error("Index " + indexFile.getAbsolutePath() + " error while creating clean shutdown file ", e);
     }
   }
@@ -394,13 +396,13 @@ public class BlobIndex {
    */
   private void verifyFileEndOffset(FileSpan fileSpan) {
     if (this.logEndOffset.get() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
-      logger.error("File span offsets provided to the index does not meet constraints " +
-                   "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}",
-                   logEndOffset.get(), fileSpan.getStartOffset(), fileSpan.getEndOffset());
+      logger.error("File span offsets provided to the index does not meet constraints "
+          + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", logEndOffset.get(),
+          fileSpan.getStartOffset(), fileSpan.getEndOffset());
       throw new IllegalArgumentException("File span offsets provided to the index does not meet constraints " +
-                                         "logEndOffset " + logEndOffset.get() +
-                                         " inputFileStartOffset " + fileSpan.getStartOffset() +
-                                         " inputFileEndOffset " + fileSpan.getEndOffset());
+          "logEndOffset " + logEndOffset.get() +
+          " inputFileStartOffset " + fileSpan.getStartOffset() +
+          " inputFileEndOffset " + fileSpan.getEndOffset());
     }
   }
 
@@ -428,12 +430,13 @@ public class BlobIndex {
      * @throws StoreException
      * @throws IOException
      */
-    public void write() throws StoreException, IOException {
+    public void write()
+        throws StoreException, IOException {
       logger.info("writing index to disk for {}", indexFile.getPath());
       // write to temp file and then swap with the existing file
       DataOutputStream writer = null;
 
-      synchronized(lock) {
+      synchronized (lock) {
         final Timer.Context context = indexFlushTime.time();
         try {
           // write to temp file and then swap with the existing file
@@ -449,11 +452,11 @@ public class BlobIndex {
           log.flush();
 
           // write the current version
-          writer.writeShort(BlobIndex.version);
+          writer.writeShort(InMemoryIndex.version);
           writer.writeLong(fileEndPointer);
 
           // write the entries
-          for (Map.Entry<StoreKey, BlobIndexValue> entry : index.entrySet()) {
+          for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
           }
@@ -466,15 +469,14 @@ public class BlobIndex {
           // replace current index file with temp file atomically
           // TODO how to handle the return type
           temp.renameTo(indexFile);
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
           logger.error("IO error while persisting index to disk {}", indexFile.getAbsoluteFile());
-          throw new StoreException("IO error while persisting index to disk " +
-                                   indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
-        }
-        finally {
-          if (writer != null)
+          throw new StoreException("IO error while persisting index to disk " + indexFile.getAbsolutePath(), e,
+              StoreErrorCodes.IOError);
+        } finally {
+          if (writer != null) {
             writer.close();
+          }
           context.stop();
         }
       }
@@ -484,8 +486,7 @@ public class BlobIndex {
     public void run() {
       try {
         write();
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         logger.info("Error while persisting the index to disk {}", e);
       }
     }
@@ -495,9 +496,10 @@ public class BlobIndex {
      * @throws IOException
      * @throws StoreException
      */
-    public void read() throws IOException, StoreException {
+    public void read()
+        throws IOException, StoreException {
       logger.info("Reading index from file ", indexFile.getPath());
-      synchronized(lock) {
+      synchronized (lock) {
         indexFile.createNewFile();
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(indexFile));
         DataInputStream stream = new DataInputStream(crcStream);
@@ -509,15 +511,16 @@ public class BlobIndex {
               logEndOffset.set(endOffset);
               while (stream.available() > Crc_Size) {
                 StoreKey key = factory.getStoreKey(stream);
-                byte[] value = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
+                byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
                 stream.read(value);
-                BlobIndexValue blobValue = new BlobIndexValue(ByteBuffer.wrap(value));
+                IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
                 if (blobValue.getOffset() < logEndOffset.get()) {
                   index.put(key, blobValue);
+                } else {
+                  logger.info(
+                      "Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
+                      logEndOffset.get(), key);
                 }
-                else
-                  logger.info("Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
-                              logEndOffset.get(), key);
               }
               long crc = crcStream.getValue();
               if (crc != stream.readLong()) {
@@ -529,12 +532,10 @@ public class BlobIndex {
             default:
               throw new StoreException("Invalid version in index file", StoreErrorCodes.Index_Version_Error);
           }
-        }
-        catch (IOException e) {
-          throw new StoreException("IO error while reading from file " +
-                                   indexFile.getAbsolutePath(), e, StoreErrorCodes.IOError);
-        }
-        finally {
+        } catch (IOException e) {
+          throw new StoreException("IO error while reading from file " + indexFile.getAbsolutePath(), e,
+              StoreErrorCodes.IOError);
+        } finally {
           stream.close();
         }
       }

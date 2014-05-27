@@ -1,8 +1,8 @@
 buildscript {
-  repositories {
-    mavenCentral()
-  }
-  apply from: file('gradle/buildscript.gradle'), to: buildscript 
+    repositories {
+        mavenCentral()
+    }
+    apply from: file('gradle/buildscript.gradle'), to: buildscript
 }
 
 apply from: file('gradle/license.gradle')
@@ -10,199 +10,199 @@ apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
 
 allprojects {
-  group = "com.github.ambry"
+    group = "com.github.ambry"
 
-  apply plugin: 'eclipse'
-  apply plugin: 'idea'
-  apply plugin: 'project-report'
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+    apply plugin: 'project-report'
 }
 
 allprojects {
-  repositories {
-    mavenCentral()
-    mavenLocal()
-  }
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
 }
 
 project(':ambry-utils') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.json:json:$jsonVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.json:json:$jsonVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-api') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-utils')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-clustermap') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-metrics')
-    compile project(':ambry-utils')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.json:json:$jsonVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-metrics')
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.json:json:$jsonVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-shared') {
-  apply plugin: 'java'
-  
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-clustermap')
-    compile project(':ambry-messageformat')
-    compile project(':ambry-utils')
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    apply plugin: 'java'
+
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-clustermap')
+        compile project(':ambry-messageformat')
+        compile project(':ambry-utils')
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-network') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-utils')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-server') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-clustermap')
-    compile project(':ambry-coordinator')
-    compile project(':ambry-messageformat')
-    compile project(':ambry-metrics')
-    compile project(':ambry-network')
-    compile project(':ambry-shared')
-    compile project(':ambry-store')
-    compile project(':ambry-utils')
-    compile project(':ambry-replication')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-    testCompile project(':ambry-clustermap').sourceSets.test.output
-  }
+    dependencies {
+        compile project(':ambry-clustermap')
+        compile project(':ambry-coordinator')
+        compile project(':ambry-messageformat')
+        compile project(':ambry-metrics')
+        compile project(':ambry-network')
+        compile project(':ambry-shared')
+        compile project(':ambry-store')
+        compile project(':ambry-utils')
+        compile project(':ambry-replication')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
+    }
 }
 
 project(':ambry-store') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-clustermap')
-    compile project(':ambry-metrics')
-    compile project(':ambry-utils')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"   
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-    testCompile project(':ambry-clustermap').sourceSets.test.output
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-clustermap')
+        compile project(':ambry-metrics')
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
+    }
 }
 
 project(':ambry-messageformat') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-utils')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }
 
 project(':ambry-replication') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-utils')
-    compile project(':ambry-store')
-    compile project(':ambry-shared')
-    compile "com.codahale.metrics:metrics-core:$metricsVersion"
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-    testCompile project(':ambry-clustermap').sourceSets.test.output
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-utils')
+        compile project(':ambry-store')
+        compile project(':ambry-shared')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
+    }
 }
 
 project(':ambry-coordinator') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-clustermap')
-    compile project(':ambry-messageformat')
-    compile project(':ambry-shared')
-    compile project(':ambry-utils')
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-    testCompile project(':ambry-clustermap').sourceSets.test.output
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-clustermap')
+        compile project(':ambry-messageformat')
+        compile project(':ambry-shared')
+        compile project(':ambry-utils')
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
+    }
 }
 
 project(':ambry-tools') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile project(':ambry-store')
-    compile project(':ambry-coordinator')
-    compile "log4j:log4j:$log4jVersion"
-    compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile project(':ambry-store')
+        compile project(':ambry-coordinator')
+        compile "log4j:log4j:$log4jVersion"
+        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+    }
 }
 
 project(':ambry-metrics') {
-  apply plugin: 'java'
+    apply plugin: 'java'
 
-  dependencies {
-    compile project(':ambry-api')
-    compile "log4j:log4j:$log4jVersion"
-    compile "org.slf4j:slf4j-api:$slf4jVersion"
-    compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
-    testCompile "junit:junit:$junitVersion"
-  }
+    dependencies {
+        compile project(':ambry-api')
+        compile "log4j:log4j:$log4jVersion"
+        compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "junit:junit:$junitVersion"
+    }
 }

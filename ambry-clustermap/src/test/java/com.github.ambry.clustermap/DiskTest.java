@@ -7,9 +7,11 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+
 // TestDisk permits Disk to be constructed with a null DataNode.
 class TestDisk extends Disk {
-  public TestDisk(JSONObject jsonObject) throws JSONException {
+  public TestDisk(JSONObject jsonObject)
+      throws JSONException {
     super(null, jsonObject);
   }
 
@@ -20,13 +22,21 @@ class TestDisk extends Disk {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    TestDisk testDisk = (TestDisk)o;
+    TestDisk testDisk = (TestDisk) o;
 
-    if (!getMountPath().equals(testDisk.getMountPath())) return false;
-    if (getRawCapacityInBytes() != testDisk.getRawCapacityInBytes()) return false;
+    if (!getMountPath().equals(testDisk.getMountPath())) {
+      return false;
+    }
+    if (getRawCapacityInBytes() != testDisk.getRawCapacityInBytes()) {
+      return false;
+    }
     return getHardState() == testDisk.getHardState();
   }
 }
@@ -36,7 +46,8 @@ class TestDisk extends Disk {
  */
 public class DiskTest {
   @Test
-  public void basics() throws JSONException {
+  public void basics()
+      throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
 
     Disk testDisk = new TestDisk(jsonObject);
@@ -48,24 +59,24 @@ public class DiskTest {
     assertEquals(testDisk, new TestDisk(testDisk.toJSONObject()));
   }
 
-  public void failValidation(JSONObject jsonObject) throws JSONException {
+  public void failValidation(JSONObject jsonObject)
+      throws JSONException {
     try {
       new TestDisk(jsonObject);
       fail("Construction of TestDisk should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
   }
 
   @Test
-  public void validation() throws JSONException {
+  public void validation()
+      throws JSONException {
     try {
       // Null DataNode
       new Disk(null, TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
       fail("Construction of Disk should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
 
@@ -76,8 +87,7 @@ public class DiskTest {
     failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 0));
 
     // Bad capacity (too big)
-    failValidation(TestUtils.getJsonDisk("/mnt1",
-                                         HardwareState.UNAVAILABLE,
-                                         1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
+    failValidation(TestUtils
+        .getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L));
   }
 }

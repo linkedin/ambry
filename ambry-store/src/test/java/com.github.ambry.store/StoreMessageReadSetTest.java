@@ -16,19 +16,22 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.List;
 
-public class BlobMessageReadSetTest {
+
+public class StoreMessageReadSetTest {
 
   /**
    * Create a temporary file
    */
-  File tempFile() throws IOException {
+  File tempFile()
+      throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
   }
 
   @Test
-  public void testMessageRead() throws IOException {
+  public void testMessageRead()
+      throws IOException {
     File tempFile = tempFile();
     try {
       BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1, null);
@@ -48,7 +51,8 @@ public class BlobMessageReadSetTest {
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 3000);
-      MessageReadSet readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getLogEndOffset());
+      MessageReadSet readSet =
+          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getLogEndOffset());
       Assert.assertEquals(readSet.count(), 3);
       Assert.assertEquals(readSet.sizeInBytes(0), 15);
       Assert.assertEquals(readSet.sizeInBytes(1), 100);
@@ -88,29 +92,25 @@ public class BlobMessageReadSetTest {
       options.add(1, readOptions2);
       options.add(2, readOptions3);
       try {
-        readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 10);
+        readSet = new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, 10);
         Assert.assertTrue(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertTrue(true);
       }
-      readSet = new BlobMessageReadSet(tempFile, randomFile.getChannel(), options, 1000);
+      readSet = new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, 1000);
       try {
         readSet.sizeInBytes(4);
         Assert.assertTrue(false);
-      }
-      catch (IndexOutOfBoundsException e) {
+      } catch (IndexOutOfBoundsException e) {
         Assert.assertTrue(true);
       }
       try {
         readSet.writeTo(4, randomFile.getChannel(), 100, 100);
         Assert.assertTrue(false);
-      }
-      catch (IndexOutOfBoundsException e) {
+      } catch (IndexOutOfBoundsException e) {
         Assert.assertTrue(true);
       }
-    }
-    finally {
+    } finally {
       tempFile.delete();
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.delete();

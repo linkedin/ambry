@@ -8,9 +8,11 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+
 // TestDataNode permits DataNode to be constructed with a null Datacenter.
 class TestDataNode extends DataNode {
-  public TestDataNode(JSONObject jsonObject) throws JSONException {
+  public TestDataNode(JSONObject jsonObject)
+      throws JSONException {
     super(null, jsonObject);
   }
 
@@ -21,14 +23,24 @@ class TestDataNode extends DataNode {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    TestDataNode testDataNode = (TestDataNode)o;
+    TestDataNode testDataNode = (TestDataNode) o;
 
-    if (!getHostname().equals(testDataNode.getHostname())) return false;
-    if (getPort() != testDataNode.getPort()) return false;
-    if (getState() != testDataNode.getState()) return false;
+    if (!getHostname().equals(testDataNode.getHostname())) {
+      return false;
+    }
+    if (getPort() != testDataNode.getPort()) {
+      return false;
+    }
+    if (getState() != testDataNode.getState()) {
+      return false;
+    }
     return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
   }
 }
@@ -40,16 +52,16 @@ public class DataNodeTest {
   private static final int diskCount = 10;
   private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
-  JSONArray getDisks() throws JSONException {
+  JSONArray getDisks()
+      throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   @Test
-  public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(),
-                                                      6666,
-                                                      HardwareState.AVAILABLE,
-                                                      getDisks());
+  public void basics()
+      throws JSONException {
+    JSONObject jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
 
     DataNode dataNode = new TestDataNode(jsonObject);
 
@@ -64,18 +76,19 @@ public class DataNodeTest {
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject()));
   }
 
-  public void failValidation(JSONObject jsonObject) throws JSONException {
+  public void failValidation(JSONObject jsonObject)
+      throws JSONException {
     try {
       new TestDataNode(jsonObject);
       fail("Construction of TestDataNode should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
   }
 
   @Test
-  public void validation() throws JSONException {
+  public void validation()
+      throws JSONException {
     JSONObject jsonObject;
 
     try {
@@ -83,8 +96,7 @@ public class DataNodeTest {
       jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject);
       fail("Should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
 

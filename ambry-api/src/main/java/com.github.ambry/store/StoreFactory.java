@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-
 import java.util.Properties;
 
 

@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+
 /**
  * Mapping of errors from all packages into server error codes
  */
@@ -34,15 +35,17 @@ public class ErrorMapping {
 
   public static ServerErrorCode getStoreErrorMapping(StoreErrorCodes code) {
     ServerErrorCode errorCode = storeErrorMapping.get(code);
-    if (errorCode == null)
+    if (errorCode == null) {
       return ServerErrorCode.Unknown_Error;
+    }
     return errorCode;
   }
 
   public static ServerErrorCode getMessageFormatErrorMapping(MessageFormatErrorCodes code) {
     ServerErrorCode errorCode = messageFormatErrorMapping.get(code);
-    if (errorCode == null)
+    if (errorCode == null) {
       return ServerErrorCode.Unknown_Error;
+    }
     return errorCode;
   }
 }

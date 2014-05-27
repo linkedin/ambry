@@ -1,6 +1,5 @@
 package com.github.ambry.config;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Enumeration;
+
 
 /**
  * Verifiable properties for configs
@@ -72,42 +72,51 @@ public class VerifiableProperties {
    */
   public int getIntInRange(String name, int defaultVal, int start, int end) {
     int v = 0;
-    if(containsKey(name))
+    if (containsKey(name)) {
       v = Integer.parseInt(getProperty(name));
-    else
+    } else {
       v = defaultVal;
-    if (v >= start && v <= end)
+    }
+    if (v >= start && v <= end) {
       return v;
-    else
-      throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    }
   }
 
   public Short getShortInRange(String name, Short defaultVal, Short start, Short end) {
     Short v = 0;
-    if(containsKey(name))
+    if (containsKey(name)) {
       v = Short.parseShort(getProperty(name));
-    else
+    } else {
       v = defaultVal;
-    if (v >= start && v <= end)
+    }
+    if (v >= start && v <= end) {
       return v;
-    else
-      throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    }
   }
 
   public Double getDoubleInRange(String name, Double defaultVal, Double start, Double end) {
     Double v = 0.0;
-    if (containsKey(name))
+    if (containsKey(name)) {
       v = Double.parseDouble(getProperty(name));
-    else
+    } else {
       v = defaultVal;
+    }
     // use big decimal for double comparison
     BigDecimal startDecimal = new BigDecimal(start);
     BigDecimal endDecimal = new BigDecimal(end);
     BigDecimal value = new BigDecimal(v);
-    if (value.compareTo(startDecimal) >= 0 && value.compareTo(endDecimal) <= 0)
+    if (value.compareTo(startDecimal) >= 0 && value.compareTo(endDecimal) <= 0) {
       return v;
-    else
-      throw new IllegalArgumentException(name + " has value " + v + " which is not in range " + start + "-" + end + ".");
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not in range " + start + "-" + end + ".");
+    }
   }
 
   /**
@@ -139,14 +148,17 @@ public class VerifiableProperties {
    */
   public long getLongInRange(String name, long defaultVal, long start, long end) {
     long v = 0;
-    if(containsKey(name))
+    if (containsKey(name)) {
       v = Long.parseLong(getProperty(name));
-    else
+    } else {
       return defaultVal;
-    if (v >= start && v <= end)
+    }
+    if (v >= start && v <= end) {
       return v;
-    else
-      throw new IllegalArgumentException(name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    }
   }
 
   /**
@@ -155,9 +167,9 @@ public class VerifiableProperties {
    * @return the value
    * @throw IllegalArgumentException If the given property is not present
    */
-   public double getDouble(String name) {
-     return Double.parseDouble(getString(name));
-   }
+  public double getDouble(String name) {
+    return Double.parseDouble(getString(name));
+  }
 
   /**
    * Get an optional argument as a double
@@ -165,10 +177,11 @@ public class VerifiableProperties {
    * @default The default value for the property if not present
    */
   public double getDouble(String name, double defaultVal) {
-    if(containsKey(name))
+    if (containsKey(name)) {
       return getDouble(name);
-    else
+    } else {
       return defaultVal;
+    }
   }
 
   /**
@@ -179,14 +192,15 @@ public class VerifiableProperties {
    */
   public boolean getBoolean(String name, boolean defaultVal) {
     String v = "";
-    if(!containsKey(name))
+    if (!containsKey(name)) {
       return defaultVal;
-    else {
+    } else {
       v = getProperty(name);
-      if (v.compareTo("true") == 0 || v.compareTo("false") == 0)
+      if (v.compareTo("true") == 0 || v.compareTo("false") == 0) {
         return Boolean.parseBoolean(v);
-      else
+      } else {
         throw new IllegalArgumentException(name + " has value " + v + " which is not true or false.");
+      }
     }
   }
 
@@ -198,20 +212,22 @@ public class VerifiableProperties {
    * Get a string property, or, if no such property is defined, return the given default value
    */
   public String getString(String name, String defaultVal) {
-    if(containsKey(name))
+    if (containsKey(name)) {
       return getProperty(name);
-    else
+    } else {
       return defaultVal;
+    }
   }
 
   /**
    * Get a string property or throw and exception if no such property is defined.
    */
   public String getString(String name) {
-    if (!containsKey(name))
+    if (!containsKey(name)) {
       throw new IllegalArgumentException("Missing required property '" + name + "'");
-    else
+    } else {
       return getProperty(name);
+    }
   }
 
   public void verify() {
@@ -219,10 +235,11 @@ public class VerifiableProperties {
     Enumeration keys = props.propertyNames();
     while (keys.hasMoreElements()) {
       Object key = keys.nextElement();
-      if (!referenceSet.contains(key))
+      if (!referenceSet.contains(key)) {
         logger.warn("Property {} is not valid", key);
-      else
-        logger.info("Property {} is overridden to {}",key, props.getProperty(key.toString()));
+      } else {
+        logger.info("Property {} is overridden to {}", key, props.getProperty(key.toString()));
+      }
     }
   }
 

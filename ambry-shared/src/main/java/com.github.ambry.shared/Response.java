@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
+
 /**
  * Response for deserialization.
  */
@@ -12,7 +13,7 @@ public abstract class Response extends RequestOrResponse {
   private static final int Error_Size_InBytes = 2;
 
   public Response(RequestResponseType type, short requestResponseVersion, int correlationId, String clientId,
-                  ServerErrorCode error) {
+      ServerErrorCode error) {
     super(type, requestResponseVersion, correlationId, clientId);
     this.error = error;
   }
@@ -24,13 +25,14 @@ public abstract class Response extends RequestOrResponse {
   @Override
   protected void writeHeader() {
     super.writeHeader();
-    bufferToSend.putShort((short)error.ordinal());
+    bufferToSend.putShort((short) error.ordinal());
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.flip();
     }

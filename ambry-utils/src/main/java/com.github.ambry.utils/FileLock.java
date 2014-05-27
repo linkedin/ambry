@@ -7,6 +7,7 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.OverlappingFileLockException;
 
+
 /**
  * File Lock helper
  */
@@ -15,7 +16,8 @@ public class FileLock {
   private final FileChannel channel;
   private java.nio.channels.FileLock flock = null;
 
-  public FileLock(File file) throws FileNotFoundException, IOException{
+  public FileLock(File file)
+      throws FileNotFoundException, IOException {
     this.file = file;
     file.createNewFile();
     channel = new RandomAccessFile(file, "rw").getChannel();
@@ -24,8 +26,9 @@ public class FileLock {
   /**
    * Lock the file or throw an exception if the lock is already held
    */
-  public void lock() throws IOException {
-    synchronized(this) {
+  public void lock()
+      throws IOException {
+    synchronized (this) {
       //trace("Acquiring lock on " + file.getAbsolutePath)
       flock = channel.lock();
     }
@@ -34,8 +37,9 @@ public class FileLock {
   /**
    * Try to lock the file and return true if the locking succeeds
    */
-  public boolean tryLock() throws IOException {
-    synchronized(this) {
+  public boolean tryLock()
+      throws IOException {
+    synchronized (this) {
       // trace("Acquiring lock on " + file.getAbsolutePath)
       try {
         // weirdly this method will return null if the lock is held by another
@@ -52,22 +56,25 @@ public class FileLock {
   /**
    * Unlock the lock if it is held
    */
-   public void unlock() throws IOException {
-     synchronized(this) {
-       //trace("Releasing lock on " + file.getAbsolutePath)
-       if(flock != null)
-         flock.release();
-     }
-   }
+  public void unlock()
+      throws IOException {
+    synchronized (this) {
+      //trace("Releasing lock on " + file.getAbsolutePath)
+      if (flock != null) {
+        flock.release();
+      }
+    }
+  }
 
-   /**
-    * Destroy this lock, closing the associated FileChannel
-    */
-   public void destroy() throws IOException {
-     synchronized(this) {
-       unlock();
-       channel.close();
-     }
-   }
+  /**
+   * Destroy this lock, closing the associated FileChannel
+   */
+  public void destroy()
+      throws IOException {
+    synchronized (this) {
+      unlock();
+      channel.close();
+    }
+  }
 }
 

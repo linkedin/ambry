@@ -6,6 +6,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Meter;
 import com.github.ambry.metrics.MetricsHistogram;
 
+
 /**
  * Metrics for the server
  */
@@ -74,7 +75,7 @@ public class ServerMetrics {
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
   public final Counter partitionReadOnlyError;
-  public final Counter storeIOError; 
+  public final Counter storeIOError;
   public final Counter unExpectedStorePutError;
   public final Counter unExpectedStoreGetError;
   public final Counter unExpectedStoreTTLError;
@@ -89,145 +90,111 @@ public class ServerMetrics {
 
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestQueueTime"));
-    putBlobProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestQueueTime"));
+    putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobProcessingTime"));
     putBlobResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobResponseQueueTime"));
-    putBlobSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
-    putBlobTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobResponseQueueTime"));
+    putBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
+    putBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobTotalTime"));
 
     getBlobRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestQueueTime"));
-    getBlobProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestQueueTime"));
+    getBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobProcessingTime"));
     getBlobResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
-    getBlobSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
-    getBlobTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
+    getBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
+    getBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobTotalTime"));
 
     getBlobPropertiesRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestQueueTime"));
     getBlobPropertiesProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesProcessingTime"));
     getBlobPropertiesResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesResponseQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesResponseQueueTime"));
     getBlobPropertiesSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesSendTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesSendTime"));
     getBlobPropertiesTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesTotalTime"));
 
     getBlobUserMetadataRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestQueueTime"));
     getBlobUserMetadataProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataProcessingTime"));
     getBlobUserMetadataResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataResponseQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataResponseQueueTime"));
     getBlobUserMetadataSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataSendTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataSendTime"));
     getBlobUserMetadataTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataTotalTime"));
 
     getBlobAllRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestQueueTime"));
     getBlobAllProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllProcessingTime"));
     getBlobAllResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllResponseQueueTime"));
-    getBlobAllSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllSendTime"));
-    getBlobAllTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllResponseQueueTime"));
+    getBlobAllSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllSendTime"));
+    getBlobAllTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllTotalTime"));
 
     deleteBlobRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestQueueTime"));
     deleteBlobProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobProcessingTime"));
     deleteBlobResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobResponseQueueTime"));
-    deleteBlobSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobSendTime"));
-    deleteBlobTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobResponseQueueTime"));
+    deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobSendTime"));
+    deleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobTotalTime"));
 
     ttlBlobRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestQueueTime"));
-    ttlBlobProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestQueueTime"));
+    ttlBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobProcessingTime"));
     ttlBlobResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobResponseQueueTime"));
-    ttlBlobSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobSendTime"));
-    ttlBlobTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobResponseQueueTime"));
+    ttlBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobSendTime"));
+    ttlBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobTotalTime"));
 
     replicaMetadataRequestQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestQueueTime"));
     replicaMetadataRequestProcessingTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestProcessingTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestProcessingTime"));
     replicaMetadataResponseQueueTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataResponseQueueTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataResponseQueueTime"));
     replicaMetadataSendTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataSendTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataSendTime"));
     replicaMetadataTotalTimeInMs =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataTotalTime"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataTotalTime"));
 
-    blobSizeInBytes =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
-    blobUserMetadataSizeInBytes =
-            registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
+    blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
+    blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
 
-    putBlobRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestRate"));
-    getBlobRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestRate"));
+    putBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestRate"));
+    getBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestRate"));
     getBlobPropertiesRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestRate"));
+        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestRate"));
     getBlobUserMetadataRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestRate"));
-    getBlobAllRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestRate"));
-    deleteBlobRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestRate"));
-    ttlBlobRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestRate"));
-    replicaMetadataRequestRate =
-            registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestRate"));
+        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestRate"));
+    getBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestRate"));
+    deleteBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestRate"));
+    ttlBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestRate"));
+    replicaMetadataRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestRate"));
 
-    partitionUnknownError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionUnknownError"));
-    diskUnavailableError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "DiskUnavailableError"));
-    partitionReadOnlyError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionReadOnlyError"));
-    storeIOError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "StoreIOError"));
-    idAlreadyExistError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "IDAlreadyExistError"));
-    dataCorruptError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "DataCorruptError"));
-    unknownFormatError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnknownFormatError"));
-    idNotFoundError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "IDNotFoundError"));
-    idDeletedError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "IDDeletedError"));
-    ttlExpiredError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "TTLExpiredError"));
-    unExpectedStorePutError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStorePutError"));
-    unExpectedStoreGetError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreGetError"));
+    partitionUnknownError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionUnknownError"));
+    diskUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "DiskUnavailableError"));
+    partitionReadOnlyError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionReadOnlyError"));
+    storeIOError = registry.counter(MetricRegistry.name(AmbryRequests.class, "StoreIOError"));
+    idAlreadyExistError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDAlreadyExistError"));
+    dataCorruptError = registry.counter(MetricRegistry.name(AmbryRequests.class, "DataCorruptError"));
+    unknownFormatError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnknownFormatError"));
+    idNotFoundError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDNotFoundError"));
+    idDeletedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDDeletedError"));
+    ttlExpiredError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TTLExpiredError"));
+    unExpectedStorePutError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStorePutError"));
+    unExpectedStoreGetError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreGetError"));
     unExpectedStoreDeleteError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreDeleteError"));
-    unExpectedStoreTTLError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreDeleteError"));
+    unExpectedStoreTTLError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
     unExpectedStoreFindEntriesError =
-            registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
   }
 }
 

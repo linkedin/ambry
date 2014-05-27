@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+
 /**
  *
  */
@@ -40,8 +41,8 @@ class MockBlockingChannel extends BlockingChannel {
   private final Object lock;
   private InputStream responseStream;
 
-  public MockBlockingChannel(MockDataNode mockDataNode, String host, int port, int readBufferSize,
-                             int writeBufferSize, int readTimeoutMs) {
+  public MockBlockingChannel(MockDataNode mockDataNode, String host, int port, int readBufferSize, int writeBufferSize,
+      int readTimeoutMs) {
     super(host, port, readBufferSize, writeBufferSize, readTimeoutMs);
 
     this.mockDataNode = mockDataNode;
@@ -51,7 +52,8 @@ class MockBlockingChannel extends BlockingChannel {
   }
 
   @Override
-  public void connect() throws SocketException, IOException {
+  public void connect()
+      throws SocketException, IOException {
     connected.set(true);
     responseStream = null;
   }
@@ -68,7 +70,8 @@ class MockBlockingChannel extends BlockingChannel {
   }
 
   @Override
-  public void send(Send send) throws ClosedChannelException, IOException {
+  public void send(Send send)
+      throws ClosedChannelException, IOException {
     if (!connected.get()) {
       throw new ClosedChannelException();
     }
@@ -80,12 +83,12 @@ class MockBlockingChannel extends BlockingChannel {
       }
     }
 
-    RequestOrResponse request = (RequestOrResponse)send;
+    RequestOrResponse request = (RequestOrResponse) send;
     RequestOrResponse response = null;
 
     switch (request.getRequestType()) {
       case PutRequest: {
-        PutRequest putRequest = (PutRequest)request;
+        PutRequest putRequest = (PutRequest) request;
         BlobId blobId = putRequest.getBlobId();
         BlobProperties blobProperties = putRequest.getBlobProperties();
         ByteBuffer userMetadata = putRequest.getUsermetadata();
@@ -97,12 +100,12 @@ class MockBlockingChannel extends BlockingChannel {
       }
 
       case GetRequest: {
-        GetRequest getRequest = (GetRequest)request;
+        GetRequest getRequest = (GetRequest) request;
         if (getRequest.getBlobIds().size() != 1) {
           throw new IOException("Number of blob ids in get request should be 1: " + getRequest.getBlobIds().size());
         }
 
-        BlobId blobId = (BlobId)getRequest.getBlobIds().get(0);
+        BlobId blobId = (BlobId) getRequest.getBlobIds().get(0);
 
         int byteBufferSize = 0;
         ByteBuffer byteBuffer = null;
@@ -137,12 +140,12 @@ class MockBlockingChannel extends BlockingChannel {
             getResponseErrorCode = bdae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
               BlobOutput blobData = bdae.getBlobOutput();
-              byteBufferSize = (int)MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
+              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
               MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer, blobData.getSize());
 
-              byte[] blobDataBytes = new byte[(int)blobData.getSize()];
-              blobData.getStream().read(blobDataBytes, 0, (int)blobData.getSize());
+              byte[] blobDataBytes = new byte[(int) blobData.getSize()];
+              blobData.getStream().read(blobDataBytes, 0, (int) blobData.getSize());
               byteBuffer.put(blobDataBytes);
 
               Crc32 crc = new Crc32();
@@ -160,10 +163,10 @@ class MockBlockingChannel extends BlockingChannel {
           ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
           List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
           messageInfoList.add(new MessageInfo(blobId, byteBufferSize));
-          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), messageInfoList,
-                                     responseSend, getResponseErrorCode);
-        }
-        else {
+          response =
+              new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), messageInfoList, responseSend,
+                  getResponseErrorCode);
+        } else {
           response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), getResponseErrorCode);
         }
 
@@ -171,7 +174,7 @@ class MockBlockingChannel extends BlockingChannel {
       }
 
       case DeleteRequest: {
-        DeleteRequest deleteRequest = (DeleteRequest)request;
+        DeleteRequest deleteRequest = (DeleteRequest) request;
         BlobId blobId = deleteRequest.getBlobId();
 
         ServerErrorCode error = mockDataNode.delete(blobId);
@@ -180,7 +183,7 @@ class MockBlockingChannel extends BlockingChannel {
       }
 
       case TTLRequest: {
-        TTLRequest ttlRequest = (TTLRequest)request;
+        TTLRequest ttlRequest = (TTLRequest) request;
         throw new IOException("TTLRequest is not yet mocked: " + ttlRequest.getRequestType());
         // break;
       }
@@ -204,7 +207,8 @@ class MockBlockingChannel extends BlockingChannel {
   }
 
   @Override
-  public InputStream receive() throws ClosedChannelException, IOException {
+  public InputStream receive()
+      throws ClosedChannelException, IOException {
     if (!connected.get()) {
       throw new ClosedChannelException();
     }

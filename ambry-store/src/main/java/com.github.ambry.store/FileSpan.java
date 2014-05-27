@@ -8,8 +8,9 @@ public class FileSpan {
   private long fileEndOffset;
 
   public FileSpan(long fileStartOffset, long fileEndOffset) {
-    if (fileEndOffset < fileStartOffset)
+    if (fileEndOffset < fileStartOffset) {
       throw new IllegalArgumentException("File span needs to be positive");
+    }
     this.fileStartOffset = fileStartOffset;
     this.fileEndOffset = fileEndOffset;
   }

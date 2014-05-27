@@ -7,6 +7,7 @@ import com.codahale.metrics.Timer;
 
 import java.util.List;
 
+
 /**
  * Metrics for Replication
  */
@@ -24,19 +25,18 @@ public class ReplicationMetrics {
 
   public ReplicationMetrics(String name, MetricRegistry registry, List<ReplicaThread> replicaThreads) {
     interColoReplicationBytesCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationBytesCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationBytesCount"));
     intraColoReplicationBytesCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBytesCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBytesCount"));
     interColoBlobsReplicatedCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationBlobsCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationBlobsCount"));
     intraColoBlobsReplicatedCount =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBlobsCount"));
-    replicationErrors =
-            registry.counter(MetricRegistry.name(ReplicaThread.class, name + "replicationErrors"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationBlobsCount"));
+    replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, name + "replicationErrors"));
     interColoReplicationLatency =
-            registry.timer(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationLatency"));
+        registry.timer(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationLatency"));
     intraColoReplicationLatency =
-            registry.timer(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationLatency"));
+        registry.timer(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationLatency"));
     this.replicaThreads = replicaThreads;
     numberOfReplicaThreads = new Gauge<Integer>() {
       @Override

@@ -1,9 +1,9 @@
 subprojects {
-  apply plugin: 'license'
+    apply plugin: 'license'
 
-  license {
-    header rootProject.file('HEADER')
-    // Skip Twitter bootstrap JS and CSS.
-    skipExistingHeaders = true
-  }
+    license {
+        header rootProject.file('HEADER')
+        // Skip Twitter bootstrap JS and CSS.
+        skipExistingHeaders = true
+    }
 }

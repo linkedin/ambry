@@ -18,38 +18,31 @@ import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import java.util.Random;
 
+
 // TODO
 public class RequestResponseTest {
 
   @Test
-  public void putRequestSerDe() throws IOException {
+  public void putRequestSerDe()
+      throws IOException {
     Random rnd = new Random();
 
     int correlationId = 5;
     String clientId = "client";
     BlobId blobId = new BlobId(new MockPartitionId());
-    byte []userMetadata = new byte[50];
+    byte[] userMetadata = new byte[50];
     rnd.nextBytes(userMetadata);
     ByteBuffer.wrap(userMetadata);
 
     int dataSize = 100;
-    byte []data = new byte[dataSize];
+    byte[] data = new byte[dataSize];
     rnd.nextBytes(data);
 
+    BlobProperties blobProperties =
+        new BlobProperties(dataSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
 
-    BlobProperties blobProperties = new BlobProperties(dataSize,
-                                                       "serviceID",
-                                                       "memberId",
-                                                       "contentType",
-                                                       false,
-                                                       Utils.Infinite_Time);
-
-    PutRequest request = new PutRequest(correlationId,
-            clientId,
-            blobId,
-            blobProperties, ByteBuffer.wrap(userMetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(data))
-    );
+    PutRequest request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+        new ByteBufferInputStream(ByteBuffer.wrap(data)));
 
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
@@ -58,7 +51,6 @@ public class RequestResponseTest {
     InputStream responseStream = new ByteArrayInputStream(outputStream.toByteArray());
     // TODO: Need ClusterMap to do this Deserialization. ClusterMap is really ugly at this level.
   }
-
 
   @Test
   public void putRequestResponseTest() {
@@ -79,7 +71,6 @@ public class RequestResponseTest {
   public void ttlRequestResponseTest() {
 
   }
-
 }
 
 /**
@@ -115,19 +106,25 @@ class MockPartitionId extends PartitionId {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    MockPartitionId mockPartition = (MockPartitionId)o;
+    MockPartitionId mockPartition = (MockPartitionId) o;
 
-    if (partition != mockPartition.partition) return false;
+    if (partition != mockPartition.partition) {
+      return false;
+    }
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    return (int)(partition ^ (partition >>> 32));
+    return (int) (partition ^ (partition >>> 32));
   }
 
   @Override

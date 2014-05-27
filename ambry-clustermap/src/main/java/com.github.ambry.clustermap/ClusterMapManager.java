@@ -16,6 +16,7 @@ import java.util.HashSet;
 import static com.github.ambry.utils.Utils.readStringFromFile;
 import static com.github.ambry.utils.Utils.writeJsonToFile;
 
+
 /**
  * ClusterMapManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
  * {@link PartitionLayout}.
@@ -29,16 +30,17 @@ public class ClusterMapManager implements ClusterMap {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
-    if (logger.isTraceEnabled())
+    if (logger.isTraceEnabled()) {
       logger.trace("ClusterMapManager " + partitionLayout);
+    }
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
     this.metricRegistry = new MetricRegistry();
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public ClusterMapManager(String hardwareLayoutPath,
-                           String partitionLayoutPath) throws IOException, JSONException {
+  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath)
+      throws IOException, JSONException {
     logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
     this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
@@ -46,7 +48,8 @@ public class ClusterMapManager implements ClusterMap {
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+  public void persist(String hardwareLayoutPath, String partitionLayoutPath)
+      throws IOException, JSONException {
     logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
     writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
@@ -60,7 +63,8 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+  public PartitionId getPartitionIdFromStream(DataInputStream stream)
+      throws IOException {
     return partitionLayout.getPartition(stream);
   }
 
@@ -71,7 +75,7 @@ public class ClusterMapManager implements ClusterMap {
 
   @Override
   public PartitionId getWritablePartitionIdAt(long index) {
-    return partitionLayout.getWritablePartitions().get((int)index);
+    return partitionLayout.getWritablePartitions().get((int) index);
   }
 
   @Override
@@ -106,7 +110,7 @@ public class ClusterMapManager implements ClusterMap {
   public List<DataNodeId> getDataNodeIds() {
     List<DataNodeId> dataNodeIds = new ArrayList<DataNodeId>();
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-        dataNodeIds.addAll(datacenter.getDataNodes());
+      dataNodeIds.addAll(datacenter.getDataNodes());
     }
     return dataNodeIds;
   }
@@ -135,7 +139,7 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        Disk disk = (Disk)replica.getDiskId();
+        Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
@@ -148,7 +152,7 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        Disk disk = (Disk)replica.getDiskId();
+        Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
@@ -161,7 +165,7 @@ public class ClusterMapManager implements ClusterMap {
     long allocatedRawCapacityInBytes = 0;
     for (Partition partition : partitionLayout.getPartitions()) {
       for (Replica replica : partition.getReplicas()) {
-        Disk currentDisk = (Disk)replica.getDiskId();
+        Disk currentDisk = (Disk) replica.getDiskId();
         if (currentDisk.equals(disk)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
         }
@@ -190,9 +194,8 @@ public class ClusterMapManager implements ClusterMap {
     DataNode maxCapacityNode = null;
     List<DataNode> dataNodes = dc.getDataNodes();
     for (DataNode dataNode : dataNodes) {
-      if (!nodesToExclude.contains(dataNode) &&
-          (maxCapacityNode == null || getUnallocatedRawCapacityInBytes(dataNode) > getUnallocatedRawCapacityInBytes(
-                  maxCapacityNode))) {
+      if (!nodesToExclude.contains(dataNode) && (maxCapacityNode == null
+          || getUnallocatedRawCapacityInBytes(dataNode) > getUnallocatedRawCapacityInBytes(maxCapacityNode))) {
         maxCapacityNode = dataNode;
       }
     }
@@ -204,8 +207,7 @@ public class ClusterMapManager implements ClusterMap {
     List<Disk> disks = node.getDisks();
     for (Disk disk : disks) {
       if ((maxCapacityDisk == null || getUnallocatedRawCapacityInBytes(disk) > getUnallocatedRawCapacityInBytes(
-              maxCapacityDisk)) &&
-          getUnallocatedRawCapacityInBytes(disk) >= minCapacity) {
+          maxCapacityDisk)) && getUnallocatedRawCapacityInBytes(disk) >= minCapacity) {
         maxCapacityDisk = disk;
       }
     }
@@ -221,7 +223,7 @@ public class ClusterMapManager implements ClusterMap {
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
       if (getUnallocatedRawCapacityInBytes(datacenter) < replicaCountPerDatacenter * replicaCapacityInBytes) {
         logger.warn("Insufficient unallocated space in datacenter {} ({} bytes unallocated)", datacenter.getName(),
-                    getUnallocatedRawCapacityInBytes(datacenter));
+            getUnallocatedRawCapacityInBytes(datacenter));
         return false;
       }
 
@@ -236,7 +238,7 @@ public class ClusterMapManager implements ClusterMap {
       }
       if (rcpd > 0) {
         logger.warn("Insufficient DataNodes ({}) with unallocated space in datacenter {} for {} Replicas)", rcpd,
-                    datacenter.getName(), replicaCountPerDatacenter);
+            datacenter.getName(), replicaCountPerDatacenter);
         return false;
       }
     }
@@ -265,9 +267,8 @@ public class ClusterMapManager implements ClusterMap {
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
   // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient. All cluster map
   // operations are performed by a single thread in some tool.
-  public List<PartitionId> allocatePartitions(int numPartitions,
-                                              int replicaCountPerDatacenter,
-                                              long replicaCapacityInBytes) {
+  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
+      long replicaCapacityInBytes) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
@@ -285,14 +286,18 @@ public class ClusterMapManager implements ClusterMap {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-
-    ClusterMapManager that = (ClusterMapManager)o;
-
-    if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null)
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
       return false;
-    return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
+    }
 
+    ClusterMapManager that = (ClusterMapManager) o;
+
+    if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null) {
+      return false;
+    }
+    return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
   }
 }

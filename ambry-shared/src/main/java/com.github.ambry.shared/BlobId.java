@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
+
 /**
  * BlobId uniquely identifies a stored blob as well as the Partition in which the blob is stored.
  */
@@ -39,9 +40,10 @@ public class BlobId extends StoreKey {
    * @param clusterMap
    * @throws IOException
    */
-  public BlobId(String id, ClusterMap clusterMap) throws IOException {
+  public BlobId(String id, ClusterMap clusterMap)
+      throws IOException {
     this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseHexBinary(id)))),
-         clusterMap);
+        clusterMap);
   }
 
   /**
@@ -50,14 +52,15 @@ public class BlobId extends StoreKey {
    * @param stream
    * @throws IOException
    */
-  public BlobId(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+  public BlobId(DataInputStream stream, ClusterMap clusterMap)
+      throws IOException {
     this.version = stream.readShort();
     this.partitionId = clusterMap.getPartitionIdFromStream(stream);
     uuid = Utils.readIntString(stream);
   }
 
   public short sizeInBytes() {
-    return (short)(Version_Size_In_Bytes + partitionId.getBytes().length + UUID_Size_In_Bytes + uuid.length());
+    return (short) (Version_Size_In_Bytes + partitionId.getBytes().length + UUID_Size_In_Bytes + uuid.length());
   }
 
   public PartitionId getPartition() {
@@ -82,7 +85,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public int compareTo(StoreKey o) {
-    BlobId other = (BlobId)o;
+    BlobId other = (BlobId) o;
 
     int result = version.compareTo(other.version);
     if (result == 0) {
@@ -96,14 +99,24 @@ public class BlobId extends StoreKey {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    BlobId blobId = (BlobId)o;
+    BlobId blobId = (BlobId) o;
 
-    if (!version.equals(blobId.version)) return false;
-    if (!partitionId.equals(blobId.partitionId)) return false;
-    if (!uuid.equals(blobId.uuid)) return false;
+    if (!version.equals(blobId.version)) {
+      return false;
+    }
+    if (!partitionId.equals(blobId.partitionId)) {
+      return false;
+    }
+    if (!uuid.equals(blobId.uuid)) {
+      return false;
+    }
 
     return true;
   }

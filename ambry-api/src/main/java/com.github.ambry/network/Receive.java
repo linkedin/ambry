@@ -3,6 +3,7 @@ package com.github.ambry.network;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 
+
 /**
  * Used to receive data from the network channel. Any implementation of this interface
  * can be used to read data from the network
@@ -10,7 +11,7 @@ import java.nio.channels.ReadableByteChannel;
 public interface Receive {
   /**
    * Indicates if the read has been completed
-   * @return  true if read is complete, else false
+   * @return true if read is complete, else false
    */
   boolean isReadComplete();
 
@@ -19,5 +20,6 @@ public interface Receive {
    * @param channel The channel to read from
    * @throws IOException
    */
-  void readFrom(ReadableByteChannel channel) throws IOException;
+  void readFrom(ReadableByteChannel channel)
+      throws IOException;
 }

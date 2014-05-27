@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+
 /**
  * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
  * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
@@ -42,13 +43,16 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject) throws JSONException {
+  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject)
+      throws JSONException {
     this(partitionLayout.getHardwareLayout(), jsonObject);
   }
 
-  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    if (logger.isTraceEnabled())
+  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject)
+      throws JSONException {
+    if (logger.isTraceEnabled()) {
       logger.trace("Partition " + jsonObject.toString());
+    }
     this.id = jsonObject.getLong("id");
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
@@ -60,7 +64,8 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
+  public static byte[] readPartitionBytesFromStream(DataInputStream stream)
+      throws IOException {
     byte[] partitionBytes = new byte[Partition_Size_In_Bytes];
     stream.read(partitionBytes);
     return partitionBytes;
@@ -114,12 +119,11 @@ public class Partition extends PartitionId {
 
   protected void validateReplicaCapacityInBytes() {
     if (replicaCapacityInBytes < MinReplicaCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityInBytes
-                                      + " is less than " + MinReplicaCapacityInBytes);
-    }
-    else if (replicaCapacityInBytes > MaxReplicaCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + replicaCapacityInBytes
-                                      + " is more than " + MaxReplicaCapacityInBytes);
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + MinReplicaCapacityInBytes);
+    } else if (replicaCapacityInBytes > MaxReplicaCapacityInBytes) {
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + MaxReplicaCapacityInBytes);
     }
   }
 
@@ -129,13 +133,13 @@ public class Partition extends PartitionId {
     Set<Disk> diskSet = new HashSet<Disk>();
 
     for (Replica replica : replicas) {
-      if (!diskSet.add((Disk)replica.getDiskId())) {
-        throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same Disk: "
-                                        + toString());
+      if (!diskSet.add((Disk) replica.getDiskId())) {
+        throw new IllegalStateException(
+            "Multiple Replicas for same Partition are layed out on same Disk: " + toString());
       }
-      if (!dataNodeSet.add(((Disk)replica.getDiskId()).getDataNode())) {
-        throw new IllegalStateException("Multiple Replicas for same Partition are layed out on same DataNode: "
-                                        + toString());
+      if (!dataNodeSet.add(((Disk) replica.getDiskId()).getDataNode())) {
+        throw new IllegalStateException(
+            "Multiple Replicas for same Partition are layed out on same DataNode: " + toString());
       }
     }
   }
@@ -147,12 +151,10 @@ public class Partition extends PartitionId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
-    JSONObject jsonObject = new JSONObject()
-            .put("id", id)
-            .put("partitionState", partitionState)
-            .put("replicaCapacityInBytes", replicaCapacityInBytes)
-            .put("replicas", new JSONArray());
+  public JSONObject toJSONObject()
+      throws JSONException {
+    JSONObject jsonObject = new JSONObject().put("id", id).put("partitionState", partitionState)
+        .put("replicaCapacityInBytes", replicaCapacityInBytes).put("replicas", new JSONArray());
     for (Replica replica : replicas) {
       jsonObject.accumulate("replicas", replica.toJSONObject());
     }
@@ -166,25 +168,30 @@ public class Partition extends PartitionId {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    Partition partition = (Partition)o;
+    Partition partition = (Partition) o;
 
     return id == partition.id;
   }
 
   @Override
   public int hashCode() {
-    return (int)(id ^ (id >>> 32));
+    return (int) (id ^ (id >>> 32));
   }
 
   @Override
   public int compareTo(PartitionId o) {
-    if (o == null)
+    if (o == null) {
       throw new NullPointerException("input argument null");
+    }
 
-    Partition other = (Partition)o;
+    Partition other = (Partition) o;
     return id.compareTo(other.id);
   }
 }

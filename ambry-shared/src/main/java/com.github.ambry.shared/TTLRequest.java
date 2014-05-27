@@ -36,7 +36,8 @@ public class TTLRequest extends RequestOrResponse {
     return newTTL;
   }
 
-  public static TTLRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+  public static TTLRequest readFrom(DataInputStream stream, ClusterMap map)
+      throws IOException {
     RequestResponseType type = RequestResponseType.TTLRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -49,9 +50,10 @@ public class TTLRequest extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       bufferToSend.putLong(newTTL);

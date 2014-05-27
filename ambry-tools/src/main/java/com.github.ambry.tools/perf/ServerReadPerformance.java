@@ -40,6 +40,7 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+
 /**
  *
  */
@@ -48,42 +49,28 @@ public class ServerReadPerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
-              parser.accepts("logToRead", "The log that needs to be replayed for traffic")
-                      .withRequiredArg()
-                      .describedAs("log_to_read")
-                      .ofType(String.class);
+          parser.accepts("logToRead", "The log that needs to be replayed for traffic").withRequiredArg()
+              .describedAs("log_to_read").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                      .withRequiredArg()
-                      .describedAs("hardware_layout")
-                      .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                      .withRequiredArg()
-                      .describedAs("partition_layout")
-                      .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
-              parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
-                      .withRequiredArg()
-                      .describedAs("The number of reads per second")
-                      .ofType(Integer.class)
-                      .defaultsTo(1000);
+          parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
+              .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-              parser.accepts("enableVerboseLogging", "Enables verbose logging")
-                      .withOptionalArg()
-                      .describedAs("Enable verbose logging")
-                      .ofType(Boolean.class)
-                      .defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
+              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
-              parser.accepts("coordinatorConfigPath", "The config for the coordinator")
-                      .withRequiredArg()
-                      .describedAs("coordinator_config_path")
-                      .ofType(String.class);
+          parser.accepts("coordinatorConfigPath", "The config for the coordinator").withRequiredArg()
+              .describedAs("coordinator_config_path").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -93,8 +80,8 @@ public class ServerReadPerformance {
       listOpt.add(partitionLayoutOpt);
       listOpt.add(coordinatorConfigPathOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -106,8 +93,9 @@ public class ServerReadPerformance {
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
-      if (enableVerboseLogging)
+      if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
+      }
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
@@ -122,10 +110,9 @@ public class ServerReadPerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
-                    " Nano Seconds  Average time taken per read " +
-                    ((double)totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
-          }
-          catch (Exception e) {
+                " Nano Seconds  Average time taken per read " +
+                ((double) totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+          } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
         }
@@ -150,17 +137,18 @@ public class ServerReadPerformance {
         for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
           long startTimeGetBlob = 0;
           try {
-            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, blobId.getPartition(), blobIds);
-            channel =  connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-                                                         replicaId.getDataNodeId().getPort(),
-                                                         10000);
+            GetRequest getRequest =
+                new GetRequest(1, "getperf", MessageFormatFlags.Blob, blobId.getPartition(), blobIds);
+            channel = connectionPool
+                .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
+                    10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
             InputStream receiveStream = channel.receive();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
             output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
             long sizeRead = 0;
-            byte[] outputBuffer = new byte[(int)output.getSize()];
+            byte[] outputBuffer = new byte[(int) output.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
             while (sizeRead < output.getSize()) {
               streamOut.write(output.getStream().read());
@@ -177,41 +165,37 @@ public class ServerReadPerformance {
             }
             if (totalLatencyForGetBlobs >= 1000000000) {
               System.out.println(totalNumberOfGetBlobs + "    " + totalLatencyForGetBlobs * .001 + "    " +
-                                 maxLatencyForGetBlobs * .001 + "    " + minLatencyForGetBlobs * .001 + "    " +
-                                 ((double)totalLatencyForGetBlobs / totalNumberOfGetBlobs) * .001);
+                  maxLatencyForGetBlobs * .001 + "    " + minLatencyForGetBlobs * .001 + "    " +
+                  ((double) totalLatencyForGetBlobs / totalNumberOfGetBlobs) * .001);
               totalLatencyForGetBlobs = 0;
               totalNumberOfGetBlobs = 0;
               maxLatencyForGetBlobs = 0;
               minLatencyForGetBlobs = Long.MAX_VALUE;
             }
 
-
             GetRequest getRequestProperties =
-                    new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, blobId.getPartition(), blobIds);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, blobId.getPartition(), blobIds);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
             InputStream receivePropertyStream = channel.receive();
             GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
             BlobProperties blobProperties =
-                    MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
+                MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
             long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
 
-
-
-
             GetRequest getRequestUserMetadata =
-                    new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, blobId.getPartition(), blobIds);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, blobId.getPartition(), blobIds);
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);
             InputStream receiveUserMetadataStream = channel.receive();
-            GetResponse getResponseUserMetadata = GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
+            GetResponse getResponseUserMetadata =
+                GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
             ByteBuffer userMetadata =
-                    MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
+                MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
             throttler.maybeThrottle(1);
-          }
-          finally {
+          } finally {
             if (channel != null) {
               connectionPool.checkInConnection(channel);
               channel = null;
@@ -219,8 +203,7 @@ public class ServerReadPerformance {
           }
         }
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.out.println("Error in server read performance " + e);
     }
   }

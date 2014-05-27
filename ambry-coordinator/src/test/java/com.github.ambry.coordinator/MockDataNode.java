@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+
 /**
  *
  */
@@ -27,13 +28,14 @@ public class MockDataNode {
   public class MaterializedBlob extends Blob {
     final ByteBuffer materializedBlobOutput;
 
-    public MaterializedBlob(Blob blob) throws IOException {
+    public MaterializedBlob(Blob blob)
+        throws IOException {
       super(blob.getBlobProperties(), blob.getUserMetadata(), blob.getBlobOutput());
 
       BlobOutput blobOutput = blob.getBlobOutput();
-      byte[] blobOutputBytes = new byte[(int)blobOutput.getSize()];
+      byte[] blobOutputBytes = new byte[(int) blobOutput.getSize()];
       new DataInputStream(blobOutput.getStream()).readFully(blobOutputBytes);
-      this.materializedBlobOutput = ByteBuffer.allocate((int)blobOutput.getSize());
+      this.materializedBlobOutput = ByteBuffer.allocate((int) blobOutput.getSize());
       materializedBlobOutput.put(blobOutputBytes);
     }
 
@@ -50,7 +52,8 @@ public class MockDataNode {
     deletedBlobs = new HashSet<BlobId>();
   }
 
-  public synchronized ServerErrorCode put(BlobId blobId, Blob blob) throws IOException {
+  public synchronized ServerErrorCode put(BlobId blobId, Blob blob)
+      throws IOException {
     if (blobs.containsKey(blobId)) {
       return ServerErrorCode.Unknown_Error;
     }
@@ -118,7 +121,6 @@ public class MockDataNode {
     return new UserMetadataAndError(blobs.get(blobId).getUserMetadata(), ServerErrorCode.No_Error);
   }
 
-
   public class BlobOutputAndError {
     private BlobOutput blobOutput;
     private ServerErrorCode error;
@@ -172,5 +174,4 @@ public class MockDataNode {
     }
     return sb.toString();
   }
-
 }

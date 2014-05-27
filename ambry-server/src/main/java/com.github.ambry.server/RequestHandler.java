@@ -6,6 +6,7 @@ import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * Request handler class
  */
@@ -22,10 +23,10 @@ public class RequestHandler implements Runnable {
   }
 
   public void run() {
-    while(true) {
+    while (true) {
       try {
         Request req = requestChannel.receiveRequest();
-        if(req.equals(EmptyRequest.getInstance())) {
+        if (req.equals(EmptyRequest.getInstance())) {
           logger.debug("Request handler {} received shut down command", id);
           return;
         }
@@ -40,7 +41,8 @@ public class RequestHandler implements Runnable {
     }
   }
 
-  public void shutdown() throws InterruptedException {
+  public void shutdown()
+      throws InterruptedException {
     requestChannel.sendRequest(EmptyRequest.getInstance());
   }
 }
@@ -55,7 +57,7 @@ class RequestHandlerPool {
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, AmbryRequests requests) {
     threads = new Thread[numThreads];
     handlers = new RequestHandler[numThreads];
-    for(int i = 0; i < numThreads; i++) {
+    for (int i = 0; i < numThreads; i++) {
       handlers[i] = new RequestHandler(i, requestResponseChannel, requests);
       threads[i] = Utils.daemonThread("request-handler-" + i, handlers[i]);
       threads[i].start();
@@ -65,10 +67,12 @@ class RequestHandlerPool {
   public void shutdown() {
     try {
       logger.info("shutting down");
-      for(RequestHandler handler: handlers)
+      for (RequestHandler handler : handlers) {
         handler.shutdown();
-      for(Thread thread : threads)
+      }
+      for (Thread thread : threads) {
         thread.join();
+      }
       logger.info("shut down completely");
     } catch (Exception e) {
       logger.error("error when shutting down request handler pool {}", e);

@@ -48,7 +48,6 @@ public class StoreConfig {
   @Default("5000")
   public final int storeMaxNumberOfEntriesToReturnFromJournal;
 
-
   /**
    * The max probability of a false positive for the index bloom filter
    */
@@ -56,18 +55,17 @@ public class StoreConfig {
   @Default("0.01")
   public final double storeIndexBloomMaxFalsePositiveProbability;
 
-
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.shared.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
-    storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20*1024*1024);
+    storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
     storeDataFlushDelaySeconds = verifiableProperties.getInt("store.data.flush.delay.seconds", 5);
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
-    storeIndexBloomMaxFalsePositiveProbability = verifiableProperties.getDoubleInRange(
-            "store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
-    storeMaxNumberOfEntriesToReturnFromJournal = verifiableProperties.getIntInRange(
-            "store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
+    storeIndexBloomMaxFalsePositiveProbability =
+        verifiableProperties.getDoubleInRange("store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
+    storeMaxNumberOfEntriesToReturnFromJournal =
+        verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
   }
 }
 

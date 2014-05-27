@@ -3,6 +3,7 @@ package com.github.ambry.store;
 import java.nio.ByteBuffer;
 import java.io.IOException;
 
+
 /**
  * Provides a read interface into the underlying storage layer
  */
@@ -14,5 +15,6 @@ public interface Read {
    * @param position The position to start the read from
    * @throws IOException
    */
-  void readInto(ByteBuffer buffer , long position) throws IOException;
+  void readInto(ByteBuffer buffer, long position)
+      throws IOException;
 }

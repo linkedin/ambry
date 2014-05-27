@@ -16,17 +16,16 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-public class BloomFilterTest
-{
+
+public class BloomFilterTest {
   public IFilter bf;
 
-  public BloomFilterTest()
-  {
+  public BloomFilterTest() {
     bf = FilterFactory.getFilter(10000L, FilterTestHelper.MAX_FAILURE_RATE);
   }
 
-  public static IFilter testSerialize(IFilter f) throws IOException
-  {
+  public static IFilter testSerialize(IFilter f)
+      throws IOException {
     f.add(ByteBuffer.wrap("a".getBytes()));
     ByteBuffer output = ByteBuffer.allocate(100000);
     DataOutputStream out = new DataOutputStream(new ByteBufferOutputStream(output));
@@ -41,16 +40,13 @@ public class BloomFilterTest
     return f2;
   }
 
-
   @Before
-  public void clear()
-  {
+  public void clear() {
     bf.clear();
   }
 
   @Test(expected = UnsupportedOperationException.class)
-  public void testBloomLimits1()
-  {
+  public void testBloomLimits1() {
     int maxBuckets = BloomCalculations.probs.length - 1;
     int maxK = BloomCalculations.probs[maxBuckets].length - 1;
 
@@ -62,57 +58,48 @@ public class BloomFilterTest
   }
 
   @Test
-  public void testOne()
-  {
+  public void testOne() {
     bf.add(ByteBuffer.wrap("a".getBytes()));
     assert bf.isPresent(ByteBuffer.wrap("a".getBytes()));
     assert !bf.isPresent(ByteBuffer.wrap("b".getBytes()));
   }
 
   @Test
-  public void testFalsePositivesInt()
-  {
+  public void testFalsePositivesInt() {
     FilterTestHelper.testFalsePositives(bf, FilterTestHelper.intKeys(), FilterTestHelper.randomKeys2());
   }
 
   @Test
-  public void testFalsePositivesRandom()
-  {
+  public void testFalsePositivesRandom() {
     FilterTestHelper.testFalsePositives(bf, FilterTestHelper.randomKeys(), FilterTestHelper.randomKeys2());
   }
 
   @Test
-  public void testWords()
-  {
-    if (KeyGenerator.WordGenerator.WORDS == 0)
-    {
+  public void testWords() {
+    if (KeyGenerator.WordGenerator.WORDS == 0) {
       return;
     }
     IFilter bf2 = FilterFactory.getFilter(KeyGenerator.WordGenerator.WORDS / 2, FilterTestHelper.MAX_FAILURE_RATE);
     int skipEven = KeyGenerator.WordGenerator.WORDS % 2 == 0 ? 0 : 2;
-    FilterTestHelper.testFalsePositives(bf2,
-            new KeyGenerator.WordGenerator(skipEven, 2),
-            new KeyGenerator.WordGenerator(1, 2));
+    FilterTestHelper
+        .testFalsePositives(bf2, new KeyGenerator.WordGenerator(skipEven, 2), new KeyGenerator.WordGenerator(1, 2));
   }
 
   @Test
-  public void testSerialize() throws IOException
-  {
+  public void testSerialize()
+      throws IOException {
     BloomFilterTest.testSerialize(bf);
   }
 
-  public void testManyHashes(Iterator<ByteBuffer> keys)
-  {
+  public void testManyHashes(Iterator<ByteBuffer> keys) {
     int MAX_HASH_COUNT = 128;
     Set<Long> hashes = new HashSet<Long>();
     long collisions = 0;
-    while (keys.hasNext())
-    {
+    while (keys.hasNext()) {
       hashes.clear();
       ByteBuffer buf = keys.next();
       BloomFilter bf = (BloomFilter) FilterFactory.getFilter(10, 1);
-      for (long hashIndex : bf.getHashBuckets(buf, MAX_HASH_COUNT, 1024 * 1024))
-      {
+      for (long hashIndex : bf.getHashBuckets(buf, MAX_HASH_COUNT, 1024 * 1024)) {
         hashes.add(hashIndex);
       }
       collisions += (MAX_HASH_COUNT - hashes.size());
@@ -121,20 +108,19 @@ public class BloomFilterTest
   }
 
   @Test
-  public void testManyRandom()
-  {
+  public void testManyRandom() {
     testManyHashes(FilterTestHelper.randomKeys());
   }
 
   @Test
-  public void testHugeBFSerialization() throws IOException
-  {
-    ByteBuffer test = ByteBuffer.wrap(new byte[] {0, 1});
+  public void testHugeBFSerialization()
+      throws IOException {
+    ByteBuffer test = ByteBuffer.wrap(new byte[]{0, 1});
 
     File f = File.createTempFile("bloomFilterTest-", ".dat");
     f.deleteOnExit();
 
-    BloomFilter filter = (BloomFilter) FilterFactory.getFilter(((long)100000 / 8) + 1, 0.01d);
+    BloomFilter filter = (BloomFilter) FilterFactory.getFilter(((long) 100000 / 8) + 1, 0.01d);
     filter.add(test);
     DataOutputStream out = new DataOutputStream(new FileOutputStream(f));
     FilterFactory.serialize(filter, out);

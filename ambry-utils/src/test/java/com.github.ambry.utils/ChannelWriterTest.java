@@ -9,9 +9,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+
 public class ChannelWriterTest {
   @Test
-  public void ChannelWriteFunctionalityTest() throws IOException {
+  public void ChannelWriteFunctionalityTest()
+      throws IOException {
     byte[] buf = new byte[1000];
     new Random().nextBytes(buf);
     ByteBuffer buffer = ByteBuffer.wrap(buf);

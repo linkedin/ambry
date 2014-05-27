@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
+
 /**
  * Performs a put operation by sending and receiving put requests until operation is complete or has failed.
  * <p/>
@@ -34,26 +35,20 @@ final public class PutOperation extends Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PutOperation(String datacenterName,
-                      ConnectionPool connectionPool,
-                      ExecutorService requesterPool,
-                      OperationContext oc,
-                      BlobId blobId,
-                      long operationTimeoutMs,
-                      BlobProperties blobProperties,
-                      ByteBuffer userMetadata,
-                      InputStream blobStream) throws CoordinatorException {
+  public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream)
+      throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-          new PutPolicy(datacenterName, blobId.getPartition()));
+        new PutPolicy(datacenterName, blobId.getPartition()));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
     try {
-      this.materializedBlobStream = new ByteBufferInputStream(blobStream, (int)blobProperties.getBlobSize());
-    }
-    catch (IOException e) {
+      this.materializedBlobStream = new ByteBufferInputStream(blobStream, (int) blobProperties.getBlobSize());
+    } catch (IOException e) {
       CoordinatorException ce = new CoordinatorException("Error processing blob passed into PutOperation.", e,
-                                                         CoordinatorError.UnexpectedInternalError);
+          CoordinatorError.UnexpectedInternalError);
       logger.error("Could not materialize blob ", ce);
       throw ce;
     }
@@ -61,31 +56,22 @@ final public class PutOperation extends Operation {
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    PutRequest putRequest = new PutRequest(context.getCorrelationId(),
-                                           context.getClientId(),
-                                           blobId,
-                                           blobProperties,
-                                           userMetadata.duplicate(),
-                                           materializedBlobStream.duplicate());
-    return new PutOperationRequest(connectionPool,
-                                   responseQueue,
-                                   context,
-                                   blobId,
-                                   replicaId,
-                                   putRequest);
+    PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
+        userMetadata.duplicate(), materializedBlobStream.duplicate());
+    return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
-          CoordinatorException {
+  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+      throws CoordinatorException {
     switch (serverErrorCode) {
       case No_Error:
         return true;
       case IO_Error:
         return false;
       case Blob_Already_Exists:
-        CoordinatorException e = new CoordinatorException("BlobId already exists.",
-                                                          CoordinatorError.UnexpectedInternalError);
+        CoordinatorException e =
+            new CoordinatorException("BlobId already exists.", CoordinatorError.UnexpectedInternalError);
         logger.error(context + " Put issued to BlobId " + blobId + " that already exists on ReplicaId " + replicaId, e);
         throw e;
       /*
@@ -97,38 +83,37 @@ final public class PutOperation extends Operation {
        */
       default:
         e = new CoordinatorException("Server returned unexpected error for PutOperation.",
-                                     CoordinatorError.UnexpectedInternalError);
+            CoordinatorError.UnexpectedInternalError);
         logger.error(context + " PutResponse for BlobId " +
-                     blobId + " received from ReplicaId " +
-                     replicaId + " had unexpected error code " + serverErrorCode, e);
+            blobId + " received from ReplicaId " +
+            replicaId + " had unexpected error code " + serverErrorCode, e);
         throw e;
     }
   }
 }
 
 final class PutOperationRequest extends OperationRequest {
-  protected PutOperationRequest(ConnectionPool connectionPool,
-                                BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context,
-                                BlobId blobId,
-                                ReplicaId replicaId,
-                                RequestOrResponse request) {
+  protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
   @Override
-  protected void markRequest() throws CoordinatorException {
+  protected void markRequest()
+      throws CoordinatorException {
     context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestRate.mark();
   }
 
   @Override
-  protected void updateRequest(long durationInMs) throws CoordinatorException {
+  protected void updateRequest(long durationInMs)
+      throws CoordinatorException {
     context.getCoordinatorMetrics().
-            getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestLatencyInMs.update(durationInMs);
+        getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestLatencyInMs.update(durationInMs);
   }
 
   @Override
-  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+  protected Response getResponse(DataInputStream dataInputStream)
+      throws IOException {
     return PutResponse.readFrom(dataInputStream);
   }
 }

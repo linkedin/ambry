@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.io.InputStream;
 import java.io.IOException;
 
+
 /**
  * Represents the message format of the individual records that are used to write a message to the store.
  * This class provides the serialization and deserialization methods for the individual records.
@@ -30,9 +31,9 @@ public class MessageFormatRecord {
   public static final short Blob_Version_V1 = 1;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
-
   // Deserialization methods for individual records
-  public static BlobProperties deserializeBlobProperties(InputStream stream) throws IOException, MessageFormatException {
+  public static BlobProperties deserializeBlobProperties(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -41,11 +42,12 @@ public class MessageFormatRecord {
         return BlobProperty_Format_V1.deserializeBlobPropertyRecord(crcStream);
       default:
         throw new MessageFormatException("blob property version not supported",
-                                         MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
-  public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
+  public static boolean deserializeDeleteRecord(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -54,11 +56,12 @@ public class MessageFormatRecord {
         return Delete_Format_V1.deserializeDeleteRecord(crcStream);
       default:
         throw new MessageFormatException("delete record version not supported",
-                                         MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
-  public static long deserializeTTLRecord(InputStream stream) throws IOException, MessageFormatException {
+  public static long deserializeTTLRecord(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -67,11 +70,12 @@ public class MessageFormatRecord {
         return TTL_Format_V1.deserializeTTLRecord(crcStream);
       default:
         throw new MessageFormatException("ttl record version not supported",
-                                         MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
-  public static ByteBuffer deserializeUserMetadata(InputStream stream) throws IOException, MessageFormatException {
+  public static ByteBuffer deserializeUserMetadata(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -80,11 +84,12 @@ public class MessageFormatRecord {
         return UserMetadata_Format_V1.deserializeUserMetadataRecord(crcStream);
       default:
         throw new MessageFormatException("metadata version not supported",
-                                         MessageFormatErrorCodes.Unknown_Format_Version);
+            MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
-  public static BlobOutput deserializeBlob(InputStream stream) throws IOException, MessageFormatException {
+  public static BlobOutput deserializeBlob(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -92,8 +97,7 @@ public class MessageFormatRecord {
       case Blob_Version_V1:
         return Blob_Format_V1.deserializeBlobRecord(crcStream);
       default:
-        throw new MessageFormatException("data version not supported",
-                                         MessageFormatErrorCodes.Unknown_Format_Version);
+        throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
@@ -134,45 +138,37 @@ public class MessageFormatRecord {
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
 
-
     // relative offset fields start offset and size
     private static final int Number_Of_Relative_Offset_Fields = 5;
     public static final int Relative_Offset_Field_Sizes_In_Bytes = 4;
     public static final int BlobProperty_Relative_Offset_Field_Offset_In_Bytes =
-            Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
+        Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
     public static final int TTL_Relative_Offset_Field_Offset_In_Bytes =
-            BlobProperty_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        BlobProperty_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Delete_Relative_Offset_Field_Offset_In_Bytes =
-            TTL_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        TTL_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int UserMetadata_Relative_Offset_Field_Offset_In_Bytes =
-            Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Blob_Relative_Offset_Field_Offset_In_Bytes =
-            UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
     // crc field start offset
     public static final int Crc_Field_Offset_In_Bytes =
-            Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
     public static int getHeaderSize() {
       return Version_Field_Size_In_Bytes +
-             Total_Size_Field_Size_In_Bytes +
-             (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) +
-             Crc_Size;
+          Total_Size_Field_Size_In_Bytes +
+          (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) +
+          Crc_Size;
     }
 
-    public static void serializeHeader(ByteBuffer outputBuffer,
-                                       long totalSize,
-                                       int blobPropertyRecordRelativeOffset,
-                                       int ttlRecordRelativeOffset,
-                                       int deleteRecordRelativeOffset,
-                                       int userMetadataRecordRelativeOffset,
-                                       int blobRecordRelativeOffset) throws MessageFormatException {
-      checkHeaderConstraints(totalSize,
-                             blobPropertyRecordRelativeOffset,
-                             ttlRecordRelativeOffset,
-                             deleteRecordRelativeOffset,
-                             userMetadataRecordRelativeOffset,
-                             blobRecordRelativeOffset);
+    public static void serializeHeader(ByteBuffer outputBuffer, long totalSize, int blobPropertyRecordRelativeOffset,
+        int ttlRecordRelativeOffset, int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset,
+        int blobRecordRelativeOffset)
+        throws MessageFormatException {
+      checkHeaderConstraints(totalSize, blobPropertyRecordRelativeOffset, ttlRecordRelativeOffset,
+          deleteRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V1);
       outputBuffer.putLong(totalSize);
@@ -186,11 +182,10 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
       Logger logger = LoggerFactory.getLogger("MessageHeader_Format_V1");
       logger.trace("serializing header : version {} size {} blobpropertyrecordrelativeoffset {} " +
-              "ttlrecordrelativeoffset {} deleterecordrelativeoffset {} " +
-              "usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
-              Message_Header_Version_V1, totalSize, blobPropertyRecordRelativeOffset,
-              ttlRecordRelativeOffset, deleteRecordRelativeOffset, userMetadataRecordRelativeOffset,
-              blobPropertyRecordRelativeOffset, crc.getValue());
+          "ttlrecordrelativeoffset {} deleterecordrelativeoffset {} " +
+          "usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}", Message_Header_Version_V1,
+          totalSize, blobPropertyRecordRelativeOffset, ttlRecordRelativeOffset, deleteRecordRelativeOffset,
+          userMetadataRecordRelativeOffset, blobPropertyRecordRelativeOffset, crc.getValue());
     }
 
     // checks the following constraints
@@ -202,58 +197,58 @@ public class MessageFormatRecord {
     //    Message_Header_Invalid_Relative_Offset
     // 4. if deleteRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
     //    Message_Header_Invalid_Relative_Offset
-    private static void checkHeaderConstraints(long totalSize,
-                                               int blobPropertyRecordRelativeOffset,
-                                               int ttlRecordRelativeOffset,
-                                               int deleteRecordRelativeOffset,
-                                               int userMetadataRecordRelativeOffset,
-                                               int blobRecordRelativeOffset) throws MessageFormatException {
+    private static void checkHeaderConstraints(long totalSize, int blobPropertyRecordRelativeOffset,
+        int ttlRecordRelativeOffset, int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset,
+        int blobRecordRelativeOffset)
+        throws MessageFormatException {
       // check constraints
-      if (totalSize <= 0)
+      if (totalSize <= 0) {
         throw new MessageFormatException("checkHeaderConstraints - totalSize " + totalSize +
-                                         " needs to be greater than 0",
-                                         MessageFormatErrorCodes.Header_Constraint_Error);
+            " needs to be greater than 0", MessageFormatErrorCodes.Header_Constraint_Error);
+      }
 
       if (blobPropertyRecordRelativeOffset > 0 && (ttlRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                                   deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                                   userMetadataRecordRelativeOffset <= 0 ||
-                                                   blobRecordRelativeOffset <= 0))
-        throw new MessageFormatException("checkHeaderConstraints - blobPropertyRecordRelativeOffset is greater than 0 " +
-                                         " but other properties do not satisfy constraints" +
-                                         " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
-                                         " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
-                                         " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
-                                         " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
-                                         " blobRecordRelativeOffset " + blobRecordRelativeOffset,
-                                         MessageFormatErrorCodes.Header_Constraint_Error);
+          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
+          userMetadataRecordRelativeOffset <= 0 ||
+          blobRecordRelativeOffset <= 0)) {
+        throw new MessageFormatException(
+            "checkHeaderConstraints - blobPropertyRecordRelativeOffset is greater than 0 " +
+                " but other properties do not satisfy constraints" +
+                " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
+                " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
+                " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
+                " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
+                " blobRecordRelativeOffset " + blobRecordRelativeOffset,
+            MessageFormatErrorCodes.Header_Constraint_Error);
+      }
 
       if (ttlRecordRelativeOffset > 0 && (blobPropertyRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                          userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                          blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset))
+          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
+          userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
+          blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
         throw new MessageFormatException("checkHeaderConstraints - ttlRecordRelativeOffset is greater than 0 " +
-                                         " but other properties do not satisfy constraints" +
-                                         " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
-                                         " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
-                                         " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
-                                         " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
-                                         " blobRecordRelativeOffset " + blobRecordRelativeOffset,
-                                         MessageFormatErrorCodes.Header_Constraint_Error);
+            " but other properties do not satisfy constraints" +
+            " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
+            " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
+            " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
+            " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
+            " blobRecordRelativeOffset " + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+      }
 
-      if (deleteRecordRelativeOffset > 0 && (blobPropertyRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                             ttlRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                             userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-                                             blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset))
+      if (deleteRecordRelativeOffset > 0 && (blobPropertyRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
+          ||
+          ttlRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
+          userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
+          blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
         throw new MessageFormatException("checkHeaderConstraints - deleteRecordRelativeOffset is greater than 0 " +
-                                         " but other properties do not satisfy constraints" +
-                                         " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
-                                         " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
-                                         " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
-                                         " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
-                                         " blobRecordRelativeOffset " + blobRecordRelativeOffset,
-                                         MessageFormatErrorCodes.Header_Constraint_Error);
+            " but other properties do not satisfy constraints" +
+            " blobPropertyRecordRelativeOffset " + blobPropertyRecordRelativeOffset +
+            " ttlRecordRelativeOffset " + ttlRecordRelativeOffset +
+            " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
+            " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
+            " blobRecordRelativeOffset " + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+      }
     }
-
 
     public MessageHeader_Format_V1(ByteBuffer input) {
       this.buffer = input;
@@ -291,21 +286,20 @@ public class MessageFormatRecord {
       return buffer.getLong(Crc_Field_Offset_In_Bytes);
     }
 
-    public void verifyHeader() throws MessageFormatException {
+    public void verifyHeader()
+        throws MessageFormatException {
       verifyCrc();
-      checkHeaderConstraints(getMessageSize(),
-                             getBlobPropertyRecordRelativeOffset(),
-                             getTTLRecordRelativeOffset(),
-                             getDeleteRecordRelativeOffset(),
-                             getUserMetadataRecordRelativeOffset(),
-                             getBlobRecordRelativeOffset());
+      checkHeaderConstraints(getMessageSize(), getBlobPropertyRecordRelativeOffset(), getTTLRecordRelativeOffset(),
+          getDeleteRecordRelativeOffset(), getUserMetadataRecordRelativeOffset(), getBlobRecordRelativeOffset());
     }
 
-    private void verifyCrc() throws MessageFormatException {
+    private void verifyCrc()
+        throws MessageFormatException {
       Crc32 crc = new Crc32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
-      if (crc.getValue() != getCrc())
+      if (crc.getValue() != getCrc()) {
         throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+      }
     }
   }
 
@@ -329,8 +323,8 @@ public class MessageFormatRecord {
 
     public static int getBlobPropertyRecordSize(BlobProperties properties) {
       return Version_Field_Size_In_Bytes +
-             BlobPropertySerDe.getBlobPropertySize(properties) +
-             Crc_Size;
+          BlobPropertySerDe.getBlobPropertySize(properties) +
+          Crc_Size;
     }
 
     public static void serializeBlobPropertyRecord(ByteBuffer outputBuffer, BlobProperties properties) {
@@ -343,22 +337,22 @@ public class MessageFormatRecord {
     }
 
     public static BlobProperties deserializeBlobPropertyRecord(CrcInputStream crcStream)
-            throws IOException, MessageFormatException {
+        throws IOException, MessageFormatException {
       try {
         DataInputStream dataStream = new DataInputStream(crcStream);
         BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(dataStream);
         long actualCRC = crcStream.getValue();
         long expectedCRC = dataStream.readLong();
         if (actualCRC != expectedCRC) {
-          logger.error("corrupt data while parsing blob properties Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+          logger.error(
+              "corrupt data while parsing blob properties Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
           throw new MessageFormatException("Blob property data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
         }
         return properties;
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         logger.error("Blob property failed to be parsed. Data may be corrupt with exception {}", e);
         throw new MessageFormatException("Blob property failed to be parsed. Data may be corrupt",
-                                         MessageFormatErrorCodes.Data_Corrupt);
+            MessageFormatErrorCodes.Data_Corrupt);
       }
     }
   }
@@ -385,8 +379,8 @@ public class MessageFormatRecord {
 
     public static int getDeleteRecordSize() {
       return Version_Field_Size_In_Bytes +
-              Delete_Field_Size_In_Bytes +
-              Crc_Size;
+          Delete_Field_Size_In_Bytes +
+          Crc_Size;
     }
 
     public static void serializeDeleteRecord(ByteBuffer outputBuffer, boolean deleteFlag) {
@@ -398,13 +392,15 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
+    public static boolean deserializeDeleteRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error("corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger
+            .error("corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return isDeleted;
@@ -431,8 +427,8 @@ public class MessageFormatRecord {
 
     public static int getTTLRecordSize() {
       return Version_Field_Size_In_Bytes +
-              BlobPropertySerDe.TTL_Field_Size_In_Bytes +
-              Crc_Size;
+          BlobPropertySerDe.TTL_Field_Size_In_Bytes +
+          Crc_Size;
     }
 
     public static void serializeTTLRecord(ByteBuffer outputBuffer, long ttl) {
@@ -444,7 +440,8 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static long deserializeTTLRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
+    public static long deserializeTTLRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long ttl = dataStream.readLong();
       long actualCRC = crcStream.getValue();
@@ -479,9 +476,9 @@ public class MessageFormatRecord {
 
     public static int getUserMetadataSize(ByteBuffer userMetadata) {
       return Version_Field_Size_In_Bytes +
-             UserMetadata_Size_Field_In_Bytes +
-             userMetadata.limit() +
-             Crc_Size;
+          UserMetadata_Size_Field_In_Bytes +
+          userMetadata.limit() +
+          Crc_Size;
     }
 
     public static void serializeUserMetadataRecord(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
@@ -495,7 +492,7 @@ public class MessageFormatRecord {
     }
 
     public static ByteBuffer deserializeUserMetadataRecord(CrcInputStream crcStream)
-            throws IOException, MessageFormatException {
+        throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       int usermetadataSize = dataStream.readInt();
       byte[] userMetadaBuffer = new byte[usermetadataSize];
@@ -503,7 +500,8 @@ public class MessageFormatRecord {
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger
+            .error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return ByteBuffer.wrap(userMetadaBuffer);
@@ -532,9 +530,9 @@ public class MessageFormatRecord {
 
     public static long getBlobRecordSize(long blobSize) {
       return Version_Field_Size_In_Bytes +
-             Blob_Size_Field_In_Bytes +
-             blobSize +
-             Crc_Size;
+          Blob_Size_Field_In_Bytes +
+          blobSize +
+          Crc_Size;
     }
 
     public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobSize) {
@@ -542,17 +540,20 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobSize);
     }
 
-    public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
+    public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
-      if (dataSize > Integer.MAX_VALUE)
+      if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
-      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int)dataSize);
+      }
+      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
         logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
-        throw new MessageFormatException("corrupt data while parsing blob content", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+            MessageFormatErrorCodes.Data_Corrupt);
       }
       return new BlobOutput(dataSize, output);
     }

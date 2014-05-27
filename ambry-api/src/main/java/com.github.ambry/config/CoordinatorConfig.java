@@ -46,18 +46,15 @@ public class CoordinatorConfig {
   public final int connectionPoolCheckoutTimeoutMs;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
-    this.hostname =
-            verifiableProperties.getString("coordinator.hostname");
-    this.datacenterName =
-            verifiableProperties.getString("coordinator.datacenter.name");
+    this.hostname = verifiableProperties.getString("coordinator.hostname");
+    this.datacenterName = verifiableProperties.getString("coordinator.datacenter.name");
     this.requesterPoolSize =
-            verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
-            verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
-    this.connectionPoolFactory =
-            verifiableProperties.getString("coordinator.connection.pool.factory",
-                                           "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
+        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
+    this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
+        "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
-            verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
+        verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
   }
 }

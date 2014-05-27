@@ -1,6 +1,5 @@
 package com.github.ambry.clustermap;
 
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -16,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 
 /**
  * PartitionLayout of {@link Partition}s and {@link Replica}s on an Ambry cluster (see {@link HardwareLayout}).
@@ -34,9 +34,11 @@ public class PartitionLayout {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    if (logger.isTraceEnabled())
+  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject)
+      throws JSONException {
+    if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout + ", " + jsonObject.toString());
+    }
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = jsonObject.getString("clusterName");
@@ -52,8 +54,9 @@ public class PartitionLayout {
 
   // Constructor for initial PartitionLayout.
   public PartitionLayout(HardwareLayout hardwareLayout) {
-    if (logger.isTraceEnabled())
+    if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout);
+    }
     this.hardwareLayout = hardwareLayout;
 
     this.clusterName = hardwareLayout.getClusterName();
@@ -148,8 +151,9 @@ public class PartitionLayout {
       throw new IllegalStateException("ClusterName cannot be null.");
     }
     if (!hardwareLayout.getClusterName().equals(clusterName)) {
-      throw new IllegalStateException("PartitionLayout cluster name does not match that of HardwareLayout: "
-                                      + clusterName + " != " + hardwareLayout.getClusterName());
+      throw new IllegalStateException(
+          "PartitionLayout cluster name does not match that of HardwareLayout: " + clusterName + " != " + hardwareLayout
+              .getClusterName());
     }
   }
 
@@ -216,16 +220,16 @@ public class PartitionLayout {
    * @param stream byte-serialized partition ID
    * @return requested Partition else null.
    */
-  public Partition getPartition(DataInputStream stream) throws IOException {
+  public Partition getPartition(DataInputStream stream)
+      throws IOException {
     byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
     return partitionMap.get(ByteBuffer.wrap(partitionBytes));
   }
 
-  public JSONObject toJSONObject() throws JSONException {
-    JSONObject jsonObject = new JSONObject()
-            .put("clusterName", hardwareLayout.getClusterName())
-            .put("version", version)
-            .put("partitions", new JSONArray());
+  public JSONObject toJSONObject()
+      throws JSONException {
+    JSONObject jsonObject = new JSONObject().put("clusterName", hardwareLayout.getClusterName()).put("version", version)
+        .put("partitions", new JSONArray());
     for (Partition partition : partitionMap.values()) {
       jsonObject.accumulate("partitions", partition.toJSONObject());
     }
@@ -236,8 +240,7 @@ public class PartitionLayout {
   public String toString() {
     try {
       return toJSONObject().toString(2);
-    }
-    catch (JSONException e) {
+    } catch (JSONException e) {
       logger.error("JSONException caught in toString: {}", e.getCause());
     }
     return null;
@@ -245,12 +248,18 @@ public class PartitionLayout {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    PartitionLayout that = (PartitionLayout)o;
+    PartitionLayout that = (PartitionLayout) o;
 
-    if (!clusterName.equals(that.clusterName)) return false;
+    if (!clusterName.equals(that.clusterName)) {
+      return false;
+    }
     return hardwareLayout.equals(that.hardwareLayout);
   }
 }

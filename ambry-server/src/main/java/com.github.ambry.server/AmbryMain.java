@@ -1,6 +1,5 @@
 package com.github.ambry.server;
 
-
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.VerifiableProperties;
@@ -10,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Properties;
 
+
 /**
  * Ambry main
  */
@@ -18,7 +18,7 @@ public class AmbryMain {
     Logger logger = LoggerFactory.getLogger("AmbryMain");
     if (args.length != 3) {
       System.out.println("USAGE: java [options] %s server.properties hardwarelayout partitionlayout"
-                         .format(AmbryServer.class.getSimpleName()));
+          .format(AmbryServer.class.getSimpleName()));
       System.exit(1);
     }
 
@@ -39,8 +39,7 @@ public class AmbryMain {
 
       server.startup();
       server.awaitShutdown();
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.out.println("error " + e);
     }
     System.exit(0);

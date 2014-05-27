@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+
 public class KeyGenerator {
   private static ByteBuffer randomKey(Random r) {
     byte[] bytes = new byte[48];

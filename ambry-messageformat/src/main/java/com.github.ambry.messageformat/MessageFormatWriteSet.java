@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.util.List;
 
+
 /**
  * A message write set that writes to the underlying write interface
  */
@@ -28,7 +29,8 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   }
 
   @Override
-  public long writeTo(Write writeChannel) throws IOException {
+  public long writeTo(Write writeChannel)
+      throws IOException {
     long sizeWritten = 0;
     while (sizeWritten < sizeToWrite) {
       sizeWritten += writeChannel.appendFrom(Channels.newChannel(streamToWrite), sizeToWrite);

@@ -3,6 +3,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 
+
 /**
  * Metrics for ClusterMap (HardwareLayout & PartitionLayout)
  */
@@ -12,7 +13,7 @@ public class ClusterMapMetrics {
 
   public final Gauge<Long> hardwareLayoutVersion;
   public final Gauge<Long> partitionLayoutVersion;
-  
+
   public final Gauge<Long> datacenterCount;
   public final Gauge<Long> dataNodeCount;
   public final Gauge<Long> diskCount;
@@ -31,9 +32,7 @@ public class ClusterMapMetrics {
   public final Gauge<Long> allocatedRawCapacityInBytes;
   public final Gauge<Long> allocatedUsableCapacityInBytes;
 
-  public ClusterMapMetrics(HardwareLayout hardwareLayout,
-                           PartitionLayout partitionLayout,
-                           MetricRegistry registry) {
+  public ClusterMapMetrics(HardwareLayout hardwareLayout, PartitionLayout partitionLayout, MetricRegistry registry) {
     this.hardwareLayout = hardwareLayout;
     this.partitionLayout = partitionLayout;
 
@@ -162,8 +161,10 @@ public class ClusterMapMetrics {
       }
     };
     registry.register(MetricRegistry.name(ClusterMap.class, "rawCapacityInBytes"), rawCapacityInBytes);
-    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
-    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"), allocatedUsableCapacityInBytes);
+    registry
+        .register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
+    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"),
+        allocatedUsableCapacityInBytes);
   }
 
   private long getHardwareLayoutVersion() {

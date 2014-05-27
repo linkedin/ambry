@@ -2,6 +2,7 @@ package com.github.ambry.notification;
 
 import com.github.ambry.messageformat.BlobProperties;
 
+
 /**
  * A pluggable notification interface that is used to notify any external
  * system about the server operations. The implementation of the APIs
@@ -16,10 +17,7 @@ public interface NotificationSystem {
    * @param blobProperties The blob properties for the blob
    * @param userMetadata The usermetadata for the blob
    */
-  public void onBlobCreated(String sourceHost,
-                            String blobId,
-                            BlobProperties blobProperties,
-                            byte[] userMetadata);
+  public void onBlobCreated(String sourceHost, String blobId, BlobProperties blobProperties, byte[] userMetadata);
 
   /**
    * Notifies the underlying system when an existing blob is deleted
@@ -34,9 +32,7 @@ public interface NotificationSystem {
    * @param blobId The id of the blob that has been replicated
    * @param sourceType The source that created the blob replica
    */
-  public void onBlobReplicaCreated(String sourceHost,
-                                   String blobId,
-                                   BlobReplicaSourceType sourceType);
+  public void onBlobReplicaCreated(String sourceHost, String blobId, BlobReplicaSourceType sourceType);
 
   /**
    * Notifies the underlying system when a deleted state of a blob is replicated to a node
@@ -44,7 +40,5 @@ public interface NotificationSystem {
    * @param blobId The id of the blob whose deleted state has been replicated
    * @param sourceType The source that deleted the blob replica
    */
-  public void onBlobReplicaDeleted(String sourceHost,
-                                   String blobId,
-                                   BlobReplicaSourceType sourceType);
+  public void onBlobReplicaDeleted(String sourceHost, String blobId, BlobReplicaSourceType sourceType);
 }

@@ -16,25 +16,18 @@ import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
+
 /**
  * Performs a delete operation by sending and receiving delete requests until operation is complete or has failed.
  */
 final public class DeleteOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public DeleteOperation(String datacenterName,
-                         ConnectionPool connectionPool,
-                         ExecutorService requesterPool,
-                         OperationContext oc,
-                         BlobId blobId,
-                         long operationTimeoutMs) throws CoordinatorException {
-    super(datacenterName,
-          connectionPool,
-          requesterPool,
-          oc,
-          blobId,
-          operationTimeoutMs,
-          new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
+  public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs)
+      throws CoordinatorException {
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
   }
 
   @Override
@@ -44,8 +37,8 @@ final public class DeleteOperation extends Operation {
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
-          CoordinatorException {
+  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+      throws CoordinatorException {
     switch (serverErrorCode) {
       case No_Error:
       case Blob_Deleted:
@@ -56,37 +49,36 @@ final public class DeleteOperation extends Operation {
       case Blob_Expired:
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for DeleteOperation.",
-                                                          CoordinatorError.UnexpectedInternalError);
+            CoordinatorError.UnexpectedInternalError);
         logger.error("{} DeleteResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
-                     context, blobId, replicaId, serverErrorCode, e);
+            context, blobId, replicaId, serverErrorCode, e);
         throw e;
     }
   }
 }
 
 final class DeleteOperationRequest extends OperationRequest {
-  protected DeleteOperationRequest(ConnectionPool connectionPool,
-                                   BlockingQueue<OperationResponse> responseQueue,
-                                   OperationContext context,
-                                   BlobId blobId,
-                                   ReplicaId replicaId,
-                                   RequestOrResponse request) {
+  protected DeleteOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
   @Override
-  protected void markRequest() throws CoordinatorException {
+  protected void markRequest()
+      throws CoordinatorException {
     context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).deleteBlobRequestRate.mark();
   }
 
   @Override
-  protected void updateRequest(long durationInMs) throws CoordinatorException {
+  protected void updateRequest(long durationInMs)
+      throws CoordinatorException {
     context.getCoordinatorMetrics().
-            getRequestMetrics(replicaId.getDataNodeId()).deleteBlobRequestLatencyInMs.update(durationInMs);
+        getRequestMetrics(replicaId.getDataNodeId()).deleteBlobRequestLatencyInMs.update(durationInMs);
   }
 
   @Override
-  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+  protected Response getResponse(DataInputStream dataInputStream)
+      throws IOException {
     return DeleteResponse.readFrom(dataInputStream);
   }
 }

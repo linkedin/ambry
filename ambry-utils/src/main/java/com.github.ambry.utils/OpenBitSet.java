@@ -5,6 +5,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+
 /**
  * An "open" BitSet implementation that allows direct access to the arrays of words
  * storing the bits.  Derived from Lucene's OpenBitSet, but with a paged backing array
@@ -27,8 +28,7 @@ import java.io.IOException;
  * class, use <code>java.util.BitSet</code>.
  */
 
-public class OpenBitSet implements IBitSet
-{
+public class OpenBitSet implements IBitSet {
   /**
    * We break the bitset up into multiple arrays to avoid promotion failure caused by attempting to allocate
    * large, contiguous arrays.  All sub-arrays but the last are uniformly PAGE_SIZE words;
@@ -44,8 +44,7 @@ public class OpenBitSet implements IBitSet
    * Constructs an OpenBitSet large enough to hold numBits.
    * @param numBits
    */
-  public OpenBitSet(long numBits)
-  {
+  public OpenBitSet(long numBits) {
     wlen = (int) bits2words(numBits);
     int lastPageSize = wlen % PAGE_SIZE;
     int fullPageCount = wlen / PAGE_SIZE;
@@ -53,11 +52,13 @@ public class OpenBitSet implements IBitSet
 
     bits = new long[pageCount][];
 
-    for (int i = 0; i < fullPageCount; ++i)
+    for (int i = 0; i < fullPageCount; ++i) {
       bits[i] = new long[PAGE_SIZE];
+    }
 
-    if (lastPageSize != 0)
+    if (lastPageSize != 0) {
       bits[bits.length - 1] = new long[lastPageSize];
+    }
   }
 
   public OpenBitSet() {
@@ -67,23 +68,22 @@ public class OpenBitSet implements IBitSet
   /**
    * @return the pageSize
    */
-  public int getPageSize()
-  {
+  public int getPageSize() {
     return PAGE_SIZE;
   }
 
-  public int getPageCount()
-  {
+  public int getPageCount() {
     return pageCount;
   }
 
-  public long[] getPage(int pageIdx)
-  {
+  public long[] getPage(int pageIdx) {
     return bits[pageIdx];
   }
 
   /** Returns the current capacity in bits (1 greater than the index of the last bit) */
-  public long capacity() { return ((long)wlen) << 6; }
+  public long capacity() {
+    return ((long) wlen) << 6;
+  }
 
   /**
    * Returns the current capacity of this set.  Included for
@@ -99,12 +99,14 @@ public class OpenBitSet implements IBitSet
   }
 
   /** Returns true if there are no set bits */
-  public boolean isEmpty() { return cardinality()==0; }
-
+  public boolean isEmpty() {
+    return cardinality() == 0;
+  }
 
   /** Expert: gets the number of longs in the array that are in use */
-  public int getNumWords() { return wlen; }
-
+  public int getNumWords() {
+    return wlen;
+  }
 
   /**
    * Returns true or false for the specified bit index.
@@ -117,7 +119,7 @@ public class OpenBitSet implements IBitSet
     int bit = index & 0x3f;           // mod 64
     long bitmask = 1L << bit;
     // TODO perfectionist one can implement this using bit operations
-    return (bits[i / PAGE_SIZE][i % PAGE_SIZE ] & bitmask) != 0;
+    return (bits[i / PAGE_SIZE][i % PAGE_SIZE] & bitmask) != 0;
   }
 
   /**
@@ -125,11 +127,11 @@ public class OpenBitSet implements IBitSet
    * The index should be less than the OpenBitSet size.
    */
   public boolean get(long index) {
-    int i = (int)(index >> 6);               // div 64
-    int bit = (int)index & 0x3f;           // mod 64
+    int i = (int) (index >> 6);               // div 64
+    int bit = (int) index & 0x3f;           // mod 64
     long bitmask = 1L << bit;
     // TODO perfectionist one can implement this using bit operations
-    return (bits[i / PAGE_SIZE][i % PAGE_SIZE ] & bitmask) != 0;
+    return (bits[i / PAGE_SIZE][i % PAGE_SIZE] & bitmask) != 0;
   }
 
   /**
@@ -137,10 +139,10 @@ public class OpenBitSet implements IBitSet
    * The index should be less than the OpenBitSet size.
    */
   public void set(long index) {
-    int wordNum = (int)(index >> 6);
-    int bit = (int)index & 0x3f;
+    int wordNum = (int) (index >> 6);
+    int bit = (int) index & 0x3f;
     long bitmask = 1L << bit;
-    bits[ wordNum / PAGE_SIZE ][ wordNum % PAGE_SIZE ] |= bitmask;
+    bits[wordNum / PAGE_SIZE][wordNum % PAGE_SIZE] |= bitmask;
   }
 
   /**
@@ -151,7 +153,7 @@ public class OpenBitSet implements IBitSet
     int wordNum = index >> 6;      // div 64
     int bit = index & 0x3f;     // mod 64
     long bitmask = 1L << bit;
-    bits[ wordNum / PAGE_SIZE ][ wordNum % PAGE_SIZE ] |= bitmask;
+    bits[wordNum / PAGE_SIZE][wordNum % PAGE_SIZE] |= bitmask;
   }
 
   /**
@@ -177,8 +179,8 @@ public class OpenBitSet implements IBitSet
    * The index should be less than the OpenBitSet size.
    */
   public void clear(long index) {
-    int wordNum = (int)(index >> 6); // div 64
-    int bit = (int)index & 0x3f;     // mod 64
+    int wordNum = (int) (index >> 6); // div 64
+    int bit = (int) index & 0x3f;     // mod 64
     long bitmask = 1L << bit;
     bits[wordNum / PAGE_SIZE][wordNum % PAGE_SIZE] &= ~bitmask;
   }
@@ -190,14 +192,18 @@ public class OpenBitSet implements IBitSet
    * @param endIndex one-past the last bit to clear
    */
   public void clear(int startIndex, int endIndex) {
-    if (endIndex <= startIndex) return;
+    if (endIndex <= startIndex) {
+      return;
+    }
 
-    int startWord = (startIndex>>6);
-    if (startWord >= wlen) return;
+    int startWord = (startIndex >> 6);
+    if (startWord >= wlen) {
+      return;
+    }
 
     // since endIndex is one past the end, this is index of the last
     // word to be changed.
-    int endWord   = ((endIndex-1)>>6);
+    int endWord = ((endIndex - 1) >> 6);
 
     long startmask = -1L << startIndex;
     long endmask = -1L >>> -endIndex;  // 64-(endIndex&0x3f) is the same as -endIndex due to wrap
@@ -211,23 +217,20 @@ public class OpenBitSet implements IBitSet
       return;
     }
 
-
-    bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE]  &= startmask;
+    bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE] &= startmask;
 
     int middle = Math.min(wlen, endWord);
-    if (startWord / PAGE_SIZE == middle / PAGE_SIZE)
-    {
-      Arrays.fill(bits[startWord/PAGE_SIZE], (startWord+1) % PAGE_SIZE, middle % PAGE_SIZE, 0L);
-    } else
-    {
-      while (++startWord<middle)
+    if (startWord / PAGE_SIZE == middle / PAGE_SIZE) {
+      Arrays.fill(bits[startWord / PAGE_SIZE], (startWord + 1) % PAGE_SIZE, middle % PAGE_SIZE, 0L);
+    } else {
+      while (++startWord < middle) {
         bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE] = 0L;
+      }
     }
     if (endWord < wlen) {
       bits[endWord / PAGE_SIZE][endWord % PAGE_SIZE] &= endmask;
     }
   }
-
 
   /** Clears a range of bits.  Clearing past the end does not change the size of the set.
    *
@@ -235,14 +238,18 @@ public class OpenBitSet implements IBitSet
    * @param endIndex one-past the last bit to clear
    */
   public void clear(long startIndex, long endIndex) {
-    if (endIndex <= startIndex) return;
+    if (endIndex <= startIndex) {
+      return;
+    }
 
-    int startWord = (int)(startIndex>>6);
-    if (startWord >= wlen) return;
+    int startWord = (int) (startIndex >> 6);
+    if (startWord >= wlen) {
+      return;
+    }
 
     // since endIndex is one past the end, this is index of the last
     // word to be changed.
-    int endWord   = (int)((endIndex-1)>>6);
+    int endWord = (int) ((endIndex - 1) >> 6);
 
     long startmask = -1L << startIndex;
     long endmask = -1L >>> -endIndex;  // 64-(endIndex&0x3f) is the same as -endIndex due to wrap
@@ -256,16 +263,15 @@ public class OpenBitSet implements IBitSet
       return;
     }
 
-    bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE]  &= startmask;
+    bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE] &= startmask;
 
     int middle = Math.min(wlen, endWord);
-    if (startWord / PAGE_SIZE == middle / PAGE_SIZE)
-    {
-      Arrays.fill(bits[startWord/PAGE_SIZE], (startWord+1) % PAGE_SIZE, middle % PAGE_SIZE, 0L);
-    } else
-    {
-      while (++startWord<middle)
+    if (startWord / PAGE_SIZE == middle / PAGE_SIZE) {
+      Arrays.fill(bits[startWord / PAGE_SIZE], (startWord + 1) % PAGE_SIZE, middle % PAGE_SIZE, 0L);
+    } else {
+      while (++startWord < middle) {
         bits[startWord / PAGE_SIZE][startWord % PAGE_SIZE] = 0L;
+      }
     }
     if (endWord < wlen) {
       bits[endWord / PAGE_SIZE][endWord % PAGE_SIZE] &= endmask;
@@ -273,32 +279,33 @@ public class OpenBitSet implements IBitSet
   }
 
   /** @return the number of set bits */
-  public long cardinality()
-  {
+  public long cardinality() {
     long bitCount = 0L;
-    for (int i=getPageCount();i-->0;)
-      bitCount+=BitUtil.pop_array(bits[i],0,wlen);
+    for (int i = getPageCount(); i-- > 0; ) {
+      bitCount += BitUtil.pop_array(bits[i], 0, wlen);
+    }
 
     return bitCount;
   }
 
   /** this = this AND other */
   public void intersect(OpenBitSet other) {
-    int newLen= Math.min(this.wlen,other.wlen);
+    int newLen = Math.min(this.wlen, other.wlen);
     long[][] thisArr = this.bits;
     long[][] otherArr = other.bits;
     int thisPageSize = PAGE_SIZE;
     int otherPageSize = other.PAGE_SIZE;
     // testing against zero can be more efficient
-    int pos=newLen;
-    while(--pos>=0) {
-      thisArr[pos / thisPageSize][ pos % thisPageSize] &= otherArr[pos / otherPageSize][pos % otherPageSize];
+    int pos = newLen;
+    while (--pos >= 0) {
+      thisArr[pos / thisPageSize][pos % thisPageSize] &= otherArr[pos / otherPageSize][pos % otherPageSize];
     }
 
     if (this.wlen > newLen) {
       // fill zeros from the new shorter length to the old length
-      for (pos=wlen;pos-->newLen;)
-        thisArr[pos / thisPageSize][ pos % thisPageSize] =0;
+      for (pos = wlen; pos-- > newLen; ) {
+        thisArr[pos / thisPageSize][pos % thisPageSize] = 0;
+      }
     }
     this.wlen = newLen;
   }
@@ -314,65 +321,77 @@ public class OpenBitSet implements IBitSet
    * by checking for trailing zero words.
    */
   public void trimTrailingZeros() {
-    int idx = wlen-1;
-    while (idx>=0 && bits[idx / PAGE_SIZE][idx % PAGE_SIZE]==0) idx--;
-    wlen = idx+1;
+    int idx = wlen - 1;
+    while (idx >= 0 && bits[idx / PAGE_SIZE][idx % PAGE_SIZE] == 0) {
+      idx--;
+    }
+    wlen = idx + 1;
   }
 
   /** returns the number of 64 bit words it would take to hold numBits */
   public static long bits2words(long numBits) {
-    return (((numBits-1)>>>6)+1);
+    return (((numBits - 1) >>> 6) + 1);
   }
 
   /** returns true if both sets have the same bits set */
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (!(o instanceof OpenBitSet)) return false;
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof OpenBitSet)) {
+      return false;
+    }
     OpenBitSet a;
-    OpenBitSet b = (OpenBitSet)o;
+    OpenBitSet b = (OpenBitSet) o;
     // make a the larger set.
     if (b.wlen > this.wlen) {
-      a = b; b=this;
+      a = b;
+      b = this;
     } else {
-      a=this;
+      a = this;
     }
 
     int aPageSize = this.PAGE_SIZE;
     int bPageSize = b.PAGE_SIZE;
 
     // check for any set bits out of the range of b
-    for (int i=a.wlen-1; i>=b.wlen; i--) {
-      if (a.bits[i/aPageSize][i % aPageSize]!=0) return false;
+    for (int i = a.wlen - 1; i >= b.wlen; i--) {
+      if (a.bits[i / aPageSize][i % aPageSize] != 0) {
+        return false;
+      }
     }
 
-    for (int i=b.wlen-1; i>=0; i--) {
-      if (a.bits[i/aPageSize][i % aPageSize] != b.bits[i/bPageSize][i % bPageSize]) return false;
+    for (int i = b.wlen - 1; i >= 0; i--) {
+      if (a.bits[i / aPageSize][i % aPageSize] != b.bits[i / bPageSize][i % bPageSize]) {
+        return false;
+      }
     }
 
     return true;
   }
-
 
   @Override
   public int hashCode() {
     // Start with a zero hash and use a mix that results in zero if the input is zero.
     // This effectively truncates trailing zeros without an explicit check.
     long h = 0;
-    for (int i = wlen; --i>=0;) {
+    for (int i = wlen; --i >= 0; ) {
       h ^= bits[i / PAGE_SIZE][i % PAGE_SIZE];
       h = (h << 1) | (h >>> 63); // rotate left
     }
     // fold leftmost bits into right and add a constant to prevent
     // empty sets from returning 0, which is too common.
-    return (int)((h>>32) ^ h) + 0x98761234;
+    return (int) ((h >> 32) ^ h) + 0x98761234;
   }
 
-  public void close() throws IOException {
+  public void close()
+      throws IOException {
     // noop, let GC do the cleanup.
   }
 
-  public void serialize(DataOutput out) throws IOException {
+  public void serialize(DataOutput out)
+      throws IOException {
     int bitLength = getNumWords();
     int pageSize = getPageSize();
     int pageCount = getPageCount();
@@ -390,7 +409,8 @@ public class OpenBitSet implements IBitSet
     clear(0, capacity());
   }
 
-  public static OpenBitSet deserialize(DataInput in) throws IOException {
+  public static OpenBitSet deserialize(DataInput in)
+      throws IOException {
     long bitLength = in.readInt();
 
     OpenBitSet bs = new OpenBitSet(bitLength << 6);
@@ -399,8 +419,9 @@ public class OpenBitSet implements IBitSet
 
     for (int p = 0; p < pageCount; p++) {
       long[] bits = bs.getPage(p);
-      for (int i = 0; i < pageSize && bitLength-- > 0; i++)
+      for (int i = 0; i < pageSize && bitLength-- > 0; i++) {
         bits[i] = in.readLong();
+      }
     }
     return bs;
   }

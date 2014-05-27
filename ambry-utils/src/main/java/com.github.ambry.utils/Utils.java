@@ -1,6 +1,5 @@
 package com.github.ambry.utils;
 
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,6 +19,7 @@ import java.nio.charset.Charset;
 import java.util.Properties;
 import java.util.Random;
 
+
 /**
  * A set of utility methods
  */
@@ -32,10 +32,12 @@ public class Utils {
    */
   public static final long Infinite_Time = -1;
 
-  public static String readShortString(DataInputStream input) throws IOException {
+  public static String readShortString(DataInputStream input)
+      throws IOException {
     Short size = input.readShort();
-    if (size <= 0)
+    if (size <= 0) {
       return null;
+    }
     byte[] bytes = new byte[size];
     // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
     int read = input.read(bytes);
@@ -45,10 +47,12 @@ public class Utils {
     return new String(bytes, "UTF-8");
   }
 
-  public static String readIntString(DataInputStream input) throws IOException {
+  public static String readIntString(DataInputStream input)
+      throws IOException {
     int size = input.readInt();
-    if (size <= 0)
+    if (size <= 0) {
       return null;
+    }
     byte[] bytes = new byte[size];
     int read = input.read(bytes);
     if (read != size) {
@@ -57,10 +61,12 @@ public class Utils {
     return new String(bytes, "UTF-8");
   }
 
-  public static ByteBuffer readIntBuffer(DataInputStream input) throws IOException {
+  public static ByteBuffer readIntBuffer(DataInputStream input)
+      throws IOException {
     int size = input.readInt();
-    if (size < 0)
+    if (size < 0) {
       return null;
+    }
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
@@ -69,10 +75,12 @@ public class Utils {
     return buffer;
   }
 
-  public static ByteBuffer readShortBuffer(DataInputStream input) throws IOException {
+  public static ByteBuffer readShortBuffer(DataInputStream input)
+      throws IOException {
     short size = input.readShort();
-    if (size < 0)
+    if (size < 0) {
       return null;
+    }
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = input.read(buffer.array());
     if (read != size) {
@@ -142,22 +150,24 @@ public class Utils {
   /**
    * Open a channel for the given file
    */
-  public static FileChannel openChannel(File file, boolean mutable) throws FileNotFoundException {
-    if (mutable)
+  public static FileChannel openChannel(File file, boolean mutable)
+      throws FileNotFoundException {
+    if (mutable) {
       return new RandomAccessFile(file, "rw").getChannel();
-    else
+    } else {
       return new FileInputStream(file).getChannel();
+    }
   }
 
   /**
    * Instantiate a class instance from a given className with an arg
    */
   public static <T> T getObj(String className, Object arg)
-          throws ClassNotFoundException, InstantiationException,
-          IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
+             InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       if (ctor.getParameterTypes().length == 1 && ctor.getParameterTypes()[0].isAssignableFrom(arg.getClass())) {
-        return (T)ctor.newInstance(arg);
+        return (T) ctor.newInstance(arg);
       }
     }
     return null;
@@ -167,17 +177,17 @@ public class Utils {
    * Instantiate a class instance from a given className.
    */
   public static <T> T getObj(String className)
-          throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-    return (T)Class.forName(className)
-            .newInstance();
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    return (T) Class.forName(className).newInstance();
   }
 
   /**
    * Compute the hash code for the given items
    */
   public static int hashcode(Object[] items) {
-    if (items == null)
+    if (items == null) {
       return 0;
+    }
     int h = 1;
     int i = 0;
     while (i < items.length) {
@@ -218,7 +228,8 @@ public class Utils {
    *
    * @param filename The path of the file to read
    */
-  public static Properties loadProps(String filename) throws FileNotFoundException, IOException {
+  public static Properties loadProps(String filename)
+      throws FileNotFoundException, IOException {
     InputStream propStream = new FileInputStream(filename);
     Properties props = new Properties();
     props.load(propStream);
@@ -232,9 +243,9 @@ public class Utils {
    * @param value The value to serialize
    */
   public static void serializeNullableString(ByteBuffer outputBuffer, String value) {
-    if (value == null)
+    if (value == null) {
       outputBuffer.putInt(0);
-    else {
+    } else {
       outputBuffer.putInt(value.length());
       outputBuffer.put(value.getBytes());
     }
@@ -257,14 +268,14 @@ public class Utils {
    * @param path file path
    * @throws IOException
    */
-  public static void writeStringToFile(String string, String path) throws IOException {
+  public static void writeStringToFile(String string, String path)
+      throws IOException {
     FileWriter fileWriter = null;
     try {
       File clusterFile = new File(path);
       fileWriter = new FileWriter(clusterFile);
       fileWriter.write(string);
-    }
-    finally {
+    } finally {
       if (fileWriter != null) {
         fileWriter.close();
       }
@@ -279,7 +290,8 @@ public class Utils {
    * @throws IOException
    * @throws JSONException
    */
-  public static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
+  public static void writeJsonToFile(JSONObject jsonObject, String path)
+      throws IOException, JSONException {
     writeStringToFile(jsonObject.toString(2), path);
   }
 
@@ -290,15 +302,15 @@ public class Utils {
    * @return string read from specified file
    * @throws IOException
    */
-  public static String readStringFromFile(String path) throws IOException {
+  public static String readStringFromFile(String path)
+      throws IOException {
     File file = new File(path);
-    byte[] encoded = new byte[(int)file.length()];
+    byte[] encoded = new byte[(int) file.length()];
     DataInputStream ds = null;
     try {
       ds = new DataInputStream(new FileInputStream(file));
       ds.readFully(encoded);
-    }
-    finally {
+    } finally {
       if (ds != null) {
         ds.close();
       }
@@ -314,33 +326,34 @@ public class Utils {
    * @throws IOException
    * @throws JSONException
    */
-  public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
+  public static JSONObject readJsonFromFile(String path)
+      throws IOException, JSONException {
     return new JSONObject(readStringFromFile(path));
   }
 
-  public static void preAllocateFileIfNeeded(File file, long capacityBytes) throws IOException {
+  public static void preAllocateFileIfNeeded(File file, long capacityBytes)
+      throws IOException {
     Runtime runtime = Runtime.getRuntime();
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
       Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {
         process.waitFor();
-      }
-      catch (InterruptedException e) {
+      } catch (InterruptedException e) {
         // ignore the interruption and check the exit value to be sure
       }
-      if (process.exitValue() != 0)
+      if (process.exitValue() != 0) {
         throw new IOException("error while trying to preallocate file " + file.getAbsolutePath() +
-                              " exitvalue " + process.exitValue() +
-                              " error string " + process.getErrorStream());
-    }
-    else {
+            " exitvalue " + process.exitValue() +
+            " error string " + process.getErrorStream());
+      }
+    } else {
       RandomAccessFile rfile = null;
       try {
         rfile = new RandomAccessFile(file, "rw");
-      }
-      finally {
-        if (rfile != null)
+      } finally {
+        if (rfile != null) {
           rfile.close();
+        }
       }
     }
   }

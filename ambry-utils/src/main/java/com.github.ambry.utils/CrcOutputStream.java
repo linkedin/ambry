@@ -3,6 +3,7 @@ package com.github.ambry.utils;
 import java.io.OutputStream;
 import java.io.IOException;
 
+
 /**
  * An outputstream that calculates Crc on the fly
  */
@@ -24,25 +25,29 @@ public class CrcOutputStream extends OutputStream {
   }
 
   @Override
-  public void write(int b) throws IOException {
+  public void write(int b)
+      throws IOException {
     stream.write(b);
-    crc.update((byte)(b&0xFF));
+    crc.update((byte) (b & 0xFF));
   }
 
   @Override
-  public void write(byte b[]) throws IOException {
+  public void write(byte b[])
+      throws IOException {
     stream.write(b);
     crc.update(b, 0, b.length);
   }
 
   @Override
-  public void write(byte b[], int off, int len) throws IOException {
+  public void write(byte b[], int off, int len)
+      throws IOException {
     stream.write(b, off, len);
     crc.update(b, off, len);
   }
 
   @Override
-  public void close() throws IOException {
+  public void close()
+      throws IOException {
     stream.close();
   }
 

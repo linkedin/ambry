@@ -13,6 +13,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * GetRequest to fetch data
  */
@@ -28,7 +29,7 @@ public class GetRequest extends RequestOrResponse {
   private static final int Blob_Id_Count_Size_InBytes = 4;
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, PartitionId partitionId,
-                    ArrayList<BlobId> blobIds) {
+      ArrayList<BlobId> blobIds) {
     super(RequestResponseType.GetRequest, Request_Response_Version, correlationId, clientId);
 
     this.flags = flags;
@@ -59,7 +60,8 @@ public class GetRequest extends RequestOrResponse {
     return blobIds;
   }
 
-  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
+      throws IOException {
     RequestResponseType type = RequestResponseType.GetRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -81,11 +83,12 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putShort((short)flags.ordinal());
+      bufferToSend.putShort((short) flags.ordinal());
       bufferToSend.putInt(blobIds.size());
       for (BlobId blobId : blobIds) {
         bufferToSend.put(blobId.toBytes());
