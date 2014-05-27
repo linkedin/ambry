@@ -13,6 +13,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolFactory;
+import com.github.ambry.shared.LoggingNotificationSystem;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +52,7 @@ public class AmbryCoordinator implements Coordinator {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap) {
-    this(properties, clusterMap, null);
+    this(properties, clusterMap, new LoggingNotificationSystem());
   }
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap,
@@ -127,6 +128,12 @@ public class AmbryCoordinator implements Coordinator {
       connectionPool = null;
     }
 
+    try {
+      notificationSystem.close();
+    } catch (IOException e) {
+      logger.error("Error while closing notification system.", e);
+    }
+
     logger.info("shutdown completed");
   }
 
@@ -190,9 +197,7 @@ public class AmbryCoordinator implements Coordinator {
               operationTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
-      if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(clientId, blobId.toString(), blobProperties, userMetadata.array());
-      }
+      notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata.array());
       coordinatorMetrics.putBlobOperationRate.mark();
       coordinatorMetrics.putBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
 
@@ -216,9 +221,7 @@ public class AmbryCoordinator implements Coordinator {
               operationTimeoutMs);
       deleteOperation.execute();
 
-      if (notificationSystem != null) {
-        notificationSystem.onBlobDeleted(clientId, blobIdString);
-      }
+      notificationSystem.onBlobDeleted(blobIdString);
       coordinatorMetrics.deleteBlobOperationRate.mark();
       coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     } catch (CoordinatorException e) {

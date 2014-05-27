@@ -145,8 +145,9 @@ public class AmbryRequests implements RequestAPI {
         metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
-          notification.onBlobReplicaCreated(currentNode.getHostname(), putRequest.getBlobId().toString(),
-              BlobReplicaSourceType.PRIMARY);
+          notification
+              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().toString(),
+                  BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
@@ -291,8 +292,8 @@ public class AmbryRequests implements RequestAPI {
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(), deleteRequest.getBlobId().toString(),
-              BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+              deleteRequest.getBlobId().toString(), BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {

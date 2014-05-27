@@ -5,7 +5,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.config.MetricsConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.ServerConfig;
@@ -18,16 +17,16 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.LoggingNotificationSystem;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,7 +51,7 @@ public class AmbryServer {
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
       throws IOException {
-    this(properties, clusterMap, null);
+    this(properties, clusterMap, new LoggingNotificationSystem());
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem)
@@ -144,6 +143,14 @@ public class AmbryServer {
       if (reporter != null) {
         reporter.stop();
       }
+      if (notificationSystem != null) {
+        try {
+          notificationSystem.close();
+        } catch (IOException e) {
+          logger.error("Error while closing notification system.", e);
+        }
+      }
+
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);

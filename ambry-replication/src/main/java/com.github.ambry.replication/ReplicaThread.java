@@ -16,19 +16,14 @@ import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.shared.ReplicaMetadataRequest;
 import com.github.ambry.shared.ReplicaMetadataResponse;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Throttler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,6 +33,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -248,8 +245,8 @@ class ReplicaThread implements Runnable {
               remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
               " Key deleted. mark for deletion id " + messageInfo.getStoreKey());
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), messageInfo.getStoreKey().toString(),
-                BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+                messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
@@ -262,8 +259,8 @@ class ReplicaThread implements Runnable {
               remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
               " key in deleted state remotely. " + messageInfo.getStoreKey());
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), messageInfo.getStoreKey().toString(),
-                BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+                messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
           }
         }
       }
@@ -320,8 +317,8 @@ class ReplicaThread implements Runnable {
             " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath() +
             " Message size " + messageInfo.getSize());
         if (notification != null) {
-          notification.onBlobReplicaCreated(dataNodeId.getHostname(), messageInfo.getStoreKey().toString(),
-              BlobReplicaSourceType.REPAIRED);
+          notification.onBlobReplicaCreated(dataNodeId.getHostname(), dataNodeId.getPort(),
+              messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
         }
       }
       if (remoteColo) {
