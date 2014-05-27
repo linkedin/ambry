@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+
 class JournalEntry {
   private long offset;
   private StoreKey key;
@@ -27,10 +28,12 @@ class JournalEntry {
     return key;
   }
 }
+
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-class BlobJournal {
+class InMemoryJournal {
+
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
@@ -44,7 +47,7 @@ class BlobJournal {
    *                            the journal after the size is reached.
    * @param maxEntriesToReturn The max number of entries to return from the journal when queried for entries.
    */
-  public BlobJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
+  public InMemoryJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     journal = new ConcurrentSkipListMap<Long, StoreKey>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;
@@ -59,8 +62,9 @@ class BlobJournal {
    * @param key The key that the entry in the journal refers to.
    */
   public void addEntry(long offset, StoreKey key) {
-    if (key == null || offset < 0)
+    if (key == null || offset < 0) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
+    }
 
     if (currentNumberOfEntries.get() == maxEntriesToJournal) {
       journal.remove(journal.firstKey());
@@ -96,12 +100,14 @@ class BlobJournal {
       if (inclusive || entries.getKey() != offset) {
         journalEntries.add(new JournalEntry(entries.getKey(), entries.getValue()));
         entriesAdded++;
-        if (entriesAdded == entriesToReturn)
+        if (entriesAdded == entriesToReturn) {
           break;
+        }
       }
     }
-    if (!journal.containsKey(offset))
+    if (!journal.containsKey(offset)) {
       return null;
+    }
     logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
     return journalEntries;
   }

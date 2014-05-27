@@ -14,12 +14,14 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 
+
 public class LogTest {
 
   /**
    * Create a temporary file
    */
-  File tempFile() throws IOException {
+  File tempFile()
+      throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
@@ -43,7 +45,8 @@ public class LogTest {
       Assert.assertEquals(written, 1000);
       Assert.assertEquals(logTest.getLogEndOffset(), 1000);
       // append to log from channel
-      long writtenFromChannel = logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
+      long writtenFromChannel =
+          logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
       Assert.assertEquals(writtenFromChannel, 1000);
       Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
@@ -75,8 +78,7 @@ public class LogTest {
       Assert.assertEquals(randomFile.length(), 5000);
       Assert.assertEquals(logTest.getLogEndOffset(), 3000);
       tempFile.delete();
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(false, true);
     }
   }
@@ -99,7 +101,8 @@ public class LogTest {
       Assert.assertEquals(written, 2000);
       Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       // append to log from channel
-      long writtenFromChannel = logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
+      long writtenFromChannel =
+          logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
       Assert.assertEquals(writtenFromChannel, 2000);
       Assert.assertEquals(logTest.getLogEndOffset(), 4000);
 
@@ -107,10 +110,9 @@ public class LogTest {
       try {
         logTest.appendFrom(ByteBuffer.wrap(testbuf));
         Assert.assertTrue(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-                get("com.github.ambry.store.Log." + tempFile.getParent() +"overflowWriteError").getCount(), 1);
+            get("com.github.ambry.store.Log." + tempFile.getParent() + "overflowWriteError").getCount(), 1);
       }
 
       // append to log from buffer and check overflow
@@ -118,10 +120,9 @@ public class LogTest {
       try {
         logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
         Assert.assertTrue(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-                get("com.github.ambry.store.Log." + tempFile.getParent() +"overflowWriteError").getCount(), 2);
+            get("com.github.ambry.store.Log." + tempFile.getParent() + "overflowWriteError").getCount(), 2);
       }
 
       logTest.close();
@@ -129,12 +130,10 @@ public class LogTest {
       try {
         logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
         Assert.assertTrue(false);
-      }
-      catch (ClosedChannelException e) {
+      } catch (ClosedChannelException e) {
         Assert.assertTrue(true);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(true, false);
     }
   }
@@ -159,30 +158,29 @@ public class LogTest {
 
       ByteBuffer buffer = ByteBuffer.allocate(1000);
       logTest.readInto(buffer, 0);
-      for (int i = 0; i < 1000; i++)
+      for (int i = 0; i < 1000; i++) {
         Assert.assertEquals(buffer.array()[i], testbuf[i]);
+      }
       buffer.clear();
       logTest.readInto(buffer, 1000);
-      for (int i = 0; i < 1000; i++)
+      for (int i = 0; i < 1000; i++) {
         Assert.assertEquals(buffer.array()[i], testbuf[i + 1000]);
+      }
       try {
         buffer.clear();
         logTest.readInto(buffer, 5000);
         Assert.assertTrue(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertTrue(true);
       }
       buffer.clear();
       try {
         logTest.readInto(buffer, 5000);
         Assert.assertFalse(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertTrue(true);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(true, false);
     }
   }
@@ -209,12 +207,10 @@ public class LogTest {
       try {
         logTest.setLogEndOffset(6000);
         Assert.assertTrue(false);
-      }
-      catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException e) {
         Assert.assertTrue(true);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(true, false);
     }
   }

@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
+
 /**
  * Response to GetRequest to fetch data
  */
@@ -22,31 +23,23 @@ public class GetResponse extends Response {
   private final int messageInfoListSize;
   private final MessageInfoListSerde messageInfoListSerDe;
 
-  public GetResponse(int correlationId,
-                     String clientId,
-                     List<MessageInfo> messageInfoList,
-                     Send send,
-                     ServerErrorCode error) {
+  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send,
+      ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.toSend = send;
   }
 
-  public GetResponse(int correlationId,
-                     String clientId,
-                     List<MessageInfo> messageInfoList,
-                     InputStream stream,
-                     ServerErrorCode error) {
+  public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream,
+      ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.stream = stream;
   }
 
-  public GetResponse(int correlationId,
-                     String clientId,
-                     ServerErrorCode error) {
+  public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(null);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
@@ -60,7 +53,8 @@ public class GetResponse extends Response {
     return messageInfoListSerDe.getMessageInfoList();
   }
 
-  public static GetResponse readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+  public static GetResponse readFrom(DataInputStream stream, ClusterMap map)
+      throws IOException {
     short typeval = stream.readShort();
     RequestResponseType type = RequestResponseType.values()[typeval];
     if (type != RequestResponseType.GetResponse) {
@@ -72,16 +66,18 @@ public class GetResponse extends Response {
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, map);
-    if (error != ServerErrorCode.No_Error)
+    if (error != ServerErrorCode.No_Error) {
       return new GetResponse(correlationId, clientId, error);
-    else
+    } else {
       return new GetResponse(correlationId, clientId, messageInfoList, stream, error);
+    }
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)super.sizeInBytes() + messageInfoListSize);
+      bufferToSend = ByteBuffer.allocate((int) super.sizeInBytes() + messageInfoListSize);
       writeHeader();
       messageInfoListSerDe.serializeMessageInfoList(bufferToSend);
       bufferToSend.flip();

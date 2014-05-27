@@ -32,12 +32,12 @@ public class ConnectionPoolConfig {
 
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
     connectionPoolReadBufferSizeBytes =
-            verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 10000, 1, 1024*1024*1024);
+        verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 10000, 1, 1024 * 1024 * 1024);
     connectionPoolWriteBufferSizeBytes =
-            verifiableProperties.getIntInRange("connectionpool.write.buffer.size.bytes", 10000, 1, 1024*1024*1024);
+        verifiableProperties.getIntInRange("connectionpool.write.buffer.size.bytes", 10000, 1, 1024 * 1024 * 1024);
     connectionPoolReadTimeoutMs =
-            verifiableProperties.getIntInRange("connectionpool.read.timeout.ms", 10000, 1, 100000);
+        verifiableProperties.getIntInRange("connectionpool.read.timeout.ms", 10000, 1, 100000);
     connectionPoolMaxConnectionsPerHost =
-            verifiableProperties.getIntInRange("connectionpool.max.connections.per.host", 5, 1, 20);
+        verifiableProperties.getIntInRange("connectionpool.max.connections.per.host", 5, 1, 20);
   }
 }

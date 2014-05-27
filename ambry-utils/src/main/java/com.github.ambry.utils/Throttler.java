@@ -21,10 +21,10 @@ public class Throttler {
   private Time time;
 
   /**
-  * @param desiredRatePerSec: The rate we want to hit in units/sec
-  * @param checkIntervalMs: The interval at which to check our rate
-  * @param throttleDown: Does throttling increase or decrease our rate?
-  * @param time: The time implementation to use
+   * @param desiredRatePerSec: The rate we want to hit in units/sec
+   * @param checkIntervalMs: The interval at which to check our rate
+   * @param throttleDown: Does throttling increase or decrease our rate?
+   * @param time: The time implementation to use
    **/
   public Throttler(double desiredRatePerSec, long checkIntervalMs, boolean throttleDown, Time time) {
     this.desiredRatePerSec = desiredRatePerSec;
@@ -35,24 +35,26 @@ public class Throttler {
     this.periodStartNs = time.nanoseconds();
   }
 
-  public void maybeThrottle(double observed) throws InterruptedException {
-    synchronized(lock) {
+  public void maybeThrottle(double observed)
+      throws InterruptedException {
+    synchronized (lock) {
       observedSoFar += observed;
       long now = time.nanoseconds();
       long elapsedNs = now - periodStartNs;
 
       // if we have completed an interval AND we have observed something, maybe
       // we should take a little nap
-      if(elapsedNs > checkIntervalMs * Time.NsPerMs && observedSoFar > 0) {
+      if (elapsedNs > checkIntervalMs * Time.NsPerMs && observedSoFar > 0) {
         double rateInSecs = (observedSoFar * Time.NsPerSec) / elapsedNs;
         boolean needAdjustment = !(throttleDown ^ (rateInSecs > desiredRatePerSec));
-        if(needAdjustment) {
+        if (needAdjustment) {
           // solve for the amount of time to sleep to make us hit the desired rate
           double desiredRateMs = desiredRatePerSec / Time.MsPerSec;
           double elapsedMs = elapsedNs / Time.NsPerMs;
           long sleepTime = Math.round(observedSoFar / desiredRateMs - elapsedMs);
-          if(sleepTime > 0) {
-            logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",rateInSecs, desiredRatePerSec, sleepTime);
+          if (sleepTime > 0) {
+            logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",
+                rateInSecs, desiredRatePerSec, sleepTime);
             time.sleep(sleepTime);
           }
         }

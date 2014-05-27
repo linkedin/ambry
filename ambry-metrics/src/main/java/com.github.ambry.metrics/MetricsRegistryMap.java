@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.Map;
 
+
 /**
  * A class that holds all metrics registered with it. It can be registered
  * with one or more MetricReporters to flush metrics.
@@ -21,7 +22,6 @@ public class MetricsRegistryMap implements ReadableMetricsRegistry {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private final String name;
-
 
   public MetricsRegistryMap(String name) {
     this.name = name;
@@ -37,7 +37,7 @@ public class MetricsRegistryMap implements ReadableMetricsRegistry {
   public Counter newCounter(String group, Counter counter) {
     logger.debug("Add new counter {} {} {}.", group, counter.getName(), counter);
     putAndGetGroup(group).putIfAbsent(counter.getName(), counter);
-    Counter realCounter = (Counter)metrics.get(group).get(counter.getName());
+    Counter realCounter = (Counter) metrics.get(group).get(counter.getName());
     for (ReadableMetricsRegistryListener listener : listeners) {
       listener.onCounter(group, realCounter);
     }
@@ -59,7 +59,7 @@ public class MetricsRegistryMap implements ReadableMetricsRegistry {
   public <T> Gauge<T> newGauge(String group, Gauge<T> gauge) {
     logger.debug("Adding new gauge {} {} {}.", group, gauge.getName(), gauge);
     putAndGetGroup(group).putIfAbsent(gauge.getName(), gauge);
-    Gauge<T> realGauge = (Gauge<T>)metrics.get(group).get(gauge.getName());
+    Gauge<T> realGauge = (Gauge<T>) metrics.get(group).get(gauge.getName());
     for (ReadableMetricsRegistryListener listener : listeners) {
       listener.onGauge(group, realGauge);
     }

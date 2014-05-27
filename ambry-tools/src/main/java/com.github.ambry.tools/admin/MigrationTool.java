@@ -22,29 +22,29 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Properties;
 
+
 /**
  * Tool to migration from a source to Ambry
  */
 public class MigrationTool {
 
-  public static void directoryWalk( String path ,
-                                    String prefix,
-                                    boolean ignorePrefix,
-                                    Coordinator coordinator,
-                                    FileWriter writer) throws CoordinatorException, InterruptedException {
+  public static void directoryWalk(String path, String prefix, boolean ignorePrefix, Coordinator coordinator,
+      FileWriter writer)
+      throws CoordinatorException, InterruptedException {
 
-    File root = new File( path );
+    File root = new File(path);
     File[] list = root.listFiles();
 
-    if (list == null) return;
+    if (list == null) {
+      return;
+    }
 
-    for ( File f : list ) {
-      if ( f.isDirectory()) {
+    for (File f : list) {
+      if (f.isDirectory()) {
         if (ignorePrefix || f.getName().startsWith(prefix)) {
           directoryWalk(f.getAbsolutePath(), prefix, true, coordinator, writer);
         }
-      }
-      else {
+      } else {
         //System.out.println( "File:" + f.getAbsoluteFile() );
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
@@ -55,22 +55,18 @@ public class MigrationTool {
           String id = coordinator.putBlob(props, ByteBuffer.wrap(usermetadata), stream);
           //System.out.println("Time taken to put " + (System.currentTimeMillis() - startMs));
           writer.write("blobId|" + id + "|source|" + f.getAbsolutePath() + "\n");
-        }
-        catch (CoordinatorException e) {
+        } catch (CoordinatorException e) {
           System.out.println("Error from coordinator for " + f.getAbsolutePath() + " " + e);
-        }
-        catch (FileNotFoundException e) {
+        } catch (FileNotFoundException e) {
           System.out.println("File not found path : " + f.getAbsolutePath() + " exception : " + e);
-        }
-        catch (IOException e) {
-          System.out.println("IOException when writing to migration log " + e );
-        }
-        finally {
+        } catch (IOException e) {
+          System.out.println("IOException when writing to migration log " + e);
+        } finally {
           try {
-            if (stream != null)
+            if (stream != null) {
               stream.close();
-          }
-          catch (Exception e) {
+            }
+          } catch (Exception e) {
             System.out.println("Error while closing file stream " + e);
           }
         }
@@ -84,41 +80,28 @@ public class MigrationTool {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
-              parser.accepts("rootDirectory", "The root folder from which all the files will be migrated")
-                    .withRequiredArg()
-                    .describedAs("root_directory")
-                    .ofType(String.class);
+          parser.accepts("rootDirectory", "The root folder from which all the files will be migrated").withRequiredArg()
+              .describedAs("root_directory").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> folderPrefixInRootOpt =
-              parser.accepts("folderPrefixInRoot", "The prefix of the folders in the root path that needs to be moved")
-                    .withRequiredArg()
-                    .describedAs("folder_prefix_in_root")
-                    .ofType(String.class);
+          parser.accepts("folderPrefixInRoot", "The prefix of the folders in the root path that needs to be moved")
+              .withRequiredArg().describedAs("folder_prefix_in_root").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                    .withRequiredArg()
-                    .describedAs("hardware_layout")
-                    .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                    .withRequiredArg()
-                    .describedAs("partition_layout")
-                    .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
-              parser.accepts("coordinatorConfigPath", "The config for the coordinator")
-                      .withRequiredArg()
-                      .describedAs("coordinator_config_path")
-                      .ofType(String.class);
+          parser.accepts("coordinatorConfigPath", "The config for the coordinator").withRequiredArg()
+              .describedAs("coordinator_config_path").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-              parser.accepts("enableVerboseLogging", "Enables verbose logging")
-                    .withOptionalArg()
-                    .describedAs("Enable verbose logging")
-                    .ofType(Boolean.class)
-                    .defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
+              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 
@@ -129,8 +112,8 @@ public class MigrationTool {
       listOpt.add(partitionLayoutOpt);
       listOpt.add(coordinatorConfigPathOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -146,29 +129,28 @@ public class MigrationTool {
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
       writer = new FileWriter(logFile);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
-      if (enableVerboseLogging)
+      if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
+      }
       Properties props = Utils.loadProps(coordinatorConfigPath);
       coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
       coordinator.start();
       while (true) {
         directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.err.println("Error on exit " + e);
-    }
-    finally {
+    } finally {
       if (writer != null) {
         try {
           writer.close();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           System.out.println("Error when closing the writer");
         }
       }
-      if (coordinator != null)
+      if (coordinator != null) {
         coordinator.shutdown();
+      }
     }
   }
 }

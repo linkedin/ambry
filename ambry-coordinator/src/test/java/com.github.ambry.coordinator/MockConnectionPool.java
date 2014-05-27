@@ -9,6 +9,7 @@ import com.github.ambry.shared.ConnectionPoolTimeoutException;
 
 import java.io.IOException;
 
+
 /**
  *
  */
@@ -18,7 +19,7 @@ public class MockConnectionPool implements ConnectionPool {
   private final int readTimeoutMs;
 
   // Need static instance of MockCluster so that all connection pools share common MockCluster.
-  public static MockCluster mockCluster= null;
+  public static MockCluster mockCluster = null;
 
   public MockConnectionPool(ConnectionPoolConfig config) {
     this.readBufferSizeBytes = config.connectionPoolReadBufferSizeBytes;
@@ -36,13 +37,10 @@ public class MockConnectionPool implements ConnectionPool {
 
   @Override
   public ConnectedChannel checkOutConnection(String host, int port, long timeout)
-          throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-    BlockingChannel blockingChannel = new MockBlockingChannel(mockCluster.getMockDataNode(host, port),
-                                                              host,
-                                                              port,
-                                                              readBufferSizeBytes,
-                                                              writeBufferSizeBytes,
-                                                              readTimeoutMs);
+      throws IOException, InterruptedException, ConnectionPoolTimeoutException {
+    BlockingChannel blockingChannel =
+        new MockBlockingChannel(mockCluster.getMockDataNode(host, port), host, port, readBufferSizeBytes,
+            writeBufferSizeBytes, readTimeoutMs);
     blockingChannel.connect();
     return blockingChannel;
   }
@@ -55,7 +53,7 @@ public class MockConnectionPool implements ConnectionPool {
   @Override
   public void destroyConnection(ConnectedChannel connectedChannel) {
     if (connectedChannel != null) {
-      MockBlockingChannel channel = (MockBlockingChannel)connectedChannel;
+      MockBlockingChannel channel = (MockBlockingChannel) connectedChannel;
       channel.disconnect();
     }
   }

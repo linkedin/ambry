@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+
 /**
  * Metrics for the coordinator
  */
@@ -57,70 +58,51 @@ public class CoordinatorMetrics {
   public CoordinatorMetrics(ClusterMap clusterMap) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
-            registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
     deleteBlobOperationLatencyInMs =
-            registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobOperationLatencyInMs"));
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobOperationLatencyInMs"));
     getBlobPropertiesOperationLatencyInMs =
-            registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesOperationLatencyInMs"));
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesOperationLatencyInMs"));
     getBlobUserMetadataOperationLatencyInMs =
-            registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataOperationLatencyInMs"));
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataOperationLatencyInMs"));
     getBlobOperationLatencyInMs =
-            registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobOperationLatencyInMs"));
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobOperationLatencyInMs"));
 
-    putBlobOperationRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationRate"));
-    deleteBlobOperationRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobOperationRate"));
+    putBlobOperationRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationRate"));
+    deleteBlobOperationRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobOperationRate"));
     getBlobPropertiesOperationRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesOperationRate"));
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesOperationRate"));
     getBlobUserMetadataOperationRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataOperationRate"));
-    getBlobOperationRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobOperationRate"));
-    operationExceptionRate =
-            registry.meter(MetricRegistry.name(AmbryCoordinator.class, "operationExceptionRate"));
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataOperationRate"));
+    getBlobOperationRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "getBlobOperationRate"));
+    operationExceptionRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "operationExceptionRate"));
 
-    putBlobError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "putBlobError"));
-    deleteBlobError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobError"));
-    getBlobPropertiesError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesError"));
+    putBlobError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "putBlobError"));
+    deleteBlobError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobError"));
+    getBlobPropertiesError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobPropertiesError"));
     getBlobUserMetadataError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataError"));
-    getBlobError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobError"));
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataError"));
+    getBlobError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "getBlobError"));
 
-    unexpectedInternalError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unexpectedInternalError"));
-    ambryUnavailableError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "ambryUnavailableError"));
-    operationTimedOutError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "operationTimedOutError"));
-    invalidBlobIdError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "invalidBlobIdError"));
-    invalidPutArgumentError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "invalidPutArgumentError"));
+    unexpectedInternalError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unexpectedInternalError"));
+    ambryUnavailableError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "ambryUnavailableError"));
+    operationTimedOutError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "operationTimedOutError"));
+    invalidBlobIdError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "invalidBlobIdError"));
+    invalidPutArgumentError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "invalidPutArgumentError"));
     insufficientCapacityError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "insufficientCapacityError"));
-    blobTooLargeError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobTooLargeError"));
-    blobDoesNotExistError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDoesNotExistError"));
-    blobDeletedError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDeletedError"));
-    blobExpiredError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
-    unknownError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownError"));
-    corruptionError =
-            registry.counter(MetricRegistry.name(AmbryCoordinator.class, "corruptionError"));
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "insufficientCapacityError"));
+    blobTooLargeError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobTooLargeError"));
+    blobDoesNotExistError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDoesNotExistError"));
+    blobDeletedError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDeletedError"));
+    blobExpiredError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
+    unknownError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownError"));
+    corruptionError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "corruptionError"));
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.
     requestMetrics = new HashMap<DataNodeId, RequestMetrics>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-        requestMetrics.put(dataNodeId, new RequestMetrics(registry, dataNodeId));
+      requestMetrics.put(dataNodeId, new RequestMetrics(registry, dataNodeId));
     }
   }
 
@@ -195,13 +177,13 @@ public class CoordinatorMetrics {
     }
   }
 
-  public RequestMetrics getRequestMetrics(DataNodeId dataNodeId) throws CoordinatorException {
+  public RequestMetrics getRequestMetrics(DataNodeId dataNodeId)
+      throws CoordinatorException {
     if (requestMetrics.containsKey(dataNodeId)) {
       return requestMetrics.get(dataNodeId);
-    }
-    else {
+    } else {
       throw new CoordinatorException("Could not find RequestMetrics for DataNode " + dataNodeId,
-                                     CoordinatorError.UnexpectedInternalError);
+          CoordinatorError.UnexpectedInternalError);
     }
   }
 
@@ -228,116 +210,62 @@ public class CoordinatorMetrics {
     private final Counter messageFormatUnknownFormatError;
 
     RequestMetrics(MetricRegistry registry, DataNodeId dataNodeId) {
-      putBlobRequestLatencyInMs =
-              registry.histogram(MetricRegistry.name(OperationRequest.class,
-                                                     dataNodeId.getDatacenterName(),
-                                                     dataNodeId.getHostname(),
-                                                     Integer.toString(dataNodeId.getPort()),
-                                                     "putBlobRequestLatencyInMs"));
-      deleteBlobRequestLatencyInMs =
-              registry.histogram(MetricRegistry.name(OperationRequest.class,
-                                                     dataNodeId.getDatacenterName(),
-                                                     dataNodeId.getHostname(),
-                                                     Integer.toString(dataNodeId.getPort()),
-                                                     "deleteBlobRequestLatencyInMs"));
-      getBlobPropertiesRequestLatencyInMs =
-              registry.histogram(MetricRegistry.name(OperationRequest.class,
-                                                     dataNodeId.getDatacenterName(),
-                                                     dataNodeId.getHostname(),
-                                                     Integer.toString(dataNodeId.getPort()),
-                                                     "getBlobPropertiesRequestLatencyInMs"));
-      getBlobUserMetadataRequestLatencyInMs =
-              registry.histogram(MetricRegistry.name(OperationRequest.class,
-                                                     dataNodeId.getDatacenterName(),
-                                                     dataNodeId.getHostname(),
-                                                     Integer.toString(dataNodeId.getPort()),
-                                                     "getBlobUserMetadataRequestLatencyInMs"));
-      getBlobRequestLatencyInMs =
-              registry.histogram(MetricRegistry.name(OperationRequest.class,
-                                                     dataNodeId.getDatacenterName(),
-                                                     dataNodeId.getHostname(),
-                                                     Integer.toString(dataNodeId.getPort()),
-                                                     "getBlobRequestLatencyInMs"));
+      putBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "putBlobRequestLatencyInMs"));
+      deleteBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "deleteBlobRequestLatencyInMs"));
+      getBlobPropertiesRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobPropertiesRequestLatencyInMs"));
+      getBlobUserMetadataRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobUserMetadataRequestLatencyInMs"));
+      getBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobRequestLatencyInMs"));
 
-      putBlobRequestRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "putBlobRequestRate"));
-      deleteBlobRequestRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "deleteBlobRequestRate"));
-      getBlobPropertiesRequestRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "getBlobPropertiesRequestRate"));
-      getBlobUserMetadataRequestRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "getBlobUserMetadataRequestRate"));
-      getBlobRequestRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "getBlobRequestRate"));
-      requestErrorRate =
-              registry.meter(MetricRegistry.name(OperationRequest.class,
-                                                 dataNodeId.getDatacenterName(),
-                                                 dataNodeId.getHostname(),
-                                                 Integer.toString(dataNodeId.getPort()),
-                                                 "requestErrorRate"));
+      putBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "putBlobRequestRate"));
+      deleteBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "deleteBlobRequestRate"));
+      getBlobPropertiesRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobPropertiesRequestRate"));
+      getBlobUserMetadataRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobUserMetadataRequestRate"));
+      getBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "getBlobRequestRate"));
+      requestErrorRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "requestErrorRate"));
 
-      unexpectedError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "unexpectedError"));
-      ioError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "ioError"));
-      timeoutError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "timeoutError"));
-      unknownError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "unknownError"));
-      messageFormatDataCorruptError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "messageFormatDataCorruptError"));
-      messageFormatHeaderConstraintError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "messageFormatHeaderConstraintError"));
-      messageFormatUnknownFormatError =
-              registry.counter(MetricRegistry.name(OperationRequest.class,
-                                                   dataNodeId.getDatacenterName(),
-                                                   dataNodeId.getHostname(),
-                                                   Integer.toString(dataNodeId.getPort()),
-                                                   "messageFormatUnknownFormatError"));
+      unexpectedError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "unexpectedError"));
+      ioError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "ioError"));
+      timeoutError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "timeoutError"));
+      unknownError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "unknownError"));
+      messageFormatDataCorruptError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "messageFormatDataCorruptError"));
+      messageFormatHeaderConstraintError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "messageFormatHeaderConstraintError"));
+      messageFormatUnknownFormatError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "messageFormatUnknownFormatError"));
     }
 
     public void countError(MessageFormatErrorCodes error) {

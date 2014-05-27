@@ -3,8 +3,8 @@ package com.github.ambry.utils;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 
-public interface IFilter extends Closeable
-{
+
+public interface IFilter extends Closeable {
   /**
    * Add the key to the filter
    * @param key The key that needs to be added to the filter

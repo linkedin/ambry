@@ -14,6 +14,7 @@ import java.util.Queue;
 
 import static java.lang.Math.min;
 
+
 /**
  * An OperationPolicy controls parallelism of an operation (how many requests in flight at a time), probing policy
  * (order in which to send requests to replicas), and whether an operation isComplete or not.
@@ -35,6 +36,7 @@ public interface OperationPolicy {
   public boolean isComplete();
 
   // TODO: HERE
+
   /**
    * Determines if an operation may have failed because of cluster wide corrupt state (blob, blob properties, user
    * metadata, on-the-wire, or on-the-disk corruption issues, as well as serde issues).
@@ -106,11 +108,12 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId)
+      throws CoordinatorException {
     this.replicaIdCount = partitionId.getReplicaIds().size();
     if (replicaIdCount < 1) {
-      CoordinatorException e = new CoordinatorException("Partition has invalid configuration.",
-                                                        CoordinatorError.UnexpectedInternalError);
+      CoordinatorException e =
+          new CoordinatorException("Partition has invalid configuration.", CoordinatorError.UnexpectedInternalError);
       logger.error("PartitionId {} has invalid number of replicas {}: {}", partitionId, replicaIdCount, e);
       throw e;
     }
@@ -129,8 +132,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     for (ReplicaId replicaId : replicaIds) {
       if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
         localReplicaIds.add(replicaId);
-      }
-      else {
+      } else {
         remoteReplicaIds.add(replicaId);
       }
     }
@@ -185,7 +187,8 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
  * Serially probes data nodes until blob is retrieved.
  */
 class GetPolicy extends ProbeLocalFirstOperationPolicy {
-  public GetPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  public GetPolicy(String datacenterName, PartitionId partitionId)
+      throws CoordinatorException {
     super(datacenterName, partitionId);
   }
 
@@ -216,7 +219,8 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   int successTarget;
   int requestParallelism;
 
-  ParallelOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  ParallelOperationPolicy(String datacenterName, PartitionId partitionId)
+      throws CoordinatorException {
     super(datacenterName, partitionId);
   }
 
@@ -229,8 +233,7 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
     int inFlightTarget;
     if (requestParallelism >= successTarget) {
       inFlightTarget = requestParallelism - successfulRequests.size();
-    }
-    else {
+    } else {
       inFlightTarget = min(requestParallelism, successTarget - successfulRequests.size());
     }
     return (requestsInFlight.size() < inFlightTarget);
@@ -260,17 +263,16 @@ class PutPolicy extends ParallelOperationPolicy {
 
    (2) sending additional put requests (increasing the requestParallelism) after a short timeout.
   */
-  public PutPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  public PutPolicy(String datacenterName, PartitionId partitionId)
+      throws CoordinatorException {
     super(datacenterName, partitionId);
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
-    }
-    else if (replicaIdCount <= 2) {
+    } else if (replicaIdCount <= 2) {
       super.successTarget = 1;
       super.requestParallelism = 2;
-    }
-    else {
+    } else {
       super.successTarget = 2;
       super.requestParallelism = 3;
     }
@@ -282,17 +284,16 @@ class PutPolicy extends ParallelOperationPolicy {
  * the partition. Policy is used for both delete and cancelTTL.
  */
 class AllInParallelOperationPolicy extends ParallelOperationPolicy {
-  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId) throws CoordinatorException {
+  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId)
+      throws CoordinatorException {
     super(datacenterName, partitionId);
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
-    }
-    else if (replicaIdCount <= 2) {
+    } else if (replicaIdCount <= 2) {
       super.successTarget = 1;
       super.requestParallelism = 2;
-    }
-    else {
+    } else {
       super.successTarget = 2;
       super.requestParallelism = replicaIdCount;
     }

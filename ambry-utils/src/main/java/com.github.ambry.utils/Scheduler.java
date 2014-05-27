@@ -7,6 +7,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadFactory;
 
+
 /**
  * A scheduler based on java.util.concurrent.ScheduledThreadPoolExecutor
  *
@@ -33,16 +34,17 @@ public class Scheduler {
 
   public void startup() {
     synchronized (this) {
-      if(executor != null)
+      if (executor != null) {
         throw new IllegalStateException("This scheduler has already been started!");
+      }
       executor = new ScheduledThreadPoolExecutor(noOfThreads);
       executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
       executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
       executor.setThreadFactory(new ThreadFactory() {
-         public Thread newThread(Runnable runnable) {
-           return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), runnable, isDaemon);
-            }
-        });
+        public Thread newThread(Runnable runnable) {
+          return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), runnable, isDaemon);
+        }
+      });
     }
   }
 
@@ -52,8 +54,7 @@ public class Scheduler {
       executor.shutdown();
       executor.awaitTermination(1, TimeUnit.DAYS);
       this.executor = null;
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("error while shutting down scheduler {}", e);
     }
   }
@@ -71,14 +72,16 @@ public class Scheduler {
         }
       }
     };
-    if(period >= 0)
+    if (period >= 0) {
       executor.scheduleAtFixedRate(runnable, delay, period, unit);
-    else
+    } else {
       executor.schedule(runnable, delay, unit);
+    }
   }
 
   private void ensureStarted() {
-    if(executor == null)
+    if (executor == null) {
       throw new IllegalStateException("Ambry scheduler has not been started");
+    }
   }
 }

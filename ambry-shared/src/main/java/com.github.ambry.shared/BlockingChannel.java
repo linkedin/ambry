@@ -1,6 +1,5 @@
 package com.github.ambry.shared;
 
-
 import com.github.ambry.network.Send;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +7,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.channels.*;
+
 
 /**
  * A blocking channel that is used to communicate with a server
@@ -33,7 +33,8 @@ public class BlockingChannel implements ConnectedChannel {
     this.readTimeoutMs = readTimeoutMs;
   }
 
-  public void connect() throws SocketException, IOException {
+  public void connect()
+      throws SocketException, IOException {
     synchronized (lock) {
       if (!connected) {
         channel = SocketChannel.open();
@@ -51,11 +52,10 @@ public class BlockingChannel implements ConnectedChannel {
         writeChannel = channel;
         readChannel = channel.socket().getInputStream();
         connected = true;
-        logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), " +
-                     "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})",
-                     channel.socket().getSoTimeout(), readTimeoutMs,
-                     channel.socket().getReceiveBufferSize(),
-                     readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
+        logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
+            + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", channel.socket().getSoTimeout(),
+            readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize,
+            channel.socket().getSendBufferSize(), writeBufferSize);
       }
     }
   }
@@ -63,7 +63,7 @@ public class BlockingChannel implements ConnectedChannel {
   public void disconnect() {
     synchronized (lock) {
       try {
-        if(connected || channel != null) {
+        if (connected || channel != null) {
           // closing the main socket channel *should* close the read channel
           // but let's do it to be sure.
           channel.close();
@@ -79,8 +79,7 @@ public class BlockingChannel implements ConnectedChannel {
           channel = null;
           connected = false;
         }
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         logger.error("error while disconnecting {}", e);
       }
     }
@@ -91,18 +90,22 @@ public class BlockingChannel implements ConnectedChannel {
   }
 
   @Override
-  public void send(Send request) throws IOException {
-    if(!connected)
+  public void send(Send request)
+      throws IOException {
+    if (!connected) {
       throw new ClosedChannelException();
+    }
     while (!request.isSendComplete()) {
       request.writeTo(writeChannel);
     }
   }
 
   @Override
-  public InputStream receive() throws IOException {
-    if(!connected)
+  public InputStream receive()
+      throws IOException {
+    if (!connected) {
       throw new ClosedChannelException();
+    }
 
     // consume the size header and return the remaining response. Need to be done by network receive?
     long toRead = 8;

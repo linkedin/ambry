@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.ambry.utils.Utils.getRandomLong;
 
+
 /**
  * Generates load for write performance test
  */
@@ -50,57 +51,36 @@ public class ServerWritePerformance {
       OptionParser parser = new OptionParser();
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                    .withRequiredArg()
-                    .describedAs("hardware_layout")
-                    .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                    .withRequiredArg()
-                    .describedAs("partition_layout")
-                    .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
-              parser.accepts("numberOfWriters", "The number of writers that issue put request")
-                    .withRequiredArg()
-                    .describedAs("The number of writers")
-                    .ofType(Integer.class)
-                    .defaultsTo(4);
+          parser.accepts("numberOfWriters", "The number of writers that issue put request").withRequiredArg()
+              .describedAs("The number of writers").ofType(Integer.class).defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> minBlobSizeOpt =
-              parser.accepts("minBlobSizeInBytes", "The minimum size of the blob that can be put")
-                    .withRequiredArg()
-                    .describedAs("The minimum blob size in bytes")
-                    .ofType(Integer.class)
-                    .defaultsTo(51200);
+          parser.accepts("minBlobSizeInBytes", "The minimum size of the blob that can be put").withRequiredArg()
+              .describedAs("The minimum blob size in bytes").ofType(Integer.class).defaultsTo(51200);
 
       ArgumentAcceptingOptionSpec<Integer> maxBlobSizeOpt =
-              parser.accepts("maxBlobSizeInBytes", "The maximum size of the blob that can be put")
-                    .withRequiredArg()
-                    .describedAs("The maximum blob size in bytes")
-                    .ofType(Integer.class)
-                    .defaultsTo(4194304);
+          parser.accepts("maxBlobSizeInBytes", "The maximum size of the blob that can be put").withRequiredArg()
+              .describedAs("The maximum blob size in bytes").ofType(Integer.class).defaultsTo(4194304);
 
       ArgumentAcceptingOptionSpec<Integer> writesPerSecondOpt =
-              parser.accepts("writesPerSecond", "The rate at which writes need to be performed")
-                    .withRequiredArg()
-                    .describedAs("The number of writes per second")
-                    .ofType(Integer.class)
-                    .defaultsTo(1000);
+          parser.accepts("writesPerSecond", "The rate at which writes need to be performed").withRequiredArg()
+              .describedAs("The number of writes per second").ofType(Integer.class).defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-              parser.accepts("enableVerboseLogging", "Enables verbose logging")
-                    .withOptionalArg()
-                    .describedAs("Enable verbose logging")
-                    .ofType(Boolean.class)
-                    .defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
+              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
-              parser.accepts("coordinatorConfigPath", "The config for the coordinator")
-                    .withRequiredArg()
-                    .describedAs("coordinator_config_path")
-                    .ofType(String.class);
+          parser.accepts("coordinatorConfigPath", "The config for the coordinator").withRequiredArg()
+              .describedAs("coordinator_config_path").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -109,8 +89,8 @@ public class ServerWritePerformance {
       listOpt.add(partitionLayoutOpt);
       listOpt.add(coordinatorConfigPathOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -123,8 +103,9 @@ public class ServerWritePerformance {
       String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
       int minBlobSize = options.valueOf(minBlobSizeOpt);
       int maxBlobSize = options.valueOf(maxBlobSizeOpt);
-      if (enableVerboseLogging)
+      if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
+      }
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalWrites = new AtomicLong(0);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
@@ -144,10 +125,9 @@ public class ServerWritePerformance {
             shutdown.set(true);
             latch.await();
             System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get() +
-                    " Nano Seconds  Average time taken per write " +
-                    ((double)totalWrites.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
-          }
-          catch (Exception e) {
+                " Nano Seconds  Average time taken per write " +
+                ((double) totalWrites.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+          } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
         }
@@ -158,38 +138,25 @@ public class ServerWritePerformance {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
       ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
 
-
       for (int i = 0; i < numberOfWriters; i++) {
-        threadIndexPerf[i] = new Thread(new ServerWritePerfRun(i,
-                                                               throttler,
-                                                               shutdown,
-                                                               latch,
-                                                               minBlobSize,
-                                                               maxBlobSize,
-                                                               writer,
-                                                               totalTimeTaken,
-                                                               totalWrites,
-                                                               enableVerboseLogging,
-                                                               map,
-                                                               connectionPool));
+        threadIndexPerf[i] = new Thread(
+            new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, writer, totalTimeTaken,
+                totalWrites, enableVerboseLogging, map, connectionPool));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i].join();
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.err.println("Error on exit " + e);
-    }
-    finally {
+    } finally {
       if (coordinator != null) {
         coordinator.shutdown();
       }
       if (writer != null) {
         try {
           writer.close();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           System.out.println("Error when closing the writer");
         }
       }
@@ -212,18 +179,9 @@ public class ServerWritePerformance {
     private int threadIndex;
     private ConnectionPool connectionPool;
 
-    public ServerWritePerfRun(int threadIndex,
-                              Throttler throttler,
-                              AtomicBoolean isShutdown,
-                              CountDownLatch latch,
-                              int minBlobSize,
-                              int maxBlobSize,
-                              FileWriter writer,
-                              AtomicLong totalTimeTaken,
-                              AtomicLong totalWrites,
-                              boolean enableVerboseLogging,
-                              ClusterMap clusterMap,
-                              ConnectionPool connectionPool) {
+    public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
+        int minBlobSize, int maxBlobSize, FileWriter writer, AtomicLong totalTimeTaken, AtomicLong totalWrites,
+        boolean enableVerboseLogging, ClusterMap clusterMap, ConnectionPool connectionPool) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -258,11 +216,11 @@ public class ServerWritePerformance {
             long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
             PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
             BlobId blobId = new BlobId(partitionId);
-            PutRequest putRequest =
-                    new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)));
-            channel = connectionPool.checkOutConnection(partitionId.getReplicaIds().get(0).getDataNodeId().getHostname(),
-                    partitionId.getReplicaIds().get(0).getDataNodeId().getPort(),
-                    10000);
+            PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
+                new ByteBufferInputStream(ByteBuffer.wrap(blob)));
+            channel = connectionPool
+                .checkOutConnection(partitionId.getReplicaIds().get(0).getDataNodeId().getHostname(),
+                    partitionId.getReplicaIds().get(0).getDataNodeId().getPort(), 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
             PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive()));
@@ -273,8 +231,10 @@ public class ServerWritePerformance {
             timePassedInNanoSeconds += (endTime - startTime);
             writer.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
-            if (enableVerboseLogging)
-              System.out.println("Time taken to put blob id " + blobId + " in us " + (endTime - startTime) * .001 + " for blob of size " + blob.length);
+            if (enableVerboseLogging) {
+              System.out.println("Time taken to put blob id " + blobId + " in us " + (endTime - startTime) * .001
+                  + " for blob of size " + blob.length);
+            }
             numberOfPuts++;
             if (maxLatencyInNanoSeconds < (endTime - startTime)) {
               maxLatencyInNanoSeconds = (endTime - startTime);
@@ -285,8 +245,8 @@ public class ServerWritePerformance {
             totalLatencyInNanoSeconds += (endTime - startTime);
             if (timePassedInNanoSeconds >= 1000000000) {
               System.out.println(threadIndex + "    " + numberOfPuts + "    " + timePassedInNanoSeconds * .001 +
-                                 "    " + maxLatencyInNanoSeconds * .001 + "    " + minLatencyInNanoSeconds * .001 +
-                                 "    " + (((double)totalLatencyInNanoSeconds) / numberOfPuts) * .001);
+                  "    " + maxLatencyInNanoSeconds * .001 + "    " + minLatencyInNanoSeconds * .001 +
+                  "    " + (((double) totalLatencyInNanoSeconds) / numberOfPuts) * .001);
               numberOfPuts = 0;
               timePassedInNanoSeconds = 0;
               maxLatencyInNanoSeconds = 0;
@@ -295,21 +255,17 @@ public class ServerWritePerformance {
             }
             totalTimeTaken.addAndGet(endTime - startTime);
             throttler.maybeThrottle(1);
-          }
-          catch (Exception e) {
+          } catch (Exception e) {
             System.out.println("Exception when putting blob " + e);
-          }
-          finally {
+          } finally {
             if (channel != null) {
               connectionPool.checkInConnection(channel);
             }
           }
         }
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         System.out.println("Exiting server write perf thread " + e);
-      }
-      finally {
+      } finally {
         latch.countDown();
       }
     }

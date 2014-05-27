@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+
 /**
  * The store manager that handles all the stores
  */
@@ -28,12 +29,8 @@ public class StoreManager {
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
 
-  public StoreManager(StoreConfig config,
-                      Scheduler scheduler,
-                      MetricRegistry registry,
-                      List<ReplicaId> replicas,
-                      StoreKeyFactory factory,
-                      MessageStoreRecovery recovery) {
+  public StoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
+      StoreKeyFactory factory, MessageStoreRecovery recovery) {
     this.config = config;
     this.scheduler = scheduler;
     this.registry = registry;
@@ -43,7 +40,8 @@ public class StoreManager {
     this.recovery = recovery;
   }
 
-  public void start() throws StoreException {
+  public void start()
+      throws StoreException {
     logger.info("Starting store manager");
     // iterate through the replicas for this node and create the stores
     for (ReplicaId replica : replicas) {
@@ -52,13 +50,9 @@ public class StoreManager {
       if (!file.exists()) {
         throw new IllegalStateException("Mount path does not exist " + replica.getMountPath());
       }
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  registry,
-                                  replica.getReplicaPath(),
-                                  replica.getCapacityInBytes(),
-                                  factory,
-                                  recovery);
+      Store store =
+          new BlobStore(config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityInBytes(), factory,
+              recovery);
       store.start();
       stores.put(replica.getPartitionId(), store);
     }
@@ -69,7 +63,8 @@ public class StoreManager {
     return stores.get(id);
   }
 
-  public void shutdown() throws StoreException {
+  public void shutdown()
+      throws StoreException {
     logger.info("Shutting down store manager");
     for (Map.Entry<PartitionId, Store> entry : stores.entrySet()) {
       entry.getValue().shutdown();

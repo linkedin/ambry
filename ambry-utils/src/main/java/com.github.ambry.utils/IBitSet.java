@@ -4,8 +4,8 @@ import java.io.Closeable;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public interface IBitSet extends Closeable
-{
+
+public interface IBitSet extends Closeable {
   public long capacity();
 
   /**
@@ -25,7 +25,8 @@ public interface IBitSet extends Closeable
    */
   public void clear(long index);
 
-  public void serialize(DataOutput out) throws IOException;
+  public void serialize(DataOutput out)
+      throws IOException;
 
   public void clear();
 }

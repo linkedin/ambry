@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
@@ -22,12 +21,14 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
+
 public class BlobStoreTest {
 
   /**
    * Create a temporary file
    */
-  File tempFile() throws IOException {
+  File tempFile()
+      throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
@@ -44,7 +45,8 @@ public class BlobStoreTest {
     }
 
     @Override
-    public long writeTo(Write writeChannel) throws IOException {
+    public long writeTo(Write writeChannel)
+        throws IOException {
       return writeChannel.appendFrom(bufToWrite);
     }
 
@@ -55,7 +57,8 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storePutTest() throws IOException {
+  public void storePutTest()
+      throws IOException {
     MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
@@ -68,13 +71,8 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 6667));
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  new MetricRegistry(),
-                                  replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityInBytes(),
-                                  factory,
-                                  new DummyMessageStoreRecovery());
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -118,22 +116,21 @@ public class BlobStoreTest {
       try {
         store.put(set);
         Assert.assertTrue(false);
-      }
-      catch (StoreException e) {
+      } catch (StoreException e) {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Already_Exist);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(false, true);
-    }
-    finally {
-      if (map != null)
+    } finally {
+      if (map != null) {
         map.cleanup();
+      }
     }
   }
 
   @Test
-  public void storeGetTest() throws IOException {
+  public void storeGetTest()
+      throws IOException {
     MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
@@ -147,13 +144,8 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 6667));
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  new MetricRegistry(),
-                                  replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityInBytes(),
-                                  factory,
-                                  new DummyMessageStoreRecovery());
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -186,20 +178,19 @@ public class BlobStoreTest {
       for (int i = 1000; i < 2000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 1000]);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       e.printStackTrace();
       Assert.assertEquals(false, true);
-    }
-    finally {
-      if (map != null)
+    } finally {
+      if (map != null) {
         map.cleanup();
+      }
     }
-
   }
 
   @Test
-  public void storeDeleteTest() throws IOException {
+  public void storeDeleteTest()
+      throws IOException {
     MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
@@ -213,13 +204,8 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 6667));
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  new MetricRegistry(),
-                                  replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityInBytes(),
-                                  factory,
-                                  new DummyMessageStoreRecovery());
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -267,26 +253,25 @@ public class BlobStoreTest {
       try {
         store.get(keysDeleted);
         Assert.assertEquals(false, true);
-      }
-      catch (StoreException e) {
+      } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       keysDeleted.clear();
       keysDeleted.add(blobId2);
       store.get(keysDeleted);
       Assert.assertEquals(true, true);
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(false, true);
-    }
-    finally {
-      if (map != null)
+    } finally {
+      if (map != null) {
         map.cleanup();
+      }
     }
   }
 
   @Test
-  public void storeUpdateTTLTest() throws IOException {
+  public void storeUpdateTTLTest()
+      throws IOException {
     MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
@@ -300,13 +285,8 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 6667));
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  new MetricRegistry(),
-                                  replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityInBytes(),
-                                  factory,
-                                  new DummyMessageStoreRecovery());
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -343,27 +323,25 @@ public class BlobStoreTest {
       try {
         store.get(keysUpdated);
         Assert.assertEquals(false, true);
-      }
-      catch (StoreException e) {
+      } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
       }
       keysUpdated.clear();
       keysUpdated.add(blobId2);
       store.get(keysUpdated);
       Assert.assertEquals(true, true);
-
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertTrue(false);
-    }
-    finally {
-      if (map != null)
+    } finally {
+      if (map != null) {
         map.cleanup();
+      }
     }
   }
 
   @Test
-  public void storeShutdownTest() throws IOException {
+  public void storeShutdownTest()
+      throws IOException {
     MockClusterMap map = null;
     try {
       Scheduler scheduler = new Scheduler(4, "thread", false);
@@ -376,13 +354,8 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 6667));
-      Store store = new BlobStore(config,
-                                  scheduler,
-                                  new MetricRegistry(),
-                                  replicaIds.get(0).getReplicaPath(),
-                                  replicaIds.get(0).getCapacityInBytes(),
-                                  factory,
-                                  new DummyMessageStoreRecovery());
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -405,25 +378,21 @@ public class BlobStoreTest {
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
 
-
       // close store
       store.shutdown();
 
       try {
         store.get(keys);
         Assert.assertTrue(false);
-      }
-      catch (StoreException e) {
+      } catch (StoreException e) {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Store_Not_Started);
       }
-
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertTrue(false);
-    }
-    finally {
-      if (map != null)
+    } finally {
+      if (map != null) {
         map.cleanup();
+      }
     }
   }
 

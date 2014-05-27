@@ -1,10 +1,10 @@
 package com.github.ambry.clustermap;
 
-
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
@@ -23,9 +23,11 @@ public class Disk implements DiskId {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Disk(DataNode dataNode, JSONObject jsonObject) throws JSONException {
-    if (logger.isTraceEnabled())
+  public Disk(DataNode dataNode, JSONObject jsonObject)
+      throws JSONException {
+    if (logger.isTraceEnabled()) {
       logger.trace("Disk " + jsonObject.toString());
+    }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
@@ -59,8 +61,7 @@ public class Disk implements DiskId {
   public void setSoftState(HardwareState hardwareState) {
     if (hardState == HardwareState.AVAILABLE) {
       softState = hardwareState;
-    }
-    else {
+    } else {
       logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
     }
   }
@@ -96,11 +97,10 @@ public class Disk implements DiskId {
   protected void validateCapacity() {
     if (capacityInBytes < MinCapacityInBytes) {
       throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " +
-                                      MinCapacityInBytes);
-    }
-    else if (capacityInBytes > MaxCapacityInBytes) {
+          MinCapacityInBytes);
+    } else if (capacityInBytes > MaxCapacityInBytes) {
       throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " +
-                                      MaxCapacityInBytes);
+          MaxCapacityInBytes);
     }
   }
 
@@ -112,11 +112,10 @@ public class Disk implements DiskId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
-    return new JSONObject()
-            .put("mountPath", mountPath)
-            .put("hardwareState", hardState)
-            .put("capacityInBytes", capacityInBytes);
+  public JSONObject toJSONObject()
+      throws JSONException {
+    return new JSONObject().put("mountPath", mountPath).put("hardwareState", hardState)
+        .put("capacityInBytes", capacityInBytes);
   }
 
   @Override
@@ -126,12 +125,18 @@ public class Disk implements DiskId {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    Disk disk = (Disk)o;
+    Disk disk = (Disk) o;
 
-    if (!dataNode.equals(disk.dataNode)) return false;
+    if (!dataNode.equals(disk.dataNode)) {
+      return false;
+    }
     return mountPath.equals(disk.mountPath);
   }
 

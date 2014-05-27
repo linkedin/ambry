@@ -3,6 +3,7 @@ package com.github.ambry.config;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * The configs for metrics
  */
@@ -24,14 +25,15 @@ public class MetricsConfig {
     List<String> trimmedFactoryClasses = new ArrayList<String>();
     if (!metricsFactoryClasses.equals("")) {
       String[] factoryClasses = metricsFactoryClasses.split(",");
-      for (String factoryClass : factoryClasses)
+      for (String factoryClass : factoryClasses) {
         trimmedFactoryClasses.add(factoryClass.trim());
+      }
     }
     return trimmedFactoryClasses;
   }
 
   public MetricsConfig(VerifiableProperties verifiableProperties) {
-    metricsFactoryClasses = verifiableProperties.getString(
-            "metrics.reporters.factory.classes", "com.github.ambry.metrics.JmxReporterFactory");
+    metricsFactoryClasses = verifiableProperties
+        .getString("metrics.reporters.factory.classes", "com.github.ambry.metrics.JmxReporterFactory");
   }
 }

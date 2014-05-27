@@ -24,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 
 import static java.lang.Math.min;
 
+
 /**
  * Performs a get operation by sending and receiving get requests until operation is complete or has failed.
  */
@@ -46,21 +47,11 @@ public abstract class GetOperation extends Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetOperation(String datacenterName,
-                      ConnectionPool connectionPool,
-                      ExecutorService requesterPool,
-                      OperationContext oc,
-                      BlobId blobId,
-                      long operationTimeoutMs,
-                      ClusterMap clusterMap,
-                      MessageFormatFlags flags) throws CoordinatorException {
-    super(datacenterName,
-          connectionPool,
-          requesterPool,
-          oc,
-          blobId,
-          operationTimeoutMs,
-          new GetPolicy(datacenterName, blobId.getPartition()));
+  public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
+      throws CoordinatorException {
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+        new GetPolicy(datacenterName, blobId.getPartition()));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -77,8 +68,8 @@ public abstract class GetOperation extends Operation {
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
-          CoordinatorException {
+  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+      throws CoordinatorException {
     switch (serverErrorCode) {
       case No_Error:
         return true;
@@ -105,11 +96,11 @@ public abstract class GetOperation extends Operation {
         return false;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for GetOperation.",
-                                                          CoordinatorError.UnexpectedInternalError);
-        logger.error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
-                     context, blobId, replicaId, serverErrorCode, e);
+            CoordinatorError.UnexpectedInternalError);
+        logger
+            .error("{} GetResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}", context,
+                blobId, replicaId, serverErrorCode, e);
         throw e;
-
     }
   }
 }
@@ -117,35 +108,34 @@ public abstract class GetOperation extends Operation {
 abstract class GetOperationRequest extends OperationRequest {
   private final ClusterMap clusterMap;
 
-  protected GetOperationRequest(ConnectionPool connectionPool,
-                                BlockingQueue<OperationResponse> responseQueue,
-                                OperationContext context,
-                                BlobId blobId,
-                                ReplicaId replicaId,
-                                RequestOrResponse request,
-                                ClusterMap clusterMap) {
+  protected GetOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
     this.clusterMap = clusterMap;
   }
 
   @Override
-  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+  protected Response getResponse(DataInputStream dataInputStream)
+      throws IOException {
     return GetResponse.readFrom(dataInputStream, clusterMap);
   }
 
   @Override
-  protected void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
-    GetResponse getResponse = (GetResponse)response;
+  protected void deserializeResponsePayload(Response response)
+      throws IOException, MessageFormatException {
+    GetResponse getResponse = (GetResponse) response;
     if (response.getError() == ServerErrorCode.No_Error) {
       if (getResponse.getMessageInfoList().size() != 1) {
-        throw new MessageFormatException("MessageInfoList indicates incorrect payload size. Should be 1: " +
-                                         getResponse.getMessageInfoList().size(), MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException(
+            "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse.getMessageInfoList().size(),
+            MessageFormatErrorCodes.Data_Corrupt);
       }
       deserializeBody(getResponse.getInputStream());
     }
   }
 
-  protected abstract void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException;
+  protected abstract void deserializeBody(InputStream inputStream)
+      throws IOException, MessageFormatException;
 }
 
 

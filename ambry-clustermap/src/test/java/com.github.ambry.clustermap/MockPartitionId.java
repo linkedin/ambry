@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * Mock partition id for unit tests
  */
@@ -21,7 +22,7 @@ public class MockPartitionId extends PartitionId {
       replicaIds.add(replicaId);
     }
     for (ReplicaId replicaId : replicaIds) {
-      ((MockReplicaId)replicaId).setPeerReplicas(replicaIds);
+      ((MockReplicaId) replicaId).setPeerReplicas(replicaIds);
     }
   }
 
@@ -49,19 +50,25 @@ public class MockPartitionId extends PartitionId {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    MockPartitionId mockPartition = (MockPartitionId)o;
+    MockPartitionId mockPartition = (MockPartitionId) o;
 
-    if (partition != mockPartition.partition) return false;
+    if (partition != mockPartition.partition) {
+      return false;
+    }
 
     return true;
   }
 
   @Override
   public int hashCode() {
-    return (int)(partition ^ (partition >>> 32));
+    return (int) (partition ^ (partition >>> 32));
   }
 
   @Override
@@ -71,7 +78,7 @@ public class MockPartitionId extends PartitionId {
 
   public void cleanUp() {
     for (ReplicaId replicaId : replicaIds) {
-      ((MockReplicaId)replicaId).cleanup();
+      ((MockReplicaId) replicaId).cleanup();
     }
   }
 }

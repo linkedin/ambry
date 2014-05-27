@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-
 import com.github.ambry.utils.ByteBufferInputStream;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -8,6 +7,7 @@ import org.junit.Test;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Random;
+
 
 public class SocketServerInputSetTest {
 
@@ -24,10 +24,9 @@ public class SocketServerInputSetTest {
       set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer)));
       buffer.clear();
       for (int i = 8; i < 2000; i++) {
-        Assert.assertEquals(buffer.array()[i], (byte)set.read());
+        Assert.assertEquals(buffer.array()[i], (byte) set.read());
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertEquals(true, false);
     }
   }

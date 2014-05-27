@@ -2,43 +2,38 @@ package com.github.ambry.utils;
 
 import java.nio.ByteBuffer;
 
-public class FilterTestHelper
-{
+
+public class FilterTestHelper {
   // used by filter subclass tests
 
   static final double MAX_FAILURE_RATE = 0.1;
-  public static final BloomCalculations.BloomSpecification spec = BloomCalculations.computeBloomSpec(15, MAX_FAILURE_RATE);
+  public static final BloomCalculations.BloomSpecification spec =
+      BloomCalculations.computeBloomSpec(15, MAX_FAILURE_RATE);
   static final int ELEMENTS = 10000;
 
-  static final ResetableIterator<ByteBuffer> intKeys()
-  {
+  static final ResetableIterator<ByteBuffer> intKeys() {
     return new KeyGenerator.IntGenerator(ELEMENTS);
   }
 
-  static final ResetableIterator<ByteBuffer> randomKeys()
-  {
+  static final ResetableIterator<ByteBuffer> randomKeys() {
     return new KeyGenerator.RandomStringGenerator(314159, ELEMENTS);
   }
 
-  static final ResetableIterator<ByteBuffer> randomKeys2()
-  {
+  static final ResetableIterator<ByteBuffer> randomKeys2() {
     return new KeyGenerator.RandomStringGenerator(271828, ELEMENTS);
   }
 
-  public static double testFalsePositives(IFilter f, ResetableIterator<ByteBuffer> keys, ResetableIterator<ByteBuffer> otherkeys)
-  {
+  public static double testFalsePositives(IFilter f, ResetableIterator<ByteBuffer> keys,
+      ResetableIterator<ByteBuffer> otherkeys) {
     assert keys.size() == otherkeys.size();
 
-    while (keys.hasNext())
-    {
+    while (keys.hasNext()) {
       f.add(keys.next());
     }
 
     int fp = 0;
-    while (otherkeys.hasNext())
-    {
-      if (f.isPresent(otherkeys.next()))
-      {
+    while (otherkeys.hasNext()) {
+      if (f.isPresent(otherkeys.next())) {
         fp++;
       }
     }
@@ -48,9 +43,7 @@ public class FilterTestHelper
     return fp_ratio;
   }
 
-  public void testTrue()
-  {
+  public void testTrue() {
     assert true;
   }
-
 }

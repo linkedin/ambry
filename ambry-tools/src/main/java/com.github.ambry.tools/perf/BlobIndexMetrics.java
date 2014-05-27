@@ -14,7 +14,8 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
-class BlobIndexMetrics extends BlobPersistentIndex {
+
+class BlobIndexMetrics extends PersistentIndex {
   private Object lock = new Object();
   private boolean enableVerboseLogging;
   private AtomicLong totalWrites;
@@ -25,9 +26,11 @@ class BlobIndexMetrics extends BlobPersistentIndex {
   private String datadir;
 
   public BlobIndexMetrics(String datadir, Scheduler scheduler, Log log, boolean enableVerboseLogging,
-                          AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads,
-                          StoreConfig config, FileWriter writer, StoreKeyFactory factory)  throws StoreException {
-    super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new StoreMetrics(datadir, new MetricRegistry()));
+      AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
+      StoreKeyFactory factory)
+      throws StoreException {
+    super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(),
+        new StoreMetrics(datadir, new MetricRegistry()));
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;
@@ -37,45 +40,50 @@ class BlobIndexMetrics extends BlobPersistentIndex {
     this.datadir = datadir;
   }
 
-  public void addToIndexRandomData(BlobId id) throws StoreException {
+  public void addToIndexRandomData(BlobId id)
+      throws StoreException {
 
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
       long size = new Random().nextInt(10000);
-      BlobIndexEntry entry = new BlobIndexEntry(id, new BlobIndexValue(size, lastOffsetUsed.get(), (byte)1, 1000));
+      IndexEntry entry = new IndexEntry(id, new IndexValue(size, lastOffsetUsed.get(), (byte) 1, 1000));
       lastOffsetUsed.addAndGet(size);
       long offset = getCurrentEndOffset();
       addToIndex(entry, new FileSpan(offset, offset + entry.getValue().getSize()));
       long endTimeInMs = System.currentTimeMillis();
-      BlobIndexValue value = findKey(id);
-      if (value == null)
+      IndexValue value = findKey(id);
+      if (value == null) {
         System.out.println("error: value is null");
-      if (enableVerboseLogging)
+      }
+      if (enableVerboseLogging) {
         System.out.println("Time taken to add to the index in Ms - " + (endTimeInMs - startTimeInMs));
+      }
       totalTimeTaken.addAndGet(endTimeInMs - startTimeInMs);
       try {
-        if (writer != null)
+        if (writer != null) {
           writer.write("blobid-" + datadir + "-" + id + "\n");
-      }
-      catch (Exception e) {
+        }
+      } catch (Exception e) {
         System.out.println("error while logging");
       }
     }
     totalWrites.incrementAndGet();
-    if (totalWrites.get() % 1000 == 0)
+    if (totalWrites.get() % 1000 == 0) {
       System.out.println("number of indexes created " + indexes.size());
+    }
   }
 
-  public void addToIndexRandomData(List<BlobId> ids) throws StoreException {
-    ArrayList<BlobIndexEntry> list = new ArrayList<BlobIndexEntry>(ids.size());
+  public void addToIndexRandomData(List<BlobId> ids)
+      throws StoreException {
+    ArrayList<IndexEntry> list = new ArrayList<IndexEntry>(ids.size());
     for (int i = 0; i < list.size(); i++) {
-      BlobIndexEntry entry = new BlobIndexEntry(ids.get(i), new BlobIndexValue(1000, 1000, (byte)1, 1000));
+      IndexEntry entry = new IndexEntry(ids.get(i), new IndexValue(1000, 1000, (byte) 1, 1000));
       list.add(entry);
       try {
-        if (writer != null)
+        if (writer != null) {
           writer.write("blobid-" + datadir + "-" + ids.get(i) + "\n");
-      }
-      catch (Exception e) {
+        }
+      } catch (Exception e) {
         System.out.println("error while logging");
       }
     }
@@ -85,10 +93,10 @@ class BlobIndexMetrics extends BlobPersistentIndex {
     }
     long endTimeInMs = System.currentTimeMillis();
     System.out.println("Time taken to add to the index all the entries - " + (endTimeInMs - startTimeInMs));
-
   }
 
-  public boolean exists(StoreKey key) throws StoreException {
+  public boolean exists(StoreKey key)
+      throws StoreException {
     System.out.println("data dir " + datadir + " searching id " + key.toString());
     long startTimeMs = System.currentTimeMillis();
     boolean exist = super.exists(key);
@@ -99,14 +107,16 @@ class BlobIndexMetrics extends BlobPersistentIndex {
     return exist;
   }
 
-  public void markAsDeleted(StoreKey id, long logEndOffset) throws StoreException {
+  public void markAsDeleted(StoreKey id, long logEndOffset)
+      throws StoreException {
     long startTimeMs = System.currentTimeMillis();
     markAsDeleted(id, logEndOffset);
     long endTimeMs = System.currentTimeMillis();
     System.out.println("Time to delete an entry - " + (endTimeMs - startTimeMs));
   }
 
-  public void updateTTL(StoreKey id, long ttl, long logEnfOffset) throws StoreException {
+  public void updateTTL(StoreKey id, long ttl, long logEnfOffset)
+      throws StoreException {
     long startTimeMs = System.currentTimeMillis();
     updateTTL(id, ttl, logEnfOffset);
     long endTimeMs = System.currentTimeMillis();

@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+
 /**
  * Converts a set of message inputs into the right message format.
  * This provides the base implementation for all types of messages
@@ -27,7 +28,8 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public int read() throws IOException {
+  public int read()
+      throws IOException {
     if (buffer != null && buffer.remaining() > 0) {
       return buffer.get() & 0xFF;
     }
@@ -40,15 +42,17 @@ public abstract class MessageFormatInputStream extends InputStream {
         crc.putLong(stream.getValue());
         crc.flip();
       }
-      if (crc.remaining() > 0)
+      if (crc.remaining() > 0) {
         return crc.get();
+      }
     }
     return -1;
   }
 
   // keep reading. the caller will decide when to end
   @Override
-  public int read(byte b[], int off, int len) throws IOException {
+  public int read(byte b[], int off, int len)
+      throws IOException {
     if (b == null) {
       throw new NullPointerException();
     } else if (off < 0 || len < 0 || len > b.length - off) {
@@ -66,7 +70,7 @@ public abstract class MessageFormatInputStream extends InputStream {
     if (stream != null) {
       if (streamRead < streamLength && (len - totalRead) > 0) {
         long bytesToRead = Math.min(streamLength - streamRead, len - totalRead);
-        int readFromStream = stream.read(b, off + totalRead, (int)bytesToRead);
+        int readFromStream = stream.read(b, off + totalRead, (int) bytesToRead);
         streamRead += readFromStream;
         totalRead += readFromStream;
       }

@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.File;
@@ -9,6 +8,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Collections;
 import java.util.List;
+
 
 /**
  * A read option class that maintains the offset and size
@@ -25,7 +25,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
     this.size = size;
     this.ttl = ttl;
     this.storeKey = storeKey;
-    logger.trace("BlobReadOption offset {} size {} ttl {} storeKey {}",offset, size, ttl, storeKey);
+    logger.trace("BlobReadOption offset {} size {} ttl {} storeKey {}", offset, size, ttl, storeKey);
   }
 
   public long getOffset() {
@@ -54,24 +54,24 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
  * An implementation of MessageReadSet that maintains a list of
  * offsets from the underlying file channel
  */
-class BlobMessageReadSet implements MessageReadSet {
+class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private final FileChannel fileChannel;
   private final File file;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BlobMessageReadSet(File file, FileChannel fileChannel,
-                            List<BlobReadOptions> readOptions,
-                            long fileEndPosition) throws IOException {
+  public StoreMessageReadSet(File file, FileChannel fileChannel, List<BlobReadOptions> readOptions,
+      long fileEndPosition)
+      throws IOException {
 
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
       if (readOption.getOffset() + readOption.getSize() > fileEndPosition) {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
-      logger.trace("MessageReadSet entry file: {} offset: {} size: {} ", file.getAbsolutePath(),
-                   readOption.getOffset(), readOption.getSize());
+      logger.trace("MessageReadSet entry file: {} offset: {} size: {} ", file.getAbsolutePath(), readOption.getOffset(),
+          readOption.getSize());
     }
     this.readOptions = readOptions;
     this.fileChannel = fileChannel;
@@ -79,14 +79,16 @@ class BlobMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
+  public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
+      throws IOException {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index out of the messageset");
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
-    logger.trace("Blob Message Read Set position {} count {}",
-                 startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
-    long written = fileChannel.transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
+    logger.trace("Blob Message Read Set position {} count {}", startOffset,
+        Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
+    long written = fileChannel
+        .transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, file.getAbsolutePath());
     return written;
   }

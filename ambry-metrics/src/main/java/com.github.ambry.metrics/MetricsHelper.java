@@ -2,6 +2,7 @@ package com.github.ambry.metrics;
 
 import java.util.concurrent.Callable;
 
+
 /**
  * MetricsHelper is a little helper class to make it easy to register and
  * manage counters and gauges.
@@ -23,18 +24,19 @@ public abstract class MetricsHelper {
     return registry.newGauge(group, new Gauge((getPrefix() + name).toLowerCase(), value));
   }
 
-  public <T> Gauge<T> newGauge(String name, final Callable<T> value) throws Exception {
+  public <T> Gauge<T> newGauge(String name, final Callable<T> value)
+      throws Exception {
     return registry.newGauge(group, new Gauge((getPrefix() + name).toLowerCase(), value.call()) {
       public T getValue() {
         try {
           return value.call();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           return null;
         }
       }
     });
   }
+
   /**
    * Returns a prefix for metric names.
    */

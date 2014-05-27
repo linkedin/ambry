@@ -16,6 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+
 /**
  * Tests {@link ClusterMapManager} class.
  */
@@ -27,21 +28,20 @@ public class ClusterMapManagerTest {
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
     StringBuilder sb = new StringBuilder();
     sb.append("Free space dump for cluster.").append(System.getProperty("line.separator"));
-    sb.append(hardwareLayout.getClusterName()).append(" : ").append(clusterMapManager
-                                                                            .getUnallocatedRawCapacityInBytes())
-            .append(System.getProperty("line.separator"));
+    sb.append(hardwareLayout.getClusterName()).append(" : ")
+        .append(clusterMapManager.getUnallocatedRawCapacityInBytes()).append(System.getProperty("line.separator"));
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      sb.append("\t").append(datacenter).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes(
-              datacenter))
-              .append(System.getProperty("line.separator"));
+      sb.append("\t").append(datacenter).append(" : ")
+          .append(clusterMapManager.getUnallocatedRawCapacityInBytes(datacenter))
+          .append(System.getProperty("line.separator"));
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        sb.append("\t\t").append(dataNode).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes(
-                dataNode))
-                .append(System.getProperty("line.separator"));
+        sb.append("\t\t").append(dataNode).append(" : ")
+            .append(clusterMapManager.getUnallocatedRawCapacityInBytes(dataNode))
+            .append(System.getProperty("line.separator"));
         for (Disk disk : dataNode.getDisks()) {
-          sb.append("\t\t\t").append(disk).append(" : ").append(clusterMapManager.getUnallocatedRawCapacityInBytes
-                  (disk))
-                  .append(System.getProperty("line.separator"));
+          sb.append("\t\t\t").append(disk).append(" : ")
+              .append(clusterMapManager.getUnallocatedRawCapacityInBytes(disk))
+              .append(System.getProperty("line.separator"));
         }
       }
     }
@@ -49,7 +49,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void clusterMapInterface() throws JSONException {
+  public void clusterMapInterface()
+      throws JSONException {
     // Exercise entire clusterMap interface
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
@@ -66,13 +67,12 @@ public class ClusterMapManagerTest {
       assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getReplicaCount());
 
       DataInputStream partitionStream =
-              new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionId.getBytes())));
+          new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionId.getBytes())));
 
       try {
         PartitionId fetchedPartitionId = clusterMapManager.getPartitionIdFromStream(partitionStream);
         assertEquals(partitionId, fetchedPartitionId);
-      }
-      catch (IOException e) {
+      } catch (IOException e) {
         assertEquals(true, false);
       }
     }
@@ -89,7 +89,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void findDatacenter() throws JSONException {
+  public void findDatacenter()
+      throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
 
@@ -102,7 +103,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void addNewPartition() throws JSONException {
+  public void addNewPartition()
+      throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
@@ -116,7 +118,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void bestEffortAllocation() throws JSONException, IOException {
+  public void bestEffortAllocation()
+      throws JSONException, IOException {
     int replicaCountPerDataCenter = 2;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -133,9 +136,8 @@ public class ClusterMapManagerTest {
 
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
-    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000,
-                                                               replicaCountPerDataCenter,
-                                                               replicaCapacityInBytes);
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
 
@@ -145,7 +147,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void capacities() throws JSONException {
+  public void capacities()
+      throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
@@ -181,8 +184,9 @@ public class ClusterMapManagerTest {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         long dataNodeFree = clusterMapManager.getUnallocatedRawCapacityInBytes(dataNode);
         assertTrue(dataNodeFree <= testHardwareLayout.getDiskCapacityInBytes() * testHardwareLayout.getDiskCount());
-        assertTrue(dataNodeFree >= testHardwareLayout.getDiskCapacityInBytes() *
-                                   testHardwareLayout.getDiskCount() - (100 * 1024 * 1024 * 1024L));
+        assertTrue(
+            dataNodeFree >= testHardwareLayout.getDiskCapacityInBytes() * testHardwareLayout.getDiskCount() - (100
+                * 1024 * 1024 * 1024L));
         for (Disk disk : dataNode.getDisks()) {
           long diskFree = clusterMapManager.getUnallocatedRawCapacityInBytes(disk);
           assertTrue(diskFree <= testHardwareLayout.getDiskCapacityInBytes());
@@ -193,7 +197,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void persistAndReadBack() throws JSONException, IOException {
+  public void persistAndReadBack()
+      throws JSONException, IOException {
     String tmpDir = folder.getRoot().getPath();
 
     String hardwareLayoutSer = tmpDir + "/hardwareLayoutSer.json";
@@ -204,18 +209,17 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerSer = TestUtils.getTestClusterMap();
     clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
-    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer,
-                                                                  partitionLayoutSer);
+    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
     assertEquals(clusterMapManagerSer, clusterMapManagerDe);
 
     clusterMapManagerDe.persist(hardwareLayoutDe, partitionLayoutDe);
-    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe,
-                                                                    partitionLayoutDe);
+    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe);
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
   @Test
-  public void validateSimpleConfig() throws JSONException, IOException {
+  public void validateSimpleConfig()
+      throws JSONException, IOException {
     String configDir = System.getProperty("user.dir");
     // intelliJ and gradle return different values for user.dir: gradle includes the sub-project directory. To handle
     // this, we check the string suffix for the sub-project directory and append ".." to correctly set configDir.
@@ -225,8 +229,7 @@ public class ClusterMapManagerTest {
     configDir += "/config";
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
-    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer,
-                                                                partitionLayoutSer);
+    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
     assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));

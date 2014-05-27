@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
+
 /**
  * Performs a get blob data operation by sending and receiving get requests until operation is complete or has failed.
  */
@@ -25,42 +26,27 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public GetBlobUserMetadataOperation(String datacenterName,
-                                      ConnectionPool connectionPool,
-                                      ExecutorService requesterPool,
-                                      OperationContext oc,
-                                      BlobId blobId,
-                                      long operationTimeoutMs,
-                                      ClusterMap clusterMap) throws CoordinatorException {
-    super(datacenterName,
-          connectionPool,
-          requesterPool,
-          oc,
-          blobId,
-          operationTimeoutMs,
-          clusterMap,
-          MessageFormatFlags.BlobUserMetadata);
+  public GetBlobUserMetadataOperation(String datacenterName, ConnectionPool connectionPool,
+      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
+      throws CoordinatorException {
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
+        MessageFormatFlags.BlobUserMetadata);
     this.userMetadata = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    return new GetBlobUserMetadataOperationRequest(connectionPool,
-                                                   responseQueue,
-                                                   context,
-                                                   blobId,
-                                                   replicaId,
-                                                   makeGetRequest(),
-                                                   clusterMap,
-                                                   this);
+    return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
+        makeGetRequest(), clusterMap, this);
   }
 
-  public ByteBuffer getUserMetadata() throws CoordinatorException {
+  public ByteBuffer getUserMetadata()
+      throws CoordinatorException {
     if (userMetadata != null) {
       return userMetadata;
     }
     CoordinatorException e = new CoordinatorException("GetBlobUserMetadata has invalid return data.",
-                                                      CoordinatorError.UnexpectedInternalError);
+        CoordinatorError.UnexpectedInternalError);
     logger.error("userMetadata is null and should not be: {}", e);
     throw e;
   }
@@ -68,8 +54,7 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
   public synchronized void setUserMetadata(ByteBuffer userMetadata) {
     if (this.userMetadata == null) {
       this.userMetadata = userMetadata;
-    }
-    else {
+    } else {
       logger.warn("{} BlobUserMetadata attempted to be set after being set.", context);
     }
   }
@@ -79,30 +64,28 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   private GetBlobUserMetadataOperation getBlobUserMetadataOperation;
 
   protected GetBlobUserMetadataOperationRequest(ConnectionPool connectionPool,
-                                                BlockingQueue<OperationResponse> responseQueue,
-                                                OperationContext context,
-                                                BlobId blobId,
-                                                ReplicaId replicaId,
-                                                RequestOrResponse request,
-                                                ClusterMap clusterMap,
-                                                GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
+      BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
+      RequestOrResponse request, ClusterMap clusterMap, GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobUserMetadataOperation = getBlobUserMetadataOperation;
   }
 
   @Override
-  protected void markRequest() throws CoordinatorException {
+  protected void markRequest()
+      throws CoordinatorException {
     context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestRate.mark();
   }
 
   @Override
-  protected void updateRequest(long durationInMs) throws CoordinatorException {
+  protected void updateRequest(long durationInMs)
+      throws CoordinatorException {
     context.getCoordinatorMetrics().
-            getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestLatencyInMs.update(durationInMs);
+        getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestLatencyInMs.update(durationInMs);
   }
 
   @Override
-  protected void deserializeBody(InputStream inputStream) throws IOException, MessageFormatException {
+  protected void deserializeBody(InputStream inputStream)
+      throws IOException, MessageFormatException {
     getBlobUserMetadataOperation.setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream));
   }
 }

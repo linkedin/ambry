@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import java.io.IOException;
 
+
 /**
  * Basic network server used to accept / send request and responses
  */
@@ -12,7 +13,8 @@ public interface NetworkServer {
    * @throws IOException
    * @throws InterruptedException
    */
-  void start() throws IOException, InterruptedException;
+  void start()
+      throws IOException, InterruptedException;
 
   /**
    * Shuts down the network server

@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 
+
 /**
  * Ambry server
  */
@@ -49,20 +50,20 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
 
-  public AmbryServer(VerifiableProperties properties,
-                     ClusterMap clusterMap) throws IOException {
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
+      throws IOException {
     this(properties, clusterMap, null);
   }
 
-  public AmbryServer(VerifiableProperties properties,
-                     ClusterMap clusterMap,
-                     NotificationSystem notificationSystem) throws IOException {
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem)
+      throws IOException {
     this.properties = properties;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
   }
 
-  public void startup() throws InstantiationException {
+  public void startup()
+      throws InstantiationException {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
@@ -83,52 +84,36 @@ public class AmbryServer {
       scheduler.startup();
       logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
-      if (nodeId == null)
+      if (nodeId == null) {
         throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port +
-                "is not present in the clustermap. Failing to start the datanode");
+            "is not present in the clustermap. Failing to start the datanode");
+      }
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      storeManager = new StoreManager(storeConfig,
-                                      scheduler,
-                                      registry,
-                                      clusterMap.getReplicaIds(nodeId),
-                                      storeKeyFactory,
-                                      new BlobStoreRecovery());
+      storeManager =
+          new StoreManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
+              new BlobStoreRecovery());
       storeManager.start();
 
-
       networkServer = new SocketServer(networkConfig, registry);
-      requests = new AmbryRequests(storeManager,
-                                   networkServer.getRequestResponseChannel(),
-                                   clusterMap,
-                                   nodeId,
-                                   registry,
-                                   findTokenFactory,
-                                   notificationSystem);
+      requests =
+          new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+              findTokenFactory, notificationSystem);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
-                                                  networkServer.getRequestResponseChannel(),
-                                                  requests);
+          networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
       connectionPool.start();
 
-      replicationManager = new ReplicationManager(replicationConfig,
-                                                  storeConfig,
-                                                  storeManager,
-                                                  storeKeyFactory,
-                                                  clusterMap,
-                                                  scheduler,
-                                                  nodeId,
-                                                  connectionPool,
-                                                  registry,
-                                                  notificationSystem);
+      replicationManager =
+          new ReplicationManager(replicationConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
+              nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
       logger.info("started");
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
     }
@@ -141,12 +126,15 @@ public class AmbryServer {
       if (scheduler != null) {
         scheduler.shutdown();
       }
-      if (networkServer != null)
+      if (networkServer != null) {
         networkServer.shutdown();
-      if (requestHandlerPool != null)
+      }
+      if (requestHandlerPool != null) {
         requestHandlerPool.shutdown();
-      if (replicationManager != null)
+      }
+      if (replicationManager != null) {
         replicationManager.shutdown();
+      }
       if (storeManager != null) {
         storeManager.shutdown();
       }
@@ -157,16 +145,15 @@ public class AmbryServer {
         reporter.stop();
       }
       logger.info("shutdown completed");
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("Error while shutting down server", e);
-    }
-    finally {
+    } finally {
       shutdownLatch.countDown();
     }
   }
 
-  public void awaitShutdown() throws InterruptedException {
+  public void awaitShutdown()
+      throws InterruptedException {
     shutdownLatch.await();
   }
 }

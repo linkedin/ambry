@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 
+
 /**
  * Performs a cancel TTL operation by sending and receiving cancel TTL requests until operation is complete or has
  * failed.
@@ -24,36 +25,23 @@ import java.util.concurrent.ExecutorService;
 final public class CancelTTLOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CancelTTLOperation(String datacenterName,
-                            ConnectionPool connectionPool,
-                            ExecutorService requesterPool,
-                            OperationContext oc,
-                            BlobId blobId,
-                            long operationTimeoutMs) throws CoordinatorException {
-    super(datacenterName,
-          connectionPool,
-          requesterPool,
-          oc,
-          blobId,
-          operationTimeoutMs,
-          new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
+  public CancelTTLOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs)
+      throws CoordinatorException {
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    TTLRequest ttlRequest = new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId,
-                                           Utils.Infinite_Time);
-    return new CancelTTLOperationRequest(connectionPool,
-                                         responseQueue,
-                                         context,
-                                         blobId,
-                                         replicaId,
-                                         ttlRequest);
+    TTLRequest ttlRequest =
+        new TTLRequest(context.getCorrelationId(), context.getClientId(), blobId, Utils.Infinite_Time);
+    return new CancelTTLOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, ttlRequest);
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
-          CoordinatorException {
+  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+      throws CoordinatorException {
     switch (serverErrorCode) {
       case No_Error:
         return true;
@@ -64,36 +52,35 @@ final public class CancelTTLOperation extends Operation {
         return false;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for CancelTTLOperation.",
-                                                          CoordinatorError.UnexpectedInternalError);
+            CoordinatorError.UnexpectedInternalError);
         logger.error("{} CancelTTLResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
-                     context, blobId, replicaId, serverErrorCode, e);
+            context, blobId, replicaId, serverErrorCode, e);
         throw e;
     }
   }
 }
 
 final class CancelTTLOperationRequest extends OperationRequest {
-  protected CancelTTLOperationRequest(ConnectionPool connectionPool,
-                                      BlockingQueue<OperationResponse> responseQueue,
-                                      OperationContext context,
-                                      BlobId blobId,
-                                      ReplicaId replicaId,
-                                      RequestOrResponse request) {
+  protected CancelTTLOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
   @Override
-  protected void markRequest() throws CoordinatorException {
+  protected void markRequest()
+      throws CoordinatorException {
     // Do nothing
   }
 
   @Override
-  protected void updateRequest(long durationInMs) throws CoordinatorException {
+  protected void updateRequest(long durationInMs)
+      throws CoordinatorException {
     // Do nothing
   }
 
   @Override
-  protected Response getResponse(DataInputStream dataInputStream) throws IOException {
+  protected Response getResponse(DataInputStream dataInputStream)
+      throws IOException {
     return TTLResponse.readFrom(dataInputStream);
   }
 }

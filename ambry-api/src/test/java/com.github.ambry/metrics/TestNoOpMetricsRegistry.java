@@ -3,6 +3,7 @@ package com.github.ambry.metrics;
 import org.junit.Assert;
 import org.junit.Test;
 
+
 public class TestNoOpMetricsRegistry {
 
   @Test

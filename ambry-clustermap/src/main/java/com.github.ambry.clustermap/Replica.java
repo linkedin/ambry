@@ -9,6 +9,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * A Replica is one constituent piece of a {@link Partition}. A Replica is uniquely identifiable by its Partition and
  * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
@@ -21,18 +22,20 @@ public class Replica implements ReplicaId {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public Replica(Partition partition, Disk disk) {
-    if (logger.isTraceEnabled())
+    if (logger.isTraceEnabled()) {
       logger.trace("Replica " + partition + ", " + disk);
+    }
     this.partition = partition;
     this.disk = disk;
 
     validate();
   }
 
-  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
+  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject)
+      throws JSONException {
     this.partition = partition;
-    this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"),
-                                        jsonObject.getInt("port"), jsonObject.getString("mountPath"));
+    this.disk = hardwareLayout
+        .findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"), jsonObject.getString("mountPath"));
     validate();
   }
 
@@ -105,12 +108,11 @@ public class Replica implements ReplicaId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  public JSONObject toJSONObject()
+      throws JSONException {
     // Effectively serializes the "foreign key" into hardwareLayout to find Disk.
-    return new JSONObject()
-            .put("hostname", disk.getDataNode().getHostname())
-            .put("port", disk.getDataNode().getPort())
-            .put("mountPath", disk.getMountPath());
+    return new JSONObject().put("hostname", disk.getDataNode().getHostname()).put("port", disk.getDataNode().getPort())
+        .put("mountPath", disk.getMountPath());
   }
 
   @Override

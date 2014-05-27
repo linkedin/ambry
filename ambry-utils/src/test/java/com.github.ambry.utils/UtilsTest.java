@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertTrue;
 
+
 /**
  * Tests Utils methods
  */
@@ -22,7 +23,7 @@ public class UtilsTest {
       long r = Utils.getRandomLong(range);
       assertTrue(r >= 0);
       assertTrue(r < range);
-      count[(int)r] = count[(int)r] + 1;
+      count[(int) r] = count[(int) r] + 1;
     }
     for (int i = 0; i < range; i++) {
       assertTrue(count[i] > 0);

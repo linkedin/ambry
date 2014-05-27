@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+
 public class MessageFormatSendTest {
 
   class MockMessageReadSet implements MessageReadSet {
@@ -28,9 +29,10 @@ public class MessageFormatSendTest {
     }
 
     @Override
-    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
-      buffers.get(index).position((int)relativeOffset);
-      buffers.get(index).limit((int)Math.min(buffers.get(index).limit(), relativeOffset + maxSize));
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
+        throws IOException {
+      buffers.get(index).position((int) relativeOffset);
+      buffers.get(index).limit((int) Math.min(buffers.get(index).limit(), relativeOffset + maxSize));
       int written = channel.write(buffers.get(index));
       buffers.get(index).clear();
       return written;
@@ -53,7 +55,8 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTest() throws IOException, MessageFormatException {
+  public void sendWriteTest()
+      throws IOException, MessageFormatException {
 
     try {
       // create one buffer of size 1004
@@ -61,7 +64,7 @@ public class MessageFormatSendTest {
       // add header,system metadata, user metadata and data to the buffers
       ByteBuffer buf1 = ByteBuffer.allocate(1016);
       // fill header
-      buf1.putShort((short)1);                    // version
+      buf1.putShort((short) 1);                    // version
       buf1.putLong(950);                          // total size
       // put relative offsets
       buf1.putInt(66);                           // blob property relative offset
@@ -76,7 +79,7 @@ public class MessageFormatSendTest {
       buf1.putInt(id.length());
       buf1.put(id.getBytes());
 
-      buf1.putShort((short)1); // blob property version
+      buf1.putShort((short) 1); // blob property version
       String attribute1 = "ttl";
       String attribute2 = "del";
       buf1.put(attribute1.getBytes()); // ttl name
@@ -86,14 +89,14 @@ public class MessageFormatSendTest {
       buf1.put(b);      // delete flag
       buf1.putInt(456); //crc
 
-      buf1.putShort((short)1); // user metadata version
+      buf1.putShort((short) 1); // user metadata version
       buf1.putInt(100);
       byte[] usermetadata = new byte[100];
       new Random().nextBytes(usermetadata);
       buf1.put(usermetadata);
       buf1.putInt(123);
 
-      buf1.putShort((short)0); // blob version
+      buf1.putShort((short) 0); // blob version
       buf1.putLong(805);       // blob size
       byte[] data = new byte[805];         // blob
       new Random().nextBytes(data);
@@ -155,7 +158,7 @@ public class MessageFormatSendTest {
       }
 
       bufresult.flip();
-      Assert.assertEquals(bufresult.getShort(), (short)1);
+      Assert.assertEquals(bufresult.getShort(), (short) 1);
       byte[] attributes = new byte[3];
       bufresult.get(attributes);
       Assert.assertEquals("ttl", new String(attributes));
@@ -164,8 +167,7 @@ public class MessageFormatSendTest {
       Assert.assertEquals("del", new String(attributes));
       Assert.assertEquals(1, bufresult.get());
       Assert.assertEquals(456, bufresult.getInt());
-    }
-    catch (MessageFormatException e) {
+    } catch (MessageFormatException e) {
       Assert.assertEquals(true, false);
     }
   }
