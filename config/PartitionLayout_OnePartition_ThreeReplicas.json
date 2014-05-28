@@ -1,5 +1,5 @@
 {
-  "clusterName": "OneDiskOneReplica",
+  "clusterName": "TestSetUpConf",
   "version": 1,
   "partitions": [
     {

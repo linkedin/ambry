@@ -1,5 +1,5 @@
 {
-  "clusterName": "ThreeNodesWithOneReplicaInEach",
+  "clusterName": "TestSetUpConf",
   "version": 1,
   "datacenters": [
     {
