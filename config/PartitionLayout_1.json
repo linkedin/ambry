@@ -1,0 +1,28 @@
+{
+  "clusterName": "OneDiskOneReplica",
+  "version": 88,
+  "partitions": [
+    {
+      "id": 0,
+      "partitionState": "READ_WRITE",
+      "replicaCapacityInBytes": 10737418240,
+      "replicas": [
+        {
+          "hostname": "localhost",
+          "mountPath": "/tmp/4",
+          "port": 6670
+        },
+	{
+          "hostname": "localhost",
+          "mountPath": "/tmp/5",
+          "port": 6671
+        },
+	{
+          "hostname": "localhost",
+          "mountPath": "/tmp/6",
+          "port": 6672
+        }
+      ]
+    }
+  ]
+}
