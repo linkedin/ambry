@@ -1,5 +1,5 @@
 {
-  "clusterName": "TestSetUpConf",
+  "clusterName": "LocalSetUp_ThreeNodeOneDisk_OnePartitionThreeReplicas",
   "version": 1,
   "datacenters": [
     {
