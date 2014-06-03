@@ -9,7 +9,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.coordinator.CoordinatorError;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -32,10 +31,6 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -56,6 +51,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class ServerTest {
@@ -262,7 +260,7 @@ public class ServerTest {
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // wait till replication can complete
-      Thread.sleep(1000);
+      Thread.sleep(4000);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -959,26 +957,15 @@ public class ServerTest {
     @Override
     public void run() {
       try {
-        int requestCount = 0;
-        while (requestCount < numberOfRequests) {
+        for (int i = 0; i < numberOfRequests; i++) {
           int size = new Random().nextInt(5000);
           BlobProperties properties = new BlobProperties(size, "service1", "owner id check", "image/jpeg", false);
           byte[] metadata = new byte[new Random().nextInt(1000)];
           byte[] blob = new byte[size];
           new Random().nextBytes(metadata);
           new Random().nextBytes(blob);
-          try {
-            String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
-            blockingQueue.put(new Payload(properties, metadata, blob, blobId));
-            requestCount++;
-          } catch (CoordinatorException e) {
-            if (e.getErrorCode() != CoordinatorError.UnexpectedInternalError) {
-              throw e;
-            } else {
-              System.err.println("Ignoring unexpected putBlob exception to avoid hanging test.");
-              e.printStackTrace();
-            }
-          }
+          String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
+          blockingQueue.put(new Payload(properties, metadata, blob, blobId));
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -1132,6 +1119,11 @@ public class ServerTest {
       senderThreads[i].start();
     }
     senderLatch.await();
+
+    if (blockingQueue.size() != numberOfRequestsToSendPerThread * numberOfSenderThreads) {
+      // Failed during putBlob
+      throw new IllegalStateException();
+    }
 
     // Let replication complete before starting verifiers.
     Thread.sleep(4000);
