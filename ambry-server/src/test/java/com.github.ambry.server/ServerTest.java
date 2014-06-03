@@ -69,7 +69,17 @@ public class ServerTest {
 
   @After
   public void cleanup() {
+    long start = System.currentTimeMillis();
+    // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
+    // and reliable.
+    System.out.println("About to invoke cluster.cleanup()");
     cluster.cleanup();
+    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+  }
+
+  @Test
+  public void startStopTest() {
+    // do nothing
   }
 
   @Test
@@ -615,7 +625,7 @@ public class ServerTest {
       latch.await();
 
       // wait till replication can complete
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       List<BlobId> blobIds = new ArrayList<BlobId>();
       for (int i = 0; i < runnables.size(); i++) {
         blobIds.addAll(runnables.get(i).getBlobIds());
@@ -712,7 +722,7 @@ public class ServerTest {
       }
 
       // wait for deleted state to replicate
-      Thread.sleep(2000);
+      Thread.sleep(4000);
 
       Iterator<BlobId> iterator = blobsDeleted.iterator();
       while (iterator.hasNext()) {
@@ -751,7 +761,7 @@ public class ServerTest {
       deleteFolderContent(new File(dataNode.getMountPaths().get(0)), false);
       serverList.get(0).startup();
 
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
@@ -838,7 +848,7 @@ public class ServerTest {
 
       serverList.get(0).startup();
 
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
@@ -949,7 +959,8 @@ public class ServerTest {
     @Override
     public void run() {
       try {
-        for (int i = 0; i < numberOfRequests; i++) {
+        int requestCount = 0;
+        while (requestCount < numberOfRequests) {
           int size = new Random().nextInt(5000);
           BlobProperties properties = new BlobProperties(size, "service1", "owner id check", "image/jpeg", false);
           byte[] metadata = new byte[new Random().nextInt(1000)];
@@ -959,9 +970,13 @@ public class ServerTest {
           try {
             String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
             blockingQueue.put(new Payload(properties, metadata, blob, blobId));
+            requestCount++;
           } catch (CoordinatorException e) {
             if (e.getErrorCode() != CoordinatorError.UnexpectedInternalError) {
               throw e;
+            } else {
+              System.err.println("Ignoring unexpected putBlob exception to avoid hanging test.");
+              e.printStackTrace();
             }
           }
         }
@@ -995,7 +1010,6 @@ public class ServerTest {
     @Override
     public void run() {
       try {
-        Thread.sleep(4000);
         while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
@@ -1046,7 +1060,9 @@ public class ServerTest {
               } else {
                 try {
                   ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-                  Assert.assertArrayEquals(userMetadataOutput.array(), payload.metadata);
+                  if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0 ) {
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -1072,14 +1088,18 @@ public class ServerTest {
                   while (readsize < blobOutput.getSize()) {
                     readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
                   }
-                  Assert.assertArrayEquals(blobout, payload.blob);
+                  if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
                 }
               }
+
               channel1.disconnect();
             }
+
             requestsVerified.incrementAndGet();
           }
         }
@@ -1105,21 +1125,28 @@ public class ServerTest {
     LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
     int numberOfVerifierThreads = 3;
-    CountDownLatch latch = new CountDownLatch(numberOfSenderThreads + numberOfVerifierThreads);
+    CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
     int numberOfRequestsToSendPerThread = 10;
     for (int i = 0; i < numberOfSenderThreads; i++) {
-      senderThreads[i] = new Thread(new Sender(blockingQueue, latch, numberOfRequestsToSendPerThread, coordinator));
+      senderThreads[i] = new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
       senderThreads[i].start();
     }
+    senderLatch.await();
+
+    // Let replication complete before starting verifiers.
+    Thread.sleep(4000);
+
+    CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
     AtomicBoolean cancelTest = new AtomicBoolean(false);
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
-          new Verifier(blockingQueue, latch, totalRequests, verifiedRequests, cluster.getClusterMap(), cancelTest));
+          new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(), cancelTest));
       thread.start();
     }
-    latch.await();
+    verifierLatch.await();
+
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
     coordinator.shutdown();
   }

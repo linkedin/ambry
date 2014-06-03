@@ -4,11 +4,13 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+
+import static org.junit.Assert.assertTrue;
 
 
 /**
@@ -54,9 +56,33 @@ public class MockCluster {
   }
 
   public void cleanup() {
+    CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
     for (AmbryServer server : serverList) {
-      server.shutdown();
+
+      new Thread(new ServerShutdown(shutdownLatch, server)).start();
     }
+    try {
+      shutdownLatch.await();
+    } catch (Exception e) {
+      assertTrue(false);
+    }
+
     clusterMap.cleanup();
+  }
+}
+
+class ServerShutdown implements Runnable {
+  private final CountDownLatch latch;
+  private final AmbryServer server;
+
+  public ServerShutdown(CountDownLatch latch, AmbryServer ambryServer) {
+    this.latch = latch;
+    this.server = ambryServer;
+  }
+
+  @Override
+  public void run() {
+    server.shutdown();
+    latch.countDown();
   }
 }
