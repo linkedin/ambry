@@ -24,6 +24,9 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,8 +36,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -89,9 +90,15 @@ class ReplicaThread implements Runnable {
         // shuffle the partitions
         Collections.shuffle(partitionsToReplicate);
         for (PartitionInfo partitionInfo : partitionsToReplicate) {
+          if (!running) {
+            break;
+          }
           List<RemoteReplicaInfo> remoteReplicas = partitionInfo.getRemoteReplicaInfo();
           Collections.shuffle(remoteReplicas);
           for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
+            if (!running) {
+              break;
+            }
             logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
                 " Thread name " + threadName +
                 " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
@@ -109,7 +116,6 @@ class ReplicaThread implements Runnable {
             }
             ConnectedChannel connectedChannel = null;
             try {
-
               connectedChannel = connectionPool
                   .checkOutConnection(remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
                       remoteReplicaInfo.getReplicaId().getDataNodeId().getPort(),

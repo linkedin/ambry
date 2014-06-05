@@ -9,7 +9,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.coordinator.CoordinatorError;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -32,10 +31,6 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -56,6 +51,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class ServerTest {
@@ -69,7 +67,17 @@ public class ServerTest {
 
   @After
   public void cleanup() {
+    long start = System.currentTimeMillis();
+    // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
+    // and reliable.
+    System.out.println("About to invoke cluster.cleanup()");
     cluster.cleanup();
+    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+  }
+
+  @Test
+  public void startStopTest() {
+    // do nothing
   }
 
   @Test
@@ -252,7 +260,7 @@ public class ServerTest {
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // wait till replication can complete
-      Thread.sleep(1000);
+      Thread.sleep(4000);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -615,7 +623,7 @@ public class ServerTest {
       latch.await();
 
       // wait till replication can complete
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       List<BlobId> blobIds = new ArrayList<BlobId>();
       for (int i = 0; i < runnables.size(); i++) {
         blobIds.addAll(runnables.get(i).getBlobIds());
@@ -712,7 +720,7 @@ public class ServerTest {
       }
 
       // wait for deleted state to replicate
-      Thread.sleep(2000);
+      Thread.sleep(4000);
 
       Iterator<BlobId> iterator = blobsDeleted.iterator();
       while (iterator.hasNext()) {
@@ -751,7 +759,7 @@ public class ServerTest {
       deleteFolderContent(new File(dataNode.getMountPaths().get(0)), false);
       serverList.get(0).startup();
 
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
@@ -838,7 +846,7 @@ public class ServerTest {
 
       serverList.get(0).startup();
 
-      Thread.sleep(2000);
+      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
@@ -956,14 +964,8 @@ public class ServerTest {
           byte[] blob = new byte[size];
           new Random().nextBytes(metadata);
           new Random().nextBytes(blob);
-          try {
-            String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
-            blockingQueue.put(new Payload(properties, metadata, blob, blobId));
-          } catch (CoordinatorException e) {
-            if (e.getErrorCode() != CoordinatorError.UnexpectedInternalError) {
-              throw e;
-            }
-          }
+          String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
+          blockingQueue.put(new Payload(properties, metadata, blob, blobId));
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -995,7 +997,6 @@ public class ServerTest {
     @Override
     public void run() {
       try {
-        Thread.sleep(4000);
         while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
@@ -1046,7 +1047,9 @@ public class ServerTest {
               } else {
                 try {
                   ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-                  Assert.assertArrayEquals(userMetadataOutput.array(), payload.metadata);
+                  if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0 ) {
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -1072,14 +1075,18 @@ public class ServerTest {
                   while (readsize < blobOutput.getSize()) {
                     readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
                   }
-                  Assert.assertArrayEquals(blobout, payload.blob);
+                  if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
                 }
               }
+
               channel1.disconnect();
             }
+
             requestsVerified.incrementAndGet();
           }
         }
@@ -1105,21 +1112,33 @@ public class ServerTest {
     LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
     int numberOfVerifierThreads = 3;
-    CountDownLatch latch = new CountDownLatch(numberOfSenderThreads + numberOfVerifierThreads);
+    CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
     int numberOfRequestsToSendPerThread = 10;
     for (int i = 0; i < numberOfSenderThreads; i++) {
-      senderThreads[i] = new Thread(new Sender(blockingQueue, latch, numberOfRequestsToSendPerThread, coordinator));
+      senderThreads[i] = new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
       senderThreads[i].start();
     }
+    senderLatch.await();
+
+    if (blockingQueue.size() != numberOfRequestsToSendPerThread * numberOfSenderThreads) {
+      // Failed during putBlob
+      throw new IllegalStateException();
+    }
+
+    // Let replication complete before starting verifiers.
+    Thread.sleep(4000);
+
+    CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
     AtomicBoolean cancelTest = new AtomicBoolean(false);
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
-          new Verifier(blockingQueue, latch, totalRequests, verifiedRequests, cluster.getClusterMap(), cancelTest));
+          new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(), cancelTest));
       thread.start();
     }
-    latch.await();
+    verifierLatch.await();
+
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
     coordinator.shutdown();
   }
