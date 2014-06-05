@@ -118,16 +118,8 @@ public class GetRequest extends RequestOrResponse {
     StringBuilder sb = new StringBuilder();
     sb.append("GetRequest[");
     sb.append("ListOfBlobIDs=").append(blobIds);
-    if (partitionId != null) {
-      sb.append(", ").append("PartitionId=").append(partitionId);
-    } else {
-      sb.append(", ").append("PartitionId=Null");
-    }
-    if (flags != null) {
-      sb.append(", ").append("MessageFormatFlags=").append(flags);
-    } else {
-      sb.append(", ").append("MessageFormatFlags=Null");
-    }
+    sb.append(", ").append("PartitionId=").append(partitionId);
+    sb.append(", ").append("MessageFormatFlags=").append(flags);
     sb.append(", ").append("TotalIdSize=").append(totalIdSize);
     sb.append("]");
     return sb.toString();

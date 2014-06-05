@@ -446,7 +446,6 @@ class Processor extends AbstractServerThread {
   /*
    * Process reads from ready sockets
    */
-
   private void read(SelectionKey key)
       throws InterruptedException, IOException {
     SocketChannel socketChannel = (SocketChannel) key.channel();
