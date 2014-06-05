@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -108,4 +109,26 @@ public class GetRequest extends RequestOrResponse {
     // header + error
     return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Count_Size_InBytes + totalIdSize;
   }
+
+  @Override
+  public String toString()
+  {
+    StringBuilder sb = new StringBuilder();
+    sb.append("GetRequest[");
+    sb.append("ListOfBlobIDs=").append(blobIds);
+    if(partitionId!=null) {
+      sb.append(", ").append("PartitionId=").append(partitionId);
+    } else {
+      sb.append(", ").append("PartitionId=Null");
+    }
+    if(flags!=null) {
+      sb.append(", ").append("MessageFormatFlags=").append(flags);
+    } else {
+      sb.append(", ").append("MessageFormatFlags=Null");
+    }
+    sb.append(", ").append("TotalIdSize=").append(totalIdSize);
+    sb.append("]");
+    return sb.toString();
+  }
+
 }

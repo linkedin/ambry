@@ -25,7 +25,6 @@ public abstract class RequestOrResponse implements Send {
   private static final int Correlation_Id_Size_In_Bytes = 4;
   private static final int ClientId_Field_Size_In_Bytes = 4;
 
-
   public RequestOrResponse(RequestResponseType type, short versionId, int correlationId, String clientId) {
     this.type = type;
     this.versionId = versionId;
@@ -68,6 +67,7 @@ public abstract class RequestOrResponse implements Send {
            Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
            ClientId_Field_Size_In_Bytes + clientId.length();
   }
+
 }
 
 
