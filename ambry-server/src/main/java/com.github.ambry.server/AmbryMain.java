@@ -4,9 +4,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Properties;
 
 
@@ -15,7 +12,6 @@ import java.util.Properties;
  */
 public class AmbryMain {
   public static void main(String args[]) {
-    Logger logger = LoggerFactory.getLogger("AmbryMain");
     if (args.length != 3) {
       System.out.println("USAGE: java [options] %s server.properties hardwarelayout partitionlayout"
           .format(AmbryServer.class.getSimpleName()));

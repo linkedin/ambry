@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 
@@ -110,5 +111,17 @@ public class GetRequest extends RequestOrResponse {
   public long sizeInBytes() {
     // header + error
     return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Count_Size_InBytes + totalIdSize;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("GetRequest[");
+    sb.append("ListOfBlobIDs=").append(blobIds);
+    sb.append(", ").append("PartitionId=").append(partitionId);
+    sb.append(", ").append("MessageFormatFlags=").append(flags);
+    sb.append(", ").append("TotalIdSize=").append(totalIdSize);
+    sb.append("]");
+    return sb.toString();
   }
 }

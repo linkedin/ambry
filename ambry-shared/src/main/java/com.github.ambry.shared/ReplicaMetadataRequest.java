@@ -81,4 +81,15 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     // header + partitionId + token
     return super.sizeInBytes() + partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("ReplicaMetadataRequest[");
+    sb.append("Token=").append(token);
+    sb.append(", ").append("PartitionId=").append(partitionId);
+    sb.append(", ").append("maxTotalSizeOfEntriesInBytes=").append(maxTotalSizeOfEntriesInBytes);
+    sb.append("]");
+    return sb.toString();
+  }
 }

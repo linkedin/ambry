@@ -113,4 +113,23 @@ public class PutRequest extends RequestOrResponse {
   public boolean isSendComplete() {
     return sizeInBytes() == sentBytes;
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("PutRequest[");
+    sb.append("BlobID=").append(blobId);
+    if (properties != null) {
+      sb.append(", ").append(getBlobProperties());
+    } else {
+      sb.append(", ").append("Properties=Null");
+    }
+    if (usermetadata != null) {
+      sb.append(", ").append("UserMetaDataSize=").append(getUsermetadata().capacity());
+    } else {
+      sb.append(", ").append("UserMetaDataSize=0");
+    }
+    sb.append("]");
+    return sb.toString();
+  }
 }

@@ -342,7 +342,6 @@ class Processor extends AbstractServerThread {
             try {
               key = iter.next();
               iter.remove();
-
               if (key.isReadable()) {
                 read(key);
               } else if (key.isWritable()) {
@@ -457,7 +456,12 @@ class Processor extends AbstractServerThread {
     } else {
       input = (SocketServerInputSet) key.attachment();
     }
-    input.readFrom(socketChannel);
+    long bytesRead = input.readFrom(socketChannel);
+
+    if (bytesRead == -1) {
+      close(key);
+      return;
+    }
 
     logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
 
