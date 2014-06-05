@@ -120,7 +120,7 @@ public class AmbryRequests implements RequestAPI {
   public void handlePutRequest(Request request)
       throws IOException, InterruptedException {
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}",putRequest);
+    publicAccessLogger.info("{}", putRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -182,7 +182,7 @@ public class AmbryRequests implements RequestAPI {
   public void handleGetRequest(Request request)
       throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}",getRequest);
+    publicAccessLogger.info("{}", getRequest);
     HistogramMeasurement responseQueueTimeMeasurement = null;
     HistogramMeasurement responseSendTimeMeasurement = null;
     HistogramMeasurement responseTotalTimeMeasurement = null;
@@ -274,7 +274,7 @@ public class AmbryRequests implements RequestAPI {
   public void handleDeleteRequest(Request request)
       throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}",deleteRequest);
+    publicAccessLogger.info("{}", deleteRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -386,7 +386,7 @@ public class AmbryRequests implements RequestAPI {
       throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
-    publicAccessLogger.info("{}",replicaMetadataRequest);
+    publicAccessLogger.info("{}", replicaMetadataRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);

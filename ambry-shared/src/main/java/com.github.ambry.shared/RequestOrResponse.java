@@ -68,7 +68,6 @@ public abstract class RequestOrResponse implements Send {
         Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
         ClientId_Field_Size_In_Bytes + clientId.length();
   }
-
 }
 
 

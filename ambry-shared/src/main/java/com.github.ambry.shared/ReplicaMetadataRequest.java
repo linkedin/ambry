@@ -83,8 +83,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public String toString()
-  {
+  public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("ReplicaMetadataRequest[");
     sb.append("Token=").append(token);

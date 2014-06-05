@@ -64,14 +64,11 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   @Override
-  public String toString()
-  {
-      StringBuilder sb = new StringBuilder();
-      sb.append("DeleteRequest[");
-      sb.append("BlobID=").append(blobId);
-      sb.append("]");
-      return sb.toString();
-
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("DeleteRequest[");
+    sb.append("BlobID=").append(blobId);
+    sb.append("]");
+    return sb.toString();
   }
-
 }

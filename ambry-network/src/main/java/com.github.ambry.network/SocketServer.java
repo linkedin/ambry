@@ -459,7 +459,7 @@ class Processor extends AbstractServerThread {
     }
     long bytesRead = input.readFrom(socketChannel);
 
-    if(bytesRead == -1)  {
+    if (bytesRead == -1) {
       close(key);
       return;
     }

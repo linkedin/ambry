@@ -114,17 +114,16 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
-  public String toString()
-  {
+  public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("GetRequest[");
     sb.append("ListOfBlobIDs=").append(blobIds);
-    if(partitionId!=null) {
+    if (partitionId != null) {
       sb.append(", ").append("PartitionId=").append(partitionId);
     } else {
       sb.append(", ").append("PartitionId=Null");
     }
-    if(flags!=null) {
+    if (flags != null) {
       sb.append(", ").append("MessageFormatFlags=").append(flags);
     } else {
       sb.append(", ").append("MessageFormatFlags=Null");
@@ -133,5 +132,4 @@ public class GetRequest extends RequestOrResponse {
     sb.append("]");
     return sb.toString();
   }
-
 }

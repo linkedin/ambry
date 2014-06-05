@@ -1047,7 +1047,7 @@ public class ServerTest {
               } else {
                 try {
                   ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-                  if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0 ) {
+                  if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0) {
                     throw new IllegalStateException();
                   }
                 } catch (MessageFormatException e) {
@@ -1115,7 +1115,8 @@ public class ServerTest {
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
     int numberOfRequestsToSendPerThread = 10;
     for (int i = 0; i < numberOfSenderThreads; i++) {
-      senderThreads[i] = new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
+      senderThreads[i] =
+          new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
       senderThreads[i].start();
     }
     senderLatch.await();
@@ -1134,7 +1135,8 @@ public class ServerTest {
     AtomicBoolean cancelTest = new AtomicBoolean(false);
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
-          new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(), cancelTest));
+          new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
+              cancelTest));
       thread.start();
     }
     verifierLatch.await();

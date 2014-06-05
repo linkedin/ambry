@@ -42,12 +42,14 @@ public class SocketServerInputSet extends InputStream implements Receive {
   }
 
   @Override
-  public long readFrom(ReadableByteChannel channel) throws IOException {
+  public long readFrom(ReadableByteChannel channel)
+      throws IOException {
     long bytesRead = 0;
     if (buffer == null) {
       bytesRead = channel.read(sizeBuffer);
-      if(bytesRead == -1)
+      if (bytesRead == -1) {
         return -1;
+      }
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
         // for now we support only intmax size. We need to extend it to streaming

@@ -93,5 +93,4 @@ public class ReplicaMetadataResponse extends Response {
   public long sizeInBytes() {
     return super.sizeInBytes() + messageInfoListSize + (token == null ? 0 : token.toBytes().length);
   }
-
 }
