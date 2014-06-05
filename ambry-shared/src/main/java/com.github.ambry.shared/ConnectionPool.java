@@ -3,6 +3,7 @@ package com.github.ambry.shared;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 
+
 /**
  * A Connection pool interface that pools a list of connections, does connection management
  * and connection cleanup. A checkoutConnection should be followed by a checkInConnection or
@@ -31,7 +32,7 @@ public interface ConnectionPool {
    * @throws InterruptedException
    */
   public ConnectedChannel checkOutConnection(String host, int port, long timeout)
-          throws IOException, InterruptedException, ConnectionPoolTimeoutException;
+      throws IOException, InterruptedException, ConnectionPoolTimeoutException;
 
   /**
    * The connected channel that needs to be put back into the pool after a successful usage

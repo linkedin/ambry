@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.channels.GatheringByteChannel;
 import java.util.List;
 
+
 /**
  * The message set that needs to be written to a write interface
  */
@@ -12,9 +13,10 @@ public interface MessageWriteSet {
   /**
    * Write the messages in this set to the given write channel
    * @param writeChannel The write interface to write the messages to
-   * @return  The size in bytes that was written to the write interface
+   * @return The size in bytes that was written to the write interface
    */
-  public long writeTo(Write writeChannel) throws IOException;
+  public long writeTo(Write writeChannel)
+      throws IOException;
 
   /**
    * Returns info about the messages contained in this write set. The messages

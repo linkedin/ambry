@@ -1,6 +1,5 @@
 package com.github.ambry.replication;
 
-
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -56,6 +55,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+
 public class ReplicationTest {
 
   class MockMessageReadSet implements MessageReadSet {
@@ -69,10 +69,11 @@ public class ReplicationTest {
     }
 
     @Override
-    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
+        throws IOException {
       ByteBuffer bufferToWrite = bytebuffers.get(0);
-      bufferToWrite.position((int)relativeOffset);
-      bufferToWrite.limit((int)Math.min(maxSize, bufferToWrite.capacity()));
+      bufferToWrite.position((int) relativeOffset);
+      bufferToWrite.limit((int) Math.min(maxSize, bufferToWrite.capacity()));
       channel.write(bufferToWrite);
       bufferToWrite.position(0);
       bufferToWrite.limit(bufferToWrite.capacity());
@@ -107,14 +108,16 @@ public class ReplicationTest {
       }
 
       @Override
-      public int appendFrom(ByteBuffer buffer) throws IOException {
+      public int appendFrom(ByteBuffer buffer)
+          throws IOException {
         buflist.get(index).put(buffer);
         index++;
         return buffer.capacity();
       }
 
       @Override
-      public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
+      public long appendFrom(ReadableByteChannel channel, long size)
+          throws IOException {
         int tempIndex = index;
         index++;
         return channel.read(buflist.get(tempIndex));
@@ -126,6 +129,7 @@ public class ReplicationTest {
 
     class DummyLog {
       private List<ByteBuffer> logInfo;
+
       public DummyLog(List<ByteBuffer> bufferList) {
         this.logInfo = bufferList;
       }
@@ -138,20 +142,24 @@ public class ReplicationTest {
         return logInfo.get(index);
       }
     }
+
     public MockStore(List<MessageInfo> messageInfo, List<ByteBuffer> buffers) {
-      if (messageInfo.size() != buffers.size())
+      if (messageInfo.size() != buffers.size()) {
         throw new IllegalArgumentException("message info size and buffer size does not match");
+      }
       messageInfoList = messageInfo;
       log = new DummyLog(buffers);
     }
 
     @Override
-    public void start() throws StoreException {
+    public void start()
+        throws StoreException {
 
     }
 
     @Override
-    public StoreInfo get(List<? extends StoreKey> ids) throws StoreException {
+    public StoreInfo get(List<? extends StoreKey> ids)
+        throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
       List<StoreKey> keys = new ArrayList<StoreKey>();
@@ -170,17 +178,17 @@ public class ReplicationTest {
     }
 
     @Override
-    public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+    public void put(MessageWriteSet messageSetToWrite)
+        throws StoreException {
       List<MessageInfo> messageInfoListTemp = messageSetToWrite.getMessageSetInfo();
       List<ByteBuffer> buffersToWrite = new ArrayList<ByteBuffer>();
       for (MessageInfo messageInfo : messageInfoListTemp) {
-        ByteBuffer buf = ByteBuffer.allocate((int)messageInfo.getSize());
+        ByteBuffer buf = ByteBuffer.allocate((int) messageInfo.getSize());
         buffersToWrite.add(buf);
       }
       try {
         messageSetToWrite.writeTo(new ByteBufferWrite(buffersToWrite));
-      }
-      catch (IOException e) {
+      } catch (IOException e) {
 
       }
       for (ByteBuffer buf : buffersToWrite) {
@@ -191,7 +199,8 @@ public class ReplicationTest {
     }
 
     @Override
-    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+    public void delete(MessageWriteSet messageSetToDelete)
+        throws StoreException {
       int index = 0;
       MessageInfo messageInfoFound = null;
       for (MessageInfo messageInfo : messageInfoList) {
@@ -201,14 +210,13 @@ public class ReplicationTest {
         }
         index++;
       }
-      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(),
-              messageInfoFound.getSize(),
-              true,
-              messageInfoFound.getExpirationTimeInMs()));
+      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(), messageInfoFound.getSize(), true,
+          messageInfoFound.getExpirationTimeInMs()));
     }
 
     @Override
-    public void updateTTL(MessageWriteSet messageSetToUpdateTTL) throws StoreException {
+    public void updateTTL(MessageWriteSet messageSetToUpdateTTL)
+        throws StoreException {
       int index = 0;
       MessageInfo messageInfoFound = null;
       for (MessageInfo messageInfo : messageInfoList) {
@@ -218,14 +226,13 @@ public class ReplicationTest {
         }
         index++;
       }
-      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(),
-              messageInfoFound.getSize(),
-              -1));
+      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(), messageInfoFound.getSize(), -1));
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
-      MockFindToken tokenmock = (MockFindToken)token;
+    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries)
+        throws StoreException {
+      MockFindToken tokenmock = (MockFindToken) token;
       List<MessageInfo> entriesToReturn = new ArrayList<MessageInfo>();
       long currentSizeOfEntries = 0;
       int index = 0;
@@ -237,8 +244,9 @@ public class ReplicationTest {
     }
 
     @Override
-    public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-      Set<StoreKey> keysMissing= new HashSet<StoreKey>();
+    public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
+        throws StoreException {
+      Set<StoreKey> keysMissing = new HashSet<StoreKey>();
       for (StoreKey key : keys) {
         boolean found = false;
         for (MessageInfo messageInfo : messageInfoList) {
@@ -247,14 +255,16 @@ public class ReplicationTest {
             break;
           }
         }
-        if (!found)
+        if (!found) {
           keysMissing.add(key);
+        }
       }
       return keysMissing;
     }
 
     @Override
-    public boolean isKeyDeleted(StoreKey key) throws StoreException {
+    public boolean isKeyDeleted(StoreKey key)
+        throws StoreException {
       for (MessageInfo messageInfo : messageInfoList) {
         if (messageInfo.getStoreKey().equals(key) && messageInfo.isDeleted()) {
           return true;
@@ -264,20 +274,16 @@ public class ReplicationTest {
     }
 
     @Override
-    public void shutdown() throws StoreException {
+    public void shutdown()
+        throws StoreException {
     }
   }
 
   class MockStoreManager extends StoreManager {
     Map<PartitionId, MockStore> stores;
 
-    public MockStoreManager(StoreConfig config,
-                            Scheduler scheduler,
-                            MetricRegistry registry,
-                            List<ReplicaId> replicas,
-                            StoreKeyFactory factory,
-                            MessageStoreRecovery recovery,
-                            Map<PartitionId, MockStore> stores) {
+    public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
+        StoreKeyFactory factory, MessageStoreRecovery recovery, Map<PartitionId, MockStore> stores) {
       super(config, scheduler, registry, replicas, factory, recovery);
       this.stores = stores;
     }
@@ -305,7 +311,8 @@ public class ReplicationTest {
       }
 
       @Override
-      public void writeTo(WritableByteChannel channel) throws IOException {
+      public void writeTo(WritableByteChannel channel)
+          throws IOException {
         channel.write(bufferList.get(index));
         index++;
       }
@@ -330,11 +337,8 @@ public class ReplicationTest {
     int port;
     int maxSizeToReturn;
 
-    public MockConnection(String host,
-                          int port,
-                          List<MessageInfo> messageInfoList,
-                          List<ByteBuffer> bufferList,
-                          int maxSizeToReturn) {
+    public MockConnection(String host, int port, List<MessageInfo> messageInfoList, List<ByteBuffer> bufferList,
+        int maxSizeToReturn) {
       this.messageInfoList = messageInfoList;
       this.bufferList = bufferList;
       this.host = host;
@@ -343,15 +347,16 @@ public class ReplicationTest {
     }
 
     @Override
-    public void send(Send request) throws IOException {
+    public void send(Send request)
+        throws IOException {
       if (request instanceof ReplicaMetadataRequest) {
-        ReplicaMetadataRequest metadataRequest = (ReplicaMetadataRequest)request;
-        MockFindToken token = (MockFindToken)metadataRequest.getToken();
+        ReplicaMetadataRequest metadataRequest = (ReplicaMetadataRequest) request;
+        MockFindToken token = (MockFindToken) metadataRequest.getToken();
         indexRequested = token.getIndex();
       }
       if (request instanceof GetRequest) {
         indexRequested = -1;
-        GetRequest getRequest = (GetRequest)request;
+        GetRequest getRequest = (GetRequest) request;
         bufferToReturn = new ArrayList<ByteBuffer>();
         messageInfoToReturn = new ArrayList<MessageInfo>();
         for (StoreKey key : getRequest.getBlobIds()) {
@@ -368,7 +373,8 @@ public class ReplicationTest {
     }
 
     @Override
-    public InputStream receive() throws IOException {
+    public InputStream receive()
+        throws IOException {
       Response response = null;
       if (indexRequested != -1) {
         List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
@@ -377,22 +383,14 @@ public class ReplicationTest {
           messageInfoToReturn.add(messageInfoList.get(i));
           indexRequested = i;
         }
-        response = new ReplicaMetadataResponse(1,
-                                               "replicametadata",
-                                               ServerErrorCode.No_Error,
-                                               new MockFindToken(indexRequested),
-                                               messageInfoToReturn);
+        response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error,
+            new MockFindToken(indexRequested), messageInfoToReturn);
         indexRequested = -1;
+      } else {
+        response = new GetResponse(1, "replication", messageInfoToReturn, new MockSend(bufferToReturn),
+            ServerErrorCode.No_Error);
       }
-      else {
-        response = new GetResponse(1,
-                                   "replication",
-                                   messageInfoToReturn,
-                                   new MockSend(bufferToReturn),
-                                   ServerErrorCode.No_Error);
-
-      }
-      ByteBuffer buffer = ByteBuffer.allocate((int)response.sizeInBytes());
+      ByteBuffer buffer = ByteBuffer.allocate((int) response.sizeInBytes());
       ByteBufferOutputStream stream = new ByteBufferOutputStream(buffer);
       WritableByteChannel channel = Channels.newChannel(stream);
       while (!response.isSendComplete()) {
@@ -421,8 +419,7 @@ public class ReplicationTest {
     int maxEntriesToReturn;
 
     public MockConnectionPool(Map<String, List<MessageInfo>> messageInfoList,
-                              Map<String, List<ByteBuffer>> byteBufferList,
-                              int maxEntriesToReturn) {
+        Map<String, List<ByteBuffer>> byteBufferList, int maxEntriesToReturn) {
       this.messageInfoList = messageInfoList;
       this.byteBufferList = byteBufferList;
       this.maxEntriesToReturn = maxEntriesToReturn;
@@ -440,12 +437,9 @@ public class ReplicationTest {
 
     @Override
     public ConnectedChannel checkOutConnection(String host, int port, long timeout)
-            throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-      return new MockConnection(host,
-                                port,
-                                messageInfoList.get(host+port),
-                                byteBufferList.get(host+port),
-                                maxEntriesToReturn);
+        throws IOException, InterruptedException, ConnectionPoolTimeoutException {
+      return new MockConnection(host, port, messageInfoList.get(host + port), byteBufferList.get(host + port),
+          maxEntriesToReturn);
     }
 
     @Override
@@ -458,7 +452,8 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTest() throws InterruptedException, IOException {
+  public void replicaThreadTest()
+      throws InterruptedException, IOException {
     try {
       MockClusterMap clusterMap = new MockClusterMap();
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
@@ -511,111 +506,78 @@ public class ReplicationTest {
         messageBufferListLocalReplica3.add(ByteBuffer.wrap(bytes));
       }
 
-      PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas,
-                                                      remoteReplicas.get(0).getReplicaId().getPartitionId(),
-                                                      new MockStore(messageInfoListLocalReplica,
-                                                                    messageBufferListLocalReplica));
+      PartitionInfo partitionInfo =
+          new PartitionInfo(remoteReplicas, remoteReplicas.get(0).getReplicaId().getPartitionId(),
+              new MockStore(messageInfoListLocalReplica, messageBufferListLocalReplica));
       ArrayList<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
       partitionInfoList.add(partitionInfo);
       Map<String, List<MessageInfo>> replicaStores = new HashMap<String, List<MessageInfo>>();
-      replicaStores.put("localhost"+6668, messageInfoListRemoteReplica2);
-      replicaStores.put("localhost"+6669, messageInfoListRemoteReplica3);
+      replicaStores.put("localhost" + 6668, messageInfoListRemoteReplica2);
+      replicaStores.put("localhost" + 6669, messageInfoListRemoteReplica3);
 
       Map<String, List<ByteBuffer>> replicaBuffers = new HashMap<String, List<ByteBuffer>>();
-      replicaBuffers.put("localhost"+6668, messageBufferListLocalReplica2);
-      replicaBuffers.put("localhost"+6669, messageBufferListLocalReplica3);
+      replicaBuffers.put("localhost" + 6668, messageBufferListLocalReplica2);
+      replicaBuffers.put("localhost" + 6669, messageBufferListLocalReplica3);
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
-      ReplicationMetrics replicationMetrics = new ReplicationMetrics("replication",
-                                                                     new MetricRegistry(),
-                                                                     new ArrayList<ReplicaThread>());
-      ReplicaThread replicaThread = new ReplicaThread("threadtest",
-                                                      partitionInfoList,
-                                                      new MockFindTokenFactory(),
-                                                      clusterMap,
-                                                      new AtomicInteger(0),
-                                                      clusterMap.getDataNodeId("localhost", 6667),
-                                                      new MockConnectionPool(replicaStores, replicaBuffers, 3),
-                                                      config,
-                                                      replicationMetrics,
-                                                      null);
-      ReplicaThread.ExchangeMetadataResponse response =
-              replicaThread.exchangeMetadata(new MockConnection("localhost",
-                                                                6668,
-                                                                messageInfoListRemoteReplica2,
-                                                                messageBufferListLocalReplica2,
-                                                                5),
-                                             partitionInfo,
-                                             remoteReplicas.get(1));
+      ReplicationMetrics replicationMetrics =
+          new ReplicationMetrics("replication", new MetricRegistry(), new ArrayList<ReplicaThread>());
+      ReplicaThread replicaThread =
+          new ReplicaThread("threadtest", partitionInfoList, new MockFindTokenFactory(), clusterMap,
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 6667),
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null);
+      ReplicaThread.ExchangeMetadataResponse response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
+          partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 0);
-      Assert.assertEquals(((MockFindToken)response.remoteToken).getIndex(), 4);
+      Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 4);
       remoteReplicas.get(1).setToken(response.remoteToken);
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost",
-                                                                   6668,
-                                                                   messageInfoListRemoteReplica2,
-                                                                   messageBufferListLocalReplica2,
-                                                                   5),
-                                                partitionInfo,
-                                                remoteReplicas.get(1));
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
+          partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 0);
-      Assert.assertEquals(((MockFindToken)response.remoteToken).getIndex(), 8);
+      Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 8);
       remoteReplicas.get(1).setToken(response.remoteToken);
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost",
-                                                                   6668,
-                                                                   messageInfoListRemoteReplica2,
-                                                                   messageBufferListLocalReplica2,
-                                                                   4),
-                                                partitionInfo,
-                                                remoteReplicas.get(1));
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 2);
-      Assert.assertEquals(((MockFindToken)response.remoteToken).getIndex(), 11);
-      replicaThread.fixMissingStoreKeys(response.missingStoreKeys,
-                                        partitionInfo,
-                                        new MockConnection("localhost",
-                                                           6668,
-                                                           messageInfoListRemoteReplica2,
-                                                           messageBufferListLocalReplica2,
-                                                           4), false);
+      Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 11);
+      replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          false);
       remoteReplicas.get(1).setToken(response.remoteToken);
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost",
-                                                                   6668,
-                                                                   messageInfoListRemoteReplica2,
-                                                                   messageBufferListLocalReplica2,
-                                                                   4),
-                                                partitionInfo,
-                                                remoteReplicas.get(1));
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 3);
-      Assert.assertEquals(((MockFindToken)response.remoteToken).getIndex(), 14);
-      replicaThread.fixMissingStoreKeys(response.missingStoreKeys,
-                                        partitionInfo,
-                                        new MockConnection("localhost",
-                                                6668,
-                                                messageInfoListRemoteReplica2,
-                                                messageBufferListLocalReplica2,
-                                                4), false);
+      Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 14);
+      replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
+          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          false);
       //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
       for (MessageInfo messageInfo : messageInfoListLocalReplica) {
         boolean found = false;
         for (MessageInfo messageInfo1 : messageInfoListRemoteReplica2) {
-          if (messageInfo.getStoreKey().equals(messageInfo1.getStoreKey()))
+          if (messageInfo.getStoreKey().equals(messageInfo1.getStoreKey())) {
             found = true;
+          }
         }
         Assert.assertTrue(found);
       }
       for (ByteBuffer buf : messageBufferListLocalReplica) {
         boolean found = false;
         for (ByteBuffer bufActual : messageBufferListLocalReplica2) {
-          if (Arrays.equals(buf.array(), bufActual.array()))
+          if (Arrays.equals(buf.array(), bufActual.array())) {
             found = true;
+          }
         }
         Assert.assertTrue(found);
       }
-
-    }
-    catch (Exception e) {
-       Assert.assertTrue(false);
+    } catch (Exception e) {
+      Assert.assertTrue(false);
     }
   }
 }

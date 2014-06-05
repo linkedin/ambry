@@ -28,6 +28,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+
 /**
  * Tests the memory boundaries and latencies of the index structure
  * during writes
@@ -39,43 +40,28 @@ public class IndexWritePerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<Integer> numberOfIndexesOpt =
-              parser.accepts("numberOfIndexes", "The number of indexes to create")
-                    .withRequiredArg()
-                    .describedAs("number_of_indexes")
-                    .ofType(Integer.class);
+          parser.accepts("numberOfIndexes", "The number of indexes to create").withRequiredArg()
+              .describedAs("number_of_indexes").ofType(Integer.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                    .withRequiredArg()
-                    .describedAs("hardware_layout")
-                    .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                      .withRequiredArg()
-                      .describedAs("partition_layout")
-                      .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
-              parser.accepts("numberOfWriters", "The number of writers that write to a random index concurrently")
-                    .withRequiredArg()
-                    .describedAs("The number of writers")
-                    .ofType(Integer.class)
-                    .defaultsTo(4);
+          parser.accepts("numberOfWriters", "The number of writers that write to a random index concurrently")
+              .withRequiredArg().describedAs("The number of writers").ofType(Integer.class).defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> writesPerSecondOpt =
-              parser.accepts("writesPerSecond", "The rate at which writes need to be performed")
-                    .withRequiredArg()
-                    .describedAs("The number of writes per second")
-                    .ofType(Integer.class)
-                    .defaultsTo(1000);
+          parser.accepts("writesPerSecond", "The rate at which writes need to be performed").withRequiredArg()
+              .describedAs("The number of writes per second").ofType(Integer.class).defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-              parser.accepts("enableVerboseLogging", "Enables verbose logging")
-                   .withOptionalArg()
-                   .describedAs("Enable verbose logging")
-                   .ofType(Boolean.class)
-                   .defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
+              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 
@@ -84,8 +70,8 @@ public class IndexWritePerformance {
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -96,8 +82,9 @@ public class IndexWritePerformance {
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
-      if (enableVerboseLogging)
+      if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
+      }
       final AtomicLong totalTimeTakenInNs = new AtomicLong(0);
       final AtomicLong totalWrites = new AtomicLong(0);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
@@ -122,16 +109,17 @@ public class IndexWritePerformance {
       for (Integer i = 0; i < numberOfIndexes; i++) {
         File indexFile = new File(System.getProperty("user.dir"), i.toString());
         if (indexFile.exists()) {
-          for (File c : indexFile.listFiles())
+          for (File c : indexFile.listFiles()) {
             c.delete();
-        }
-        else
+          }
+        } else {
           indexFile.mkdir();
+        }
         System.out.println("Creating index folder " + indexFile.getAbsolutePath());
         writer.write("logdir-" + indexFile.getAbsolutePath() + "\n");
-        indexWithMetrics.add(new BlobIndexMetrics(indexFile.getAbsolutePath(), s, log, enableVerboseLogging,
-                                                  totalWrites, totalTimeTakenInNs, totalWrites, config, writer,
-                                                  factory));
+        indexWithMetrics.add(
+            new BlobIndexMetrics(indexFile.getAbsolutePath(), s, log, enableVerboseLogging, totalWrites,
+                totalTimeTakenInNs, totalWrites, config, writer, factory));
       }
 
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
@@ -143,11 +131,11 @@ public class IndexWritePerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             latch.await();
-            System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get() +
+            System.out
+                .println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get() +
                     " Nano Seconds  Average time taken per write " +
-                    ((double)totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
-          }
-          catch (Exception e) {
+                    ((double) totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
+          } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
         }
@@ -162,19 +150,15 @@ public class IndexWritePerformance {
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i].join();
       }
-    }
-    catch (StoreException e) {
+    } catch (StoreException e) {
       System.err.println("Index creation error on exit " + e.getMessage());
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.err.println("Error on exit " + e);
-    }
-    finally {
+    } finally {
       if (writer != null) {
         try {
           writer.close();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           System.out.println("Error when closing the writer");
         }
       }
@@ -189,13 +173,14 @@ public class IndexWritePerformance {
     private ClusterMap map;
 
     public IndexWritePerfRun(ArrayList<BlobIndexMetrics> indexesWithMetrics, Throttler throttler,
-                             AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
+        AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
       this.indexesWithMetrics = indexesWithMetrics;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
       this.map = map;
     }
+
     public void run() {
       try {
         System.out.println("Starting write index performance");
@@ -209,14 +194,11 @@ public class IndexWritePerformance {
           indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobId(partition));
           throttler.maybeThrottle(1);
         }
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         System.out.println("Exiting write index perf thread " + e);
-      }
-      finally {
+      } finally {
         latch.countDown();
       }
     }
   }
-
 }

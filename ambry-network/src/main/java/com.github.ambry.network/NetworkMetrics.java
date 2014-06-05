@@ -7,6 +7,7 @@ import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * Metrics for the network layer
  */
@@ -35,7 +36,7 @@ public class NetworkMetrics {
         }
       });
       registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + " ResponseQueueSize"),
-                        responseQueueSize.get(i));
+          responseQueueSize.get(i));
     }
     sendInFlight = registry.counter(MetricRegistry.name(SocketServer.class, "SendInFlight"));
   }

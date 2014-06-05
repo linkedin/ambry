@@ -5,6 +5,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
+
 /**
  * Metrics for the store
  */
@@ -37,12 +38,14 @@ public class StoreMetrics {
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeStartTime"));
     overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "overflowWriteError"));
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "overflowReadError"));
-    recoveryTime = registry.timer(MetricRegistry.name(BlobPersistentIndex.class, name + "indexRecoveryTime"));
-    findTime = registry.timer(MetricRegistry.name(BlobPersistentIndex.class, name + "indexFindTime"));
-    indexFlushTime = registry.timer(MetricRegistry.name(BlobPersistentIndex.class, name + "indexFlushTime"));
-    nonzeroMessageRecovery = registry.counter(MetricRegistry.name(BlobPersistentIndex.class, name + "nonZeroMessageRecovery"));
-    bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegmentInfo.class, name + "bloomPositiveCount"));
-    bloomFalsePositiveCount = registry.counter(MetricRegistry.name(IndexSegmentInfo.class, name + "bloomFalsePositiveCount"));
+    recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexRecoveryTime"));
+    findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexFindTime"));
+    indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexFlushTime"));
+    nonzeroMessageRecovery =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "nonZeroMessageRecovery"));
+    bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "bloomPositiveCount"));
+    bloomFalsePositiveCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "bloomFalsePositiveCount"));
   }
 
   public void initializeCapacityUsedMetric(final Log log) {

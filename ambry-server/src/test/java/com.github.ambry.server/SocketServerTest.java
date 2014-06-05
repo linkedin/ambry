@@ -29,11 +29,13 @@ import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
 
+
 public class SocketServerTest {
 
   private SocketServer server = null;
 
-  public SocketServerTest() throws InterruptedException, IOException {
+  public SocketServerTest()
+      throws InterruptedException, IOException {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
@@ -47,7 +49,8 @@ public class SocketServerTest {
   }
 
   @Test
-  public void simpleRequest() throws IOException, InterruptedException {
+  public void simpleRequest()
+      throws IOException, InterruptedException {
     MockClusterMap map = new MockClusterMap();
     int correlationId = 1;
     byte[] bufdata = new byte[10];
@@ -57,11 +60,9 @@ public class SocketServerTest {
     byte[] bufmetadata = new byte[5];
     new Random().nextBytes(bufmetadata);
 
-    PutRequest emptyRequest = new PutRequest(correlationId,
-                                             "test",
-                                             new BlobId(map.getWritablePartitionIdAt(0)),
-                                             new BlobProperties(10, "id"), ByteBuffer.wrap(bufmetadata), stream
-    );
+    PutRequest emptyRequest =
+        new PutRequest(correlationId, "test", new BlobId(map.getWritablePartitionIdAt(0)), new BlobProperties(10, "id"),
+            ByteBuffer.wrap(bufmetadata), stream);
 
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
     channel.connect();
@@ -83,13 +84,12 @@ public class SocketServerTest {
     Assert.assertEquals("id", requestFromNetwork.getBlobProperties().getServiceId());
     InputStream streamFromNetwork = requestFromNetwork.getData();
     for (int i = 0; i < 10; i++) {
-      Assert.assertEquals(bufdata[i], (byte)streamFromNetwork.read());
+      Assert.assertEquals(bufdata[i], (byte) streamFromNetwork.read());
     }
     try {
       streamFromNetwork.read();
       Assert.assertTrue(false);
-    }
-    catch (BufferUnderflowException e) {
+    } catch (BufferUnderflowException e) {
       Assert.assertTrue(true);
     }
 
@@ -106,7 +106,8 @@ public class SocketServerTest {
   /**
    * Choose a number of random available ports
    */
-  ArrayList<Integer> choosePorts(int count) throws IOException {
+  ArrayList<Integer> choosePorts(int count)
+      throws IOException {
     ArrayList<Integer> sockets = new ArrayList<Integer>();
     for (int i = 0; i < count; i++) {
       ServerSocket socket = new ServerSocket(0);
@@ -119,7 +120,8 @@ public class SocketServerTest {
   /**
    * Choose an available port
    */
-  public int choosePort() throws IOException {
+  public int choosePort()
+      throws IOException {
     return choosePorts(1).get(0);
   }
 }

@@ -1,10 +1,10 @@
 package com.github.ambry.shared;
 
-
 import com.github.ambry.utils.Utils;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+
 
 /**
  * A Response to the Put Request
@@ -15,12 +15,13 @@ public class PutResponse extends Response {
     super(RequestResponseType.PutResponse, Request_Response_Version, correlationId, clientId, error);
   }
 
-  public static PutResponse readFrom(DataInputStream stream) throws IOException {
+  public static PutResponse readFrom(DataInputStream stream)
+      throws IOException {
     RequestResponseType type = RequestResponseType.values()[stream.readShort()];
     if (type != RequestResponseType.PutResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible: " + type);
     }
-    Short versionId  = stream.readShort();
+    Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];

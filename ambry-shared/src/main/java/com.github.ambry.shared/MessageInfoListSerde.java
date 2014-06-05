@@ -9,6 +9,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * A serde for serializing and deserializing list of message info
  */
@@ -22,7 +23,7 @@ public class MessageInfoListSerde {
 
   public int getMessageInfoListSize() {
     int listcountSize = 4;
-    if(messageInfoList == null) {
+    if (messageInfoList == null) {
       return listcountSize;
     }
     int size = 0;
@@ -46,13 +47,13 @@ public class MessageInfoListSerde {
         outputBuffer.put(messageInfo.getStoreKey().toBytes());
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
-        outputBuffer.put(messageInfo.isDeleted() ? (byte)1 : 0);
+        outputBuffer.put(messageInfo.isDeleted() ? (byte) 1 : 0);
       }
     }
   }
 
-  public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream,
-                                                             ClusterMap map) throws IOException {
+  public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map)
+      throws IOException {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
@@ -61,8 +62,9 @@ public class MessageInfoListSerde {
       long ttl = stream.readLong();
       byte b = stream.readByte();
       boolean isDeleted = false;
-      if (b == 1)
+      if (b == 1) {
         isDeleted = true;
+      }
       messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
     }
     return messageListInfo;

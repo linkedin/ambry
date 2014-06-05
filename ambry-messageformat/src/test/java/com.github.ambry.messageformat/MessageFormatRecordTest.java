@@ -8,13 +8,15 @@ import org.junit.Test;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+
 public class MessageFormatRecordTest {
   @Test
   public void deserializeTest() {
     try {
       // Test Blob property V1 Record
       BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
-      ByteBuffer stream = ByteBuffer.allocate(MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(properties));
+      ByteBuffer stream =
+          ByteBuffer.allocate(MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(properties));
       MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(stream, properties);
       stream.flip();
       BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
@@ -26,12 +28,11 @@ public class MessageFormatRecordTest {
 
       // corrupt blob property V1 record
       stream.flip();
-      stream.put(10, (byte)10);
+      stream.put(10, (byte) 10);
       try {
         BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
@@ -44,12 +45,11 @@ public class MessageFormatRecordTest {
 
       // corrupt delete V1 record
       deleteRecord.flip();
-      deleteRecord.put(10, (byte)4);
+      deleteRecord.put(10, (byte) 4);
       try {
         boolean corruptDeleted = MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
@@ -69,8 +69,7 @@ public class MessageFormatRecordTest {
       try {
         format.verifyHeader();
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
@@ -83,19 +82,19 @@ public class MessageFormatRecordTest {
 
       // corrupt ttl record V1
       ttl.flip();
-      ttl.put(10, (byte)4);
+      ttl.put(10, (byte) 4);
       try {
         ttlValue = MessageFormatRecord.deserializeTTLRecord(new ByteBufferInputStream(ttl));
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
       // Test usermetadata V1 record
       ByteBuffer usermetadata = ByteBuffer.allocate(1000);
       new Random().nextBytes(usermetadata.array());
-      ByteBuffer output = ByteBuffer.allocate(MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata));
+      ByteBuffer output =
+          ByteBuffer.allocate(MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata));
       MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(output, usermetadata);
       output.flip();
       ByteBuffer bufOutput = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
@@ -104,12 +103,11 @@ public class MessageFormatRecordTest {
       // corrupt usermetadata record V1
       output.flip();
       Byte currentRandomByte = output.get(10);
-      output.put(10, (byte)(currentRandomByte+1));
+      output.put(10, (byte) (currentRandomByte + 1));
       try {
         MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
 
@@ -117,7 +115,7 @@ public class MessageFormatRecordTest {
       ByteBuffer data = ByteBuffer.allocate(2000);
       new Random().nextBytes(data.array());
       long size = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
-      ByteBuffer sData = ByteBuffer.allocate((int)size);
+      ByteBuffer sData = ByteBuffer.allocate((int) size);
       MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(sData, 2000);
       sData.put(data);
       Crc32 crc = new Crc32();
@@ -133,16 +131,14 @@ public class MessageFormatRecordTest {
       // corrupt blob record V1
       sData.flip();
       currentRandomByte = sData.get(10);
-      sData.put(10, (byte)(currentRandomByte+1));
+      sData.put(10, (byte) (currentRandomByte + 1));
       try {
         MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
         Assert.assertEquals(true, false);
-      }
-      catch (MessageFormatException e) {
+      } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       Assert.assertTrue(false);
     }
   }

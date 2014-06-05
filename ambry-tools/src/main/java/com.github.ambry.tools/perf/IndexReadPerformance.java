@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+
 /**
  * Reads from a file and populates the indexes and issues
  * random read requests and tracks performance . This test reads 10000 ids
@@ -56,47 +57,33 @@ public class IndexReadPerformance {
       return ids;
     }
   }
+
   public static void main(String args[]) {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
-              parser.accepts("logToRead", "The log that needs to be replayed for traffic")
-                    .withRequiredArg()
-                    .describedAs("log_to_read")
-                    .ofType(String.class);
+          parser.accepts("logToRead", "The log that needs to be replayed for traffic").withRequiredArg()
+              .describedAs("log_to_read").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                      .withRequiredArg()
-                      .describedAs("hardware_layout")
-                      .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                      .withRequiredArg()
-                      .describedAs("partition_layout")
-                      .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfReadersOpt =
-              parser.accepts("numberOfReaders", "The number of readers that read to a random index concurrently")
-                    .withRequiredArg()
-                    .describedAs("The number of readers")
-                    .ofType(Integer.class)
-                    .defaultsTo(4);
+          parser.accepts("numberOfReaders", "The number of readers that read to a random index concurrently")
+              .withRequiredArg().describedAs("The number of readers").ofType(Integer.class).defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
-              parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
-                    .withRequiredArg()
-                    .describedAs("The number of reads per second")
-                    .ofType(Integer.class)
-                    .defaultsTo(1000);
+          parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
+              .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-              parser.accepts("enableVerboseLogging", "Enables verbose logging")
-                    .withOptionalArg()
-                    .describedAs("Enable verbose logging")
-                    .ofType(Boolean.class)
-                    .defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
+              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 
@@ -105,8 +92,8 @@ public class IndexReadPerformance {
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -117,13 +104,13 @@ public class IndexReadPerformance {
       int numberOfReaders = options.valueOf(numberOfReadersOpt);
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
-      if (enableVerboseLogging)
+      if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
+      }
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
       StoreKeyFactory factory = new BlobIdFactory(map);
-
 
       // Read the log and get the index directories and create the indexes
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
@@ -149,10 +136,9 @@ public class IndexReadPerformance {
             shutdown.set(true);
             latch.await();
             System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
-                               " Nano Seconds  Average time taken per read " +
-                               ((double)totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
-          }
-          catch (Exception e) {
+                " Nano Seconds  Average time taken per read " +
+                ((double) totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+          } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
         }
@@ -162,12 +148,11 @@ public class IndexReadPerformance {
       while ((line = br.readLine()) != null) {
         if (line.startsWith("logdir")) {
           String[] logdirs = line.split("-");
-          BlobIndexMetrics metricIndex = new BlobIndexMetrics(logdirs[1], s, log, enableVerboseLogging,
-                                                              totalReads, totalTimeTaken, totalReads,
-                                                              config, null, factory);
+          BlobIndexMetrics metricIndex =
+              new BlobIndexMetrics(logdirs[1], s, log, enableVerboseLogging, totalReads, totalTimeTaken, totalReads,
+                  config, null, factory);
           hashes.put(logdirs[1], new IndexPayload(metricIndex, new HashSet<String>()));
-        }
-        else {
+        } else {
           break;
         }
       }
@@ -192,8 +177,7 @@ public class IndexReadPerformance {
       }
 
       br.close();
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.out.println("Exiting process with exception " + e);
     }
   }
@@ -212,7 +196,7 @@ public class IndexReadPerformance {
           if (line.startsWith("blobid")) {
             String[] ids = line.split("-");
             HashSet<String> idsForIndex = hashes.get(ids[1]).getIds();
-            idsForIndex.add(ids[2]+"-"+ids[3]+"-"+ids[4]+"-"+ids[5]+"-"+ids[6]);
+            idsForIndex.add(ids[2] + "-" + ids[3] + "-" + ids[4] + "-" + ids[5] + "-" + ids[6]);
             System.out.println("Reading id " + ids[2]);
           }
           if (count == 10000) {
@@ -221,8 +205,7 @@ public class IndexReadPerformance {
           count++;
         }
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       System.out.print("Error when reading from log " + e);
     }
   }
@@ -234,14 +217,15 @@ public class IndexReadPerformance {
     private CountDownLatch latch;
     private ClusterMap map;
 
-    public IndexReadPerfRun(HashMap<String, IndexPayload> hashes, Throttler throttler,
-                            AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
+    public IndexReadPerfRun(HashMap<String, IndexPayload> hashes, Throttler throttler, AtomicBoolean isShutdown,
+        CountDownLatch latch, ClusterMap map) {
       this.hashes = hashes;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
       this.latch = latch;
       this.map = map;
     }
+
     public void run() {
       try {
         System.out.println("Starting index read performance");
@@ -251,25 +235,25 @@ public class IndexReadPerformance {
           synchronized (hashes) {
             // choose a random index
             int indexToUse = new Random().nextInt(hashes.size());
-            IndexPayload index = (IndexPayload)hashes.values().toArray()[indexToUse];
-            if (index.getIds().size() == 0)
+            IndexPayload index = (IndexPayload) hashes.values().toArray()[indexToUse];
+            if (index.getIds().size() == 0) {
               continue;
+            }
             int idToUse = new Random().nextInt(index.getIds().size());
-            String idToLookup = (String)index.getIds().toArray()[idToUse];
+            String idToLookup = (String) index.getIds().toArray()[idToUse];
 
-            if (!index.getIndex().exists(new BlobId(idToLookup, map)))
+            if (!index.getIndex().exists(new BlobId(idToLookup, map))) {
               System.out.println("Error id not found in index " + idToLookup);
-            else
+            } else {
               System.out.println("found id " + idToLookup);
+            }
             throttler.maybeThrottle(1);
           }
           Thread.sleep(1000);
         }
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         System.out.println("Exiting index read perf thread " + e.getCause());
-      }
-      finally {
+      } finally {
         latch.countDown();
       }
     }

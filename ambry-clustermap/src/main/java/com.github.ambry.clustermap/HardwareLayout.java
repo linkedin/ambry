@@ -28,9 +28,11 @@ public class HardwareLayout {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public HardwareLayout(JSONObject jsonObject) throws JSONException {
-    if (logger.isTraceEnabled())
+  public HardwareLayout(JSONObject jsonObject)
+      throws JSONException {
+    if (logger.isTraceEnabled()) {
       logger.trace("HardwareLayout " + jsonObject.toString());
+    }
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
 
@@ -143,7 +145,7 @@ public class HardwareLayout {
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-        diskInStateCount.put(dataNode.getState(), diskInStateCount.get(dataNode.getState()) + 1);
+          diskInStateCount.put(dataNode.getState(), diskInStateCount.get(dataNode.getState()) + 1);
         }
       }
     }
@@ -223,14 +225,14 @@ public class HardwareLayout {
   protected void validateClusterName() {
     if (clusterName == null) {
       throw new IllegalStateException("HardwareLayout clusterName cannot be null.");
-    }
-    else if (clusterName.length() == 0) {
+    } else if (clusterName.length() == 0) {
       throw new IllegalStateException("HardwareLayout clusterName cannot be zero length.");
     }
   }
 
   // Validate each hardware component (Datacenter, DataNode, and Disk) are unique
-  protected void validateUniqueness() throws IllegalStateException {
+  protected void validateUniqueness()
+      throws IllegalStateException {
     logger.trace("begin validateUniqueness.");
     HashSet<Datacenter> datacenterSet = new HashSet<Datacenter>();
     HashSet<DataNode> dataNodeSet = new HashSet<DataNode>();
@@ -261,11 +263,10 @@ public class HardwareLayout {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
-    JSONObject jsonObject = new JSONObject()
-            .put("clusterName", clusterName)
-            .put("version", version)
-            .put("datacenters", new JSONArray());
+  public JSONObject toJSONObject()
+      throws JSONException {
+    JSONObject jsonObject =
+        new JSONObject().put("clusterName", clusterName).put("version", version).put("datacenters", new JSONArray());
     for (Datacenter datacenter : datacenters) {
       jsonObject.accumulate("datacenters", datacenter.toJSONObject());
     }
@@ -276,8 +277,7 @@ public class HardwareLayout {
   public String toString() {
     try {
       return toJSONObject().toString(2);
-    }
-    catch (JSONException e) {
+    } catch (JSONException e) {
       logger.error("JSONException caught in toString: {}", e.getCause());
     }
     return null;
@@ -285,12 +285,18 @@ public class HardwareLayout {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    HardwareLayout that = (HardwareLayout)o;
+    HardwareLayout that = (HardwareLayout) o;
 
-    if (!clusterName.equals(that.clusterName)) return false;
+    if (!clusterName.equals(that.clusterName)) {
+      return false;
+    }
     return datacenters.equals(that.datacenters);
   }
 }

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
+
 public class JvmMetricsTest {
 
   class MockMetricsRegistryMap extends MetricsRegistryMap {
@@ -21,7 +22,8 @@ public class JvmMetricsTest {
   }
 
   @Test
-  public void testJvmMetrics() throws IOException {
+  public void testJvmMetrics()
+      throws IOException {
     MockMetricsRegistryMap registry = new MockMetricsRegistryMap();
     JvmMetrics metrics = new JvmMetrics(registry);
     metrics.start();

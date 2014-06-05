@@ -2,6 +2,7 @@ package com.github.ambry.metrics;
 
 import java.util.concurrent.atomic.AtomicReference;
 
+
 public class Gauge<T> implements Metric {
   private final String name;
   private AtomicReference<T> ref;

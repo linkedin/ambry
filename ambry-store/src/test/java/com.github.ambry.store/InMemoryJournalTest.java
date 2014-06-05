@@ -5,11 +5,12 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class BlobJournalTest {
+
+public class InMemoryJournalTest {
 
   @Test
   public void testJournalOperation() {
-    BlobJournal journal = new BlobJournal("test", 10, 5);
+    InMemoryJournal journal = new InMemoryJournal("test", 10, 5);
     journal.addEntry(0, new MockId("id1"));
     journal.addEntry(1000, new MockId("id2"));
     journal.addEntry(2000, new MockId("id3"));
@@ -48,5 +49,4 @@ public class BlobJournalTest {
     Assert.assertEquals(entries.get(4).getOffset(), 6000);
     Assert.assertEquals(entries.get(4).getKey(), new MockId("id7"));
   }
-
 }

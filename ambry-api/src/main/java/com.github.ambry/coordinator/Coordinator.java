@@ -6,6 +6,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+
 /**
  * The Coordinator performs operations on an Ambry cluster.
  */
@@ -20,7 +21,8 @@ public interface Coordinator {
    * @return The id of the blob if the blob was successfully stored
    * @throws CoordinatorException If the operation experienced an error
    */
-  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob) throws CoordinatorException;
+  String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blob)
+      throws CoordinatorException;
 
   /**
    * Deletes the blob that corresponds to the given id.
@@ -28,7 +30,8 @@ public interface Coordinator {
    * @param id The id of the blob that needs to be deleted.
    * @throws CoordinatorException If the operation experienced an error
    */
-  void deleteBlob(String id) throws CoordinatorException;
+  void deleteBlob(String id)
+      throws CoordinatorException;
 
   /**
    * Cancels the ttl of the blob that correspond to the specified blob id. If the cancel succeeds, the blob will not
@@ -37,7 +40,8 @@ public interface Coordinator {
    * @param id The id of the blob that needs its TTL cancelled
    * @throws CoordinatorException If the operation experienced an error
    */
-  void cancelTTL(String id) throws CoordinatorException;
+  void cancelTTL(String id)
+      throws CoordinatorException;
 
   /**
    * Gets the properties of the blob that corresponds to the specified blob id.
@@ -46,7 +50,8 @@ public interface Coordinator {
    * @return The blob properties of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
    */
-  BlobProperties getBlobProperties(String blobId) throws CoordinatorException;
+  BlobProperties getBlobProperties(String blobId)
+      throws CoordinatorException;
 
   /**
    * Gets the user metadata of the blob that corresponds to the specified blob id.
@@ -55,7 +60,8 @@ public interface Coordinator {
    * @return A buffer that contains the user metadata of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
    */
-  ByteBuffer getBlobUserMetadata(String blobId) throws CoordinatorException;
+  ByteBuffer getBlobUserMetadata(String blobId)
+      throws CoordinatorException;
 
   // TODO: Add interface 'BlobInfo getBlobInfo(String blobId)' to coordinator
 
@@ -66,7 +72,8 @@ public interface Coordinator {
    * @return The data of  of the blob that corresponds to the blob id provided.
    * @throws CoordinatorException If the operation experienced an error
    */
-  BlobOutput getBlob(String blobId) throws CoordinatorException;
+  BlobOutput getBlob(String blobId)
+      throws CoordinatorException;
 
   /**
    * Starts the coordinator.

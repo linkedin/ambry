@@ -1,6 +1,5 @@
 package com.github.ambry.tools.admin;
 
-
 import java.util.*;
 
 
@@ -41,8 +40,9 @@ class Node {
   public Disk getDiskWithMostCapacity(long replicaSize) {
     Disk minDisk = null;
     for (Disk disk : disks) {
-      if ((minDisk == null || minDisk.freeCapacity < disk.freeCapacity) && disk.freeCapacity >= replicaSize)
+      if ((minDisk == null || minDisk.freeCapacity < disk.freeCapacity) && disk.freeCapacity >= replicaSize) {
         minDisk = disk;
+      }
     }
     return minDisk;
   }
@@ -53,15 +53,17 @@ class Datacenter {
 
   public Datacenter(int numberOfNodes, int numberOfDisks, long capacity) {
     nodes = new ArrayList<Node>(numberOfNodes);
-    for (int i = 0; i < numberOfNodes; i++)
+    for (int i = 0; i < numberOfNodes; i++) {
       nodes.add(new Node(i, numberOfDisks, capacity));
+    }
   }
 
   public Node getNodeWithMostFreeCapacity() {
     Node minNode = null;
     for (Node node : nodes) {
-      if (minNode == null || minNode.getFreeCapacity() < node.getFreeCapacity())
+      if (minNode == null || minNode.getFreeCapacity() < node.getFreeCapacity()) {
         minNode = node;
+      }
     }
     return minNode;
   }
@@ -112,19 +114,17 @@ public class TestPartitionAlloc {
   }
 
   // shuffle nodes and disks and choose the first for each replica
-  public static void Strategy1(Datacenter dc,
-                               List<Partition> partitions,
-                               int numberOfPartitions,
-                               int numberOfReplicas,
-                               long replicaSize) {
+  public static void Strategy1(Datacenter dc, List<Partition> partitions, int numberOfPartitions, int numberOfReplicas,
+      long replicaSize) {
     for (int i = 0; i < numberOfPartitions; i++) {
       List<Node> nodes = dc.nodes;
       Collections.shuffle(nodes);
       List<Disk> allocatedDisks = new ArrayList<Disk>();
 
       for (Node dataNode : nodes) {
-        if (allocatedDisks.size() == numberOfReplicas)
+        if (allocatedDisks.size() == numberOfReplicas) {
           break;
+        }
         List<Disk> shuffledDisks = dataNode.disks;
         Collections.shuffle(shuffledDisks);
 
@@ -141,11 +141,8 @@ public class TestPartitionAlloc {
   }
 
   // choose a random node and disk for each replica
-  public static void Strategy2(Datacenter dc,
-                               List<Partition> partitions,
-                               int numberOfPartitions,
-                               int numberOfReplicas,
-                               long replicaSize) {
+  public static void Strategy2(Datacenter dc, List<Partition> partitions, int numberOfPartitions, int numberOfReplicas,
+      long replicaSize) {
     Random rand = new Random(System.currentTimeMillis());
     for (int i = 0; i < numberOfPartitions; i++) {
       List<Node> nodes = dc.nodes;
@@ -174,19 +171,17 @@ public class TestPartitionAlloc {
   }
 
   // shuffle nodes and pick the first while disk is chosen based on most capacity left
-  public static void Strategy3(Datacenter dc,
-                               List<Partition> partitions,
-                               int numberOfPartitions,
-                               int numberOfReplicas,
-                               long replicaSize) {
+  public static void Strategy3(Datacenter dc, List<Partition> partitions, int numberOfPartitions, int numberOfReplicas,
+      long replicaSize) {
     for (int i = 0; i < numberOfPartitions; i++) {
       List<Node> nodes = dc.nodes;
       Collections.shuffle(nodes);
       List<Disk> allocatedDisks = new ArrayList<Disk>();
 
       for (Node dataNode : nodes) {
-        if (allocatedDisks.size() == numberOfReplicas)
+        if (allocatedDisks.size() == numberOfReplicas) {
           break;
+        }
         Disk disk = dataNode.getDiskWithMostCapacity(replicaSize);
         allocatedDisks.add(disk);
         disk.freeCapacity = disk.freeCapacity - replicaSize;
@@ -196,11 +191,8 @@ public class TestPartitionAlloc {
   }
 
   // choose node and disk based on most capacity left
-  public static void Strategy4(Datacenter dc,
-                               List<Partition> partitions,
-                               int numberOfPartitions,
-                               int numberOfReplicas,
-                               long replicaSize) {
+  public static void Strategy4(Datacenter dc, List<Partition> partitions, int numberOfPartitions, int numberOfReplicas,
+      long replicaSize) {
     for (int i = 0; i < numberOfPartitions; i++) {
       List<Disk> allocatedDisks = new ArrayList<Disk>();
 
@@ -227,12 +219,13 @@ public class TestPartitionAlloc {
     for (int i = 0; i < partitions.size(); i++) {
       System.out.print("Partition Id " + i);
       for (int j = 0; j < partitions.get(i).disks.size(); j++) {
-        List<Integer> replicas = diskmap.get(partitions.get(i).disks.get(j).id + ":" + partitions.get(i).disks.get(j).node.id);
+        List<Integer> replicas =
+            diskmap.get(partitions.get(i).disks.get(j).id + ":" + partitions.get(i).disks.get(j).node.id);
         replicas.add(i);
         diskmap.put(partitions.get(i).disks.get(j).id + ":" + partitions.get(i).disks.get(j).node.id, replicas);
 
         System.out.print(" ReplicaId " + partitions.get(i).disks.get(j).id + ":" +
-                partitions.get(i).disks.get(j).node.id + " - " + partitions.get(i).disks.get(j).freeCapacity);
+            partitions.get(i).disks.get(j).node.id + " - " + partitions.get(i).disks.get(j).freeCapacity);
       }
       System.out.println();
     }

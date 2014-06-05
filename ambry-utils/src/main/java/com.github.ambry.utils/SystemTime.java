@@ -22,7 +22,8 @@ public class SystemTime extends Time {
     return System.nanoTime();
   }
 
-  public void sleep(long ms) throws InterruptedException {
+  public void sleep(long ms)
+      throws InterruptedException {
     Thread.sleep(ms);
   }
 }

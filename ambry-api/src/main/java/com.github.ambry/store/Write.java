@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 
+
 /**
  * A write interface provided by the underlying store to write to it
  */
@@ -16,7 +17,8 @@ public interface Write {
    * @return The number of bytes written to the write interface
    * @throws IOException
    */
-  int appendFrom(ByteBuffer buffer) throws IOException;
+  int appendFrom(ByteBuffer buffer)
+      throws IOException;
 
   /**
    * Appends the channel to the underlying write interface. Writes "size" number of bytes
@@ -26,5 +28,6 @@ public interface Write {
    * @return The number of bytes written to the write interface
    * @throws IOException
    */
-  long appendFrom(ReadableByteChannel channel, long size) throws IOException;
+  long appendFrom(ReadableByteChannel channel, long size)
+      throws IOException;
 }

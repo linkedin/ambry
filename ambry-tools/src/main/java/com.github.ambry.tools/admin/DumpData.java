@@ -6,7 +6,7 @@ import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
-import com.github.ambry.store.BlobIndexValue;
+import com.github.ambry.store.IndexValue;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -18,6 +18,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.io.File;
 
+
 /**
  * Dumps the log or the index given a file path
  */
@@ -26,29 +27,20 @@ public class DumpData {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> fileToReadOpt =
-              parser.accepts("fileToRead", "The file that needs to be dumped")
-                    .withRequiredArg()
-                    .describedAs("file_to_read")
-                    .ofType(String.class);
+          parser.accepts("fileToRead", "The file that needs to be dumped").withRequiredArg().describedAs("file_to_read")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-              parser.accepts("hardwareLayout", "The path of the hardware layout file")
-                    .withRequiredArg()
-                    .describedAs("hardware_layout")
-                    .ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
+              .describedAs("hardware_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-              parser.accepts("partitionLayout", "The path of the partition layout file")
-                    .withRequiredArg()
-                    .describedAs("partition_layout")
-                    .ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
+              .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfFileOpt =
-              parser.accepts("typeOfFile", "The type of file to read - log or index")
-                    .withRequiredArg()
-                    .describedAs("The type of file")
-                    .ofType(String.class)
-                    .defaultsTo("log");
+          parser.accepts("typeOfFile", "The type of file to read - log or index").withRequiredArg()
+              .describedAs("The type of file").ofType(String.class).defaultsTo("log");
 
       OptionSet options = parser.parse(args);
 
@@ -57,8 +49,8 @@ public class DumpData {
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
-      for(OptionSpec opt : listOpt) {
-        if(!options.has(opt)) {
+      for (OptionSpec opt : listOpt) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -95,17 +87,15 @@ public class DumpData {
             stream.read(idRead);
             String id = new String(idRead);
             System.out.print(id + " ");
-            byte [] valueRead = new byte[BlobIndexValue.Index_Value_Size_In_Bytes];
+            byte[] valueRead = new byte[IndexValue.Index_Value_Size_In_Bytes];
             stream.read(valueRead);
-            BlobIndexValue value = new BlobIndexValue(ByteBuffer.wrap(valueRead));
+            IndexValue value = new IndexValue(ByteBuffer.wrap(valueRead));
             System.out.println("offset " + value.getOffset() + " size " + value.getSize());
             numberOfEntriesRead++;
           }
           System.out.println("log end offset " + stream.readLong());
         }
-      }
-      else if (typeOfFile.compareTo("log") == 0)
-      {
+      } else if (typeOfFile.compareTo("log") == 0) {
         System.out.println("Dumping log");
         while (true) {
           short version = stream.readShort();
@@ -114,29 +104,29 @@ public class DumpData {
             buffer.putShort(version);
             stream.read(buffer.array(), 2, buffer.capacity() - 2);
             buffer.clear();
-            MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+            MessageFormatRecord.MessageHeader_Format_V1 header =
+                new MessageFormatRecord.MessageHeader_Format_V1(buffer);
             System.out.println(" Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-                    " blobPropertyRelativeOffset " + header.getBlobPropertyRecordRelativeOffset() +
-                    " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
-                    " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
-                    " crc " + header.getCrc());
+                " blobPropertyRelativeOffset " + header.getBlobPropertyRecordRelativeOffset() +
+                " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
+                " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
+                " crc " + header.getCrc());
             // read blob id
             BlobId id = new BlobId(stream, map);
             System.out.println("Id - " + id.toString());
             BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
             System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
-                    " serviceId " + props.getServiceId());
+                " serviceId " + props.getServiceId());
             ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(stream);
             System.out.println(" Metadata - size " + metadata.capacity());
             BlobOutput output = MessageFormatRecord.deserializeBlob(stream);
             System.out.println("Blob - size " + output.getSize());
           }
         }
-      }
-      else
+      } else {
         System.out.println("Unknown file to read option");
-    }
-    catch (Exception e) {
+      }
+    } catch (Exception e) {
       System.out.println("Closed with error " + e);
     }
   }

@@ -4,11 +4,14 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+
+import static org.junit.Assert.assertTrue;
+
 
 /**
  * A mock cluster that is setup with multiple datacenters.
@@ -20,11 +23,12 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
 
-  public MockCluster() throws IOException, InstantiationException {
+  public MockCluster()
+      throws IOException, InstantiationException {
     clusterMap = new MockClusterMap();
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
-    for (MockDataNodeId dataNodeId: dataNodes) {
+    for (MockDataNodeId dataNodeId : dataNodes) {
       startServer(dataNodeId);
     }
   }
@@ -37,7 +41,8 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId) throws IOException, InstantiationException {
+  private void startServer(DataNodeId dataNodeId)
+      throws IOException, InstantiationException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -51,8 +56,33 @@ public class MockCluster {
   }
 
   public void cleanup() {
-    for (AmbryServer server : serverList)
-      server.shutdown();
+    CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
+    for (AmbryServer server : serverList) {
+
+      new Thread(new ServerShutdown(shutdownLatch, server)).start();
+    }
+    try {
+      shutdownLatch.await();
+    } catch (Exception e) {
+      assertTrue(false);
+    }
+
     clusterMap.cleanup();
+  }
+}
+
+class ServerShutdown implements Runnable {
+  private final CountDownLatch latch;
+  private final AmbryServer server;
+
+  public ServerShutdown(CountDownLatch latch, AmbryServer ambryServer) {
+    this.latch = latch;
+    this.server = ambryServer;
+  }
+
+  @Override
+  public void run() {
+    server.shutdown();
+    latch.countDown();
   }
 }

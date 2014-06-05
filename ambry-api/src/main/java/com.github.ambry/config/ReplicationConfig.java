@@ -58,18 +58,17 @@ public class ReplicationConfig {
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
-            verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationNumReplicaThreads =
-            verifiableProperties.getInt("replication.no.of.replica.threads", 1);
+        verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
+    replicationNumReplicaThreads = verifiableProperties.getInt("replication.no.of.replica.threads", 1);
     replicationConnectionPoolCheckoutTimeoutMs =
-            verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);
+        verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);
     replicationTokenFlushIntervalSeconds =
-            verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
     replicationTokenFlushDelaySeconds =
-            verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
-            verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 256000, 0, 2097152);
+        verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 256000, 0, 2097152);
     replicaWaitTimeBetweenReplicasMs =
-            verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
+        verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
   }
 }

@@ -1,6 +1,5 @@
 package com.github.ambry.messageformat;
 
-
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
@@ -12,6 +11,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
+
 
 public class MessageFormatInputStreamTest {
 
@@ -33,13 +33,14 @@ public class MessageFormatInputStreamTest {
 
     @Override
     public short sizeInBytes() {
-      return (short)(2 + id.length());
+      return (short) (2 + id.length());
     }
 
     @Override
     public int compareTo(StoreKey o) {
-      if (o == null)
+      if (o == null) {
         throw new NullPointerException("input argument null");
+      }
       MockId other = (MockId) o;
       return id.compareTo(other.id);
     }
@@ -51,7 +52,8 @@ public class MessageFormatInputStreamTest {
   }
 
   @Test
-  public void messageFormatBlobPropertyTest() throws IOException, MessageFormatException {
+  public void messageFormatBlobPropertyTest()
+      throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     BlobProperties prop = new BlobProperties(10, "servid");
     byte[] usermetadata = new byte[1000];
@@ -60,16 +62,17 @@ public class MessageFormatInputStreamTest {
     new Random().nextBytes(data);
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
-    MessageFormatInputStream messageFormatStream = new PutMessageFormatInputStream(key, prop,
-            ByteBuffer.wrap(usermetadata), stream, 2000);
+    MessageFormatInputStream messageFormatStream =
+        new PutMessageFormatInputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, 2000);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertyRecordSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(prop);
-    int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
+    int userMetadataSize =
+        MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
     long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
 
     Assert.assertEquals(messageFormatStream.getSize(), headerSize + blobPropertyRecordSize +
-                        userMetadataSize + blobSize + key.sizeInBytes());
+        userMetadataSize + blobSize + key.sizeInBytes());
 
     // verify header
     byte[] headerOutput = new byte[headerSize];
@@ -86,11 +89,11 @@ public class MessageFormatInputStreamTest {
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
-
     // verify handle
     byte[] handleOutput = new byte[key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
-    messageFormatStream.read(handleOutput);;
+    messageFormatStream.read(handleOutput);
+    ;
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
     Assert.assertArrayEquals(dest, key.toBytes());
@@ -101,7 +104,7 @@ public class MessageFormatInputStreamTest {
     messageFormatStream.read(blobPropertyOutput);
     Assert.assertEquals(blobPropertyBuf.getShort(), 1);
     BlobProperties propOutput =
-            BlobPropertySerDe.getBlobPropertyFromStream(new DataInputStream(new ByteBufferInputStream(blobPropertyBuf)));
+        BlobPropertySerDe.getBlobPropertyFromStream(new DataInputStream(new ByteBufferInputStream(blobPropertyBuf)));
     Assert.assertEquals(10, propOutput.getBlobSize());
     Assert.assertEquals("servid", propOutput.getServiceId());
     crc = new Crc32();
@@ -127,14 +130,15 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(streamData.readShort(), 1);
     Assert.assertEquals(streamData.readLong(), 2000);
     for (int i = 0; i < 2000; i++) {
-      Assert.assertEquals((byte)streamData.read(), data[i]);
+      Assert.assertEquals((byte) streamData.read(), data[i]);
     }
     long crcVal = crcstream.getValue();
     Assert.assertEquals(crcVal, streamData.readLong());
   }
 
   @Test
-  public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
+  public void messageFormatDeleteRecordTest()
+      throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     MessageFormatInputStream messageFormatStream = new DeleteMessageFormatInputStream(key);
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -164,7 +168,6 @@ public class MessageFormatInputStreamTest {
     handleOutputBuf.get(dest);
     Assert.assertArrayEquals(dest, key.toBytes());
 
-
     // check delete record
     byte[] deleteRecordOutput = new byte[deleteRecordSize];
     ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
@@ -177,7 +180,8 @@ public class MessageFormatInputStreamTest {
   }
 
   @Test
-  public void messageFormatTTLTest() throws IOException, MessageFormatException {
+  public void messageFormatTTLTest()
+      throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     MessageFormatInputStream messageFormatStream = new TTLMessageFormatInputStream(key, 1124);
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();

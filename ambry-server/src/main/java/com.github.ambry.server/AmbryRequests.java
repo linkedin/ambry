@@ -54,6 +54,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * The main request implementation class. All requests to the server are
  * handled by this class
@@ -72,13 +73,9 @@ public class AmbryRequests implements RequestAPI {
   private final FindTokenFactory findTokenFactory;
   private final NotificationSystem notification;
 
-  public AmbryRequests(StoreManager storeManager,
-                       RequestResponseChannel requestResponseChannel,
-                       ClusterMap clusterMap,
-                       DataNodeId nodeId,
-                       MetricRegistry registry,
-                       FindTokenFactory findTokenFactory,
-                       NotificationSystem operationNotification) {
+  public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
+      NotificationSystem operationNotification) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -89,7 +86,8 @@ public class AmbryRequests implements RequestAPI {
     this.notification = operationNotification;
   }
 
-  public void handleRequests(Request request) throws InterruptedException {
+  public void handleRequests(Request request)
+      throws InterruptedException {
     try {
       logger.trace("{}", request);
       DataInputStream stream = new DataInputStream(request.getInputStream());
@@ -110,16 +108,17 @@ public class AmbryRequests implements RequestAPI {
         case ReplicaMetadataRequest:
           handleReplicaMetadataRequest(request);
           break;
-        default: throw new UnsupportedOperationException("Request type not supported");
+        default:
+          throw new UnsupportedOperationException("Request type not supported");
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("Error while handling request" + request + "Closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
   }
 
-  public void handlePutRequest(Request request) throws IOException, InterruptedException {
+  public void handlePutRequest(Request request)
+      throws IOException, InterruptedException {
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     publicAccessLogger.info(putRequest.toString());
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -132,71 +131,56 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(putRequest.getBlobId().getPartition(), true);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating put request failed with error {}", error);
-        response = new PutResponse(putRequest.getCorrelationId(),
-                                   putRequest.getClientId(),
-                                   error);
-      }
-      else {
-        MessageFormatInputStream stream = new PutMessageFormatInputStream(putRequest.getBlobId(),
-                                                                          putRequest.getBlobProperties(),
-                                                                          putRequest.getUsermetadata(),
-                                                                          putRequest.getData(),
-                                                                          putRequest.getBlobProperties().getBlobSize());
-        MessageInfo info = new MessageInfo(putRequest.getBlobId(),
-                                           stream.getSize(),
-                                           Utils.addSecondsToEpochTime(
-                                                   putRequest.getBlobProperties().getCreationTimeInMs(),
-                                                   putRequest.getBlobProperties().getTimeToLiveInSeconds()));
+        response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
+      } else {
+        MessageFormatInputStream stream =
+            new PutMessageFormatInputStream(putRequest.getBlobId(), putRequest.getBlobProperties(),
+                putRequest.getUsermetadata(), putRequest.getData(), putRequest.getBlobProperties().getBlobSize());
+        MessageInfo info = new MessageInfo(putRequest.getBlobId(), stream.getSize(), Utils
+            .addSecondsToEpochTime(putRequest.getBlobProperties().getCreationTimeInMs(),
+                putRequest.getBlobProperties().getTimeToLiveInSeconds()));
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
-        response = new PutResponse(putRequest.getCorrelationId(),
-                                   putRequest.getClientId(),
-                                   ServerErrorCode.No_Error);
+        response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
         metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
-          notification.onBlobReplicaCreated(currentNode.getHostname(),
-                                            putRequest.getBlobId().toString(),
-                                            BlobReplicaSourceType.PRIMARY);
+          notification
+              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().toString(),
+                  BlobReplicaSourceType.PRIMARY);
         }
       }
-    }
-    catch (StoreException e) {
+    } catch (StoreException e) {
       logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.Already_Exist)
+      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.IOError)
+      } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
         metrics.storeIOError.inc();
-      else
+      } else {
         metrics.unExpectedStorePutError.inc();
-      response = new PutResponse(putRequest.getCorrelationId(),
-                                 putRequest.getClientId(),
-                                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    }
-    catch (Exception e) {
+      }
+      response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
       logger.error("Unknown exception on a put ", e);
-      response = new PutResponse(putRequest.getCorrelationId(),
-                                 putRequest.getClientId(),
-                                 ServerErrorCode.Unknown_Error);
-    }
-    finally {
+      response =
+          new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
+    } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
-    requestResponseChannel.sendResponse(response,
-                                        request,
-                                        new NetworkRequestMetrics(
-                                                new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
-                                                new HistogramMeasurement(metrics.putBlobSendTimeInMs),
-                                                new HistogramMeasurement(metrics.putBlobTotalTimeInMs),
-                                                totalTimeSpent));
+    requestResponseChannel.sendResponse(response, request,
+        new NetworkRequestMetrics(new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
+            new HistogramMeasurement(metrics.putBlobSendTimeInMs),
+            new HistogramMeasurement(metrics.putBlobTotalTimeInMs), totalTimeSpent));
   }
 
-  public void handleGetRequest(Request request) throws IOException, InterruptedException {
+  public void handleGetRequest(Request request)
+      throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     publicAccessLogger.info(getRequest.toString());
     HistogramMeasurement responseQueueTimeMeasurement = null;
@@ -210,22 +194,19 @@ public class AmbryRequests implements RequestAPI {
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobTotalTimeInMs);
-    }
-    else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
+    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
       metrics.getBlobPropertiesRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobPropertiesRequestRate.mark();
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobPropertiesTotalTimeInMs);
-    }
-    else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
+    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
       metrics.getBlobUserMetadataRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobUserMetadataRequestRate.mark();
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataTotalTimeInMs);
-    }
-    else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
+    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
       metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobAllRequestRate.mark();
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobAllResponseQueueTimeInMs);
@@ -238,70 +219,60 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(getRequest.getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating get request failed with error {}", error);
-        response = new GetResponse(getRequest.getCorrelationId(),
-                                   getRequest.getClientId(),
-                                   error);
-      }
-      else {
+        response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
+      } else {
         Store storeToGet = storeManager.getStore(getRequest.getPartition());
         StoreInfo info = storeToGet.get(getRequest.getBlobIds());
-        Send blobsToSend = new MessageFormatSend(info.getMessageReadSet(),
-                                                 getRequest.getMessageFormatFlag(),
-                                                 messageFormatMetrics);
-        response = new GetResponse(getRequest.getCorrelationId(),
-                                               getRequest.getClientId(),
-                                               info.getMessageReadSetInfo(),
-                                               blobsToSend,
-                                               ServerErrorCode.No_Error);
+        Send blobsToSend =
+            new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics);
+        response =
+            new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), info.getMessageReadSetInfo(),
+                blobsToSend, ServerErrorCode.No_Error);
       }
-    }
-    catch (StoreException e) {
+    } catch (StoreException e) {
       logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
         metrics.ttlExpiredError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
         metrics.idDeletedError.inc();
-      else
+      } else {
         metrics.unExpectedStoreGetError.inc();
-      response = new GetResponse(getRequest.getCorrelationId(),
-                                 getRequest.getClientId(),
-                                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    }
-    catch (MessageFormatException e) {
+      }
+      response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (MessageFormatException e) {
       logger.error("Message format exception on a get with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt)
+      if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
         metrics.dataCorruptError.inc();
-      else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version)
+      } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
         metrics.unknownFormatError.inc();
-      response = new GetResponse(getRequest.getCorrelationId(),
-                                 getRequest.getClientId(),
-                                 ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
-    }
-    catch (Exception e) {
+      }
+      response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+          ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
       logger.error("Unknown exception on a get ", e);
-      response = new GetResponse(getRequest.getCorrelationId(),
-                                 getRequest.getClientId(),
-                                 ServerErrorCode.Unknown_Error);
-    }
-    finally {
+      response =
+          new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
+    } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
-      if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob)
+      if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
         metrics.getBlobProcessingTimeInMs.update(processingTime);
-      else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties)
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
         metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
-      else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata)
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
+      }
     }
-    requestResponseChannel.sendResponse(response, request, new NetworkRequestMetrics(responseQueueTimeMeasurement,
-                                                                                     responseSendTimeMeasurement,
-                                                                                     responseTotalTimeMeasurement,
-                                                                                     totalTimeSpent));
+    requestResponseChannel.sendResponse(response, request,
+        new NetworkRequestMetrics(responseQueueTimeMeasurement, responseSendTimeMeasurement,
+            responseTotalTimeMeasurement, totalTimeSpent));
   }
 
-  public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
+  public void handleDeleteRequest(Request request)
+      throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     publicAccessLogger.info(deleteRequest.toString());
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -314,11 +285,8 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(deleteRequest.getBlobId().getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating delete request failed with error {}", error);
-        response = new DeleteResponse(deleteRequest.getCorrelationId(),
-                                      deleteRequest.getClientId(),
-                                      error);
-      }
-      else {
+        response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
+      } else {
         MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
         MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
@@ -326,51 +294,43 @@ public class AmbryRequests implements RequestAPI {
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
-        response = new DeleteResponse(deleteRequest.getCorrelationId(),
-                                      deleteRequest.getClientId(),
-                                      ServerErrorCode.No_Error);
+        response =
+            new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(),
-                                            deleteRequest.getBlobId().toString(),
-                                            BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+              deleteRequest.getBlobId().toString(), BlobReplicaSourceType.PRIMARY);
         }
       }
-    }
-    catch (StoreException e) {
+    } catch (StoreException e) {
       logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
         metrics.ttlExpiredError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
         metrics.idDeletedError.inc();
-      else
+      } else {
         metrics.unExpectedStoreDeleteError.inc();
-      response = new DeleteResponse(deleteRequest.getCorrelationId(),
-                                    deleteRequest.getClientId(),
-                                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    }
-    catch (Exception e) {
+      }
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
       logger.error("Unknown exception on delete ", e);
-      response = new DeleteResponse(deleteRequest.getCorrelationId(),
-                                    deleteRequest.getClientId(),
-                                    ServerErrorCode.Unknown_Error);
-    }
-    finally {
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+    } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       metrics.deleteBlobProcessingTimeInMs.update(processingTime);
     }
-    requestResponseChannel.sendResponse(response,
-                                        request,
-                                        new NetworkRequestMetrics(
-                                                new HistogramMeasurement(metrics.deleteBlobResponseQueueTimeInMs),
-                                                new HistogramMeasurement(metrics.deleteBlobSendTimeInMs),
-                                                new HistogramMeasurement(metrics.deleteBlobTotalTimeInMs),
-                                                totalTimeSpent));
+    requestResponseChannel.sendResponse(response, request,
+        new NetworkRequestMetrics(new HistogramMeasurement(metrics.deleteBlobResponseQueueTimeInMs),
+            new HistogramMeasurement(metrics.deleteBlobSendTimeInMs),
+            new HistogramMeasurement(metrics.deleteBlobTotalTimeInMs), totalTimeSpent));
   }
 
-  public void handleTTLRequest(Request request) throws IOException, InterruptedException {
+  public void handleTTLRequest(Request request)
+      throws IOException, InterruptedException {
     TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
@@ -382,60 +342,50 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(ttlRequest.getBlobId().getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating ttl request failed with error {}", error);
-        response = new TTLResponse(ttlRequest.getCorrelationId(),
-                                   ttlRequest.getClientId(),
-                                   error);
-      }
-      else {
-        MessageFormatInputStream stream = new TTLMessageFormatInputStream(ttlRequest.getBlobId(), ttlRequest.getNewTTL());
+        response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), error);
+      } else {
+        MessageFormatInputStream stream =
+            new TTLMessageFormatInputStream(ttlRequest.getBlobId(), ttlRequest.getNewTTL());
         MessageInfo info = new MessageInfo(ttlRequest.getBlobId(), stream.getSize(), ttlRequest.getNewTTL());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
         Store storeToUpdateTTL = storeManager.getStore(ttlRequest.getBlobId().getPartition());
         storeToUpdateTTL.updateTTL(writeset);
-        response = new TTLResponse(ttlRequest.getCorrelationId(),
-                                   ttlRequest.getClientId(),
-                                   ServerErrorCode.No_Error);
+        response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), ServerErrorCode.No_Error);
       }
-    }
-    catch (StoreException e) {
+    } catch (StoreException e) {
       logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found)
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired)
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
         metrics.ttlExpiredError.inc();
-      else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted)
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
         metrics.idDeletedError.inc();
-      else
+      } else {
         metrics.unExpectedStoreTTLError.inc();
-      response = new TTLResponse(ttlRequest.getCorrelationId(),
-                                 ttlRequest.getClientId(),
-                                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    }
-    catch (Exception e) {
+      }
+      response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
       logger.error("Unknown exception on ttl ", e);
-      response = new TTLResponse(ttlRequest.getCorrelationId(),
-                                 ttlRequest.getClientId(),
-                                 ServerErrorCode.Unknown_Error);
-    }
-    finally {
+      response =
+          new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), ServerErrorCode.Unknown_Error);
+    } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;
       metrics.ttlBlobProcessingTimeInMs.update(processingTime);
     }
-    requestResponseChannel.sendResponse(response,
-                                        request,
-                                        new NetworkRequestMetrics(
-                                                new HistogramMeasurement(metrics.ttlBlobResponseQueueTimeInMs),
-                                                new HistogramMeasurement(metrics.ttlBlobSendTimeInMs),
-                                                new HistogramMeasurement(metrics.ttlBlobTotalTimeInMs),
-                                                totalTimeSpent));
+    requestResponseChannel.sendResponse(response, request,
+        new NetworkRequestMetrics(new HistogramMeasurement(metrics.ttlBlobResponseQueueTimeInMs),
+            new HistogramMeasurement(metrics.ttlBlobSendTimeInMs),
+            new HistogramMeasurement(metrics.ttlBlobTotalTimeInMs), totalTimeSpent));
   }
 
-  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
+  public void handleReplicaMetadataRequest(Request request)
+      throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
-            ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
+        ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
@@ -446,47 +396,40 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(replicaMetadataRequest.getPartitionId(), false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating replica metadata request failed with error {}", error);
-        response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
-                                               replicaMetadataRequest.getClientId(),
-                                               error);
+        response =
+            new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+                error);
       }
       Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
       FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
-                                                 replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-      response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
-                                             replicaMetadataRequest.getClientId(),
-                                             ServerErrorCode.No_Error,
-                                             findInfo.getFindToken(),
-                                             findInfo.getMessageEntries());
-    }
-    catch (StoreException e) {
+          replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+      response =
+          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+              ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());
+    } catch (StoreException e) {
       logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.IOError)
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
         metrics.storeIOError.inc();
-      else
+      } else {
         metrics.unExpectedStoreFindEntriesError.inc();
-      response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
-                                             replicaMetadataRequest.getClientId(),
-                                             ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    }
-    catch (Exception e) {
+      }
+      response =
+          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
       logger.error("Unknown exception on replica metadata request ", e);
-      response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
-                                             replicaMetadataRequest.getClientId(),
-                                             ServerErrorCode.Unknown_Error);
-    }
-    finally {
+      response =
+          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+              ServerErrorCode.Unknown_Error);
+    } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
-    requestResponseChannel.sendResponse(response,
-                                        request,
-                                        new NetworkRequestMetrics(
-                                                new HistogramMeasurement(metrics.replicaMetadataResponseQueueTimeInMs),
-                                                new HistogramMeasurement(metrics.replicaMetadataSendTimeInMs),
-                                                new HistogramMeasurement(metrics.replicaMetadataTotalTimeInMs),
-                                                totalTimeSpent));
+    requestResponseChannel.sendResponse(response, request,
+        new NetworkRequestMetrics(new HistogramMeasurement(metrics.replicaMetadataResponseQueueTimeInMs),
+            new HistogramMeasurement(metrics.replicaMetadataSendTimeInMs),
+            new HistogramMeasurement(metrics.replicaMetadataTotalTimeInMs), totalTimeSpent));
   }
 
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
@@ -497,14 +440,15 @@ public class AmbryRequests implements RequestAPI {
     }
     // 2. ensure the disk for the partition/replica is available
     List<ReplicaId> replicaIds = partition.getReplicaIds();
-    for (ReplicaId replica : replicaIds)
-      if (replica.getDataNodeId().getHostname() == currentNode.getHostname() &&
-          replica.getDataNodeId().getPort() == currentNode.getPort()) {
+    for (ReplicaId replica : replicaIds) {
+      if (replica.getDataNodeId().getHostname() == currentNode.getHostname()
+          && replica.getDataNodeId().getPort() == currentNode.getPort()) {
         if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
           metrics.diskUnavailableError.inc();
           return ServerErrorCode.Disk_Unavailable;
         }
       }
+    }
     // 3. ensure if the partition can be written to
     if (checkPartitionState && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();

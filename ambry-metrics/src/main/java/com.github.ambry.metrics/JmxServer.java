@@ -18,6 +18,7 @@ import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXServiceURL;
 import java.io.IOException;
 
+
 /**
  * Programmatically start the JMX server and its accompanying RMI server. This is necessary in order to reliably
  * and - heh - simply request and know a dynamic port such that processes on the same machine do not collide when
@@ -36,20 +37,23 @@ public class JmxServer {
 
   // An RMIServerSocketFactory that will tell what port it opened up.  Imagine that.
   class UpfrontRMIServerSocketFactory implements RMIServerSocketFactory {
-    ServerSocket lastSS  = null;
+    ServerSocket lastSS = null;
 
     @Override
-    public ServerSocket createServerSocket(int port) throws IOException {
+    public ServerSocket createServerSocket(int port)
+        throws IOException {
       lastSS = new ServerSocket(port);
       return lastSS;
     }
   }
 
-  public JmxServer(int requestedPort) throws RemoteException, MalformedURLException, IOException {
+  public JmxServer(int requestedPort)
+      throws RemoteException, MalformedURLException, IOException {
     this.requestedPort = requestedPort;
     if (System.getProperty("com.sun.management.jmxremote") != null) {
-      logger.warn("System property com.sun.management.jmxremote has been specified, starting the JVM's JMX server as well. " +
-                  "This behavior is not well defined and our values will collide with any set on command line.");
+      logger.warn(
+          "System property com.sun.management.jmxremote has been specified, starting the JVM's JMX server as well. "
+              + "This behavior is not well defined and our values will collide with any set on command line.");
     }
 
     String hostname = InetAddress.getLocalHost().getHostName();
@@ -63,15 +67,16 @@ public class JmxServer {
     this.actualPort = ssFactory.lastSS.getLocalPort();
     MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
     Map<String, Object> env = new HashMap<String, Object>();
-    JMXServiceURL serviceURL = new JMXServiceURL("service:jmx:rmi:///jndi/rmi://" + hostname + ":" + actualPort + "/jmxrmi");
+    JMXServiceURL serviceURL =
+        new JMXServiceURL("service:jmx:rmi:///jndi/rmi://" + hostname + ":" + actualPort + "/jmxrmi");
     this.jmxServer = JMXConnectorServerFactory.newJMXConnectorServer(serviceURL, env, mbs);
     this.url = serviceURL.toString();
     jmxServer.start();
     logger.info("Started jmx server" + toString());
-
   }
 
-  public JmxServer() throws RemoteException, MalformedURLException, IOException {
+  public JmxServer()
+      throws RemoteException, MalformedURLException, IOException {
     this(0); // use default registry port
   }
 
@@ -81,8 +86,7 @@ public class JmxServer {
     if (existingProp == null) {
       logger.debug("Setting new system property of {} to {}", prop, value);
       System.setProperty(prop, value);
-    }
-    else {
+    } else {
       logger.info("Not overriding system property {} as already has value {}", prop, existingProp);
     }
   }
@@ -106,12 +110,13 @@ public class JmxServer {
   /**
    * Stop the JMX server. Must be called at program end or will prevent termination.
    */
-  public void stop() throws IOException {
+  public void stop()
+      throws IOException {
     jmxServer.stop();
   }
 
   public String toString() {
-    return "JmxServer port= " + getPort() +  " url= " + getJmxUrl();
+    return "JmxServer port= " + getPort() + " url= " + getJmxUrl();
   }
 }
 

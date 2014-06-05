@@ -3,6 +3,7 @@ package com.github.ambry.store;
 import java.util.List;
 import java.io.IOException;
 
+
 /**
  * The recovery component used by the store to recover
  * the index from the log.
@@ -19,5 +20,6 @@ public interface MessageStoreRecovery {
    * @return A list of messages that were successfully recovered
    * @throws IOException
    */
-  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException;
+  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+      throws IOException;
 }

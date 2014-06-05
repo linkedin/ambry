@@ -1,6 +1,5 @@
 package com.github.ambry.utils;
 
-
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -11,10 +10,12 @@ import java.io.IOException;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+
 public class ByteBufferInputStreamTest {
 
   @Test
-  public void byteBufferStreamTest() throws IOException {
+  public void byteBufferStreamTest()
+      throws IOException {
     byte[] buf = new byte[1024];
     new Random().nextBytes(buf);
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
@@ -22,19 +23,21 @@ public class ByteBufferInputStreamTest {
       Assert.assertEquals(stream.read(), (buf[i] & 0xFF));
     }
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(buf));
-    byte [] outputBuf = new byte[500];
+    byte[] outputBuf = new byte[500];
     stream1.read(outputBuf, 0, 500);
-    for (int i = 0; i < 500; i++)
+    for (int i = 0; i < 500; i++) {
       Assert.assertEquals(outputBuf[i], buf[i]);
+    }
 
     stream1.read(outputBuf, 0, 500);
-    for (int i = 500; i < 1000; i++)
+    for (int i = 500; i < 1000; i++) {
       Assert.assertEquals(outputBuf[i - 500], buf[i]);
-
+    }
   }
 
   @Test
-  public void markResetTest() throws IOException {
+  public void markResetTest()
+      throws IOException {
     byte[] buf = new byte[1024];
     new Random().nextBytes(buf);
 
@@ -72,5 +75,4 @@ public class ByteBufferInputStreamTest {
       // Expected
     }
   }
-
 }

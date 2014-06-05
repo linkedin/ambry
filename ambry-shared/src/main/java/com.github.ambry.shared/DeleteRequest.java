@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
+
 /**
  * Delete request to delete blob
  */
@@ -21,7 +22,8 @@ public class DeleteRequest extends RequestOrResponse {
     sizeSent = 0;
   }
 
-  public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+  public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map)
+      throws IOException {
     RequestResponseType type = RequestResponseType.DeleteRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -36,9 +38,10 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       bufferToSend.flip();
@@ -57,7 +60,7 @@ public class DeleteRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + blobId
-    return super.sizeInBytes() +  blobId.sizeInBytes();
+    return super.sizeInBytes() + blobId.sizeInBytes();
   }
 
   @Override

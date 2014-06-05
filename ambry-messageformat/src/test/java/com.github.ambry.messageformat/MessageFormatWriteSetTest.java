@@ -1,6 +1,5 @@
 package com.github.ambry.messageformat;
 
-
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferInputStream;
 import org.junit.Assert;
@@ -14,6 +13,7 @@ import java.util.List;
 
 import com.github.ambry.store.Write;
 
+
 public class MessageFormatWriteSetTest {
 
   public class MockWrite implements Write {
@@ -25,14 +25,16 @@ public class MessageFormatWriteSetTest {
     }
 
     @Override
-    public int appendFrom(ByteBuffer buffer) throws IOException {
+    public int appendFrom(ByteBuffer buffer)
+        throws IOException {
       int toWrite = buffer.remaining();
       buf.put(buffer);
       return toWrite;
     }
 
     @Override
-    public long appendFrom(ReadableByteChannel channel, long size) throws IOException {
+    public long appendFrom(ReadableByteChannel channel, long size)
+        throws IOException {
       channel.read(buf);
       return size;
     }
@@ -42,8 +44,10 @@ public class MessageFormatWriteSetTest {
       return buf;
     }
   }
+
   @Test
-  public void writeSetTest() throws IOException {
+  public void writeSetTest()
+      throws IOException {
     byte[] buf = new byte[2000];
     MessageInfo info1 = new MessageInfo(new MessageFormatInputStreamTest.MockId("id1"), 1000, 123);
     MessageInfo info2 = new MessageInfo(new MessageFormatInputStreamTest.MockId("id2"), 1000, 123);

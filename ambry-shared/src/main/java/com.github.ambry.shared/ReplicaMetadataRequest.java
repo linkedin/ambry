@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
+
 /**
  * Replica metadata request to get new entries for replication
  */
@@ -21,18 +22,16 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   private static int Max_Entries_Size_In_Bytes = 8;
 
-  public ReplicaMetadataRequest(int correlationId,
-                                String clientId,
-                                PartitionId partitionId,
-                                FindToken token,
-                                long maxTotalSizeOfEntriesInBytes) {
+  public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token,
+      long maxTotalSizeOfEntriesInBytes) {
     super(RequestResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
     this.token = token;
     this.partitionId = partitionId;
     this.maxTotalSizeOfEntriesInBytes = maxTotalSizeOfEntriesInBytes;
   }
 
-  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactory factory) throws IOException {
+  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactory factory)
+      throws IOException {
     RequestResponseType type = RequestResponseType.ReplicaMetadataRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -57,7 +56,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();

@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.ByteBuffer;
 
+
 /**
  * This represents data received from the channel and provides an input stream
  * interface to read from it. This class is responsible for deciding when to buffer
@@ -30,7 +31,8 @@ public class SocketServerInputSet extends InputStream implements Receive {
   }
 
   @Override
-  public int read() throws IOException {
+  public int read()
+      throws IOException {
     return (buffer.get() & 0xFF);
   }
 
@@ -40,8 +42,8 @@ public class SocketServerInputSet extends InputStream implements Receive {
   }
 
   @Override
-  public int readFrom(ReadableByteChannel channel) throws IOException {
-    int bytesRead = 0;
+  public long readFrom(ReadableByteChannel channel) throws IOException {
+    long bytesRead = 0;
     if (buffer == null) {
       bytesRead = channel.read(sizeBuffer);
       if(bytesRead == -1)
@@ -49,13 +51,16 @@ public class SocketServerInputSet extends InputStream implements Receive {
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
         // for now we support only intmax size. We need to extend it to streaming
-        sizeToRead = (int)sizeBuffer.getLong();
+        sizeToRead = (int) sizeBuffer.getLong();
         sizeRead += 8;
+        bytesRead += 8;
         buffer = ByteBuffer.allocate(sizeToRead - 8);
       }
     }
     if (buffer != null && sizeRead < sizeToRead) {
-      sizeRead += channel.read(buffer);
+      long bytesReadFromChannel = channel.read(buffer);
+      sizeRead += bytesReadFromChannel;
+      bytesRead += bytesReadFromChannel;
       if (sizeRead == sizeToRead) {
         buffer.flip();
       }

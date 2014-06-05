@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
+
 /**
  * Request Response for serialization and de-serialization
  */
@@ -54,7 +55,7 @@ public abstract class RequestOrResponse implements Send {
       throw new IllegalStateException("Buffer to send should not be null");
     }
     bufferToSend.putLong(sizeInBytes());
-    bufferToSend.putShort((short)type.ordinal());
+    bufferToSend.putShort((short) type.ordinal());
     bufferToSend.putShort(versionId);
     bufferToSend.putInt(correlationId);
     bufferToSend.putInt(clientId.length());
@@ -64,8 +65,8 @@ public abstract class RequestOrResponse implements Send {
   public long sizeInBytes() {
     // size + type + versionId + correlationId + clientId
     return Request_Response_Size_In_Bytes + Request_Response_Type_Size_In_Bytes +
-           Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
-           ClientId_Field_Size_In_Bytes + clientId.length();
+        Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
+        ClientId_Field_Size_In_Bytes + clientId.length();
   }
 
 }

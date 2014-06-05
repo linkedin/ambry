@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+
 final class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final Object lock = new Object();
@@ -48,9 +49,7 @@ final class RemoteReplicaInfo {
   private long timeTokenSetInMs;
   private FindToken tokenPersisted = null;
 
-  public RemoteReplicaInfo(ReplicaId replicaId,
-                           FindToken token,
-                           long tokenPersistIntervalInMs) {
+  public RemoteReplicaInfo(ReplicaId replicaId, FindToken token, long tokenPersistIntervalInMs) {
     this.replicaId = replicaId;
     this.currentToken = token;
     if (tokenToPersist == null) {
@@ -158,26 +157,18 @@ public final class ReplicationManager {
   private static final short Crc_Size = 8;
   private static final short Replication_Delay_Multiplier = 5;
 
-
-
-  public ReplicationManager(ReplicationConfig replicationConfig,
-                            StoreConfig storeConfig,
-                            StoreManager storeManager,
-                            StoreKeyFactory storeKeyFactory,
-                            ClusterMap clusterMap,
-                            Scheduler scheduler,
-                            DataNodeId dataNode,
-                            ConnectionPool connectionPool,
-                            MetricRegistry metricRegistry,
-                            NotificationSystem requestNotification) throws ReplicationException {
+  public ReplicationManager(ReplicationConfig replicationConfig, StoreConfig storeConfig, StoreManager storeManager,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler, DataNodeId dataNode,
+      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification)
+      throws ReplicationException {
 
     try {
       this.replicationConfig = replicationConfig;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
-      this.replicationMetrics = new ReplicationMetrics("replication-"+dataNode.getHostname()+":"+dataNode.getPort(),
-                                                       metricRegistry,
-                                                       replicaThreads);
+      this.replicationMetrics =
+          new ReplicationMetrics("replication-" + dataNode.getHostname() + ":" + dataNode.getPort(), metricRegistry,
+              replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -198,16 +189,13 @@ public final class ReplicationManager {
             // We need to ensure that replica tokens gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo =
-                    new RemoteReplicaInfo(remoteReplica,
-                                          factory.getNewFindToken(),
-                                          storeConfig.storeDataFlushIntervalSeconds *
-                                                  SystemTime.MsPerSec * Replication_Delay_Multiplier);
+            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, factory.getNewFindToken(),
+                storeConfig.storeDataFlushIntervalSeconds *
+                    SystemTime.MsPerSec * Replication_Delay_Multiplier);
             remoteReplicas.add(remoteReplicaInfo);
           }
-          PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas,
-                                                          replicaId.getPartitionId(),
-                                                          storeManager.getStore(replicaId.getPartitionId()));
+          PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
+              storeManager.getStore(replicaId.getPartitionId()));
           partitionsToReplicate.put(replicaId.getPartitionId(), partitionInfo);
           List<PartitionInfo> partitionInfos = partitionGroupedByMountPath.get(replicaId.getMountPath());
           if (partitionInfos == null) {
@@ -217,14 +205,14 @@ public final class ReplicationManager {
           partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
         }
       }
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("Error on starting replication manager", e);
       throw new ReplicationException("Error on starting replication manager");
     }
   }
 
-  public void start() throws ReplicationException {
+  public void start()
+      throws ReplicationException {
 
     try {
       // read stored tokens
@@ -239,10 +227,10 @@ public final class ReplicationManager {
       if (partitionGroupedByMountPath.size() >= replicationConfig.replicationNumReplicaThreads) {
         logger.info("Number of replica threads is less than or equal to the number of mount paths");
         int numberOfMountPathPerThread =
-                partitionGroupedByMountPath.size() / replicationConfig.replicationNumReplicaThreads;
+            partitionGroupedByMountPath.size() / replicationConfig.replicationNumReplicaThreads;
         int remainingMountPaths = partitionGroupedByMountPath.size() % replicationConfig.replicationNumReplicaThreads;
         Iterator<Map.Entry<String, List<PartitionInfo>>> mountPathEntries =
-                partitionGroupedByMountPath.entrySet().iterator();
+            partitionGroupedByMountPath.entrySet().iterator();
         for (int i = 0; i < replicationConfig.replicationNumReplicaThreads; i++) {
           // create the list of partition info for the replica thread
           List<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
@@ -255,20 +243,12 @@ public final class ReplicationManager {
             partitionInfoList.addAll(mountPathEntries.next().getValue());
             remainingMountPaths--;
           }
-          ReplicaThread replicaThread = new ReplicaThread("Replica Thread " + i,
-                                                          partitionInfoList,
-                                                          factory,
-                                                          clusterMap,
-                                                          correlationIdGenerator,
-                                                          dataNodeId,
-                                                          connectionPool,
-                                                          replicationConfig,
-                                                          replicationMetrics,
-                                                          notification);
+          ReplicaThread replicaThread =
+              new ReplicaThread("Replica Thread " + i, partitionInfoList, factory, clusterMap, correlationIdGenerator,
+                  dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
           replicaThreads.add(replicaThread);
         }
-      }
-      else {
+      } else {
 
       }
       // start all replica threads
@@ -280,19 +260,15 @@ public final class ReplicationManager {
 
       // start background persistent thread
       // start scheduler thread to persist index in the background
-      this.scheduler.schedule("replica token persistor",
-                              persistor,
-                              replicationConfig.replicationTokenFlushDelaySeconds,
-                              replicationConfig.replicationTokenFlushIntervalSeconds,
-                              TimeUnit.SECONDS);
-
-    }
-    catch (IOException e) {
+      this.scheduler.schedule("replica token persistor", persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+          replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+    } catch (IOException e) {
       logger.error("IO error while starting replication");
     }
   }
 
-  public void shutdown() throws ReplicationException {
+  public void shutdown()
+      throws ReplicationException {
     try {
       // stop all replica threads
       for (ReplicaThread replicaThread : replicaThreads) {
@@ -300,14 +276,14 @@ public final class ReplicationManager {
       }
       // persist replica tokens
       persistor.write();
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error("Error shutting down replica manager {}", e);
       throw new ReplicationException("Error shutting down replica manager");
     }
   }
 
-  private void readFromFile(String mountPath) throws ReplicationException, IOException {
+  private void readFromFile(String mountPath)
+      throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
@@ -330,30 +306,31 @@ public final class ReplicationManager {
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
               for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
-                if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
-                    info.getReplicaId().getDataNodeId().getPort() == port) {
+                if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
+                    && info.getReplicaId().getDataNodeId().getPort() == port) {
                   info.setToken(token);
-                  logger.trace("Read token for partition {} remote host {} port {} token {}",
-                               partitionId, hostname, port, token);
+                  logger
+                      .trace("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
+                          token);
                   updatedToken = true;
                 }
               }
-              if (!updatedToken)
+              if (!updatedToken) {
                 logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
+              }
             }
             long crc = crcStream.getValue();
             if (crc != stream.readLong()) {
-              throw new ReplicationException("Crc check does not match for replica token file for mount path " + mountPath);
+              throw new ReplicationException(
+                  "Crc check does not match for replica token file for mount path " + mountPath);
             }
             break;
           default:
             throw new ReplicationException("Invalid version in replica token file for mount path " + mountPath);
         }
-      }
-      catch (IOException e) {
-        throw new ReplicationException("IO error while reading from replica token file " +  e);
-      }
-      finally {
+      } catch (IOException e) {
+        throw new ReplicationException("IO error while reading from replica token file " + e);
+      } finally {
         stream.close();
       }
     }
@@ -370,7 +347,8 @@ public final class ReplicationManager {
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
      * path to a file. The file is saved on the corresponding mount path
      */
-    public void write() throws IOException, ReplicationException {
+    public void write()
+        throws IOException, ReplicationException {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         File temp = new File(mountPath, replicaTokenFileName + ".tmp");
         File actual = new File(mountPath, replicaTokenFileName);
@@ -401,12 +379,10 @@ public final class ReplicationManager {
           fileStream.getChannel().force(true);
           // swap temp file with the original file
           temp.renameTo(actual);
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
           logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
           throw new ReplicationException("IO error while persisting replica tokens to disk ");
-        }
-        finally {
+        } finally {
           writer.close();
         }
         logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
@@ -416,8 +392,7 @@ public final class ReplicationManager {
     public void run() {
       try {
         write();
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         logger.info("Error while persisting the replica tokens {}", e);
       }
     }

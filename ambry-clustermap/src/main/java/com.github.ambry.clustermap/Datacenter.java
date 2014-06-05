@@ -1,6 +1,5 @@
 package com.github.ambry.clustermap;
 
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -9,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+
 
 /**
  * A Datacenter in an Ambry cluster. A Datacenter must be uniquely identifiable by its name. A Datacenter is the primary
@@ -23,9 +23,11 @@ public class Datacenter {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
-    if (logger.isTraceEnabled())
+  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject)
+      throws JSONException {
+    if (logger.isTraceEnabled()) {
       logger.trace("Datacenter " + jsonObject.toString());
+    }
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
 
@@ -70,8 +72,7 @@ public class Datacenter {
   protected void validateName() {
     if (name == null) {
       throw new IllegalStateException("Datacenter name cannot be null.");
-    }
-    else if (name.length() == 0) {
+    } else if (name.length() == 0) {
       throw new IllegalStateException("Datacenter name cannot be zero length.");
     }
   }
@@ -83,10 +84,9 @@ public class Datacenter {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
-    JSONObject jsonObject = new JSONObject()
-            .put("name", name)
-            .put("dataNodes", new JSONArray());
+  public JSONObject toJSONObject()
+      throws JSONException {
+    JSONObject jsonObject = new JSONObject().put("name", name).put("dataNodes", new JSONArray());
     for (DataNode dataNode : dataNodes) {
       jsonObject.accumulate("dataNodes", dataNode.toJSONObject());
     }
@@ -100,10 +100,14 @@ public class Datacenter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    Datacenter that = (Datacenter)o;
+    Datacenter that = (Datacenter) o;
 
     return name.equals(that.name);
   }

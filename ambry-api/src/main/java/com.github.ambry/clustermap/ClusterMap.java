@@ -6,6 +6,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.List;
 
+
 /**
  * The ClusterMap provides a high-level interface to {@link DataNodeId}s, {@link PartitionId}s and {@link ReplicaId}s.
  */
@@ -16,7 +17,8 @@ public interface ClusterMap {
    * @param stream data input stream that contains the serialized partition bytes
    * @return deserialized PartitionId
    */
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException;
+  public PartitionId getPartitionIdFromStream(DataInputStream stream)
+      throws IOException;
 
   /**
    * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such PartitionId.

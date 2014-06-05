@@ -6,6 +6,7 @@ import com.github.ambry.utils.CrcInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+
 /**
  * Represents a message that consist of the blob, blob properties and user metadata.
  * This format is used to put a new blob into the store
@@ -26,9 +27,9 @@ import java.nio.ByteBuffer;
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
-  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperty,
-                                     ByteBuffer userMetadata, InputStream data,
-                                     long streamSize) throws MessageFormatException {
+  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperty, ByteBuffer userMetadata,
+      InputStream data, long streamSize)
+      throws MessageFormatException {
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertyRecordSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(blobProperty);
@@ -36,15 +37,14 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize +
-                                (int)(blobSize - streamSize - MessageFormatRecord.Crc_Size));
+        (int) (blobSize - streamSize - MessageFormatRecord.Crc_Size));
 
-    MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer,
-                                                                blobPropertyRecordSize + userMetadataSize + blobSize,
-                                                                headerSize + key.sizeInBytes(),
-                                                                MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-                                                                MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-                                                                headerSize + key.sizeInBytes() + blobPropertyRecordSize,
-                                                                headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize);
+    MessageFormatRecord.MessageHeader_Format_V1
+        .serializeHeader(buffer, blobPropertyRecordSize + userMetadataSize + blobSize, headerSize + key.sizeInBytes(),
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            headerSize + key.sizeInBytes() + blobPropertyRecordSize,
+            headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize);
     buffer.put(key.toBytes());
     MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(buffer, blobProperty);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);

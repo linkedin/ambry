@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
+
 /**
  * The response for a ReplicaMetadataRequest. This returns the new entries found
  * and the new token that could be used for future searches
@@ -22,22 +23,18 @@ public class ReplicaMetadataResponse extends Response {
   private MessageInfoListSerde messageInfoListSerDe;
   private final int messageInfoListSize;
 
-  public ReplicaMetadataResponse(int correlationId,
-                                 String clientId,
-                                 ServerErrorCode error,
-                                 FindToken token,
-                                 List<MessageInfo> messageInfoList) {
+  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error, FindToken token,
+      List<MessageInfo> messageInfoList) {
     super(RequestResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
-    if (token == null || messageInfoList == null)
+    if (token == null || messageInfoList == null) {
       throw new IllegalArgumentException("Invalid token or message info list");
+    }
     this.token = token;
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
   }
 
-  public ReplicaMetadataResponse(int correlationId,
-                                 String clientId,
-                                 ServerErrorCode error) {
+  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     token = null;
     this.messageInfoListSerDe = new MessageInfoListSerde(null);
@@ -52,14 +49,14 @@ public class ReplicaMetadataResponse extends Response {
     return token;
   }
 
-  public static ReplicaMetadataResponse readFrom(DataInputStream stream,
-                                                 FindTokenFactory factory,
-                                                 ClusterMap clusterMap) throws IOException {
+  public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
+      ClusterMap clusterMap)
+      throws IOException {
     RequestResponseType type = RequestResponseType.values()[stream.readShort()];
     if (type != RequestResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
-    Short versionId  = stream.readShort();
+    Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
@@ -71,9 +68,10 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel) throws IOException {
+  public void writeTo(WritableByteChannel channel)
+      throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate((int)sizeInBytes());
+      bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       if (token != null) {
         bufferToSend.put(token.toBytes());

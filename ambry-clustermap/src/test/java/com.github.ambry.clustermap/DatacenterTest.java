@@ -8,9 +8,11 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+
 // TestDatacenter permits Datacenter to be constructed with a null HardwareLayout.
 class TestDatacenter extends Datacenter {
-  public TestDatacenter(JSONObject jsonObject) throws JSONException {
+  public TestDatacenter(JSONObject jsonObject)
+      throws JSONException {
     super(null, jsonObject);
   }
 
@@ -21,12 +23,18 @@ class TestDatacenter extends Datacenter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
-    TestDatacenter testDatacenter = (TestDatacenter)o;
+    TestDatacenter testDatacenter = (TestDatacenter) o;
 
-    if (!getName().equals(testDatacenter.getName())) return false;
+    if (!getName().equals(testDatacenter.getName())) {
+      return false;
+    }
     return getRawCapacityInBytes() == testDatacenter.getRawCapacityInBytes();
   }
 }
@@ -40,20 +48,20 @@ public class DatacenterTest {
 
   private static final int dataNodeCount = 6;
 
-  JSONArray getDisks() throws JSONException {
+  JSONArray getDisks()
+      throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
-  JSONArray getDataNodes() throws JSONException {
-    return TestUtils.getJsonArrayDataNodes(dataNodeCount,
-                                           TestUtils.getLocalHost(),
-                                           6666,
-                                           HardwareState.AVAILABLE,
-                                           getDisks());
+  JSONArray getDataNodes()
+      throws JSONException {
+    return TestUtils
+        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
   }
 
   @Test
-  public void basics() throws JSONException {
+  public void basics()
+      throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
 
     Datacenter datacenter = new TestDatacenter(jsonObject);
@@ -65,18 +73,19 @@ public class DatacenterTest {
     assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject()));
   }
 
-  public void failValidation(JSONObject jsonObject) throws JSONException {
+  public void failValidation(JSONObject jsonObject)
+      throws JSONException {
     try {
       new TestDatacenter(jsonObject);
       fail("Should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
   }
 
   @Test
-  public void validation() throws JSONException {
+  public void validation()
+      throws JSONException {
     JSONObject jsonObject;
 
     try {
@@ -84,8 +93,7 @@ public class DatacenterTest {
       jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
       new Datacenter(null, jsonObject);
       fail("Should have failed validation.");
-    }
-    catch (IllegalStateException e) {
+    } catch (IllegalStateException e) {
       // Expected.
     }
 

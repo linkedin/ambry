@@ -10,7 +10,6 @@ import java.lang.annotation.Retention;
 @Documented
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Default
-{
-    String value();
+public @interface Default {
+  String value();
 }

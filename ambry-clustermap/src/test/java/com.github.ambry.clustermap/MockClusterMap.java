@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 /**
  * Mock cluster map for unit tests. This sets up a three node cluster
  * with 3 mount points in each. Each mount point has three partitions
@@ -20,7 +21,8 @@ public class MockClusterMap implements ClusterMap {
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
 
-  public MockClusterMap() throws IOException {
+  public MockClusterMap()
+      throws IOException {
 
     // create 3 nodes with each having 3 mount paths
     MockDataNodeId dataNodeId1 = createDataNode(6667, "DC1");
@@ -58,7 +60,8 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private MockDataNodeId createDataNode(int port, String datacenter) throws IOException {
+  private MockDataNodeId createDataNode(int port, String datacenter)
+      throws IOException {
     File f = null;
     try {
       List<String> mountPaths = new ArrayList<String>(3);
@@ -79,8 +82,7 @@ public class MockClusterMap implements ClusterMap {
       mountPaths.add(mountPath3);
       MockDataNodeId dataNode = new MockDataNodeId(port, mountPaths, datacenter);
       return dataNode;
-    }
-    finally {
+    } finally {
       if (f != null) {
         f.delete();
       }
@@ -88,7 +90,8 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+  public PartitionId getPartitionIdFromStream(DataInputStream stream)
+      throws IOException {
     long id = stream.readLong();
     return partitions.get(id);
   }
@@ -100,8 +103,9 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public PartitionId getWritablePartitionIdAt(long index) {
-    if (index < 0  || index >= partitions.size())
+    if (index < 0 || index >= partitions.size()) {
       throw new IndexOutOfBoundsException("argument invalid");
+    }
     return partitions.get(index);
   }
 
@@ -113,8 +117,9 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     for (DataNodeId dataNodeId : dataNodes) {
-      if (dataNodeId.getHostname().compareTo(hostname) == 0 && dataNodeId.getPort() == port)
+      if (dataNodeId.getHostname().compareTo(hostname) == 0 && dataNodeId.getPort() == port) {
         return dataNodeId;
+      }
     }
     return null;
   }
@@ -125,8 +130,8 @@ public class MockClusterMap implements ClusterMap {
     for (PartitionId partitionId : partitions.values()) {
       List<ReplicaId> replicaIds = partitionId.getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
-        if (replicaId.getDataNodeId().getHostname().compareTo(dataNodeId.getHostname()) == 0 &&
-            replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
+        if (replicaId.getDataNodeId().getHostname().compareTo(dataNodeId.getHostname()) == 0
+            && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
           replicaIdsToReturn.add(replicaId);
         }
       }
@@ -151,12 +156,12 @@ public class MockClusterMap implements ClusterMap {
 
   public void cleanup() {
     for (PartitionId partitionId : partitions.values()) {
-      MockPartitionId mockPartition = (MockPartitionId)partitionId;
+      MockPartitionId mockPartition = (MockPartitionId) partitionId;
       mockPartition.cleanUp();
     }
 
     for (DataNodeId dataNode : dataNodes) {
-      List<String> mountPaths = ((MockDataNodeId)dataNode).getMountPaths();
+      List<String> mountPaths = ((MockDataNodeId) dataNode).getMountPaths();
       for (String mountPath : mountPaths) {
         File mountPathDir = new File(mountPath);
         for (File file : mountPathDir.listFiles()) {
@@ -181,7 +186,7 @@ class MockReplicaId implements ReplicaId {
     this.dataNodeId = dataNodeId;
     mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
     File mountFile = new File(mountPath);
-    File replicaFile = new File(mountFile, "replica" + port + ((MockPartitionId)partitionId).partition);
+    File replicaFile = new File(mountFile, "replica" + port + ((MockPartitionId) partitionId).partition);
     replicaFile.mkdir();
     replicaFile.deleteOnExit();
     replicaPath = replicaFile.getAbsolutePath();

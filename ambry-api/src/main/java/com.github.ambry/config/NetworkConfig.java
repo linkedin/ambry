@@ -1,11 +1,9 @@
 package com.github.ambry.config;
 
-
 /**
  * The configs for network layer
  */
 public class NetworkConfig {
-
 
   /**
    * The number of network threads that the server uses for handling network requests
@@ -70,9 +68,10 @@ public class NetworkConfig {
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
     port = verifiableProperties.getInt("port", 6667);
     hostName = verifiableProperties.getString("host.name", "localhost");
-    socketSendBufferBytes = verifiableProperties.getInt("socket.send.buffer.bytes", 100*1024);
-    socketReceiveBufferBytes = verifiableProperties.getInt("socket.receive.buffer.bytes", 100*1024);
-    socketRequestMaxBytes = verifiableProperties.getIntInRange("socket.request.max.bytes", 100*1024*1024, 1, Integer.MAX_VALUE);
+    socketSendBufferBytes = verifiableProperties.getInt("socket.send.buffer.bytes", 100 * 1024);
+    socketReceiveBufferBytes = verifiableProperties.getInt("socket.receive.buffer.bytes", 100 * 1024);
+    socketRequestMaxBytes =
+        verifiableProperties.getIntInRange("socket.request.max.bytes", 100 * 1024 * 1024, 1, Integer.MAX_VALUE);
     queuedMaxRequests = verifiableProperties.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);
   }
 }

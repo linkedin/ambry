@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+
 /**
  * Performs an operation
  */
@@ -46,13 +47,8 @@ public abstract class Operation {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Operation(String datacenterName,
-                   ConnectionPool connectionPool,
-                   ExecutorService requesterPool,
-                   OperationContext context,
-                   BlobId blobId,
-                   long operationTimeoutMs,
-                   OperationPolicy operationPolicy) {
+  public Operation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -77,8 +73,8 @@ public abstract class Operation {
    * @return true if response is successful
    * @throws CoordinatorException
    */
-  protected abstract boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) throws
-          CoordinatorException;
+  protected abstract boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+      throws CoordinatorException;
 
   private void sendRequests() {
     logger.debug("{} sendRequests determining whether to send more requests", context);
@@ -90,14 +86,14 @@ public abstract class Operation {
     }
   }
 
-  public void execute() throws CoordinatorException {
+  public void execute()
+      throws CoordinatorException {
     logger.debug("{} operation beginning execute", context);
     sendRequests();
     while (true) {
       try {
         OperationResponse operationResponse =
-                responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(),
-                                   TimeUnit.MILLISECONDS);
+            responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
         logger.debug("{} operation processing a response", context);
         if (operationResponse == null) {
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
@@ -106,7 +102,7 @@ public abstract class Operation {
         ReplicaId replicaId = operationResponse.getReplicaId();
         if (!requestsInFlight.remove(replicaId)) {
           CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
-                                                            CoordinatorError.UnexpectedInternalError);
+              CoordinatorError.UnexpectedInternalError);
           logger.error("Response received from replica (" + replicaId + ") to which no request is in flight: ", e);
           throw e;
         }
@@ -114,21 +110,17 @@ public abstract class Operation {
         if (operationResponse.getError() == RequestResponseError.SUCCESS) {
           if (processResponseError(replicaId, operationResponse.getResponse().getError())) {
             operationPolicy.onSuccessfulResponse(replicaId);
-          }
-          else {
+          } else {
             if (operationResponse.getResponse().getError() == ServerErrorCode.Data_Corrupt) {
               operationPolicy.onCorruptResponse(replicaId);
-            }
-            else {
+            } else {
               operationPolicy.onFailedResponse(replicaId);
             }
           }
-        }
-        else {
+        } else {
           if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
             operationPolicy.onCorruptResponse(replicaId);
-          }
-          else {
+          } else {
             operationPolicy.onFailedResponse(replicaId);
           }
         }
@@ -143,16 +135,14 @@ public abstract class Operation {
         }
         if (!operationPolicy.mayComplete()) {
           throw new CoordinatorException("Insufficient DataNodes replied to complete operation",
-                                         CoordinatorError.AmbryUnavailable);
+              CoordinatorError.AmbryUnavailable);
         }
         sendRequests();
-      }
-      catch (CoordinatorException e) {
+      } catch (CoordinatorException e) {
         operationComplete.set(true);
         logger.error(context + " operation throwing CoordinatorException during ", e);
         throw e;
-      }
-      catch (InterruptedException e) {
+      } catch (InterruptedException e) {
         operationComplete.set(true);
         // Slightly abuse the notion of "unexpected" internal error since InterruptedException does not indicate
         // something truly unexpected.
@@ -177,12 +167,8 @@ abstract class OperationRequest implements Runnable {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected OperationRequest(ConnectionPool connectionPool,
-                             BlockingQueue<OperationResponse> responseQueue,
-                             OperationContext context,
-                             BlobId blobId,
-                             ReplicaId replicaId,
-                             RequestOrResponse request) {
+  protected OperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;
@@ -191,12 +177,17 @@ abstract class OperationRequest implements Runnable {
     this.request = request;
   }
 
-  protected abstract Response getResponse(DataInputStream dataInputStream) throws IOException;
+  protected abstract Response getResponse(DataInputStream dataInputStream)
+      throws IOException;
 
-  protected abstract void markRequest() throws CoordinatorException;
-  protected abstract void updateRequest(long durationInMs) throws CoordinatorException;
+  protected abstract void markRequest()
+      throws CoordinatorException;
 
-  void deserializeResponsePayload(Response response) throws IOException, MessageFormatException {
+  protected abstract void updateRequest(long durationInMs)
+      throws CoordinatorException;
+
+  void deserializeResponsePayload(Response response)
+      throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
   }
 
@@ -207,9 +198,9 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.debug("{} {} checking out connection", context, replicaId);
-      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-                                                           replicaId.getDataNodeId().getPort(),
-                                                           context.getConnectionPoolCheckoutTimeout());
+      connectedChannel = connectionPool
+          .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
+              context.getConnectionPoolCheckoutTimeout());
       logger.debug("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
       logger.debug("{} {} receiving response", context, replicaId);
@@ -233,28 +224,23 @@ abstract class OperationRequest implements Runnable {
       enqueueOperationResponse(new OperationResponse(replicaId, response));
       markRequest();
       updateRequest(System.currentTimeMillis() - startTimeInMs);
-    }
-    catch (IOException e) {
+    } catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
       countError(RequestResponseError.IO_ERROR);
-    }
-    catch (MessageFormatException e) {
+    } catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
       countError(e.getErrorCode());
-    }
-    catch (ConnectionPoolTimeoutException e) {
+    } catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
       countError(RequestResponseError.TIMEOUT_ERROR);
-    }
-    catch (Exception e) {
+    } catch (Exception e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
       countError(RequestResponseError.UNEXPECTED_ERROR);
-    }
-    finally {
+    } finally {
       if (connectedChannel != null) {
         logger.debug("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
@@ -265,8 +251,7 @@ abstract class OperationRequest implements Runnable {
   private void countError(MessageFormatErrorCodes error) {
     try {
       context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    }
-    catch (CoordinatorException e) {
+    } catch (CoordinatorException e) {
       logger.error("Swallowing exception fetching RequestMetrics: ", e);
     }
   }
@@ -274,8 +259,7 @@ abstract class OperationRequest implements Runnable {
   private void countError(RequestResponseError error) {
     try {
       context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    }
-    catch (CoordinatorException e) {
+    } catch (CoordinatorException e) {
       logger.error("Swallowing exception fetching RequestMetrics: ", e);
     }
   }
@@ -283,7 +267,7 @@ abstract class OperationRequest implements Runnable {
   private void enqueueOperationResponse(OperationResponse operationResponse) {
     if (!responseQueue.offer(operationResponse)) {
       logger.error(context + " " + replicaId +
-                   " responseQueue incorrectly sized since offer() returned false.  BlobId ", blobId);
+          " responseQueue incorrectly sized since offer() returned false.  BlobId ", blobId);
     }
   }
 }

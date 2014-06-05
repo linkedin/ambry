@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
 
+
 /**
  * Straight up ripoff of Hadoop's metrics2 JvmMetrics class.
  */
@@ -23,6 +24,7 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
   class CounterTuple {
     private Counter counter1;
     private Counter counter2;
+
     public CounterTuple(Counter counter1, Counter counter2) {
       this.counter1 = counter1;
       this.counter2 = counter2;
@@ -76,10 +78,9 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
     updateGcUsage();
     updateThreadUsage();
 
-    logger.debug("updated metrics to: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]",
-                  gMemNonHeapUsedM, gMemNonHeapCommittedM, gMemHeapUsedM, gMemHeapCommittedM, gThreadsNew,
-                  gThreadsRunnable, gThreadsBlocked, gThreadsWaiting, gThreadsTimedWaiting,
-                  gThreadsTerminated, cGcCount, cGcTimeMillis);
+    logger.debug("updated metrics to: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]", gMemNonHeapUsedM,
+        gMemNonHeapCommittedM, gMemHeapUsedM, gMemHeapCommittedM, gThreadsNew, gThreadsRunnable, gThreadsBlocked,
+        gThreadsWaiting, gThreadsTimedWaiting, gThreadsTerminated, cGcCount, cGcTimeMillis);
   }
 
   public void stop() {
@@ -115,15 +116,16 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
 
   private CounterTuple getGcInfo(String gcName) {
     CounterTuple tuple = gcBeanCounters.get(gcName);
-    if (tuple != null)
+    if (tuple != null) {
       return tuple;
-    else {
-      CounterTuple newTuple = new CounterTuple(newCounter("%s-gc-count" + gcName),
-              newCounter("%s-gc-time-millis" + gcName));
+    } else {
+      CounterTuple newTuple =
+          new CounterTuple(newCounter("%s-gc-count" + gcName), newCounter("%s-gc-time-millis" + gcName));
       gcBeanCounters.put(gcName, newTuple);
       return newTuple;
     }
   }
+
   private void updateThreadUsage() {
     long threadsNew = 0l;
     long threadsRunnable = 0l;
@@ -138,22 +140,22 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
       // check to ensure threadInfo is not null due to race conditions
       if (threadInfo != null) {
         switch (threadInfo.getThreadState()) {
-          case NEW :
+          case NEW:
             threadsNew += 1;
             break;
-          case RUNNABLE :
+          case RUNNABLE:
             threadsRunnable += 1;
             break;
-          case BLOCKED :
+          case BLOCKED:
             threadsBlocked += 1;
             break;
-          case WAITING :
+          case WAITING:
             threadsWaiting += 1;
             break;
-          case TIMED_WAITING :
+          case TIMED_WAITING:
             threadsTimedWaiting += 1;
             break;
-          case TERMINATED :
+          case TERMINATED:
             threadsTerminated += 1;
             break;
         }
