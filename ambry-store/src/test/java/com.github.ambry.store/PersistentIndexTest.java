@@ -445,6 +445,7 @@ public class PersistentIndexTest {
       log.close();
       scheduler.shutdown();
     } catch (Exception e) {
+      e.printStackTrace();
       Assert.assertEquals(false, true);
     } finally {
       if (map != null) {

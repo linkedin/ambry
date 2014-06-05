@@ -446,12 +446,8 @@ class IndexSegment {
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           writer.write(entry.getKey().toBytes());
           writer.write(entry.getValue().getBytes().array());
-          if (entry.getValue().getOffset() >= fileEndPointer) {
-            logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(),
-                entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
-          }
-          logger.trace("Index {} writing key {} offset {} size {}", getFile().getAbsolutePath(), entry.getKey(),
-              entry.getValue().getOffset(), entry.getValue().getOffset());
+          logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(), entry.getKey(),
+              entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
           numOfEntries++;
         }
         prevNumOfEntriesWritten = numOfEntries;
@@ -532,14 +528,15 @@ class IndexSegment {
         case 0:
           this.keySize = stream.readInt();
           this.valueSize = stream.readInt();
-          this.endOffset.set(stream.readLong());
+          long logEndOffset = stream.readLong();
+          long maxEndOffset = Long.MIN_VALUE;
           while (stream.available() > Crc_Size) {
             StoreKey key = factory.getStoreKey(stream);
             byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
             stream.read(value);
             IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
             // ignore entries that have offsets outside the log end offset that this index represents
-            if (blobValue.getOffset() < endOffset.get()) {
+            if (blobValue.getOffset() < logEndOffset) {
               index.put(key, blobValue);
               logger.trace("Index {} putting key {} in index offset {} size {}", indexFile.getPath(), key,
                   blobValue.getOffset(), blobValue.getSize());
@@ -549,12 +546,16 @@ class IndexSegment {
               journal.addEntry(blobValue.getOffset(), key);
               sizeWritten.addAndGet(key.sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
               numberOfItems.incrementAndGet();
+              if (blobValue.getOffset() + blobValue.getSize() > maxEndOffset) {
+                maxEndOffset = blobValue.getOffset() + blobValue.getSize();
+              }
             } else {
               logger.info(
                   "Index {} ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
-                  indexFile.getPath(), endOffset.get(), key);
+                  indexFile.getPath(), logEndOffset, key);
             }
           }
+          this.endOffset.set(maxEndOffset);
           long crc = crcStream.getValue();
           if (crc != stream.readLong()) {
             // reset structures

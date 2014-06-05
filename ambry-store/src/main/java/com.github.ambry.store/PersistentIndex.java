@@ -611,8 +611,6 @@ public class PersistentIndex {
     public void write()
         throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
-      long startTime = SystemTime.getInstance().milliseconds();
-      logger.info("Starting persistence of index " + dataDir + " at " + startTime);
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer
