@@ -17,7 +17,8 @@ public interface Receive {
   /**
    * Reads some bytes from the provided channel
    * @param channel The channel to read from
+   * @return No of bytes read. Returns -1 if EOS is reached
    * @throws IOException
    */
-  void readFrom(ReadableByteChannel channel) throws IOException;
+  int readFrom(ReadableByteChannel channel) throws IOException;
 }

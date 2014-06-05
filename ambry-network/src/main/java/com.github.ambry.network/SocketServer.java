@@ -332,13 +332,18 @@ class Processor extends AbstractServerThread {
             try {
               key = iter.next();
               iter.remove();
-
               if(key.isReadable())
-                read(key);
-              else if(key.isWritable())
+              {
+                int bytesRead = read(key);
+                if(bytesRead == -1)
+                  close(key);
+              }
+              else if(key.isWritable()) {
                 write(key);
-              else if(!key.isValid())
+              }
+              else if(!key.isValid()) {
                 close(key);
+              }
               else
                 throw new IllegalStateException("Unrecognized key state for processor thread.");
             }
@@ -439,7 +444,7 @@ class Processor extends AbstractServerThread {
   /*
    * Process reads from ready sockets
    */
-  private void read(SelectionKey key) throws InterruptedException, IOException {
+  private int read(SelectionKey key) throws InterruptedException, IOException {
     SocketChannel socketChannel = (SocketChannel)key.channel();
     SocketServerInputSet input = null;
     if(key.attachment() == null) {
@@ -449,7 +454,10 @@ class Processor extends AbstractServerThread {
     else {
       input = (SocketServerInputSet)key.attachment();
     }
-    input.readFrom(socketChannel);
+    int bytesRead = input.readFrom(socketChannel);
+
+    if(bytesRead == -1)
+      return -1;
 
     logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
 
@@ -472,6 +480,7 @@ class Processor extends AbstractServerThread {
       key.interestOps(SelectionKey.OP_READ);
       wakeup();
     }
+    return bytesRead;
   }
 
     /*

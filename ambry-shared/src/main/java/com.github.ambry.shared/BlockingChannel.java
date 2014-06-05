@@ -60,6 +60,7 @@ public class BlockingChannel implements ConnectedChannel {
     }
   }
 
+
   public void disconnect() {
     synchronized (lock) {
       try {
