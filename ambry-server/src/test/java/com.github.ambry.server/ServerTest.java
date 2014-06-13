@@ -59,10 +59,12 @@ import org.junit.Test;
 public class ServerTest {
 
   private MockCluster cluster;
+  private MockNotificationSystem notificationSystem;
 
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
-    cluster = new MockCluster();
+    notificationSystem = new MockNotificationSystem(9);
+    cluster = new MockCluster(notificationSystem);
   }
 
   @After
@@ -184,7 +186,6 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException {
-
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -260,7 +261,12 @@ public class ServerTest {
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // wait till replication can complete
-      Thread.sleep(4000);
+      notificationSystem.awaitBlobCreations(blobId1.toString());
+      notificationSystem.awaitBlobCreations(blobId2.toString());
+      notificationSystem.awaitBlobCreations(blobId3.toString());
+      notificationSystem.awaitBlobCreations(blobId4.toString());
+      notificationSystem.awaitBlobCreations(blobId5.toString());
+      notificationSystem.awaitBlobCreations(blobId6.toString());
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -350,7 +356,7 @@ public class ServerTest {
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
-      Thread.sleep(1000);
+      notificationSystem.awaitBlobDeletions(blobId1.toString());
 
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
@@ -425,6 +431,7 @@ public class ServerTest {
         }
       }
 
+      System.out.println("Starting test");
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
@@ -466,6 +473,7 @@ public class ServerTest {
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
+      System.out.println("Waiting for blobId 7");
       cluster.getServers().get(0).startup();
       // wait for server to recover
       Thread.sleep(2000);
@@ -497,9 +505,29 @@ public class ServerTest {
       for (File toDelete : mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
+      notificationSystem.decrementCreatedReplica(blobId2.toString());
+      notificationSystem.decrementCreatedReplica(blobId3.toString());
+      notificationSystem.decrementCreatedReplica(blobId4.toString());
+      notificationSystem.decrementCreatedReplica(blobId5.toString());
+      notificationSystem.decrementCreatedReplica(blobId6.toString());
+      notificationSystem.decrementCreatedReplica(blobId7.toString());
+      notificationSystem.decrementCreatedReplica(blobId8.toString());
+      notificationSystem.decrementCreatedReplica(blobId9.toString());
+      notificationSystem.decrementCreatedReplica(blobId10.toString());
+      notificationSystem.decrementCreatedReplica(blobId11.toString());
 
       cluster.getServers().get(0).startup();
-      Thread.sleep(2000);
+      notificationSystem.awaitBlobCreations(blobId2.toString());
+      notificationSystem.awaitBlobCreations(blobId3.toString());
+      notificationSystem.awaitBlobCreations(blobId4.toString());
+      notificationSystem.awaitBlobCreations(blobId5.toString());
+      notificationSystem.awaitBlobCreations(blobId6.toString());
+      notificationSystem.awaitBlobCreations(blobId7.toString());
+      notificationSystem.awaitBlobCreations(blobId8.toString());
+      notificationSystem.awaitBlobCreations(blobId9.toString());
+      notificationSystem.awaitBlobCreations(blobId10.toString());
+      notificationSystem.awaitBlobCreations(blobId11.toString());
+
       channel1.disconnect();
       channel1.connect();
 

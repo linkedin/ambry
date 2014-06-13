@@ -4,11 +4,16 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.BlobReplicaSourceType;
+import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import javax.management.Notification;
 
 import static org.junit.Assert.assertTrue;
 
@@ -22,9 +27,11 @@ import static org.junit.Assert.assertTrue;
 public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
+  private NotificationSystem notificationSystem;
 
-  public MockCluster()
+  public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException {
+    this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap();
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
@@ -50,7 +57,7 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "0");
     VerifiableProperties propverify = new VerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, clusterMap);
+    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     server.startup();
     serverList.add(server);
   }
@@ -85,4 +92,99 @@ class ServerShutdown implements Runnable {
     server.shutdown();
     latch.countDown();
   }
+}
+
+class Tracker {
+  public CountDownLatch totalReplicasDeleted;
+  public CountDownLatch totalReplicasCreated;
+
+  public Tracker(int expectedNumberOfReplicas) {
+    totalReplicasDeleted = new CountDownLatch(expectedNumberOfReplicas);
+    totalReplicasCreated = new CountDownLatch(expectedNumberOfReplicas);
+  }
+}
+
+/**
+ * A mock notification system that heps to identify when blobs
+ * get replicated. This class is not thread safe
+ */
+class MockNotificationSystem implements NotificationSystem {
+
+  HashMap<String, Tracker> objectTracker = new HashMap<String, Tracker>();
+  int numberOfReplicas;
+
+  public MockNotificationSystem(int numberOfReplicas) {
+    this.numberOfReplicas = numberOfReplicas;
+  }
+
+  @Override
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata) {
+    // ignore
+  }
+
+  @Override
+  public void onBlobDeleted(String blobId) {
+    // ignore
+  }
+
+  @Override
+  public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    Tracker tracker = objectTracker.get(blobId);
+    if (tracker == null) {
+      tracker = new Tracker(numberOfReplicas);
+      objectTracker.put(blobId, tracker);
+    }
+    tracker.totalReplicasCreated.countDown();
+  }
+
+  @Override
+  public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    Tracker tracker = objectTracker.get(blobId);
+    tracker.totalReplicasDeleted.countDown();
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    // ignore
+  }
+
+  public void awaitBlobCreations(String blobId) {
+    try {
+      Tracker tracker = objectTracker.get(blobId);
+      tracker.totalReplicasCreated.await();
+    }
+    catch (InterruptedException e) {
+      // ignore
+    }
+  }
+
+  public void awaitBlobDeletions(String blobId) {
+    try {
+      Tracker tracker = objectTracker.get(blobId);
+      tracker.totalReplicasDeleted.await();
+    }
+    catch (InterruptedException e) {
+      // ignore
+    }
+  }
+
+  public void clearAndUpdate(int numberOfReplicas) {
+    objectTracker.clear();
+    this.numberOfReplicas = numberOfReplicas;
+  }
+
+  public void decrementCreatedReplica(String blobId) {
+    Tracker tracker = objectTracker.get(blobId);
+    long currentCount = tracker.totalReplicasCreated.getCount();
+    long finalCount = currentCount + 1;
+    if (finalCount > numberOfReplicas) {
+      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
+    }
+    tracker.totalReplicasCreated = new CountDownLatch(numberOfReplicas);
+    while (tracker.totalReplicasCreated.getCount() > finalCount) {
+      tracker.totalReplicasCreated.countDown();
+    }
+  }
+
 }
