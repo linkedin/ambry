@@ -174,6 +174,21 @@ public class Utils {
   }
 
   /**
+   * Instantiate a class instance from a given className with two args (along with MetricRegistry)
+   */
+  public static <T> T getObj(String className, Object arg1, Object arg2)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
+             InvocationTargetException {
+    for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
+      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
+          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
+        return (T) ctor.newInstance(arg1, arg2);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Instantiate a class instance from a given className.
    */
   public static <T> T getObj(String className)

@@ -91,7 +91,7 @@ public class AmbryCoordinator implements Coordinator {
 
       logger.info("Getting connection pool");
       ConnectionPoolFactory connectionPoolFactory =
-          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig);
+          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry);
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 
