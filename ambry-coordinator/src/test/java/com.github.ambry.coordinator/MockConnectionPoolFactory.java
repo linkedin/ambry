@@ -1,5 +1,6 @@
 package com.github.ambry.coordinator;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolFactory;
@@ -7,9 +8,11 @@ import com.github.ambry.shared.ConnectionPoolFactory;
 
 public class MockConnectionPoolFactory implements ConnectionPoolFactory {
   ConnectionPoolConfig config;
+  private final MetricRegistry registry;
 
-  public MockConnectionPoolFactory(ConnectionPoolConfig config) {
+  public MockConnectionPoolFactory(ConnectionPoolConfig config, MetricRegistry registry) {
     this.config = config;
+    this.registry = registry;
   }
 
   public ConnectionPool getConnectionPool() {

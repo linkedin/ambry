@@ -103,7 +103,7 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
       connectionPool.start();
 
       replicationManager =

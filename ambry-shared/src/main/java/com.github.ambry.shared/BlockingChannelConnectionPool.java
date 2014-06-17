@@ -1,5 +1,8 @@
 package com.github.ambry.shared;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.ConnectionPoolConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +28,13 @@ class BlockingChannelInfo {
   private final String host;
   private final int port;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private Gauge<Integer> availableConnections;
+  private Gauge<Integer> activeConnections;
+  private Gauge<Integer> totalNumberOfConnections;
 
-  public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port) {
+  private final String name;
+
+  public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry) {
     this.config = config;
     this.blockingChannelAvailableConnections =
         new ArrayBlockingQueue<BlockingChannel>(config.connectionPoolMaxConnectionsPerHost);
@@ -37,6 +45,34 @@ class BlockingChannelInfo {
     this.lock = new Object();
     this.host = host;
     this.port = port;
+    this.name = host + ":" + port;
+
+    availableConnections = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return blockingChannelAvailableConnections.size();
+      }
+    };
+    registry
+        .register(MetricRegistry.name(BlockingChannelInfo.class, name + "-availableConnections"), availableConnections);
+
+    activeConnections = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return blockingChannelActiveConnections.size();
+      }
+    };
+    registry.register(MetricRegistry.name(BlockingChannelInfo.class, name + "-activeConnections"), activeConnections);
+
+    totalNumberOfConnections = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return numberOfConnections.intValue();
+      }
+    };
+    registry.register(MetricRegistry.name(BlockingChannelInfo.class, name + "-totalNumberOfConnections"),
+        totalNumberOfConnections);
+
     logger.info("Starting blocking channel info for host {} and port {}", host, port);
   }
 
@@ -138,6 +174,14 @@ class BlockingChannelInfo {
     }
   }
 
+  /**
+   * Returns the number of connections with this BlockingChannelInfo
+   * @return
+   */
+  public int getNumberOfConnections() {
+    return this.numberOfConnections.intValue();
+  }
+
   public void cleanup() {
     rwlock.writeLock().lock();
     logger.info("Cleaning all active and available connections for host {} and port {}", host, port);
@@ -169,10 +213,53 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   private final Map<String, BlockingChannelInfo> connections;
   private final ConnectionPoolConfig config;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final MetricRegistry registry;
+  private final Timer connectionCheckOutTime;
+  private final Timer connectionCheckInTime;
+  private final Timer connectionDestroyTime;
+  // Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
+  private Gauge<Integer> totalNumberOfNodesConnectedTo;
+  // Represents the total number of connections, in other words, aggregate of the connections from all nodes
+  public Gauge<Integer> totalNumberOfConnections;
 
-  public BlockingChannelConnectionPool(ConnectionPoolConfig config) {
+  public BlockingChannelConnectionPool(ConnectionPoolConfig config, MetricRegistry registry) {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
     this.config = config;
+    this.registry = registry;
+    connectionCheckOutTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckOutTime"));
+    connectionCheckInTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckInTime"));
+    connectionDestroyTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionDestroyTime"));
+
+    totalNumberOfNodesConnectedTo = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        int noOfNodesConnectedTo = 0;
+        for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
+          if (blockingChannelInfo.getNumberOfConnections() > 0) {
+            noOfNodesConnectedTo++;
+          }
+        }
+        return noOfNodesConnectedTo;
+      }
+    };
+    registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfNodesConnectedTo"),
+        totalNumberOfNodesConnectedTo);
+
+    totalNumberOfConnections = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        int noOfConnections = 0;
+        for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
+          noOfConnections += blockingChannelInfo.getNumberOfConnections();
+        }
+        return noOfConnections;
+      }
+    };
+    registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfConnections"),
+        totalNumberOfConnections);
   }
 
   @Override
@@ -191,41 +278,56 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   @Override
   public ConnectedChannel checkOutConnection(String host, int port, long timeoutInMs)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-    BlockingChannelInfo blockingChannelInfo = connections.get(host + port);
-    if (blockingChannelInfo == null) {
-      synchronized (this) {
-        blockingChannelInfo = connections.get(host + port);
-        if (blockingChannelInfo == null) {
-          logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
-          blockingChannelInfo = new BlockingChannelInfo(config, host, port);
-          connections.put(host + port, blockingChannelInfo);
+    final Timer.Context context = connectionCheckOutTime.time();
+    try {
+      BlockingChannelInfo blockingChannelInfo = connections.get(host + port);
+      if (blockingChannelInfo == null) {
+        synchronized (this) {
+          blockingChannelInfo = connections.get(host + port);
+          if (blockingChannelInfo == null) {
+            logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
+            connections.put(host + port, blockingChannelInfo);
+          }
         }
       }
+      return blockingChannelInfo.getBlockingChannel(timeoutInMs);
+    } finally {
+      context.stop();
     }
-    return blockingChannelInfo.getBlockingChannel(timeoutInMs);
   }
 
   @Override
   public void checkInConnection(ConnectedChannel connectedChannel) {
-    BlockingChannelInfo blockingChannelInfo =
-        connections.get(connectedChannel.getRemoteHost() + connectedChannel.getRemotePort());
-    if (blockingChannelInfo == null) {
-      logger.error("Unexpected state in connection pool. Host {} and port {} not found to checkin connection",
-          connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
-      throw new IllegalArgumentException("Connection does not belong to the pool");
+    final Timer.Context context = connectionCheckInTime.time();
+    try {
+      BlockingChannelInfo blockingChannelInfo =
+          connections.get(connectedChannel.getRemoteHost() + connectedChannel.getRemotePort());
+      if (blockingChannelInfo == null) {
+        logger.error("Unexpected state in connection pool. Host {} and port {} not found to checkin connection",
+            connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
+        throw new IllegalArgumentException("Connection does not belong to the pool");
+      }
+      blockingChannelInfo.addBlockingChannel((BlockingChannel) connectedChannel);
+    } finally {
+      context.stop();
     }
-    blockingChannelInfo.addBlockingChannel((BlockingChannel) connectedChannel);
   }
 
   @Override
   public void destroyConnection(ConnectedChannel connectedChannel) {
-    BlockingChannelInfo blockingChannelInfo =
-        connections.get(connectedChannel.getRemoteHost() + connectedChannel.getRemotePort());
-    if (blockingChannelInfo == null) {
-      logger.error("Unexpected state in connection pool. Host {} and port {} not found to checkin connection",
-          connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
-      throw new IllegalArgumentException("Connection does not belong to the pool");
+    final Timer.Context context = connectionDestroyTime.time();
+    try {
+      BlockingChannelInfo blockingChannelInfo =
+          connections.get(connectedChannel.getRemoteHost() + connectedChannel.getRemotePort());
+      if (blockingChannelInfo == null) {
+        logger.error("Unexpected state in connection pool. Host {} and port {} not found to checkin connection",
+            connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
+        throw new IllegalArgumentException("Connection does not belong to the pool");
+      }
+      blockingChannelInfo.destroyBlockingChannel((BlockingChannel) connectedChannel);
+    } finally {
+      context.stop();
     }
-    blockingChannelInfo.destroyBlockingChannel((BlockingChannel) connectedChannel);
   }
 }
