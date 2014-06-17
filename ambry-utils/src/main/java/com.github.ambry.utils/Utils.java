@@ -174,7 +174,7 @@ public class Utils {
   }
 
   /**
-   * Instantiate a class instance from a given className with two args (along with MetricRegistry)
+   * Instantiate a class instance from a given className with two args
    */
   public static <T> T getObj(String className, Object arg1, Object arg2)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
