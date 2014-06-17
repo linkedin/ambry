@@ -79,7 +79,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public String toString() {
-    //return DatatypeConverter.printBase64Binary(toBytes());
+    // return DatatypeConverter.printBase64Binary(toBytes());
     return DatatypeConverter.printHexBinary(toBytes());
   }
 

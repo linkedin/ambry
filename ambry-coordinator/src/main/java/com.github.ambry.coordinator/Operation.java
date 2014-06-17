@@ -11,9 +11,6 @@ import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.SystemTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,6 +21,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -96,6 +95,7 @@ public abstract class Operation {
             responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
         logger.debug("{} operation processing a response", context);
         if (operationResponse == null) {
+          logger.error("{} Operation timed out", context);
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
         }
 
@@ -127,20 +127,22 @@ public abstract class Operation {
 
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
-          if (operationPolicy.isCorrupt()) {
-            context.getCoordinatorMetrics().corruptionError.inc();
-          }
           logger.debug("{} operation successfully completing execute", context);
           return;
         }
         if (!operationPolicy.mayComplete()) {
-          throw new CoordinatorException("Insufficient DataNodes replied to complete operation",
-              CoordinatorError.AmbryUnavailable);
-        }
-        sendRequests();
+          if (operationPolicy.isCorrupt()) {
+            logger.error("{} operation is corrupt.", context);
+            context.getCoordinatorMetrics().corruptionError.inc();
+          }
+          String message =
+              "Insufficient DataNodes replied to complete operation " + context + ": " + operationPolicy.toString();
+          logger.error("{} {}", context, message);
+          throw new CoordinatorException(message, CoordinatorError.AmbryUnavailable);
+        } sendRequests();
       } catch (CoordinatorException e) {
         operationComplete.set(true);
-        logger.error(context + " operation throwing CoordinatorException during ", e);
+        logger.error(context + " operation threw CoordinatorException during execute", e);
         throw e;
       } catch (InterruptedException e) {
         operationComplete.set(true);

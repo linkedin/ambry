@@ -12,15 +12,14 @@ import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.lang.Math.min;
 
@@ -79,19 +78,27 @@ public abstract class GetOperation extends Operation {
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
-          throw new CoordinatorException("Blob not found.", CoordinatorError.BlobDoesNotExist);
+          String message = "Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          logger.error(message);
+          throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
         return false;
       case Blob_Deleted:
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
-          throw new CoordinatorException("Blob deleted.", CoordinatorError.BlobDeleted);
+          String message = "Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
+              + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaId +  ").";
+          logger.error(message);
+          throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
         return false;
       case Blob_Expired:
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
-          throw new CoordinatorException("Blob expired.", CoordinatorError.BlobExpired);
+          String message = "Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
+              + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaId +  ").";
+          logger.error(message);
+          throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }
         return false;
       default:
@@ -107,6 +114,7 @@ public abstract class GetOperation extends Operation {
 
 abstract class GetOperationRequest extends OperationRequest {
   private final ClusterMap clusterMap;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap) {
@@ -126,9 +134,10 @@ abstract class GetOperationRequest extends OperationRequest {
     GetResponse getResponse = (GetResponse) response;
     if (response.getError() == ServerErrorCode.No_Error) {
       if (getResponse.getMessageInfoList().size() != 1) {
-        throw new MessageFormatException(
-            "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse.getMessageInfoList().size(),
-            MessageFormatErrorCodes.Data_Corrupt);
+        String message =
+            "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse.getMessageInfoList().size();
+        logger.error(message);
+        throw new MessageFormatException(message, MessageFormatErrorCodes.Data_Corrupt);
       }
       deserializeBody(getResponse.getInputStream());
     }
