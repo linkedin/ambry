@@ -178,8 +178,8 @@ class BlockingChannelInfo {
    * Returns the number of connections with this BlockingChannelInfo
    * @return
    */
-  public AtomicInteger getNumberOfConnections() {
-    return this.numberOfConnections;
+  public int getNumberOfConnections() {
+    return this.numberOfConnections.intValue();
   }
 
   public void cleanup() {
@@ -217,29 +217,32 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   private final Timer connectionCheckOutTime;
   private final Timer connectionCheckInTime;
   private final Timer connectionDestroyTime;
+  // Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
   private Gauge<Integer> totalNumberOfNodesConnectedTo;
-      //Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
+  // Represents the total number of connections, in other words, aggregate of the connections from all nodes
   public Gauge<Integer> totalNumberOfConnections;
-      //Represents the total number of connections, in other words, aggregate of the connections from all nodes
 
   public BlockingChannelConnectionPool(ConnectionPoolConfig config, MetricRegistry registry) {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
     this.config = config;
     this.registry = registry;
-    connectionCheckOutTime = registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckOutTime"));
-    connectionCheckInTime = registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckInTime"));
-    connectionDestroyTime = registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionDestroyTime"));
+    connectionCheckOutTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckOutTime"));
+    connectionCheckInTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckInTime"));
+    connectionDestroyTime =
+        registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionDestroyTime"));
 
     totalNumberOfNodesConnectedTo = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        AtomicInteger noOfNodesConnectedTo = new AtomicInteger(0);
+        int noOfNodesConnectedTo = 0;
         for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
-          if (blockingChannelInfo.getNumberOfConnections().intValue() > 0) {
-            noOfNodesConnectedTo.incrementAndGet();
+          if (blockingChannelInfo.getNumberOfConnections() > 0) {
+            noOfNodesConnectedTo++;
           }
         }
-        return noOfNodesConnectedTo.intValue();
+        return noOfNodesConnectedTo;
       }
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfNodesConnectedTo"),
@@ -248,15 +251,15 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     totalNumberOfConnections = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        AtomicInteger noOfNodesConnectedTo = new AtomicInteger(0);
+        int noOfConnections = 0;
         for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
-          noOfNodesConnectedTo.addAndGet(blockingChannelInfo.getNumberOfConnections().intValue());
+          noOfConnections += blockingChannelInfo.getNumberOfConnections();
         }
-        return noOfNodesConnectedTo.intValue();
+        return noOfConnections;
       }
     };
-    registry
-        .register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfConnections"), totalNumberOfConnections);
+    registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfConnections"),
+        totalNumberOfConnections);
   }
 
   @Override
