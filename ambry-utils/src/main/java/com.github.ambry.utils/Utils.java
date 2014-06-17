@@ -160,6 +160,14 @@ public class Utils {
   }
 
   /**
+   * Instantiate a class instance from a given className.
+   */
+  public static <T> T getObj(String className)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    return (T) Class.forName(className).newInstance();
+  }
+
+  /**
    * Instantiate a class instance from a given className with an arg
    */
   public static <T> T getObj(String className, Object arg)
@@ -186,14 +194,6 @@ public class Utils {
       }
     }
     return null;
-  }
-
-  /**
-   * Instantiate a class instance from a given className.
-   */
-  public static <T> T getObj(String className)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-    return (T) Class.forName(className).newInstance();
   }
 
   /**
