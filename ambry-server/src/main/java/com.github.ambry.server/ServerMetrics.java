@@ -12,17 +12,45 @@ import com.github.ambry.metrics.MetricsHistogram;
  */
 public class ServerMetrics {
 
+  public static final long smallBlob = 50 * 1024; // up to and including 50KB
+  public static final long mediumBlob = 1 * 1024 * 1024; // up to and including 1MB
+  // largeBlob is everything larger than mediumBlob
+
   public final Histogram putBlobRequestQueueTimeInMs;
   public final Histogram putBlobProcessingTimeInMs;
   public final Histogram putBlobResponseQueueTimeInMs;
   public final Histogram putBlobSendTimeInMs;
   public final Histogram putBlobTotalTimeInMs;
 
+  public final Histogram putSmallBlobProcessingTimeInMs;
+  public final Histogram putSmallBlobSendTimeInMs;
+  public final Histogram putSmallBlobTotalTimeInMs;
+
+  public final Histogram putMediumBlobProcessingTimeInMs;
+  public final Histogram putMediumBlobSendTimeInMs;
+  public final Histogram putMediumBlobTotalTimeInMs;
+
+  public final Histogram putLargeBlobProcessingTimeInMs;
+  public final Histogram putLargeBlobSendTimeInMs;
+  public final Histogram putLargeBlobTotalTimeInMs;
+
   public final Histogram getBlobRequestQueueTimeInMs;
   public final Histogram getBlobProcessingTimeInMs;
   public final Histogram getBlobResponseQueueTimeInMs;
   public final Histogram getBlobSendTimeInMs;
   public final Histogram getBlobTotalTimeInMs;
+
+  public final Histogram getSmallBlobProcessingTimeInMs;
+  public final Histogram getSmallBlobSendTimeInMs;
+  public final Histogram getSmallBlobTotalTimeInMs;
+
+  public final Histogram getMediumBlobProcessingTimeInMs;
+  public final Histogram getMediumBlobSendTimeInMs;
+  public final Histogram getMediumBlobTotalTimeInMs;
+
+  public final Histogram getLargeBlobProcessingTimeInMs;
+  public final Histogram getLargeBlobSendTimeInMs;
+  public final Histogram getLargeBlobTotalTimeInMs;
 
   public final Histogram getBlobPropertiesRequestQueueTimeInMs;
   public final Histogram getBlobPropertiesProcessingTimeInMs;
@@ -72,6 +100,15 @@ public class ServerMetrics {
   public final Meter ttlBlobRequestRate;
   public final Meter replicaMetadataRequestRate;
 
+  public final Meter putSmallBlobRequestRate;
+  public final Meter getSmallBlobRequestRate;
+
+  public final Meter putMediumBlobRequestRate;
+  public final Meter getMediumBlobRequestRate;
+
+  public final Meter putLargeBlobRequestRate;
+  public final Meter getLargeBlobRequestRate;
+
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
   public final Counter partitionReadOnlyError;
@@ -97,6 +134,21 @@ public class ServerMetrics {
     putBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
     putBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobTotalTime"));
 
+    putSmallBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobProcessingTime"));
+    putSmallBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobSendTime"));
+    putSmallBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobTotalTime"));
+
+    putMediumBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutMediumBlobProcessingTime"));
+    putMediumBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutMediumBlobSendTime"));
+    putMediumBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutMediumBlobTotalTime"));
+
+    putLargeBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutLargeBlobProcessingTime"));
+    putLargeBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutLargeBlobSendTime"));
+    putLargeBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutLargeBlobTotalTime"));
+
     getBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestQueueTime"));
     getBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobProcessingTime"));
@@ -104,6 +156,21 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
     getBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
     getBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobTotalTime"));
+
+    getSmallBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobProcessingTime"));
+    getSmallBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobSendTime"));
+    getSmallBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobTotalTime"));
+
+    getMediumBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobProcessingTime"));
+    getMediumBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobSendTime"));
+    getMediumBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobTotalTime"));
+
+    getLargeBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobProcessingTime"));
+    getLargeBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobSendTime"));
+    getLargeBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobTotalTime"));
 
     getBlobPropertiesRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobPropertiesRequestQueueTime"));
@@ -178,6 +245,15 @@ public class ServerMetrics {
     ttlBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestRate"));
 
+    putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
+    getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));
+
+    putMediumBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutMediumBlobRequestRate"));
+    getMediumBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobRequestRate"));
+
+    putLargeBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutLargeBlobRequestRate"));
+    getLargeBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobRequestRate"));
+
     partitionUnknownError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "DiskUnavailableError"));
     partitionReadOnlyError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionReadOnlyError"));
@@ -195,6 +271,26 @@ public class ServerMetrics {
     unExpectedStoreTTLError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
     unExpectedStoreFindEntriesError =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
+  }
+
+  public void markPutBlobRequestRateBySize(long blobSize) {
+    if (blobSize <= smallBlob) {
+      putSmallBlobRequestRate.mark();
+    } else if (blobSize <= mediumBlob) {
+      putMediumBlobRequestRate.mark();
+    } else {
+      putLargeBlobRequestRate.mark();
+    }
+  }
+
+  public void markGetBlobRequestRateBySize(long blobSize) {
+    if (blobSize <= smallBlob) {
+      getSmallBlobRequestRate.mark();
+    } else if (blobSize <= mediumBlob) {
+      getMediumBlobRequestRate.mark();
+    } else {
+      getLargeBlobRequestRate.mark();
+    }
   }
 }
 
