@@ -203,6 +203,7 @@ public class AmbryCoordinator implements Coordinator {
 
       return blobId.toString();
     } catch (CoordinatorException e) {
+      logger.trace("putBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.PutBlob, e.getErrorCode());
       throw e;
     }
@@ -225,7 +226,7 @@ public class AmbryCoordinator implements Coordinator {
       coordinatorMetrics.deleteBlobOperationRate.mark();
       coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     } catch (CoordinatorException e) {
-      logger.error("deleteBlob re-throwing CoordinatorException" + e);
+      logger.trace("deleteBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.DeleteBlob, e.getErrorCode());
       throw e;
     }
@@ -260,7 +261,7 @@ public class AmbryCoordinator implements Coordinator {
 
       return gbpo.getBlobProperties();
     } catch (CoordinatorException e) {
-      logger.error("getBlobProperties re-throwing CoordinatorException" + e);
+      logger.trace("getBlobProperties re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobProperties, e.getErrorCode());
       throw e;
     }
@@ -284,7 +285,7 @@ public class AmbryCoordinator implements Coordinator {
 
       return gumo.getUserMetadata();
     } catch (CoordinatorException e) {
-      logger.error("getBlobUserMetadata re-throwing CoordinatorException" + e);
+      logger.trace("getBlobUserMetadata re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobUserMetadata, e.getErrorCode());
       throw e;
     }
@@ -308,7 +309,7 @@ public class AmbryCoordinator implements Coordinator {
 
       return gbdo.getBlobOutput();
     } catch (CoordinatorException e) {
-      logger.error("getBlob re-throwing CoordinatorException" + e);
+      logger.trace("getBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlob, e.getErrorCode());
       throw e;
     }

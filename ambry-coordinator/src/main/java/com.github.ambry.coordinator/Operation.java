@@ -139,7 +139,8 @@ public abstract class Operation {
               "Insufficient DataNodes replied to complete operation " + context + ": " + operationPolicy.toString();
           logger.error("{} {}", context, message);
           throw new CoordinatorException(message, CoordinatorError.AmbryUnavailable);
-        } sendRequests();
+        }
+        sendRequests();
       } catch (CoordinatorException e) {
         operationComplete.set(true);
         logger.error(context + " operation threw CoordinatorException during execute", e);
