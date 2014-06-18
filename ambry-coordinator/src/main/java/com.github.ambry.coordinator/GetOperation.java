@@ -87,7 +87,7 @@ public abstract class GetOperation extends Operation {
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
           String message = "Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
-              + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount +  ").";
+              + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
@@ -96,7 +96,7 @@ public abstract class GetOperation extends Operation {
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
           String message = "Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
-              + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount +  ").";
+              + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }

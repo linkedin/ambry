@@ -102,27 +102,12 @@ public class ServerMetrics {
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
-  public final Meter getSmallBlobPropertiesRequestRate;
-  public final Meter getSmallBlobUserMetadataRequestRate;
-  public final Meter getSmallBlobAllRequestRate;
-  public final Meter deleteSmallBlobRequestRate;
-  public final Meter smallReplicaMetadataRequestRate;
 
   public final Meter putMediumBlobRequestRate;
   public final Meter getMediumBlobRequestRate;
-  public final Meter getMediumBlobPropertiesRequestRate;
-  public final Meter getMediumBlobUserMetadataRequestRate;
-  public final Meter getMediumBlobAllRequestRate;
-  public final Meter deleteMediumBlobRequestRate;
-  public final Meter mediumReplicaMetadataRequestRate;
 
   public final Meter putLargeBlobRequestRate;
   public final Meter getLargeBlobRequestRate;
-  public final Meter getLargeBlobPropertiesRequestRate;
-  public final Meter getLargeBlobUserMetadataRequestRate;
-  public final Meter getLargeBlobAllRequestRate;
-  public final Meter deleteLargeBlobRequestRate;
-  public final Meter largeReplicaMetadataRequestRate;
 
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
@@ -262,38 +247,12 @@ public class ServerMetrics {
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));
-    getSmallBlobPropertiesRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobPropertiesRequestRate"));
-    getSmallBlobUserMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobUserMetadataRequestRate"));
-    getSmallBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobAllRequestRate"));
-    deleteSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteSmallBlobRequestRate"));
-    smallReplicaMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "SmallReplicaMetadataRequestRate"));
 
     putMediumBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutMediumBlobRequestRate"));
     getMediumBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobRequestRate"));
-    getMediumBlobPropertiesRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobPropertiesRequestRate"));
-    getMediumBlobUserMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobUserMetadataRequestRate"));
-    getMediumBlobAllRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetMediumBlobAllRequestRate"));
-    deleteMediumBlobRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteMediumBlobRequestRate"));
-    mediumReplicaMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "MediumReplicaMetadataRequestRate"));
 
     putLargeBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutLargeBlobRequestRate"));
     getLargeBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobRequestRate"));
-    getLargeBlobPropertiesRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobPropertiesRequestRate"));
-    getLargeBlobUserMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobUserMetadataRequestRate"));
-    getLargeBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetLargeBlobAllRequestRate"));
-    deleteLargeBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteLargeBlobRequestRate"));
-    largeReplicaMetadataRequestRate =
-        registry.meter(MetricRegistry.name(AmbryRequests.class, "LargeReplicaMetadataRequestRate"));
 
     partitionUnknownError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "DiskUnavailableError"));
@@ -333,7 +292,6 @@ public class ServerMetrics {
       getLargeBlobRequestRate.mark();
     }
   }
-
 }
 
 class HistogramMeasurement implements MetricsHistogram {

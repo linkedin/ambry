@@ -15,14 +15,14 @@ public class NetworkRequestMetrics {
   private MetricsHistogram requestTotalTimeBySize;
 
   public NetworkRequestMetrics(MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime,
-      MetricsHistogram requestTotalTime, MetricsHistogram responseSendTimeBasedOnBlobSize,
-      MetricsHistogram requestTotalTimeBasedOnBlobSize, long timeSpentTillNow) {
+      MetricsHistogram requestTotalTime, MetricsHistogram responseSendTimeBySize,
+      MetricsHistogram requestTotalTimeBySize, long timeSpentTillNow) {
     this.responseQueueTime = responseQueueTime;
     this.responseSendTime = responseSendTime;
     this.requestTotalTime = requestTotalTime;
     this.timeSpentTillNow = timeSpentTillNow;
-    this.responseSendTimeBySize = responseSendTimeBasedOnBlobSize;
-    this.requestTotalTimeBySize = requestTotalTimeBasedOnBlobSize;
+    this.responseSendTimeBySize = responseSendTimeBySize;
+    this.requestTotalTimeBySize = requestTotalTimeBySize;
   }
 
   public void updateResponseQueueTime(long value) {
@@ -32,12 +32,12 @@ public class NetworkRequestMetrics {
 
   public void updateResponseSendTime(long value) {
     responseSendTime.update(value);
-    if(responseSendTimeBySize != null) {
+    if (responseSendTimeBySize != null) {
       responseSendTimeBySize.update(value);
     }
     timeSpentTillNow += value;
     requestTotalTime.update(timeSpentTillNow);
-    if(requestTotalTimeBySize != null) {
+    if (requestTotalTimeBySize != null) {
       requestTotalTimeBySize.update(timeSpentTillNow);
     }
   }
