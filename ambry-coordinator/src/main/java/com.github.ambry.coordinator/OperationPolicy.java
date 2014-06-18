@@ -35,8 +35,6 @@ public interface OperationPolicy {
    */
   public boolean isComplete();
 
-  // TODO: HERE
-
   /**
    * Determines if an operation may have failed because of cluster wide corrupt state (blob, blob properties, user
    * metadata, on-the-wire, or on-the-disk corruption issues, as well as serde issues).
@@ -153,7 +151,10 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 
   @Override
   public boolean isCorrupt() {
-    return (corruptRequests.size() == failedRequests.size());
+    if (!mayComplete()) {
+      return (corruptRequests.size() == failedRequests.size());
+    }
+    return false;
   }
 
   @Override
@@ -180,6 +181,30 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   @Override
   public int getReplicaIdCount() {
     return replicaIdCount;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("OperationPolicyState[");
+    sb.append(" orderedReplicaIds=");
+    for (ReplicaId replicaId : orderedReplicaIds) {
+      sb.append(replicaId).append(", ");
+    }
+    sb.append("; successfulRequests=");
+    for (ReplicaId replicaId : successfulRequests) {
+      sb.append(replicaId).append(", ");
+    }
+    sb.append("; failedRequests=");
+    for (ReplicaId replicaId : failedRequests) {
+      sb.append(replicaId).append(", ");
+    }
+    sb.append("; corruptRequests=");
+    for (ReplicaId replicaId : corruptRequests) {
+      sb.append(replicaId).append(", ");
+    }
+    sb.append("]");
+    return sb.toString();
   }
 }
 
