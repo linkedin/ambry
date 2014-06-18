@@ -17,10 +17,13 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TTLMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.metrics.MetricsHistogram;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.ServerMetrics;
+import com.github.ambry.shared.Response;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
@@ -173,10 +176,10 @@ public class AmbryRequests implements RequestAPI {
       totalTimeSpent += processingTime;
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
-    requestResponseChannel.sendResponse(response, request,
-        new NetworkRequestMetrics(new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
-            new HistogramMeasurement(metrics.putBlobSendTimeInMs),
-            new HistogramMeasurement(metrics.putBlobTotalTimeInMs), totalTimeSpent));
+    sendPutResponse(requestResponseChannel, response, request,
+        new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
+        new HistogramMeasurement(metrics.putBlobSendTimeInMs), new HistogramMeasurement(metrics.putBlobTotalTimeInMs),
+        totalTimeSpent, putRequest.getBlobProperties().getBlobSize(), metrics);
   }
 
   public void handleGetRequest(Request request)
@@ -266,9 +269,9 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
       }
     }
-    requestResponseChannel.sendResponse(response, request,
-        new NetworkRequestMetrics(responseQueueTimeMeasurement, responseSendTimeMeasurement,
-            responseTotalTimeMeasurement, totalTimeSpent));
+    sendGetResponse(requestResponseChannel, response, request, responseQueueTimeMeasurement,
+        responseSendTimeMeasurement, responseTotalTimeMeasurement, totalTimeSpent, response.sizeInBytes(),
+        getRequest.getMessageFormatFlag(), metrics);
   }
 
   public void handleDeleteRequest(Request request)
@@ -326,7 +329,7 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new NetworkRequestMetrics(new HistogramMeasurement(metrics.deleteBlobResponseQueueTimeInMs),
             new HistogramMeasurement(metrics.deleteBlobSendTimeInMs),
-            new HistogramMeasurement(metrics.deleteBlobTotalTimeInMs), totalTimeSpent));
+            new HistogramMeasurement(metrics.deleteBlobTotalTimeInMs), null, null, totalTimeSpent));
   }
 
   public void handleTTLRequest(Request request)
@@ -376,10 +379,11 @@ public class AmbryRequests implements RequestAPI {
       startTime += processingTime;
       metrics.ttlBlobProcessingTimeInMs.update(processingTime);
     }
+
     requestResponseChannel.sendResponse(response, request,
         new NetworkRequestMetrics(new HistogramMeasurement(metrics.ttlBlobResponseQueueTimeInMs),
             new HistogramMeasurement(metrics.ttlBlobSendTimeInMs),
-            new HistogramMeasurement(metrics.ttlBlobTotalTimeInMs), totalTimeSpent));
+            new HistogramMeasurement(metrics.ttlBlobTotalTimeInMs), null, null, totalTimeSpent));
   }
 
   public void handleReplicaMetadataRequest(Request request)
@@ -427,10 +431,101 @@ public class AmbryRequests implements RequestAPI {
       startTime += processingTime;
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
+
     requestResponseChannel.sendResponse(response, request,
         new NetworkRequestMetrics(new HistogramMeasurement(metrics.replicaMetadataResponseQueueTimeInMs),
             new HistogramMeasurement(metrics.replicaMetadataSendTimeInMs),
-            new HistogramMeasurement(metrics.replicaMetadataTotalTimeInMs), totalTimeSpent));
+            new HistogramMeasurement(metrics.replicaMetadataTotalTimeInMs), null, null, totalTimeSpent));
+  }
+
+  public void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
+      MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime, MetricsHistogram requestTotalTime,
+      long totalTimeSpent, long blobSize, ServerMetrics metrics)
+      throws InterruptedException {
+    if (response.getError() == ServerErrorCode.No_Error) {
+      metrics.markPutBlobRequestRateBySize(blobSize);
+      if (blobSize <= ServerMetrics.smallBlob) {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                new HistogramMeasurement(metrics.putSmallBlobProcessingTimeInMs),
+                new HistogramMeasurement(metrics.putSmallBlobTotalTimeInMs), totalTimeSpent));
+      } else if (blobSize <= ServerMetrics.mediumBlob) {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                new HistogramMeasurement(metrics.putMediumBlobProcessingTimeInMs),
+                new HistogramMeasurement(metrics.putMediumBlobTotalTimeInMs), totalTimeSpent));
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                new HistogramMeasurement(metrics.putLargeBlobProcessingTimeInMs),
+                new HistogramMeasurement(metrics.putLargeBlobTotalTimeInMs), totalTimeSpent));
+      }
+    } else {
+      requestResponseChannel.sendResponse(response, request,
+          new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null, totalTimeSpent));
+    }
+  }
+
+  public void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
+      MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime, MetricsHistogram requestTotalTime,
+      long totalTimeSpent, long blobSize, MessageFormatFlags flags, ServerMetrics metrics)
+      throws InterruptedException {
+
+    if (blobSize <= ServerMetrics.smallBlob) {
+      if (flags == MessageFormatFlags.Blob) {
+        if (response.getError() == ServerErrorCode.No_Error) {
+          metrics.markGetBlobRequestRateBySize(blobSize);
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                  new HistogramMeasurement(metrics.getSmallBlobProcessingTimeInMs),
+                  new HistogramMeasurement(metrics.getSmallBlobTotalTimeInMs), totalTimeSpent));
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
+        }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
+      }
+    } else if (blobSize <= ServerMetrics.mediumBlob) {
+      if (flags == MessageFormatFlags.Blob) {
+        if (response.getError() == ServerErrorCode.No_Error) {
+          metrics.markGetBlobRequestRateBySize(blobSize);
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                  new HistogramMeasurement(metrics.getMediumBlobProcessingTimeInMs),
+                  new HistogramMeasurement(metrics.getMediumBlobTotalTimeInMs), totalTimeSpent));
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
+        }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
+      }
+    } else {
+      if (flags == MessageFormatFlags.Blob) {
+        if (response.getError() == ServerErrorCode.No_Error) {
+          metrics.markGetBlobRequestRateBySize(blobSize);
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+                  new HistogramMeasurement(metrics.getLargeBlobProcessingTimeInMs),
+                  new HistogramMeasurement(metrics.getLargeBlobTotalTimeInMs), totalTimeSpent));
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
+        }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
+      }
+    }
   }
 
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
