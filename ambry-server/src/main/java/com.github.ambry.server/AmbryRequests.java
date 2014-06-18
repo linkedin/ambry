@@ -443,7 +443,7 @@ public class AmbryRequests implements RequestAPI {
       long totalTimeSpent, long blobSize, ServerMetrics metrics)
       throws InterruptedException {
     if (response.getError() == ServerErrorCode.No_Error) {
-      metrics.markPutBlobRequestRate(blobSize);
+      metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
         requestResponseChannel.sendResponse(response, request,
             new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
@@ -474,42 +474,57 @@ public class AmbryRequests implements RequestAPI {
     if (blobSize <= ServerMetrics.smallBlob) {
       if (flags == MessageFormatFlags.Blob) {
         if (response.getError() == ServerErrorCode.No_Error) {
-          metrics.markGetBlobRequestRate(blobSize);
+          metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   new HistogramMeasurement(metrics.getSmallBlobProcessingTimeInMs),
                   new HistogramMeasurement(metrics.getSmallBlobTotalTimeInMs), totalTimeSpent));
-          return;
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
         }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
       }
-      requestResponseChannel.sendResponse(response, request,
-          new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null, totalTimeSpent));
     } else if (blobSize <= ServerMetrics.mediumBlob) {
       if (flags == MessageFormatFlags.Blob) {
         if (response.getError() == ServerErrorCode.No_Error) {
-          metrics.markGetBlobRequestRate(blobSize);
+          metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   new HistogramMeasurement(metrics.getMediumBlobProcessingTimeInMs),
                   new HistogramMeasurement(metrics.getMediumBlobTotalTimeInMs), totalTimeSpent));
-          return;
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
         }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
       }
-      requestResponseChannel.sendResponse(response, request,
-          new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null, totalTimeSpent));
     } else {
       if (flags == MessageFormatFlags.Blob) {
         if (response.getError() == ServerErrorCode.No_Error) {
-          metrics.markGetBlobRequestRate(blobSize);
+          metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   new HistogramMeasurement(metrics.getLargeBlobProcessingTimeInMs),
                   new HistogramMeasurement(metrics.getLargeBlobTotalTimeInMs), totalTimeSpent));
-          return;
+        } else {
+          requestResponseChannel.sendResponse(response, request,
+              new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                  totalTimeSpent));
         }
+      } else {
+        requestResponseChannel.sendResponse(response, request,
+            new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
+                totalTimeSpent));
       }
-      requestResponseChannel.sendResponse(response, request,
-          new NetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null, totalTimeSpent));
     }
   }
 

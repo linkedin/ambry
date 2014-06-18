@@ -273,7 +273,7 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
   }
 
-  public void markPutBlobRequestRate(long blobSize) {
+  public void markPutBlobRequestRateBySize(long blobSize) {
     if (blobSize <= smallBlob) {
       putSmallBlobRequestRate.mark();
     } else if (blobSize <= mediumBlob) {
@@ -283,7 +283,7 @@ public class ServerMetrics {
     }
   }
 
-  public void markGetBlobRequestRate(long blobSize) {
+  public void markGetBlobRequestRateBySize(long blobSize) {
     if (blobSize <= smallBlob) {
       getSmallBlobRequestRate.mark();
     } else if (blobSize <= mediumBlob) {
