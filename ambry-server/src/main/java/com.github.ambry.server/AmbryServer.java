@@ -114,8 +114,6 @@ public class AmbryServer {
       logger.info("started");
     } catch (Exception e) {
       logger.error("Error during startup", e);
-      e.printStackTrace();
-      System.out.println("Error during startup " + e);
       throw new InstantiationException("failure during startup " + e);
     }
   }

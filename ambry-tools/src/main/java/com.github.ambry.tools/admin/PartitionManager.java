@@ -32,8 +32,9 @@ public class PartitionManager {
           .describedAs("partition_layout_path").ofType(String.class).defaultsTo("");
 
       ArgumentAcceptingOptionSpec<String> operationTypeOpt = parser.accepts("operationType",
-          "The type of operation to perform on the partition. Currently supported" + "operations are 'AddPartition', 'AddReplicas'")
-          .withRequiredArg().describedAs("operation_type").ofType(String.class);
+          "The type of operation to perform on the partition. Currently supported"
+              + "operations are 'AddPartition', 'AddReplicas'").withRequiredArg().describedAs("operation_type")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfPartitionsOpt =
           parser.accepts("numberOfPartitionsToAdd", "The number of partitions to add").withRequiredArg()
@@ -52,9 +53,8 @@ public class PartitionManager {
               .describedAs("partition_id_to_add_replicas_to").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterToAddReplicasToOpt =
-          parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to").withRequiredArg()
-              .describedAs("datacenter_to_add_replicas_to").ofType(String.class);
-
+          parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")
+              .withRequiredArg().describedAs("datacenter_to_add_replicas_to").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 

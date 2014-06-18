@@ -277,8 +277,8 @@ public class ClusterMapManager implements ClusterMap {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
-      List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes,
-          hardwareLayout.getDatacenters());
+      List<Disk> disks =
+          allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, hardwareLayout.getDatacenters());
       if (disks.size() == 0) {
         System.err.println("numPartitions: " + numPartitions);
         break;
@@ -328,7 +328,7 @@ public class ClusterMapManager implements ClusterMap {
     datacentersToAdd.add(datacenterToAdd);
     List<Disk> disksForReplicas =
         allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacentersToAdd);
-    partitionLayout.AddNewReplica((Partition)partitionId, disksForReplicas);
+    partitionLayout.AddNewReplica((Partition) partitionId, disksForReplicas);
   }
 
   @Override

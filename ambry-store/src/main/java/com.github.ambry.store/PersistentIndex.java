@@ -343,6 +343,7 @@ public class PersistentIndex {
     }
     value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
+    value.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
     indexes.lastEntry().getValue().addEntry(new IndexEntry(id, value), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }

@@ -446,8 +446,8 @@ class IndexSegment {
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           writer.write(entry.getKey().toBytes());
           writer.write(entry.getValue().getBytes().array());
-          logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(), entry.getKey(),
-              entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
+          logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(),
+              entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
           numOfEntries++;
         }
         prevNumOfEntriesWritten = numOfEntries;
@@ -529,6 +529,7 @@ class IndexSegment {
           this.keySize = stream.readInt();
           this.valueSize = stream.readInt();
           long logEndOffset = stream.readLong();
+          logger.trace("Index {} Reading log end offset from file {}", indexFile.getPath(), logEndOffset);
           long maxEndOffset = Long.MIN_VALUE;
           while (stream.available() > Crc_Size) {
             StoreKey key = factory.getStoreKey(stream);
@@ -536,7 +537,7 @@ class IndexSegment {
             stream.read(value);
             IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
             // ignore entries that have offsets outside the log end offset that this index represents
-            if (blobValue.getOffset() < logEndOffset) {
+            if (blobValue.getOffset() + blobValue.getSize() <= logEndOffset) {
               index.put(key, blobValue);
               logger.trace("Index {} putting key {} in index offset {} size {}", indexFile.getPath(), key,
                   blobValue.getOffset(), blobValue.getSize());
@@ -556,6 +557,7 @@ class IndexSegment {
             }
           }
           this.endOffset.set(maxEndOffset);
+          logger.trace("Index {} Setting end offset for index {}", indexFile.getPath(), maxEndOffset);
           long crc = crcStream.getValue();
           if (crc != stream.readLong()) {
             // reset structures

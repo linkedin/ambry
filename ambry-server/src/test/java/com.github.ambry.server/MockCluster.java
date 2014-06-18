@@ -12,8 +12,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import javax.management.Notification;
 
 import static org.junit.Assert.assertTrue;
 
@@ -110,7 +110,7 @@ class Tracker {
  */
 class MockNotificationSystem implements NotificationSystem {
 
-  HashMap<String, Tracker> objectTracker = new HashMap<String, Tracker>();
+  ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
   int numberOfReplicas;
 
   public MockNotificationSystem(int numberOfReplicas) {
@@ -128,7 +128,7 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+  public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     if (tracker == null) {
       tracker = new Tracker(numberOfReplicas);
@@ -153,8 +153,7 @@ class MockNotificationSystem implements NotificationSystem {
     try {
       Tracker tracker = objectTracker.get(blobId);
       tracker.totalReplicasCreated.await();
-    }
-    catch (InterruptedException e) {
+    } catch (InterruptedException e) {
       // ignore
     }
   }
@@ -163,18 +162,12 @@ class MockNotificationSystem implements NotificationSystem {
     try {
       Tracker tracker = objectTracker.get(blobId);
       tracker.totalReplicasDeleted.await();
-    }
-    catch (InterruptedException e) {
+    } catch (InterruptedException e) {
       // ignore
     }
   }
 
-  public void clearAndUpdate(int numberOfReplicas) {
-    objectTracker.clear();
-    this.numberOfReplicas = numberOfReplicas;
-  }
-
-  public void decrementCreatedReplica(String blobId) {
+  public synchronized void decrementCreatedReplica(String blobId) {
     Tracker tracker = objectTracker.get(blobId);
     long currentCount = tracker.totalReplicasCreated.getCount();
     long finalCount = currentCount + 1;
@@ -187,4 +180,16 @@ class MockNotificationSystem implements NotificationSystem {
     }
   }
 
+  public synchronized void decrementDeletedReplica(String blobId) {
+    Tracker tracker = objectTracker.get(blobId);
+    long currentCount = tracker.totalReplicasDeleted.getCount();
+    long finalCount = currentCount + 1;
+    if (finalCount > numberOfReplicas) {
+      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
+    }
+    tracker.totalReplicasDeleted = new CountDownLatch(numberOfReplicas);
+    while (tracker.totalReplicasDeleted.getCount() > finalCount) {
+      tracker.totalReplicasDeleted.countDown();
+    }
+  }
 }

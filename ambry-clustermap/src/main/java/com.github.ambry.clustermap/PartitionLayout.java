@@ -219,7 +219,7 @@ public class PartitionLayout {
     if (partition == null || disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Partition or disks is null or disks is of zero length");
     }
-    for (Disk disk: disks) {
+    for (Disk disk : disks) {
       partition.addReplica(new Replica(partition, disk));
     }
     validate();
