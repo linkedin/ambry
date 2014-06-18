@@ -1,6 +1,8 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import java.util.HashMap;
+import java.util.Map;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -53,6 +55,10 @@ public class ClusterMapManager implements ClusterMap {
     logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
     writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
+  }
+
+  public List<? extends PartitionId> getAllPartitions() {
+    return partitionLayout.getPartitions();
   }
 
   // Implementation of ClusterMap interface
@@ -248,10 +254,11 @@ public class ClusterMapManager implements ClusterMap {
 
   // Allocate unique datanode.disks for each replica in each datacenter up to replicaCountPerDatacenter (hard-code all
   // datacenters to have same number of replicas for now).
-  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes) {
+  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes,
+      List<Datacenter> dataCenters) {
     ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
 
-    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+    for (Datacenter datacenter : dataCenters) {
       int rcpd = replicaCountPerDatacenter;
       Set<DataNode> nodesToExclude = new HashSet<DataNode>();
       for (int i = 0; i < rcpd; i++) {
@@ -265,14 +272,13 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
-  // Hackish 1st attempt at PartitionId allocation policy to confirm Administrative API is sufficient. All cluster map
-  // operations are performed by a single thread in some tool.
   public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
       long replicaCapacityInBytes) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
-      List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes);
+      List<Disk> disks =
+          allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, hardwareLayout.getDatacenters());
       if (disks.size() == 0) {
         System.err.println("numPartitions: " + numPartitions);
         break;
@@ -282,6 +288,47 @@ public class ClusterMapManager implements ClusterMap {
     }
 
     return partitions;
+  }
+
+  public void addReplicas(PartitionId partitionId, String dataCenterName) {
+    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+    Map<String, Integer> replicaCountByDatacenter = new HashMap<String, Integer>();
+    long capacityOfReplicasInBytes = 0;
+    // we ensure that the datacenter provided does not have any replicas
+    for (ReplicaId replicaId : replicaIds) {
+      if (replicaId.getDataNodeId().getDatacenterName().compareToIgnoreCase(dataCenterName) == 0) {
+        throw new IllegalArgumentException("Data center " + dataCenterName +
+            " provided already contains replica for partition " + partitionId);
+      }
+      capacityOfReplicasInBytes = replicaId.getCapacityInBytes();
+      Integer numberOfReplicas = replicaCountByDatacenter.get(replicaId.getDataNodeId().getDatacenterName());
+      if (numberOfReplicas == null) {
+        numberOfReplicas = new Integer(0);
+      }
+      numberOfReplicas++;
+      replicaCountByDatacenter.put(replicaId.getDataNodeId().getDatacenterName(), numberOfReplicas);
+    }
+    if (replicaCountByDatacenter.size() == 0) {
+      throw new IllegalArgumentException("No existing replicas present for partition " + partitionId + " in cluster.");
+    }
+    // verify that all data centers have the same replica
+    int numberOfReplicasPerDatacenter = 0;
+    int index = 0;
+    for (Map.Entry<String, Integer> entry : replicaCountByDatacenter.entrySet()) {
+      if (index == 0) {
+        numberOfReplicasPerDatacenter = entry.getValue();
+      }
+      if (numberOfReplicasPerDatacenter != entry.getValue()) {
+        throw new IllegalStateException("Datacenters have different replicas for partition " + partitionId);
+      }
+      index++;
+    }
+    Datacenter datacenterToAdd = hardwareLayout.findDatacenter(dataCenterName);
+    List<Datacenter> datacentersToAdd = new ArrayList<Datacenter>();
+    datacentersToAdd.add(datacenterToAdd);
+    List<Disk> disksForReplicas =
+        allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacentersToAdd);
+    partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
   }
 
   @Override

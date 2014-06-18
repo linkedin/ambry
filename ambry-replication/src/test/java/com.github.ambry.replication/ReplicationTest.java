@@ -457,8 +457,8 @@ public class ReplicationTest {
     try {
       MockClusterMap clusterMap = new MockClusterMap();
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
-      for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 6667))) {
-        if (replicaId.getDataNodeId().getPort() == 6667) {
+      for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422))) {
+        if (replicaId.getDataNodeId().getPort() == 64422) {
           for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
             RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, new MockFindToken(0), 1000000);
             remoteReplicas.add(remoteReplicaInfo);
@@ -512,50 +512,50 @@ public class ReplicationTest {
       ArrayList<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
       partitionInfoList.add(partitionInfo);
       Map<String, List<MessageInfo>> replicaStores = new HashMap<String, List<MessageInfo>>();
-      replicaStores.put("localhost" + 6668, messageInfoListRemoteReplica2);
-      replicaStores.put("localhost" + 6669, messageInfoListRemoteReplica3);
+      replicaStores.put("localhost" + 64423, messageInfoListRemoteReplica2);
+      replicaStores.put("localhost" + 64424, messageInfoListRemoteReplica3);
 
       Map<String, List<ByteBuffer>> replicaBuffers = new HashMap<String, List<ByteBuffer>>();
-      replicaBuffers.put("localhost" + 6668, messageBufferListLocalReplica2);
-      replicaBuffers.put("localhost" + 6669, messageBufferListLocalReplica3);
+      replicaBuffers.put("localhost" + 64423, messageBufferListLocalReplica2);
+      replicaBuffers.put("localhost" + 64424, messageBufferListLocalReplica3);
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicationMetrics replicationMetrics =
           new ReplicationMetrics("replication", new MetricRegistry(), new ArrayList<ReplicaThread>());
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", partitionInfoList, new MockFindTokenFactory(), clusterMap,
-              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 6667),
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null);
       ReplicaThread.ExchangeMetadataResponse response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
           partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 0);
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 4);
       remoteReplicas.get(1).setToken(response.remoteToken);
 
       response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 5),
           partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 0);
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 8);
       remoteReplicas.get(1).setToken(response.remoteToken);
 
       response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 2);
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 11);
       replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           false);
       remoteReplicas.get(1).setToken(response.remoteToken);
       response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           partitionInfo, remoteReplicas.get(1));
       Assert.assertEquals(response.missingStoreKeys.size(), 3);
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 14);
       replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
-          new MockConnection("localhost", 6668, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           false);
       //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
       for (MessageInfo messageInfo : messageInfoListLocalReplica) {

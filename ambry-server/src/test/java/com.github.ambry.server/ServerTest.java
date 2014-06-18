@@ -59,10 +59,12 @@ import org.junit.Test;
 public class ServerTest {
 
   private MockCluster cluster;
+  private MockNotificationSystem notificationSystem;
 
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
-    cluster = new MockCluster();
+    notificationSystem = new MockNotificationSystem(9);
+    cluster = new MockCluster(notificationSystem);
   }
 
   @After
@@ -97,7 +99,7 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
+      BlockingChannel channel = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive();
@@ -184,7 +186,6 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException {
-
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -207,9 +208,9 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 6668, 10000, 10000, 10000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 6669, 10000, 10000, 10000);
+      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
+      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000);
+      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000);
 
       channel1.connect();
       channel2.connect();
@@ -260,7 +261,12 @@ public class ServerTest {
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
       // wait till replication can complete
-      Thread.sleep(4000);
+      notificationSystem.awaitBlobCreations(blobId1.toString());
+      notificationSystem.awaitBlobCreations(blobId2.toString());
+      notificationSystem.awaitBlobCreations(blobId3.toString());
+      notificationSystem.awaitBlobCreations(blobId4.toString());
+      notificationSystem.awaitBlobCreations(blobId5.toString());
+      notificationSystem.awaitBlobCreations(blobId6.toString());
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -350,7 +356,7 @@ public class ServerTest {
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
-      Thread.sleep(1000);
+      notificationSystem.awaitBlobDeletions(blobId1.toString());
 
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
@@ -366,7 +372,7 @@ public class ServerTest {
       cluster.getServers().get(0).awaitShutdown();
 
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 6667);
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 64422);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
@@ -424,7 +430,6 @@ public class ServerTest {
           Assert.assertTrue(false);
         }
       }
-
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
@@ -468,7 +473,11 @@ public class ServerTest {
 
       cluster.getServers().get(0).startup();
       // wait for server to recover
-      Thread.sleep(2000);
+      notificationSystem.awaitBlobCreations(blobId7.toString());
+      notificationSystem.awaitBlobCreations(blobId8.toString());
+      notificationSystem.awaitBlobCreations(blobId9.toString());
+      notificationSystem.awaitBlobCreations(blobId10.toString());
+      notificationSystem.awaitBlobCreations(blobId11.toString());
       channel1.disconnect();
       channel1.connect();
 
@@ -497,9 +506,29 @@ public class ServerTest {
       for (File toDelete : mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
+      notificationSystem.decrementCreatedReplica(blobId2.toString());
+      notificationSystem.decrementCreatedReplica(blobId3.toString());
+      notificationSystem.decrementCreatedReplica(blobId4.toString());
+      notificationSystem.decrementCreatedReplica(blobId5.toString());
+      notificationSystem.decrementCreatedReplica(blobId6.toString());
+      notificationSystem.decrementCreatedReplica(blobId7.toString());
+      notificationSystem.decrementCreatedReplica(blobId8.toString());
+      notificationSystem.decrementCreatedReplica(blobId9.toString());
+      notificationSystem.decrementCreatedReplica(blobId10.toString());
+      notificationSystem.decrementCreatedReplica(blobId11.toString());
 
       cluster.getServers().get(0).startup();
-      Thread.sleep(2000);
+      notificationSystem.awaitBlobCreations(blobId2.toString());
+      notificationSystem.awaitBlobCreations(blobId3.toString());
+      notificationSystem.awaitBlobCreations(blobId4.toString());
+      notificationSystem.awaitBlobCreations(blobId5.toString());
+      notificationSystem.awaitBlobCreations(blobId6.toString());
+      notificationSystem.awaitBlobCreations(blobId7.toString());
+      notificationSystem.awaitBlobCreations(blobId8.toString());
+      notificationSystem.awaitBlobCreations(blobId9.toString());
+      notificationSystem.awaitBlobCreations(blobId10.toString());
+      notificationSystem.awaitBlobCreations(blobId11.toString());
+
       channel1.disconnect();
       channel1.connect();
 
@@ -593,9 +622,9 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = new BlockingChannel("localhost", 6667, 10000, 10000, 10000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 6668, 10000, 10000, 10000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 6669, 10000, 10000, 10000);
+      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
+      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000);
+      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000);
 
       // put all the blobs to random servers
 
@@ -623,10 +652,12 @@ public class ServerTest {
       latch.await();
 
       // wait till replication can complete
-      Thread.sleep(4000);
       List<BlobId> blobIds = new ArrayList<BlobId>();
       for (int i = 0; i < runnables.size(); i++) {
         blobIds.addAll(runnables.get(i).getBlobIds());
+      }
+      for (BlobId blobId : blobIds) {
+        notificationSystem.awaitBlobCreations(blobId.toString());
       }
 
       // verify blob properties, metadata and blob across all nodes
@@ -719,12 +750,10 @@ public class ServerTest {
         }
       }
 
-      // wait for deleted state to replicate
-      Thread.sleep(4000);
-
       Iterator<BlobId> iterator = blobsDeleted.iterator();
       while (iterator.hasNext()) {
         BlobId deletedId = iterator.next();
+        notificationSystem.awaitBlobDeletions(deletedId.toString());
         for (int j = 0; j < 3; j++) {
           if (j == 0) {
             channel = channel1;
@@ -749,7 +778,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 6667);
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 64422);
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -757,13 +786,30 @@ public class ServerTest {
         }
       }
       deleteFolderContent(new File(dataNode.getMountPaths().get(0)), false);
+      int totalblobs = 0;
+      for (int i = 0; i < blobIds.size(); i++) {
+        for (ReplicaId replicaId : blobIds.get(i).getPartition().getReplicaIds()) {
+          if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
+            if (blobsDeleted.contains(blobIds.get(i))) {
+              notificationSystem.decrementDeletedReplica(blobIds.get(i).toString());
+            } else {
+              totalblobs++;
+              notificationSystem.decrementCreatedReplica(blobIds.get(i).toString());
+            }
+          }
+        }
+      }
       serverList.get(0).startup();
 
-      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
       for (int j = 0; j < blobIds.size(); j++) {
+        if (blobsDeleted.contains(blobIds.get(j))) {
+          notificationSystem.awaitBlobDeletions(blobIds.get(j).toString());
+        } else {
+          notificationSystem.awaitBlobCreations(blobIds.get(j).toString());
+        }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
         GetRequest getRequest =
@@ -833,7 +879,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 6667);
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 64422);
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
@@ -843,14 +889,24 @@ public class ServerTest {
         }
         deleteFolderContent(new File(dataNode.getMountPaths().get(i)), false);
       }
-
+      for (int i = 0; i < blobIds.size(); i++) {
+        if (blobsChecked.contains(blobIds.get(i))) {
+          notificationSystem.decrementDeletedReplica(blobIds.get(i).toString());
+        } else {
+          notificationSystem.decrementCreatedReplica(blobIds.get(i).toString());
+        }
+      }
       serverList.get(0).startup();
 
-      Thread.sleep(4000);
       channel1.disconnect();
       channel1.connect();
 
       for (int j = 0; j < blobIds.size(); j++) {
+        if (blobsChecked.contains(blobIds.get(j))) {
+          notificationSystem.awaitBlobDeletions(blobIds.get(j).toString());
+        } else {
+          notificationSystem.awaitBlobCreations(blobIds.get(j).toString());
+        }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
         GetRequest getRequest =
@@ -1000,6 +1056,7 @@ public class ServerTest {
         while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
+            notificationSystem.awaitBlobCreations(payload.blobId);
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
               BlockingChannel channel1 =
                   new BlockingChannel(dataNodeId.getHostname(), dataNodeId.getPort(), 10000, 10000, 10000);
@@ -1113,7 +1170,7 @@ public class ServerTest {
     int numberOfSenderThreads = 3;
     int numberOfVerifierThreads = 3;
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
-    int numberOfRequestsToSendPerThread = 10;
+    int numberOfRequestsToSendPerThread = 3;
     for (int i = 0; i < numberOfSenderThreads; i++) {
       senderThreads[i] =
           new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
@@ -1125,9 +1182,6 @@ public class ServerTest {
       // Failed during putBlob
       throw new IllegalStateException();
     }
-
-    // Let replication complete before starting verifiers.
-    Thread.sleep(4000);
 
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
@@ -1162,6 +1216,7 @@ public class ServerTest {
     channel.send(getRequest3);
     InputStream stream = channel.receive();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), cluster.getClusterMap());
+    Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
     BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
     byte[] blobout = new byte[(int) blobOutput.getSize()];
     int readsize = 0;
