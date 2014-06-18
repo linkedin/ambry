@@ -1,5 +1,6 @@
 package com.github.ambry.tools.perf;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
@@ -122,7 +123,7 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
+      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       long maxLatencyForGetBlobs = 0;

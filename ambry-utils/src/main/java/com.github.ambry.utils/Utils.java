@@ -160,6 +160,14 @@ public class Utils {
   }
 
   /**
+   * Instantiate a class instance from a given className.
+   */
+  public static <T> T getObj(String className)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    return (T) Class.forName(className).newInstance();
+  }
+
+  /**
    * Instantiate a class instance from a given className with an arg
    */
   public static <T> T getObj(String className, Object arg)
@@ -174,11 +182,18 @@ public class Utils {
   }
 
   /**
-   * Instantiate a class instance from a given className.
+   * Instantiate a class instance from a given className with two args
    */
-  public static <T> T getObj(String className)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-    return (T) Class.forName(className).newInstance();
+  public static <T> T getObj(String className, Object arg1, Object arg2)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
+             InvocationTargetException {
+    for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
+      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
+          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
+        return (T) ctor.newInstance(arg1, arg2);
+      }
+    }
+    return null;
   }
 
   /**

@@ -1,5 +1,6 @@
 package com.github.ambry.tools.perf;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
@@ -136,7 +137,7 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig);
+      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
 
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
