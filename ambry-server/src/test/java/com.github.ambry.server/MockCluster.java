@@ -105,7 +105,7 @@ class Tracker {
 }
 
 /**
- * A mock notification system that heps to identify when blobs
+ * A mock notification system that helps to identify when blobs
  * get replicated. This class is not thread safe
  */
 class MockNotificationSystem implements NotificationSystem {

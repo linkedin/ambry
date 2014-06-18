@@ -328,7 +328,7 @@ public class ClusterMapManager implements ClusterMap {
     datacentersToAdd.add(datacenterToAdd);
     List<Disk> disksForReplicas =
         allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacentersToAdd);
-    partitionLayout.AddNewReplica((Partition) partitionId, disksForReplicas);
+    partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
   }
 
   @Override
