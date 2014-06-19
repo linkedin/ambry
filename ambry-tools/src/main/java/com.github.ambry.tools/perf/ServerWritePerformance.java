@@ -179,6 +179,7 @@ public class ServerWritePerformance {
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
+    private Random randomObject;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter writer, AtomicLong totalTimeTaken, AtomicLong totalWrites,
@@ -195,6 +196,7 @@ public class ServerWritePerformance {
       this.totalWrites = totalWrites;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
+      this.randomObject = new Random();
     }
 
     public void run() {
@@ -214,7 +216,7 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+            long index = getRandomLong(randomObject, clusterMap.getWritablePartitionIdsCount());
             PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),

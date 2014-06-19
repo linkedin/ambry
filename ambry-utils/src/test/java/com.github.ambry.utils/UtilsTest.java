@@ -1,6 +1,7 @@
 package com.github.ambry.utils;
 
 import org.junit.Test;
+import java.util.Random;
 
 import static org.junit.Assert.assertTrue;
 
@@ -12,15 +13,16 @@ public class UtilsTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void testGetRandomLongException() {
-    Utils.getRandomLong(0);
+    Utils.getRandomLong(new Random(), 0);
   }
 
   public void whpGetRandomLongRangeTest(int range, int draws) {
     // This test is probabilistic in nature if range is greater than one.
     // Make sure draws >> range for test to pass with high probability.
     int count[] = new int[range];
+    Random randomObject = new Random();
     for (int i = 0; i < draws; i++) {
-      long r = Utils.getRandomLong(range);
+      long r = Utils.getRandomLong(randomObject, range);
       assertTrue(r >= 0);
       assertTrue(r < range);
       count[(int) r] = count[(int) r] + 1;

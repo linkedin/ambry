@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Random;
 
 import static com.github.ambry.utils.Utils.getRandomLong;
 
@@ -48,6 +49,7 @@ public class AmbryCoordinator implements Coordinator {
   private String datacenterName;
   private ExecutorService requesterPool;
   private ConnectionPool connectionPool;
+  private Random randomObject;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -62,6 +64,7 @@ public class AmbryCoordinator implements Coordinator {
     this.clusterMap = clusterMap;
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
+    this.randomObject = new Random();
   }
 
   @Override
@@ -146,7 +149,7 @@ public class AmbryCoordinator implements Coordinator {
     if (clusterMap.getWritablePartitionIdsCount() < 1) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }
-    long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+    long index = getRandomLong(randomObject, clusterMap.getWritablePartitionIdsCount());
     return clusterMap.getWritablePartitionIdAt(index);
   }
 
