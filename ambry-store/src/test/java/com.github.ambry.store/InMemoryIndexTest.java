@@ -122,9 +122,7 @@ public class InMemoryIndexTest {
       indexFile.delete();
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
       Log log = new Log(logFile, 7000, new StoreMetrics(logFile, new MetricRegistry()));
-      log.setLogEndOffset(3000);
       Properties props = new Properties();
       props.put("store.data.flush.delay.seconds", "999999");
       MockIndex index =
@@ -135,6 +133,8 @@ public class InMemoryIndexTest {
       final MockId blobId3 = new MockId("id3");
       final MockId blobId4 = new MockId("id4");
       final MockId blobId5 = new MockId("id5");
+      ByteBuffer buffer = ByteBuffer.allocate(3000);
+      log.appendFrom(buffer);
 
       byte flags = 3;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(1000, 0, flags, 12345));
@@ -180,6 +180,9 @@ public class InMemoryIndexTest {
       Assert.assertNull(value5);
       indexNew.close();
 
+      buffer = ByteBuffer.allocate(2000);
+      log.appendFrom(buffer);
+
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
             @Override
@@ -196,9 +199,9 @@ public class InMemoryIndexTest {
       Assert.assertEquals(value4.getSize(), 1000);
       Assert.assertEquals(value5.getSize(), 1000);
       Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
-      log.setLogEndOffset(5000);
       indexNew.close();
-      log.setLogEndOffset(7000);
+      buffer = ByteBuffer.allocate(2000);
+      log.appendFrom(buffer);
 
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
@@ -258,6 +261,7 @@ public class InMemoryIndexTest {
       log.close();
       scheduler.shutdown();
     } catch (Exception e) {
+      e.printStackTrace();
       Assert.assertEquals(false, true);
     }
   }

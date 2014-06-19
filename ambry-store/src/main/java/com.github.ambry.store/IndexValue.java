@@ -104,6 +104,10 @@ public class IndexValue {
         oldOffset);
   }
 
+  public void setNewSize(long size) {
+    value.putLong(0, size);
+  }
+
   public ByteBuffer getBytes() {
     return value;
   }

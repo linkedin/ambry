@@ -214,6 +214,17 @@ public class PartitionLayout {
     return partition;
   }
 
+  // Adds replicas to the partition for each specified disk
+  public void addNewReplicas(Partition partition, List<Disk> disks) {
+    if (partition == null || disks == null || disks.size() == 0) {
+      throw new IllegalArgumentException("Partition or disks is null or disks is of zero length");
+    }
+    for (Disk disk : disks) {
+      partition.addReplica(new Replica(partition, disk));
+    }
+    validate();
+  }
+
   /**
    * Gets Partition with specified byte-serialized ID.
    *

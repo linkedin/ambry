@@ -25,17 +25,17 @@ public class MockClusterMap implements ClusterMap {
       throws IOException {
 
     // create 3 nodes with each having 3 mount paths
-    MockDataNodeId dataNodeId1 = createDataNode(6667, "DC1");
-    MockDataNodeId dataNodeId2 = createDataNode(6668, "DC1");
-    MockDataNodeId dataNodeId3 = createDataNode(6669, "DC1");
+    MockDataNodeId dataNodeId1 = createDataNode(64422, "DC1");
+    MockDataNodeId dataNodeId2 = createDataNode(64423, "DC1");
+    MockDataNodeId dataNodeId3 = createDataNode(64424, "DC1");
 
-    MockDataNodeId dataNodeId4 = createDataNode(7000, "DC2");
-    MockDataNodeId dataNodeId5 = createDataNode(7001, "DC2");
-    MockDataNodeId dataNodeId6 = createDataNode(7002, "DC2");
+    MockDataNodeId dataNodeId4 = createDataNode(64425, "DC2");
+    MockDataNodeId dataNodeId5 = createDataNode(64426, "DC2");
+    MockDataNodeId dataNodeId6 = createDataNode(64427, "DC2");
 
-    MockDataNodeId dataNodeId7 = createDataNode(7003, "DC3");
-    MockDataNodeId dataNodeId8 = createDataNode(7004, "DC3");
-    MockDataNodeId dataNodeId9 = createDataNode(7005, "DC3");
+    MockDataNodeId dataNodeId7 = createDataNode(64428, "DC3");
+    MockDataNodeId dataNodeId8 = createDataNode(64429, "DC3");
+    MockDataNodeId dataNodeId9 = createDataNode(64430, "DC3");
 
     dataNodes = new ArrayList<MockDataNodeId>(9);
     dataNodes.add(dataNodeId1);

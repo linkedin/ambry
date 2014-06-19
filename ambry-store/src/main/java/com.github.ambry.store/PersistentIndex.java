@@ -343,6 +343,7 @@ public class PersistentIndex {
     }
     value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
+    value.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
     indexes.lastEntry().getValue().addEntry(new IndexEntry(id, value), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }
@@ -611,8 +612,6 @@ public class PersistentIndex {
     public void write()
         throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
-      long startTime = SystemTime.getInstance().milliseconds();
-      logger.info("Starting persistence of index " + dataDir + " at " + startTime);
       try {
         if (indexes.size() > 0) {
           // before iterating the map, get the current file end pointer

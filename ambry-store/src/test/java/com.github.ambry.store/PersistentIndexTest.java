@@ -267,18 +267,18 @@ public class PersistentIndexTest {
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
       Log log = new Log(logFile, 8000, new StoreMetrics(logFile, new MetricRegistry()));
-      log.setLogEndOffset(5000);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
-      log.setLogEndOffset(5000);
       final MockId blobId1 = new MockId("id1");
       final MockId blobId2 = new MockId("id2");
       final MockId blobId3 = new MockId("id3");
       final MockId blobId4 = new MockId("id4");
       final MockId blobId5 = new MockId("id5");
 
+      ByteBuffer buffer = ByteBuffer.allocate(5000);
+      log.appendFrom(buffer);
       byte flags = 3;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(3000, 0, flags, 12345));
       IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(1000, 3000, flags, 12567));
@@ -321,6 +321,8 @@ public class PersistentIndexTest {
       Assert.assertNull(value5);
       indexNew.close();
 
+      buffer = ByteBuffer.allocate(2000);
+      log.appendFrom(buffer);
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -338,10 +340,11 @@ public class PersistentIndexTest {
       Assert.assertEquals(value5.getSize(), 1000);
       Assert.assertEquals(value5.getOffset(), 6000);
       Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
-      log.setLogEndOffset(7000);
+      Assert.assertEquals(log.getLogEndOffset(), 7000);
       indexNew.close();
 
-      log.setLogEndOffset(8000);
+      buffer = ByteBuffer.allocate(1000);
+      log.appendFrom(buffer);
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -445,6 +448,7 @@ public class PersistentIndexTest {
       log.close();
       scheduler.shutdown();
     } catch (Exception e) {
+      e.printStackTrace();
       Assert.assertEquals(false, true);
     } finally {
       if (map != null) {
@@ -653,7 +657,8 @@ public class PersistentIndexTest {
       scheduler.startup();
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       Log log = new Log(logFile, 30000, new StoreMetrics(logFile, new MetricRegistry()));
-      log.setLogEndOffset(30000);
+      ByteBuffer buffer = ByteBuffer.allocate(30000);
+      log.appendFrom(buffer);
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
@@ -854,7 +859,8 @@ public class PersistentIndexTest {
       Assert.assertEquals(value1.getOffset(), 0);
       Assert.assertEquals(value2.getOffset(), 100);
       Assert.assertEquals(value3.getOffset(), 200);
-      log.setLogEndOffset(1500);
+      ByteBuffer buffer = ByteBuffer.allocate(1500);
+      log.appendFrom(buffer);
       index.close();
       index = new MockIndex(logFile, scheduler, log, config, factory);
       FindInfo info = index.findEntriesSince(token, 1200);

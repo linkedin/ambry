@@ -38,6 +38,7 @@ public class Log implements Write, Read {
     }
     this.capacityInBytes = capacityInBytes;
     fileChannel = Utils.openChannel(file, true);
+    logger.trace("Log : {} File size on start {} ", dataDir, fileChannel.size());
     // A log's write offset will always be set to the start of the log.
     // External components is responsible for setting it the right value
     currentWriteOffset = new AtomicLong(0);
@@ -56,12 +57,13 @@ public class Log implements Write, Read {
 
   public void setLogEndOffset(long endOffset)
       throws IOException {
-    if (endOffset < 0 || endOffset > capacityInBytes) {
-      logger.error("endOffset {} outside the file size {}", endOffset, capacityInBytes);
-      throw new IllegalArgumentException("endOffset " + endOffset + " outside the file size " + capacityInBytes);
+    if (endOffset < 0 || endOffset > fileChannel.size()) {
+      logger.error("Log: {} EndOffset {} outside the file size {}", file.getAbsolutePath(), endOffset,
+          fileChannel.size());
+      throw new IllegalArgumentException("endOffset " + endOffset + " outside the file size " + fileChannel.size());
     }
     fileChannel.position(endOffset);
-    logger.trace("Setting log end offset {}", endOffset);
+    logger.trace("Log: {} Setting log end offset {}", file.getAbsolutePath(), endOffset);
     this.currentWriteOffset.set(endOffset);
   }
 
@@ -74,14 +76,14 @@ public class Log implements Write, Read {
       throws IOException {
     if (currentWriteOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
-      logger.error("Error trying to append to log from buffer since new data size {} exceeds total log size {}",
-          buffer.remaining(), capacityInBytes);
+      logger.error("Log: {} Error trying to append to log from buffer since new data size {} exceeds total log size {}",
+          file.getAbsolutePath(), buffer.remaining(), capacityInBytes);
       throw new IllegalArgumentException("Error trying to append to log from buffer since new data size " +
           buffer.remaining() + " exceeds total log size " + capacityInBytes);
     }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
-    logger.trace("Bytes appended to the log from bytebuffer for logfile {} byteswritten: {}", file.getPath(),
+    logger.trace("Log: {} Bytes appended to the log from bytebuffer byteswritten: {}", file.getAbsolutePath(),
         bytesWritten);
     return bytesWritten;
   }
@@ -89,16 +91,19 @@ public class Log implements Write, Read {
   @Override
   public long appendFrom(ReadableByteChannel channel, long size)
       throws IOException {
+    logger.trace("Log: {} CurrentWriteOffset {} CapacityInBytes {} SizeToAppend {}", file.getAbsolutePath(),
+        currentWriteOffset, capacityInBytes, size);
     if (currentWriteOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
-      logger.error("Error trying to append to log from channel since new data size {} exceeds total log size {}", size,
-          capacityInBytes);
+      logger
+          .error("Log: {} Error trying to append to log from channel since new data size {} exceeds total log size {}",
+              file.getAbsolutePath(), size, capacityInBytes);
       throw new IllegalArgumentException("Error trying to append to log from channel since new data size " +
           size + "exceeds total log size " + capacityInBytes);
     }
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
     currentWriteOffset.addAndGet(bytesWritten);
-    logger.trace("Bytes appended to the log from read channel for logfile {} byteswritten: {}", file.getPath(),
+    logger.trace("Log: {} Bytes appended to the log from read channel BytesWritten: {}", file.getAbsolutePath(),
         bytesWritten);
     return bytesWritten;
   }
@@ -121,9 +126,8 @@ public class Log implements Write, Read {
       throws IOException {
     if (sizeInBytes() < position || (position + buffer.remaining() > sizeInBytes())) {
       metrics.overflowReadError.inc(1);
-      logger
-          .error("Error trying to read outside the log range. log end position {} input buffer size {}", sizeInBytes(),
-              buffer.remaining());
+      logger.error("Log: {} Error trying to read outside the log range. log end position {} input buffer size {}",
+          file.getAbsolutePath(), sizeInBytes(), buffer.remaining());
       throw new IllegalArgumentException("Error trying to read outside the log range. log end position " +
           sizeInBytes() + " input buffer size " + buffer.remaining());
     }
