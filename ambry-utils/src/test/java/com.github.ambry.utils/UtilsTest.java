@@ -20,9 +20,9 @@ public class UtilsTest {
     // This test is probabilistic in nature if range is greater than one.
     // Make sure draws >> range for test to pass with high probability.
     int count[] = new int[range];
-    Random randomObject = new Random();
+    Random random = new Random();
     for (int i = 0; i < draws; i++) {
-      long r = Utils.getRandomLong(randomObject, range);
+      long r = Utils.getRandomLong(random, range);
       assertTrue(r >= 0);
       assertTrue(r < range);
       count[(int) r] = count[(int) r] + 1;

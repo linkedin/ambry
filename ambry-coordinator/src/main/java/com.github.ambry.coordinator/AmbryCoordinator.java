@@ -49,7 +49,7 @@ public class AmbryCoordinator implements Coordinator {
   private String datacenterName;
   private ExecutorService requesterPool;
   private ConnectionPool connectionPool;
-  private Random randomObject;
+  private Random random;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -64,7 +64,7 @@ public class AmbryCoordinator implements Coordinator {
     this.clusterMap = clusterMap;
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
-    this.randomObject = new Random();
+    this.random = new Random();
   }
 
   @Override
@@ -149,7 +149,7 @@ public class AmbryCoordinator implements Coordinator {
     if (clusterMap.getWritablePartitionIdsCount() < 1) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }
-    long index = getRandomLong(randomObject, clusterMap.getWritablePartitionIdsCount());
+    long index = getRandomLong(random, clusterMap.getWritablePartitionIdsCount());
     return clusterMap.getWritablePartitionIdAt(index);
   }
 
