@@ -18,6 +18,7 @@ import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -65,10 +66,6 @@ public class AmbryCoordinator implements Coordinator {
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
     this.randomForPartitionSelection = new Random();
-  }
-
-  @Override
-  public void start() {
     logger.info("coordinator starting");
     try {
       logger.info("Setting up JMX.");
@@ -106,11 +103,11 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   @Override
-  public void shutdown() {
+  public void close() {
     if (shuttingDown.getAndSet(true)) {
       return;
     }
-    logger.info("shutdown started");
+    logger.info("closing started");
 
     if (requesterPool != null) {
       try {
@@ -137,7 +134,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.error("Error while closing notification system.", e);
     }
 
-    logger.info("shutdown completed");
+    logger.info("closing completed");
   }
 
   private OperationContext getOperationContext() {

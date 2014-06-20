@@ -615,11 +615,10 @@ public class CoordinatorTest {
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
-    ac.start();
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(ac);
     }
-    ac.shutdown();
+    ac.close();
   }
 
   @Test
@@ -651,17 +650,13 @@ public class CoordinatorTest {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
-
-    acOne.start();
-    acTwo.start();
-
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(acOne);
       PutGetDelete(acTwo);
     }
 
-    acOne.shutdown();
-    acTwo.shutdown();
+    acOne.close();
+    acTwo.close();
   }
 
   @Test
@@ -709,16 +704,12 @@ public class CoordinatorTest {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
     AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
-
-    acOne.start();
-    acTwo.start();
-
     for (int i = 0; i < 20; ++i) {
       PutRemoteGetDelete(acOne, acTwo);
     }
 
-    acOne.shutdown();
-    acTwo.shutdown();
+    acOne.close();
+    acTwo.close();
   }
 
   @Test
