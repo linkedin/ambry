@@ -376,8 +376,8 @@ public class Utils {
   /**
    * Get a pseudo-random long uniformly between 0 and n-1. Stolen from {@link java.util.Random#nextInt()}.
    *
-   * @param random Random Object to be used to generate the random number so that we generate
-   *                     uniformly distributed random number
+   * @param random random object used to generate the random number so that we generate
+   *                     uniforml random between 0 and n-1
    * @param n the bound
    * @return a value select randomly from the range {@code [0..n)}.
    */

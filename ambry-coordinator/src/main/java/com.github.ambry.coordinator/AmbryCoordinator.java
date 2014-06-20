@@ -49,7 +49,7 @@ public class AmbryCoordinator implements Coordinator {
   private String datacenterName;
   private ExecutorService requesterPool;
   private ConnectionPool connectionPool;
-  private Random random;
+  private final Random random;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
