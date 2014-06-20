@@ -214,7 +214,7 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+            long index = getRandomLong(rand, clusterMap.getWritablePartitionIdsCount());
             PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
