@@ -11,7 +11,7 @@ import java.nio.ByteBuffer;
 /**
  * The Coordinator performs operations on an Ambry cluster.
  */
-public interface Coordinator extends Closeable{
+public interface Coordinator extends Closeable {
   /**
    * Puts a blob into the store with a set of blob properties and user metadata. It returns the id of the blob if it was
    * stored successfully.
@@ -75,5 +75,4 @@ public interface Coordinator extends Closeable{
    */
   BlobOutput getBlob(String blobId)
       throws CoordinatorException;
-
 }
