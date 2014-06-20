@@ -152,7 +152,7 @@ public class ServerWritePerformance {
       System.err.println("Error on exit " + e);
     } finally {
       if (coordinator != null) {
-        coordinator.shutdown();
+        coordinator.close();
       }
       if (writer != null) {
         try {

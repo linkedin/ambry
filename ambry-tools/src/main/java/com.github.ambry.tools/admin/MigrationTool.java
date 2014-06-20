@@ -134,7 +134,6 @@ public class MigrationTool {
       }
       Properties props = Utils.loadProps(coordinatorConfigPath);
       coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
-      coordinator.start();
       while (true) {
         directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
       }
@@ -149,7 +148,7 @@ public class MigrationTool {
         }
       }
       if (coordinator != null) {
-        coordinator.shutdown();
+        coordinator.close();
       }
     }
   }
