@@ -134,7 +134,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.error("Error while closing notification system.", e);
     }
 
-    logger.info("clsoing completed");
+    logger.info("closing completed");
   }
 
   private OperationContext getOperationContext() {
