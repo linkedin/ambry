@@ -3,6 +3,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
@@ -22,8 +23,7 @@ import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.server.ServerMetrics;
-import com.github.ambry.shared.Response;
+import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
@@ -75,10 +75,11 @@ public class AmbryRequests implements RequestAPI {
   private final MessageFormatMetrics messageFormatMetrics;
   private final FindTokenFactory findTokenFactory;
   private final NotificationSystem notification;
+  private final ReplicationManager replicationManager;
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-      NotificationSystem operationNotification) {
+      NotificationSystem operationNotification, ReplicationManager replicationManager) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -87,6 +88,7 @@ public class AmbryRequests implements RequestAPI {
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
     this.findTokenFactory = findTokenFactory;
     this.notification = operationNotification;
+    this.replicationManager = replicationManager;
   }
 
   public void handleRequests(Request request)
@@ -408,6 +410,10 @@ public class AmbryRequests implements RequestAPI {
       Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
       FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
           replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+
+      replicationManager.updateBytesReadByRemoteReplica(replicaMetadataRequest.getPartitionId(),
+          replicaMetadataRequest.getClientId().substring(21), replicaMetadataRequest.getReplicaPath(),
+          findInfo.getBytesReadSoFar());
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());

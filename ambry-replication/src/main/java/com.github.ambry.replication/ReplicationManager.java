@@ -48,8 +48,10 @@ final class RemoteReplicaInfo {
   private FindToken tokenToPersist = null;
   private long timeTokenSetInMs;
   private FindToken tokenPersisted = null;
+  private Store localStore;
+  private long totalBytesReadFromLocalStore;
 
-  public RemoteReplicaInfo(ReplicaId replicaId, FindToken token, long tokenPersistIntervalInMs) {
+  public RemoteReplicaInfo(ReplicaId replicaId, Store localStore, FindToken token, long tokenPersistIntervalInMs) {
     this.replicaId = replicaId;
     this.currentToken = token;
     if (tokenToPersist == null) {
@@ -57,10 +59,24 @@ final class RemoteReplicaInfo {
       timeTokenSetInMs = SystemTime.getInstance().milliseconds();
     }
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
+    this.totalBytesReadFromLocalStore = new Long(0);
+    this.localStore = localStore;
   }
 
   public ReplicaId getReplicaId() {
     return replicaId;
+  }
+
+  public long getReplicaLag() {
+    if (localStore != null) {
+      return this.localStore.getSizeInBytes() - this.totalBytesReadFromLocalStore;
+    } else {
+      return 0;
+    }
+  }
+
+  public void updateBytesFromLocalStore(long totalBytesReadFromLocalStore) {
+    this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
   }
 
   public FindToken getToken() {
@@ -185,13 +201,15 @@ public final class ReplicationManager {
         List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
         if (peerReplicas != null) {
           List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
-          for (ReplicaId remoteReplica : replicaId.getPeerReplicaIds()) {
+          for (ReplicaId remoteReplica : peerReplicas) {
             // We need to ensure that replica tokens gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, factory.getNewFindToken(),
-                storeConfig.storeDataFlushIntervalSeconds *
+            RemoteReplicaInfo remoteReplicaInfo =
+                new RemoteReplicaInfo(remoteReplica, storeManager.getStore(replicaId.getPartitionId()),
+                    factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier);
+            replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
@@ -265,6 +283,34 @@ public final class ReplicationManager {
     } catch (IOException e) {
       logger.error("IO error while starting replication");
     }
+  }
+
+  public void updateBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
+      long totalBytesRead) {
+    RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
+    if (remoteReplicaInfo != null) {
+      remoteReplicaInfo.updateBytesFromLocalStore(totalBytesRead);
+    }
+  }
+
+  private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
+    RemoteReplicaInfo remoteReplicaInfo = null;
+    for (PartitionId partitionId1 : partitionsToReplicate.keySet()) {
+      if (partitionId.compareTo(partitionId1) == 0) {
+        PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
+        for (RemoteReplicaInfo remoteReplicaInfo1 : partitionInfo.getRemoteReplicaInfo()) {
+          if (remoteReplicaInfo1.getReplicaId().getMountPath().equals(replicaPath) && remoteReplicaInfo1.getReplicaId()
+              .getDataNodeId().getHostname().equals(hostName)) {
+            remoteReplicaInfo = remoteReplicaInfo1;
+          }
+        }
+      }
+    }
+    if (remoteReplicaInfo == null) {
+      replicationMetrics.unknownRemoteReplicaRequestCount.inc();
+      logger.error("ReplicaMetaDataRequest from unknown Replica ", hostName + ", with path ", replicaPath);
+    }
+    return remoteReplicaInfo;
   }
 
   public void shutdown()

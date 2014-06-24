@@ -80,6 +80,11 @@ public interface Store {
       throws StoreException;
 
   /**
+   * Returns the total bytes written so far in this store
+   */
+  long getSizeInBytes();
+
+  /**
    * Shutsdown the store
    */
   void shutdown()

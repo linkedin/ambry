@@ -10,6 +10,7 @@ import java.util.List;
 public class FindInfo {
   private List<MessageInfo> messageEntries;
   private FindToken findToken;
+  private long bytesReadSoFar;
 
   public FindInfo(List<MessageInfo> messageEntries, FindToken findToken) {
     this.messageEntries = messageEntries;
@@ -22,5 +23,9 @@ public class FindInfo {
 
   public FindToken getFindToken() {
     return findToken;
+  }
+
+  public long getBytesReadSoFar() {
+    return this.bytesReadSoFar;
   }
 }

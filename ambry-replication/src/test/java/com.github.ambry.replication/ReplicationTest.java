@@ -126,9 +126,11 @@ public class ReplicationTest {
 
     DummyLog log;
     List<MessageInfo> messageInfoList;
+    long bytesWrittenSoFar;
 
     class DummyLog {
       private List<ByteBuffer> logInfo;
+      private long endOffSet;
 
       public DummyLog(List<ByteBuffer> bufferList) {
         this.logInfo = bufferList;
@@ -136,10 +138,15 @@ public class ReplicationTest {
 
       public void appendData(ByteBuffer buffer) {
         logInfo.add(buffer);
+        endOffSet += buffer.capacity();
       }
 
       public ByteBuffer getData(int index) {
         return logInfo.get(index);
+      }
+
+      public long getEndOffSet() {
+        return endOffSet;
       }
     }
 
@@ -149,6 +156,7 @@ public class ReplicationTest {
       }
       messageInfoList = messageInfo;
       log = new DummyLog(buffers);
+      bytesWrittenSoFar = new Long(0);
     }
 
     @Override
@@ -271,6 +279,11 @@ public class ReplicationTest {
         }
       }
       return false;
+    }
+
+    @Override
+    public long getSizeInBytes() {
+      return log.getEndOffSet();
     }
 
     @Override
@@ -460,7 +473,8 @@ public class ReplicationTest {
       for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422))) {
         if (replicaId.getDataNodeId().getPort() == 64422) {
           for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
-            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, new MockFindToken(0), 1000000);
+            RemoteReplicaInfo remoteReplicaInfo =
+                new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0), 1000000);
             remoteReplicas.add(remoteReplicaInfo);
           }
         }

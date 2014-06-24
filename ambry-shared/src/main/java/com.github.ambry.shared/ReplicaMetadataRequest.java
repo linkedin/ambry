@@ -2,6 +2,8 @@ package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.Replica;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
@@ -17,15 +19,17 @@ import java.nio.channels.WritableByteChannel;
  */
 public class ReplicaMetadataRequest extends RequestOrResponse {
   private FindToken token;
+  private String replicaPath;
   private PartitionId partitionId;
   private long maxTotalSizeOfEntriesInBytes;
 
   private static int Max_Entries_Size_In_Bytes = 8;
 
   public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token,
-      long maxTotalSizeOfEntriesInBytes) {
+      String replicaPath, long maxTotalSizeOfEntriesInBytes) {
     super(RequestResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
     this.token = token;
+    this.replicaPath = replicaPath;
     this.partitionId = partitionId;
     this.maxTotalSizeOfEntriesInBytes = maxTotalSizeOfEntriesInBytes;
   }
@@ -36,15 +40,20 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
+    String replicaPath = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     FindToken token = factory.getFindToken(stream);
     long maxTotalSizeOfEntries = stream.readLong();
     // ignore version for now
-    return new ReplicaMetadataRequest(correlationId, clientId, partitionId, token, maxTotalSizeOfEntries);
+    return new ReplicaMetadataRequest(correlationId, clientId, partitionId, token, replicaPath, maxTotalSizeOfEntries);
   }
 
   public FindToken getToken() {
     return token;
+  }
+
+  public String getReplicaPath() {
+    return this.replicaPath;
   }
 
   public PartitionId getPartitionId() {
@@ -61,6 +70,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
+      bufferToSend.putInt(replicaPath.length());
+      bufferToSend.put(replicaPath.getBytes());
       bufferToSend.put(partitionId.getBytes());
       bufferToSend.put(token.toBytes());
       bufferToSend.putLong(maxTotalSizeOfEntriesInBytes);

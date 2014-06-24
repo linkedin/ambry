@@ -99,13 +99,11 @@ public class PartitionLayout {
 
   public List<Partition> getWritablePartitions() {
     List<Partition> writablePartitions = new ArrayList<Partition>();
-
     for (Partition partition : partitionMap.values()) {
       if (partition.getPartitionState() == PartitionState.READ_WRITE) {
         writablePartitions.add(partition);
       }
     }
-
     return writablePartitions;
   }
 
