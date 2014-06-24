@@ -96,12 +96,6 @@ public class AmbryServer {
       storeManager.start();
 
       networkServer = new SocketServer(networkConfig, registry);
-      requests =
-          new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenFactory, notificationSystem, replicationManager);
-      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
-          networkServer.getRequestResponseChannel(), requests);
-      networkServer.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
       connectionPool.start();
@@ -110,6 +104,13 @@ public class AmbryServer {
           new ReplicationManager(replicationConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
               nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
+
+      requests =
+          new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+              findTokenFactory, notificationSystem, replicationManager);
+      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+          networkServer.getRequestResponseChannel(), requests);
+      networkServer.start();
 
       logger.info("started");
     } catch (Exception e) {
