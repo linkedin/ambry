@@ -3,6 +3,7 @@ package com.github.ambry.coordinator;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 
+import java.io.Closeable;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
@@ -10,7 +11,7 @@ import java.nio.ByteBuffer;
 /**
  * The Coordinator performs operations on an Ambry cluster.
  */
-public interface Coordinator {
+public interface Coordinator extends Closeable {
   /**
    * Puts a blob into the store with a set of blob properties and user metadata. It returns the id of the blob if it was
    * stored successfully.
@@ -74,14 +75,4 @@ public interface Coordinator {
    */
   BlobOutput getBlob(String blobId)
       throws CoordinatorException;
-
-  /**
-   * Starts the coordinator.
-   */
-  void start();
-
-  /**
-   * Shutdown the coordinator. Any freeing of resources will be done here on shutdown
-   */
-  void shutdown();
 }

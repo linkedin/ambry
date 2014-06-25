@@ -154,13 +154,12 @@ public class ServerTest {
         // get blob data
         // Use coordinator to get the blob
         Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
-        coordinator.start();
         BlobOutput output = coordinator.getBlob(blobId1.toString());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
         output.getStream().read(dataOutputStream);
         Assert.assertArrayEquals(dataOutputStream, data);
-        coordinator.shutdown();
+        coordinator.close();
       } catch (CoordinatorException e) {
         e.printStackTrace();
         Assert.assertEquals(false, true);
@@ -324,7 +323,6 @@ public class ServerTest {
         // get blob data
         // Use coordinator to get the blob
         Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
-        coordinator.start();
         checkBlobId(coordinator, blobId1, data);
         checkBlobId(coordinator, blobId2, data);
         checkBlobId(coordinator, blobId3, data);
@@ -332,7 +330,7 @@ public class ServerTest {
         checkBlobId(coordinator, blobId5, data);
         checkBlobId(coordinator, blobId6, data);
 
-        coordinator.shutdown();
+        coordinator.close();
       } catch (CoordinatorException e) {
         e.printStackTrace();
         Assert.assertEquals(false, true);
@@ -1164,7 +1162,6 @@ public class ServerTest {
     props.setProperty("coordinator.datacenter.name", "DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
-    coordinator.start();
     Thread[] senderThreads = new Thread[3];
     LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
@@ -1196,7 +1193,7 @@ public class ServerTest {
     verifierLatch.await();
 
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
-    coordinator.shutdown();
+    coordinator.close();
   }
 
   private void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data)

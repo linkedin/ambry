@@ -18,6 +18,7 @@ import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -25,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Random;
 
 import static com.github.ambry.utils.Utils.getRandomLong;
 
@@ -48,6 +50,7 @@ public class AmbryCoordinator implements Coordinator {
   private String datacenterName;
   private ExecutorService requesterPool;
   private ConnectionPool connectionPool;
+  private final Random randomForPartitionSelection;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -62,10 +65,7 @@ public class AmbryCoordinator implements Coordinator {
     this.clusterMap = clusterMap;
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
-  }
-
-  @Override
-  public void start() {
+    this.randomForPartitionSelection = new Random();
     logger.info("coordinator starting");
     try {
       logger.info("Setting up JMX.");
@@ -103,11 +103,11 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   @Override
-  public void shutdown() {
+  public void close() {
     if (shuttingDown.getAndSet(true)) {
       return;
     }
-    logger.info("shutdown started");
+    logger.info("closing started");
 
     if (requesterPool != null) {
       try {
@@ -134,7 +134,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.error("Error while closing notification system.", e);
     }
 
-    logger.info("shutdown completed");
+    logger.info("closing completed");
   }
 
   private OperationContext getOperationContext() {
@@ -146,7 +146,7 @@ public class AmbryCoordinator implements Coordinator {
     if (clusterMap.getWritablePartitionIdsCount() < 1) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }
-    long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+    long index = getRandomLong(randomForPartitionSelection, clusterMap.getWritablePartitionIdsCount());
     return clusterMap.getWritablePartitionIdAt(index);
   }
 

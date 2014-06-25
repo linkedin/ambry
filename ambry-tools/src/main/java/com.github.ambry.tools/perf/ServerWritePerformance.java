@@ -152,7 +152,7 @@ public class ServerWritePerformance {
       System.err.println("Error on exit " + e);
     } finally {
       if (coordinator != null) {
-        coordinator.shutdown();
+        coordinator.close();
       }
       if (writer != null) {
         try {
@@ -214,7 +214,7 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            long index = getRandomLong(clusterMap.getWritablePartitionIdsCount());
+            long index = getRandomLong(rand, clusterMap.getWritablePartitionIdsCount());
             PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
