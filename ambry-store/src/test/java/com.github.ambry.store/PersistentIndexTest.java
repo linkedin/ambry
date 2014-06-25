@@ -655,10 +655,7 @@ public class PersistentIndexTest {
       }
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log log = new Log(logFile, 30000, new StoreMetrics(logFile, new MetricRegistry()));
-      ByteBuffer buffer = ByteBuffer.allocate(30000);
-      log.appendFrom(buffer);
+      Log log = new Log(logFile, 6900, new StoreMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
@@ -667,6 +664,8 @@ public class PersistentIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      ByteBuffer buffer = ByteBuffer.allocate(6900);
+      log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
       MockId blobId2 = new MockId("id02");
       MockId blobId3 = new MockId("id03");
@@ -765,13 +764,12 @@ public class PersistentIndexTest {
       Assert.assertEquals(index.findKey(blobId1).getOffset(), 0);
       Assert.assertEquals(index.findKey(blobId2).getOffset(), 100);
 
-      log.setLogEndOffset(30000);
-
       index.close();
       MockIndex indexNew = new MockIndex(logFile, scheduler, log, config, factory);
       Assert.assertEquals(indexNew.findKey(blobId1).getOffset(), 0);
       Assert.assertEquals(indexNew.findKey(blobId2).getOffset(), 100);
     } catch (Exception e) {
+      e.printStackTrace();
       org.junit.Assert.assertTrue(false);
     } finally {
       if (map != null) {

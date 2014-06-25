@@ -268,6 +268,14 @@ class ReplicaThread implements Runnable {
             notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
                 messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
           }
+        } else if (messageInfo.getExpirationTimeInMs() > System.currentTimeMillis()) {
+          // if the remote replica has an object that is expired, it is not considered missing locally
+          missingStoreKeys.remove(messageInfo.getStoreKey());
+          logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+              " Thread name " + threadName +
+              " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+              remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+              " key in expired state remotely. " + messageInfo.getStoreKey());
         }
       }
     }

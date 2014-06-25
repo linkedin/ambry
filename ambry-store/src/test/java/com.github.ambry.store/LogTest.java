@@ -112,7 +112,7 @@ public class LogTest {
         Assert.assertTrue(false);
       } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-            get("com.github.ambry.store.Log." + tempFile.getParent() + "overflowWriteError").getCount(), 1);
+            get("com.github.ambry.store.Log." + tempFile.getParent() + "-overflowWriteError").getCount(), 1);
       }
 
       // append to log from buffer and check overflow
@@ -122,7 +122,7 @@ public class LogTest {
         Assert.assertTrue(false);
       } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-            get("com.github.ambry.store.Log." + tempFile.getParent() + "overflowWriteError").getCount(), 2);
+            get("com.github.ambry.store.Log." + tempFile.getParent() + "-overflowWriteError").getCount(), 2);
       }
 
       logTest.close();
@@ -134,6 +134,7 @@ public class LogTest {
         Assert.assertTrue(true);
       }
     } catch (Exception e) {
+      e.printStackTrace();
       Assert.assertEquals(true, false);
     }
   }
