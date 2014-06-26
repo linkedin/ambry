@@ -128,7 +128,8 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+  public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
+      BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     if (tracker == null) {
       tracker = new Tracker(numberOfReplicas);

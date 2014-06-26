@@ -24,6 +24,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -268,7 +269,8 @@ class ReplicaThread implements Runnable {
             notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
                 messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
           }
-        } else if (messageInfo.getExpirationTimeInMs() > System.currentTimeMillis()) {
+        } else if (messageInfo.getExpirationTimeInMs() != Utils.Infinite_Time
+            && System.currentTimeMillis() > messageInfo.getExpirationTimeInMs()) {
           // if the remote replica has an object that is expired, it is not considered missing locally
           missingStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
