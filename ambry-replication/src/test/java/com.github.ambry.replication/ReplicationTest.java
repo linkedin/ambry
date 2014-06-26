@@ -379,7 +379,8 @@ public class ReplicationTest {
       if (indexRequested != -1) {
         List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
         int startIndex = indexRequested;
-        for (int i = startIndex; i < startIndex + maxSizeToReturn; i++) {
+        int endIndex = Math.min(messageInfoList.size(), startIndex + maxSizeToReturn);
+        for (int i = startIndex; i < endIndex; i++) {
           messageInfoToReturn.add(messageInfoList.get(i));
           indexRequested = i;
         }
@@ -497,6 +498,13 @@ public class ReplicationTest {
         messageBufferListLocalReplica3.add(ByteBuffer.wrap(bytes));
       }
 
+      // add an expired message to replica 2
+      BlobId idExpired = new BlobId(remoteReplicas.get(0).getReplicaId().getPartitionId());
+      messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, 1000, 1));
+      byte[] bytesExpired = new byte[1000];
+      new Random().nextBytes(bytesExpired);
+      messageBufferListLocalReplica2.add(ByteBuffer.wrap(bytesExpired));
+
       // add additional messages to replica 3
       for (int i = 15; i < 18; i++) {
         BlobId id = new BlobId(remoteReplicas.get(0).getReplicaId().getPartitionId());
@@ -549,6 +557,7 @@ public class ReplicationTest {
           new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           false);
       remoteReplicas.get(1).setToken(response.remoteToken);
+
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           partitionInfo, remoteReplicas.get(1));
@@ -557,6 +566,14 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
           new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
           false);
+      remoteReplicas.get(1).setToken(response.remoteToken);
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
+          partitionInfo, remoteReplicas.get(1));
+      Assert.assertEquals(response.missingStoreKeys.size(), 0);
+      Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 15);
+
       //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
       for (MessageInfo messageInfo : messageInfoListLocalReplica) {
         boolean found = false;

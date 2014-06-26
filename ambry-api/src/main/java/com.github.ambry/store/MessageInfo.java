@@ -1,5 +1,8 @@
 package com.github.ambry.store;
 
+import com.github.ambry.utils.Utils;
+
+
 /**
  * A message info class that contains basic info about a message
  */
@@ -42,5 +45,9 @@ public class MessageInfo {
 
   public boolean isDeleted() {
     return isDeleted;
+  }
+
+  public boolean isExpired() {
+    return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
 }

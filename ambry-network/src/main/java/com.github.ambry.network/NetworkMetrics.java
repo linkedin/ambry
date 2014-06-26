@@ -35,7 +35,7 @@ public class NetworkMetrics {
           return channel.getResponseQueueSize(index);
         }
       });
-      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + " ResponseQueueSize"),
+      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
           responseQueueSize.get(i));
     }
     sendInFlight = registry.counter(MetricRegistry.name(SocketServer.class, "SendInFlight"));
