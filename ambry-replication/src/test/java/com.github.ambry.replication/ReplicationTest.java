@@ -574,7 +574,6 @@ public class ReplicationTest {
       Assert.assertEquals(response.missingStoreKeys.size(), 0);
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 15);
 
-
       //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
       for (MessageInfo messageInfo : messageInfoListLocalReplica) {
         boolean found = false;
