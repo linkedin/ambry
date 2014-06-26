@@ -95,8 +95,6 @@ public class AmbryServer {
               new BlobStoreRecovery());
       storeManager.start();
 
-      networkServer = new SocketServer(networkConfig, registry);
-
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
       connectionPool.start();
 
@@ -105,6 +103,7 @@ public class AmbryServer {
               nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
+      networkServer = new SocketServer(networkConfig, registry);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager);

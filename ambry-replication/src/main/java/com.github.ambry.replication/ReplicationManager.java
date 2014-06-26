@@ -209,7 +209,7 @@ public final class ReplicationManager {
                 new RemoteReplicaInfo(remoteReplica, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier);
-            //replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
+            replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),

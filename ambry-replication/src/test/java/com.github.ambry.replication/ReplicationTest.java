@@ -248,7 +248,9 @@ public class ReplicationTest {
         entriesToReturn.add(messageInfoList.get(tokenmock.getIndex() + index));
         index++;
       }
-      return new FindInfo(entriesToReturn, new MockFindToken(tokenmock.getIndex() + entriesToReturn.size()));
+      // last parameter for FindInfo is not accurate. Ignoring for now, as it is a testcase.
+      return new FindInfo(entriesToReturn, new MockFindToken(tokenmock.getIndex() + entriesToReturn.size()),
+           entriesToReturn.size());
     }
 
     @Override

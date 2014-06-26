@@ -25,6 +25,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   private static int Max_Entries_Size_In_Bytes = 8;
 
+  private static final int ReplicaPath_Field_Size_In_Bytes = 4;
+
   public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token,
       String replicaPath, long maxTotalSizeOfEntriesInBytes) {
     super(RequestResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
@@ -70,7 +72,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putInt(replicaPath.length());
+      bufferToSend.putInt(replicaPath.getBytes().length);
       bufferToSend.put(replicaPath.getBytes());
       bufferToSend.put(partitionId.getBytes());
       bufferToSend.put(token.toBytes());
@@ -89,8 +91,9 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + partitionId + token
-    return super.sizeInBytes() + partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
+    // header + replicaPath +  partitionId + token
+    return super.sizeInBytes() + ReplicaPath_Field_Size_In_Bytes + replicaPath.getBytes().length
+        +  partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
   }
 
   @Override
@@ -99,6 +102,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     sb.append("ReplicaMetadataRequest[");
     sb.append("Token=").append(token);
     sb.append(", ").append("PartitionId=").append(partitionId);
+    sb.append(", ").append("ReplicaPath=").append(replicaPath);
     sb.append(", ").append("maxTotalSizeOfEntriesInBytes=").append(maxTotalSizeOfEntriesInBytes);
     sb.append("]");
     return sb.toString();

@@ -324,9 +324,9 @@ public class InMemoryIndex {
             largestOffset = entry.getValue().getOffset();
           }
         }
-        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
+        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId), largestOffset);
       } else {
-        return new FindInfo(messageEntries, storeToken);
+        return new FindInfo(messageEntries, storeToken, storeToken.getOffset());
       }
     } else {
       long endOffset = storeToken.getOffset();
@@ -343,7 +343,7 @@ public class InMemoryIndex {
         }
       }
       eliminateDuplicates(messageEntries);
-      return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
+      return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), endOffset);
     }
   }
 

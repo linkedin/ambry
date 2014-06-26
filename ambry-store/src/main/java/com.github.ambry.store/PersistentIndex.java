@@ -469,7 +469,7 @@ public class PersistentIndex {
           }
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
           eliminateDuplicates(messageEntries);
-          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId));
+          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), offsetEnd);
         } else {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
@@ -484,7 +484,8 @@ public class PersistentIndex {
               " New offset from find info" +
               " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset()
               : newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
-          return new FindInfo(messageEntries, newToken);
+          long totalBytesRead = newToken.getOffset() != -1 ? newToken.getOffset() : newToken.getIndexStartOffset();
+          return new FindInfo(messageEntries, newToken, totalBytesRead);
         }
       } else {
         // find index segment closest to the offset. get all entries after that
@@ -492,7 +493,8 @@ public class PersistentIndex {
         StoreFindToken newToken =
             findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
         eliminateDuplicates(messageEntries);
-        return new FindInfo(messageEntries, newToken);
+        long totalBytesRead = newToken.getOffset() != -1 ? newToken.getOffset() : newToken.getIndexStartOffset();
+        return new FindInfo(messageEntries, newToken, totalBytesRead);
       }
     } catch (IOException e) {
       logger.error("FindEntriesSince : IO error {}", e);
