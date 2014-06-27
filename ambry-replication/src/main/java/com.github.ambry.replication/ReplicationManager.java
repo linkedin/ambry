@@ -76,7 +76,9 @@ final class RemoteReplicaInfo {
   }
 
   public void updateBytesFromLocalStore(long totalBytesReadFromLocalStore) {
-    this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
+    if (totalBytesReadFromLocalStore != -1) {
+      this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
+    }
   }
 
   public FindToken getToken() {
