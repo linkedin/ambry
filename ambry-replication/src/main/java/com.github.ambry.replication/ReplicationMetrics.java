@@ -2,6 +2,7 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
@@ -22,6 +23,8 @@ public class ReplicationMetrics {
   public final Counter replicationErrors;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
+  public final Histogram remoteReplicaPersistingTime;
+  public final Histogram remoteReplicaRecreatingTime;
   public Gauge<Integer> numberOfReplicaThreads;
   private List<ReplicaThread> replicaThreads;
   public List<Gauge<Long>> replicaLags;
@@ -43,6 +46,10 @@ public class ReplicationMetrics {
         registry.timer(MetricRegistry.name(ReplicaThread.class, name + "interColoReplicationLatency"));
     intraColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, name + "intraColoReplicationLatency"));
+    remoteReplicaPersistingTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "remoteReplicaPersistingTime"));
+    remoteReplicaRecreatingTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "remoteReplicaRecreatingTime"));
     this.replicaThreads = replicaThreads;
     this.registry = registry;
     numberOfReplicaThreads = new Gauge<Integer>() {

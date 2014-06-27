@@ -187,7 +187,7 @@ class ReplicaThread implements Runnable {
 
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname(), partitionInfo.getPartitionId(),
-        remoteReplicaInfo.getToken(), remoteReplicaInfo.getReplicaId().getReplicaPath(),
+        remoteReplicaInfo.getToken(), partitionInfo.getLocalReplicaId().getReplicaPath(),
         replicationConfig.replicationFetchSizeInBytes);
     connectedChannel.send(request);
     InputStream stream = connectedChannel.receive();

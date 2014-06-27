@@ -10,7 +10,7 @@ import java.util.List;
 public class FindInfo {
   private List<MessageInfo> messageEntries;
   private FindToken findToken;
-  // Total bytes read so far by the replica wrt a remote store
+  // Total bytes read so far by remote replica with respect to local store
   private long totalBytesRead;
 
   public FindInfo(List<MessageInfo> messageEntries, FindToken findToken, long totalBytesRead) {

@@ -108,7 +108,6 @@ class InMemoryJournal {
     if (!journal.containsKey(offset)) {
       return null;
     }
-    logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
     return journalEntries;
   }
 }

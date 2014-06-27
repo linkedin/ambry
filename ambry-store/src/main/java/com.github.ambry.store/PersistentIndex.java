@@ -420,6 +420,7 @@ public class PersistentIndex {
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
     try {
+      long logEndOffsetBeforeFind = log.getLogEndOffset();
       StoreFindToken storeToken = (StoreFindToken) token;
       // validate token
       if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -456,6 +457,7 @@ public class PersistentIndex {
         if (entries != null) {
           long offsetEnd = offsetToStart;
           long currentTotalSizeOfEntries = 0;
+          long lastEntrySize = 0;
           for (JournalEntry entry : entries) {
             IndexValue value = findKey(entry.getKey());
             messageEntries.add(
@@ -463,13 +465,18 @@ public class PersistentIndex {
                     value.getTimeToLiveInMs()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
+            lastEntrySize = value.getSize();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
               break;
             }
           }
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
           eliminateDuplicates(messageEntries);
-          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), offsetEnd);
+          if (messageEntries.size() == 0) {
+            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), logEndOffsetBeforeFind);
+          } else {
+            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), offsetEnd + lastEntrySize);
+          }
         } else {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
@@ -484,7 +491,7 @@ public class PersistentIndex {
               " New offset from find info" +
               " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset()
               : newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
-          long totalBytesRead = newToken.getOffset() != -1 ? newToken.getOffset() : newToken.getIndexStartOffset();
+          long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
           return new FindInfo(messageEntries, newToken, totalBytesRead);
         }
       } else {
@@ -493,12 +500,27 @@ public class PersistentIndex {
         StoreFindToken newToken =
             findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
         eliminateDuplicates(messageEntries);
-        long totalBytesRead = newToken.getOffset() != -1 ? newToken.getOffset() : newToken.getIndexStartOffset();
+        long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
         return new FindInfo(messageEntries, newToken, totalBytesRead);
       }
     } catch (IOException e) {
       logger.error("FindEntriesSince : IO error {}", e);
       throw new StoreException("IOError when finding entries", StoreErrorCodes.IOError);
+    }
+  }
+
+  private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
+      long logEndOffsetBeforeFind) {
+    if (newToken.getOffset() == -1) {
+      return newToken.getIndexStartOffset();
+    } else {
+
+      if (messageEntries.size() > 0) {
+        MessageInfo lastMsgInfo = messageEntries.get(messageEntries.size() - 1);
+        return newToken.getOffset() + lastMsgInfo.getSize();
+      } else {
+        return logEndOffsetBeforeFind;
+      }
     }
   }
 

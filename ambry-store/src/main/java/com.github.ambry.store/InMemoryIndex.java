@@ -288,6 +288,7 @@ public class InMemoryIndex {
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
+    long logEndOffsetBeforeFind = log.getLogEndOffset();
     StoreFindToken storeToken = (StoreFindToken) token;
     // validate token
     if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -317,20 +318,24 @@ public class InMemoryIndex {
       // read the entire index and return it
       if (index.entrySet().size() > 0) {
         long largestOffset = 0;
+        long lastEntrySize = 0;
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           messageEntries.add(new MessageInfo(entry.getKey(), entry.getValue().getSize(),
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs()));
           if (entry.getValue().getOffset() > largestOffset) {
             largestOffset = entry.getValue().getOffset();
+            lastEntrySize = entry.getValue().getSize();
           }
         }
-        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId), largestOffset);
+        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId),
+            largestOffset + lastEntrySize);
       } else {
-        return new FindInfo(messageEntries, storeToken, storeToken.getOffset());
+        return new FindInfo(messageEntries, storeToken, logEndOffsetBeforeFind);
       }
     } else {
       long endOffset = storeToken.getOffset();
       long currentTotalSize = 0;
+      long lastEntrySize = 0;
       for (JournalEntry entry : entries) {
         IndexValue value = index.get(entry.getKey());
         messageEntries.add(
@@ -338,12 +343,18 @@ public class InMemoryIndex {
                 value.getTimeToLiveInMs()));
         endOffset = entry.getOffset();
         currentTotalSize += value.getSize();
+        lastEntrySize = value.getSize();
         if (currentTotalSize >= maxTotalSizeOfEntries) {
           break;
         }
       }
       eliminateDuplicates(messageEntries);
-      return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), endOffset);
+      if(messageEntries.size() > 0) {
+        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), endOffset + lastEntrySize);
+      }
+      else {
+        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), logEndOffsetBeforeFind);
+      }
     }
   }
 
