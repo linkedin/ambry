@@ -31,21 +31,21 @@ public class StoreMetrics {
   public StoreMetrics(String name, MetricRegistry registry) {
     this.registry = registry;
     this.name = name;
-    getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeGetResponse"));
-    putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storePutResponse"));
-    deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeDeleteResponse"));
-    ttlResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeTTLResponse"));
-    storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "storeStartTime"));
-    overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "overflowWriteError"));
-    overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "overflowReadError"));
-    recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexRecoveryTime"));
-    findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexFindTime"));
-    indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "indexFlushTime"));
+    getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeGetResponse"));
+    putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storePutResponse"));
+    deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeDeleteResponse"));
+    ttlResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeTTLResponse"));
+    storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeStartTime"));
+    overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "-overflowWriteError"));
+    overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "-overflowReadError"));
+    recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "-indexRecoveryTime"));
+    findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "-indexFindTime"));
+    indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "-indexFlushTime"));
     nonzeroMessageRecovery =
-        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "nonZeroMessageRecovery"));
-    bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "bloomPositiveCount"));
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-nonZeroMessageRecovery"));
+    bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomPositiveCount"));
     bloomFalsePositiveCount =
-        registry.counter(MetricRegistry.name(IndexSegment.class, name + "bloomFalsePositiveCount"));
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
   }
 
   public void initializeCapacityUsedMetric(final Log log) {
@@ -55,6 +55,6 @@ public class StoreMetrics {
         return log.getLogEndOffset();
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "currentCapacityUsed"), currentCapacityUsed);
+    registry.register(MetricRegistry.name(Log.class, name + "-currentCapacityUsed"), currentCapacityUsed);
   }
 }

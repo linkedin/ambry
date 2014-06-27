@@ -135,7 +135,6 @@ public class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
-      long startTimeIndexFind = SystemTime.getInstance().nanoseconds();
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.exists(info.getStoreKey())) {

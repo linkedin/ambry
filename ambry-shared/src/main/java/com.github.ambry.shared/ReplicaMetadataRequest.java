@@ -92,8 +92,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + replicaPath +  partitionId + token
-    return super.sizeInBytes() + ReplicaPath_Field_Size_In_Bytes + replicaPath.getBytes().length
-        +  partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
+    return super.sizeInBytes() + ReplicaPath_Field_Size_In_Bytes + replicaPath.getBytes().length + partitionId
+        .getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
   }
 
   @Override

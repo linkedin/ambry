@@ -349,10 +349,9 @@ public class InMemoryIndex {
         }
       }
       eliminateDuplicates(messageEntries);
-      if(messageEntries.size() > 0) {
+      if (messageEntries.size() > 0) {
         return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), endOffset + lastEntrySize);
-      }
-      else {
+      } else {
         return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), logEndOffsetBeforeFind);
       }
     }

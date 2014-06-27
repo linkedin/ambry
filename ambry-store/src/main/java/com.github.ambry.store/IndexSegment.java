@@ -539,7 +539,7 @@ class IndexSegment {
             // ignore entries that have offsets outside the log end offset that this index represents
             if (blobValue.getOffset() + blobValue.getSize() <= logEndOffset) {
               index.put(key, blobValue);
-              logger.trace("Index {} putting key {} in index offset {} size {}", indexFile.getPath(), key,
+              logger.trace("Index {} Putting key {} in index offset {} size {}", indexFile.getPath(), key,
                   blobValue.getOffset(), blobValue.getSize());
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
@@ -552,9 +552,14 @@ class IndexSegment {
               }
             } else {
               logger.info(
-                  "Index {} ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
+                  "Index {} Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
                   indexFile.getPath(), logEndOffset, key);
             }
+          }
+          if (maxEndOffset != logEndOffset) {
+            logger.error("Index {} MaxEndOffset {} of index entries does not match the log end offset {} in index ",
+                indexFile.getPath(), maxEndOffset, logEndOffset);
+            throw new StoreException("Index inconsistency error", StoreErrorCodes.Initialization_Error);
           }
           this.endOffset.set(maxEndOffset);
           logger.trace("Index {} Setting end offset for index {}", indexFile.getPath(), maxEndOffset);

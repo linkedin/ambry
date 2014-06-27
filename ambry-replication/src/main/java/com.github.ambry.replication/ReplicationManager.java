@@ -198,7 +198,7 @@ public final class ReplicationManager {
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
       this.replicationMetrics =
-          new ReplicationMetrics("replication-" + dataNode.getHostname() + ":" + dataNode.getPort(), metricRegistry,
+          new ReplicationMetrics("replication-" + dataNode.getHostname() + "-" + dataNode.getPort(), metricRegistry,
               replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
@@ -419,7 +419,6 @@ public final class ReplicationManager {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
-    // TODO add metric to indicate time taken
 
     /**
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
@@ -464,8 +463,8 @@ public final class ReplicationManager {
           throw new ReplicationException("IO error while persisting replica tokens to disk ");
         } finally {
           writer.close();
-          replicationMetrics.remoteReplicaPersistingTime.update(
-              SystemTime.getInstance().milliseconds() - writeStartTime);
+          replicationMetrics.remoteReplicaPersistingTime
+              .update(SystemTime.getInstance().milliseconds() - writeStartTime);
         }
         logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
       }
