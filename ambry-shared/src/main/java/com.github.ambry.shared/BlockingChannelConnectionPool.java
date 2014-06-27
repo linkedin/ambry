@@ -54,7 +54,7 @@ class BlockingChannelInfo {
       }
     };
     registry
-        .register(MetricRegistry.name(BlockingChannelInfo.class, name + "-availableConnections"), availableConnections);
+        .register(MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port + "-availableConnections"), availableConnections);
 
     activeConnections = new Gauge<Integer>() {
       @Override
@@ -62,7 +62,7 @@ class BlockingChannelInfo {
         return blockingChannelActiveConnections.size();
       }
     };
-    registry.register(MetricRegistry.name(BlockingChannelInfo.class, name + "-activeConnections"), activeConnections);
+    registry.register(MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port + "-activeConnections"), activeConnections);
 
     totalNumberOfConnections = new Gauge<Integer>() {
       @Override
@@ -70,7 +70,7 @@ class BlockingChannelInfo {
         return numberOfConnections.intValue();
       }
     };
-    registry.register(MetricRegistry.name(BlockingChannelInfo.class, name + "-totalNumberOfConnections"),
+    registry.register(MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port + "-totalNumberOfConnections"),
         totalNumberOfConnections);
 
     logger.info("Starting blocking channel info for host {} and port {}", host, port);

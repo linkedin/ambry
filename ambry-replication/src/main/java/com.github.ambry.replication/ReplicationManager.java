@@ -167,7 +167,7 @@ public final class ReplicationManager {
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
       this.replicationMetrics =
-          new ReplicationMetrics("replication-" + dataNode.getHostname() + ":" + dataNode.getPort(), metricRegistry,
+          new ReplicationMetrics("replication-" + dataNode.getHostname() + "-" + dataNode.getPort(), metricRegistry,
               replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
