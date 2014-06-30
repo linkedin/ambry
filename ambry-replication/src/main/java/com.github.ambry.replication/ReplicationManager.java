@@ -48,7 +48,7 @@ final class RemoteReplicaInfo {
   private FindToken tokenToPersist = null;
   private long timeTokenSetInMs;
   private FindToken tokenPersisted = null;
-  private Store localStore;
+  private final Store localStore;
   private long totalBytesReadFromLocalStore;
 
   public RemoteReplicaInfo(ReplicaId replicaId, Store localStore, FindToken token, long tokenPersistIntervalInMs) {
@@ -59,7 +59,7 @@ final class RemoteReplicaInfo {
       timeTokenSetInMs = SystemTime.getInstance().milliseconds();
     }
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
-    this.totalBytesReadFromLocalStore = new Long(0);
+    this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
   }
 
@@ -67,17 +67,11 @@ final class RemoteReplicaInfo {
     return replicaId;
   }
 
-  public long getReplicaLag() {
+  public long getReplicaLagInBytes() {
     if (localStore != null) {
       return this.localStore.getSizeInBytes() - this.totalBytesReadFromLocalStore;
     } else {
       return 0;
-    }
-  }
-
-  public void updateBytesFromLocalStore(long totalBytesReadFromLocalStore) {
-    if (totalBytesReadFromLocalStore != -1) {
-      this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
     }
   }
 
@@ -303,43 +297,40 @@ public final class ReplicationManager {
   }
 
   /**
-   * Used to update the total bytes read by a remote replica from local store
-   * @param partitionId
-   * @param hostName
-   * @param replicaPath
-   * @param totalBytesRead
+   * Updates the total bytes read by a remote replica from local store
+   * @param partitionId PartitionId to which the replica belongs to
+   * @param hostName HostName of the datanode where the replica belongs to
+   * @param replicaPath Replica Path of the replica interested in
+   * @param totalBytesRead Total bytes read by the replica
    */
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
       long totalBytesRead) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
-      remoteReplicaInfo.updateBytesFromLocalStore(totalBytesRead);
+      remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesRead);
     }
   }
 
   /**
    * Used to fetch the remote replica from the local store with the given PartitionId, ReplicaPath and Hostname
-   * @param partitionId
-   * @param hostName
-   * @param replicaPath
-   * @return
+   * @param partitionId PartitionId to which the replica belongs to
+   * @param hostName HostName of the datanode where the replica belongs to
+   * @param replicaPath Replica Path of the replica interested in
+   * @return RemoteReplicaInfo
    */
   private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo remoteReplicaInfo = null;
-    for (PartitionId partitionId1 : partitionsToReplicate.keySet()) {
-      if (partitionId.compareTo(partitionId1) == 0) {
-        PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-        for (RemoteReplicaInfo remoteReplicaInfo1 : partitionInfo.getRemoteReplicaInfo()) {
-          if (remoteReplicaInfo1.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo1
-              .getReplicaId().getDataNodeId().getHostname().equals(hostName)) {
-            remoteReplicaInfo = remoteReplicaInfo1;
-          }
-        }
+
+    PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
+    for (RemoteReplicaInfo tempRemoteReplicaInfo : partitionInfo.getRemoteReplicaInfo()) {
+      if (tempRemoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && tempRemoteReplicaInfo
+          .getReplicaId().getDataNodeId().getHostname().equals(hostName)) {
+        remoteReplicaInfo = tempRemoteReplicaInfo;
       }
     }
     if (remoteReplicaInfo == null) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
-      logger.error("ReplicaMetaDataRequest from unknown Replica ", hostName + ", with path ", replicaPath);
+      logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
     return remoteReplicaInfo;
   }
@@ -362,7 +353,7 @@ public final class ReplicationManager {
   private void readFromFile(String mountPath)
       throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
-    long readStartTime = SystemTime.getInstance().milliseconds();
+    long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
@@ -376,8 +367,11 @@ public final class ReplicationManager {
               PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
               // read remote node host name
               String hostname = Utils.readIntString(stream);
+              // read replicaPath
+              String replicaPath = Utils.readIntString(stream);
               // read remote port
               int port = stream.readInt();
+              // read totalBytesreadFromLocalStore
               long totalBytesReadFromLocalStore = stream.readLong();
               // read replica token
               FindToken token = factory.getFindToken(stream);
@@ -386,7 +380,8 @@ public final class ReplicationManager {
               boolean updatedToken = false;
               for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port) {
+                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
+                    .equals(replicaPath)) {
                   info.setToken(token);
                   info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   logger
@@ -412,7 +407,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while reading from replica token file " + e);
       } finally {
         stream.close();
-        replicationMetrics.remoteReplicaRecreatingTime.update(SystemTime.getInstance().milliseconds() - readStartTime);
+        replicationMetrics.remoteReplicaTokensRestoreTime
+            .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
   }
@@ -428,7 +424,7 @@ public final class ReplicationManager {
      */
     public void write()
         throws IOException, ReplicationException {
-      long writeStartTime = SystemTime.getInstance().milliseconds();
+      long writeStartTimeMs = SystemTime.getInstance().milliseconds();
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         File temp = new File(mountPath, replicaTokenFileName + ".tmp");
         File actual = new File(mountPath, replicaTokenFileName);
@@ -446,6 +442,8 @@ public final class ReplicationManager {
                 writer.write(info.getPartitionId().getBytes());
                 writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().length());
                 writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
+                writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
+                writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
                 writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
                 writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
                 writer.write(remoteReplica.getTokenToPersist().toBytes());
@@ -465,8 +463,8 @@ public final class ReplicationManager {
           throw new ReplicationException("IO error while persisting replica tokens to disk ");
         } finally {
           writer.close();
-          replicationMetrics.remoteReplicaPersistingTime
-              .update(SystemTime.getInstance().milliseconds() - writeStartTime);
+          replicationMetrics.remoteReplicaTokensPersistTime
+              .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
         }
         logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
       }

@@ -411,8 +411,7 @@ public class AmbryRequests implements RequestAPI {
       FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
           replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
       replicationManager.updateTotalBytesReadByRemoteReplica(replicaMetadataRequest.getPartitionId(),
-          replicaMetadataRequest.getClientId().substring(21), replicaMetadataRequest.getReplicaPath(),
-          findInfo.getBytesReadSoFar());
+          replicaMetadataRequest.getHostName(), replicaMetadataRequest.getReplicaPath(), findInfo.getBytesReadSoFar());
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());

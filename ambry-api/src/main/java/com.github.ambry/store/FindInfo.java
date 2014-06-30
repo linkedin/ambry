@@ -8,10 +8,10 @@ import java.util.List;
  * new find token that can be used for subsequent searches.
  */
 public class FindInfo {
-  private List<MessageInfo> messageEntries;
-  private FindToken findToken;
+  private final List<MessageInfo> messageEntries;
+  private final FindToken findToken;
   // Total bytes read so far by remote replica with respect to local store
-  private long totalBytesRead;
+  private final long totalBytesRead;
 
   public FindInfo(List<MessageInfo> messageEntries, FindToken findToken, long totalBytesRead) {
     this.messageEntries = messageEntries;

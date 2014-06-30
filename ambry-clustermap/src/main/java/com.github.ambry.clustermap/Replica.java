@@ -1,8 +1,5 @@
 package com.github.ambry.clustermap;
 
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;

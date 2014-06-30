@@ -609,6 +609,27 @@ public class CoordinatorTest {
     assertArrayEquals(blobDataBytes, putContent.array());
 
     ac.deleteBlob(blobId);
+
+    try {
+      getBlobOutput = ac.getBlob(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      getBlobProperties = ac.getBlobProperties(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      getUserMetadata = ac.getBlobUserMetadata(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      ac.deleteBlob(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
   }
 
   void simple(ClusterMap clusterMap)

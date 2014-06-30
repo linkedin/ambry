@@ -23,11 +23,11 @@ public class ReplicationMetrics {
   public final Counter replicationErrors;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
-  public final Histogram remoteReplicaPersistingTime;
-  public final Histogram remoteReplicaRecreatingTime;
+  public final Histogram remoteReplicaTokensPersistTime;
+  public final Histogram remoteReplicaTokensRestoreTime;
   public Gauge<Integer> numberOfReplicaThreads;
   private List<ReplicaThread> replicaThreads;
-  public List<Gauge<Long>> replicaLags;
+  public List<Gauge<Long>> replicaLagsInBytes;
   private MetricRegistry registry;
 
   public ReplicationMetrics(String name, MetricRegistry registry, List<ReplicaThread> replicaThreads) {
@@ -40,17 +40,17 @@ public class ReplicationMetrics {
     intraColoBlobsReplicatedCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoBlobsReplicatedCount"));
     unknownRemoteReplicaRequestCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "unknownRemoteReplicaRequestCount"));
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationBlobsCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-unknownRemoteReplicaRequestCount"));
+    registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationBlobsCount"));
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-replicationErrors"));
     interColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, name + "-interColoReplicationLatency"));
-    remoteReplicaPersistingTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "-remoteReplicaPersistingTime"));
-    remoteReplicaRecreatingTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "-remoteReplicaRecreatingTime"));
     intraColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationLatency"));
+    remoteReplicaTokensPersistTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensPersistTime"));
+    remoteReplicaTokensRestoreTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensRestoreTime"));
     this.replicaThreads = replicaThreads;
     this.registry = registry;
     numberOfReplicaThreads = new Gauge<Integer>() {
@@ -60,8 +60,8 @@ public class ReplicationMetrics {
       }
     };
 
-    registry.register(MetricRegistry.name(ReplicaThread.class, "numberOfReplicaThreads"), numberOfReplicaThreads);
-    replicaLags = new ArrayList<Gauge<Long>>();
+    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreads"), numberOfReplicaThreads);
+    this.replicaLagsInBytes = new ArrayList<Gauge<Long>>();
   }
 
   private int getLiveThreads() {
@@ -78,11 +78,12 @@ public class ReplicationMetrics {
     Gauge<Long> replicaLag = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return remoteReplicaInfo.getReplicaLag();
+        return remoteReplicaInfo.getReplicaLagInBytes();
       }
     };
-    registry.register(MetricRegistry.name(ReplicationMetrics.class, remoteReplicaInfo.getReplicaId() + "-replicaLag"),
+    registry.register(
+        MetricRegistry.name(ReplicationMetrics.class, remoteReplicaInfo.getReplicaId() + "-replicaLagsInBytes"),
         replicaLag);
-    replicaLags.add(replicaLag);
+    replicaLagsInBytes.add(replicaLag);
   }
 }

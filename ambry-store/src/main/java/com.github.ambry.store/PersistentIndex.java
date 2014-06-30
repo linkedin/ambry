@@ -447,7 +447,7 @@ public class PersistentIndex {
       if (storeToken.getStoreKey() == null) {
         boolean inclusive = false;
         long offsetToStart = storeToken.getOffset();
-        if (storeToken.getOffset() == -1) {
+        if (storeToken.getOffset() == StoreFindToken.Uninitialized_Offset) {
           inclusive = true;
           offsetToStart = 0;
         }
@@ -489,7 +489,7 @@ public class PersistentIndex {
           eliminateDuplicates(messageEntries);
           logger.trace("Index: " + dataDir +
               " New offset from find info" +
-              " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset()
+              " offset : " + (newToken.getOffset() != StoreFindToken.Uninitialized_Offset ? newToken.getOffset()
               : newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
           return new FindInfo(messageEntries, newToken, totalBytesRead);
@@ -511,10 +511,13 @@ public class PersistentIndex {
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
       long logEndOffsetBeforeFind) {
-    if (newToken.getOffset() == -1) {
-      return newToken.getIndexStartOffset();
+    if (newToken.getOffset() == StoreFindToken.Uninitialized_Offset) {
+      if (newToken.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset) {
+        return 0;
+      } else {
+        return newToken.getIndexStartOffset();
+      }
     } else {
-
       if (messageEntries.size() > 0) {
         MessageInfo lastMsgInfo = messageEntries.get(messageEntries.size() - 1);
         return newToken.getOffset() + lastMsgInfo.getSize();
@@ -532,7 +535,7 @@ public class PersistentIndex {
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;
-    long offsetEnd = -1;
+    long offsetEnd = StoreFindToken.Uninitialized_Offset;
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
@@ -558,7 +561,7 @@ public class PersistentIndex {
         break;
       }
     }
-    if (offsetEnd != -1) {
+    if (offsetEnd != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(offsetEnd, sessionId);
     } else {
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex,
@@ -703,16 +706,18 @@ class StoreFindToken implements FindToken {
   private static final int Offset_Size = 8;
   private static final int Start_Offset_Size = 8;
 
+  public static final int Uninitialized_Offset = -1;
+
   public StoreFindToken() {
-    this(-1, -1, null, null);
+    this(Uninitialized_Offset, Uninitialized_Offset, null, null);
   }
 
   public StoreFindToken(StoreKey key, long indexStartOffset, UUID sessionId) {
-    this(-1, indexStartOffset, key, sessionId);
+    this(Uninitialized_Offset, indexStartOffset, key, sessionId);
   }
 
   public StoreFindToken(long offset, UUID sessionId) {
-    this(offset, -1, null, sessionId);
+    this(offset, Uninitialized_Offset, null, sessionId);
   }
 
   private StoreFindToken(long offset, long indexStartOffset, StoreKey key, UUID sessionId) {
@@ -737,7 +742,7 @@ class StoreFindToken implements FindToken {
     // read index start offset
     long indexStartOffset = stream.readLong();
     // read store key if needed
-    if (indexStartOffset != -1) {
+    if (indexStartOffset != Uninitialized_Offset) {
       return new StoreFindToken(factory.getStoreKey(stream), indexStartOffset, sessionIdUUID);
     } else {
       return new StoreFindToken(offset, sessionIdUUID);
@@ -763,7 +768,7 @@ class StoreFindToken implements FindToken {
   public void setOffset(long offset) {
     this.offset = offset;
     this.storeKey = null;
-    this.indexStartOffset = -1;
+    this.indexStartOffset = Uninitialized_Offset;
   }
 
   @Override

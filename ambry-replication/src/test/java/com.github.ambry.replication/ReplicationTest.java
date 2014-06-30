@@ -126,7 +126,6 @@ public class ReplicationTest {
 
     DummyLog log;
     List<MessageInfo> messageInfoList;
-    long bytesWrittenSoFar;
 
     class DummyLog {
       private List<ByteBuffer> logInfo;
@@ -156,7 +155,6 @@ public class ReplicationTest {
       }
       messageInfoList = messageInfo;
       log = new DummyLog(buffers);
-      bytesWrittenSoFar = new Long(0);
     }
 
     @Override
