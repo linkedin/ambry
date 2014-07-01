@@ -27,6 +27,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   private static final int Max_Entries_Size_In_Bytes = 8;
 
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
+  private static final int HostName_Field_Size_In_Bytes = 4;
 
   public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token,
       String hostName, String replicaPath, long maxTotalSizeOfEntriesInBytes) {
@@ -101,10 +102,9 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + hostName + replicaPath +  partitionId + token
-    return super.sizeInBytes() + ReplicaPath_Field_Size_In_Bytes + hostName.getBytes().length +
-        replicaPath.getBytes().length + partitionId.getBytes().length + token.toBytes().length
-        + Max_Entries_Size_In_Bytes;
+    return super.sizeInBytes() + HostName_Field_Size_In_Bytes + hostName.getBytes().length
+        + ReplicaPath_Field_Size_In_Bytes + replicaPath.getBytes().length +
+        +partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
   }
 
   @Override

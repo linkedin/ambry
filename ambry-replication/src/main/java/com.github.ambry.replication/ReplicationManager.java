@@ -380,8 +380,8 @@ public final class ReplicationManager {
               boolean updatedToken = false;
               for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
-                    .equals(replicaPath)) {
+                    && info.getReplicaId().getDataNodeId().getPort() == port
+                    && info.getReplicaId().getReplicaPath().equals(replicaPath)) {
                   info.setToken(token);
                   info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   logger
@@ -440,9 +440,9 @@ public final class ReplicationManager {
               FindToken tokenToPersist = remoteReplica.getTokenToPersist();
               if (tokenToPersist != null) {
                 writer.write(info.getPartitionId().getBytes());
-                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().length());
+                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes().length);
                 writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
-                writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
+                writer.writeInt(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
                 writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
                 writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
                 writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
