@@ -380,8 +380,8 @@ public final class ReplicationManager {
               boolean updatedToken = false;
               for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port
-                    && info.getReplicaId().getReplicaPath().equals(replicaPath)) {
+                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
+                    .equals(replicaPath)) {
                   info.setToken(token);
                   info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   logger
