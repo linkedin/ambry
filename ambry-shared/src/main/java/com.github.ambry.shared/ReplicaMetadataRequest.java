@@ -25,7 +25,6 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   private long maxTotalSizeOfEntriesInBytes;
 
   private static final int Max_Entries_Size_In_Bytes = 8;
-
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
 

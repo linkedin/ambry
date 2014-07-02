@@ -319,20 +319,20 @@ public final class ReplicationManager {
    * @return RemoteReplicaInfo
    */
   private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
-    RemoteReplicaInfo remoteReplicaInfo = null;
+    RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-    for (RemoteReplicaInfo tempRemoteReplicaInfo : partitionInfo.getRemoteReplicaInfo()) {
-      if (tempRemoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && tempRemoteReplicaInfo
-          .getReplicaId().getDataNodeId().getHostname().equals(hostName)) {
-        remoteReplicaInfo = tempRemoteReplicaInfo;
+    for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfo()) {
+      if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
+          .getDataNodeId().getHostname().equals(hostName)) {
+        foundRemoteReplicaInfo = remoteReplicaInfo;
       }
     }
-    if (remoteReplicaInfo == null) {
+    if (foundRemoteReplicaInfo == null) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
-    return remoteReplicaInfo;
+    return foundRemoteReplicaInfo;
   }
 
   public void shutdown()
@@ -367,11 +367,11 @@ public final class ReplicationManager {
               PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
               // read remote node host name
               String hostname = Utils.readIntString(stream);
-              // read replicaPath
+              // read remote replica path
               String replicaPath = Utils.readIntString(stream);
               // read remote port
               int port = stream.readInt();
-              // read totalBytesreadFromLocalStore
+              // read total bytes read from local store
               long totalBytesReadFromLocalStore = stream.readLong();
               // read replica token
               FindToken token = factory.getFindToken(stream);

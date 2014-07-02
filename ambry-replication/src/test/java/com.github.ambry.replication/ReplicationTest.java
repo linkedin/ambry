@@ -244,11 +244,18 @@ public class ReplicationTest {
       int index = 0;
       while (currentSizeOfEntries < maxSizeOfEntries && index < messageInfoList.size()) {
         entriesToReturn.add(messageInfoList.get(tokenmock.getIndex() + index));
+        currentSizeOfEntries += messageInfoList.get(tokenmock.getIndex() + index).getSize();
         index++;
       }
-      // last parameter for FindInfo is not accurate. Ignoring for now, as it is a testcase.
+
+      int startIndex = tokenmock.getIndex();
+      int totalSizeRead = 0;
+      for (int i = 0; i < startIndex; i++) {
+        totalSizeRead += messageInfoList.get(i).getSize();
+      }
+      totalSizeRead += currentSizeOfEntries;
       return new FindInfo(entriesToReturn, new MockFindToken(tokenmock.getIndex() + entriesToReturn.size()),
-          entriesToReturn.size());
+          totalSizeRead);
     }
 
     @Override
@@ -472,23 +479,10 @@ public class ReplicationTest {
       MockClusterMap clusterMap = new MockClusterMap();
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
       for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422))) {
-        if (replicaId.getDataNodeId().getPort() == 64422) {
-          for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
-            RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0), 1000000);
-            remoteReplicas.add(remoteReplicaInfo);
-          }
-        }
-      }
-      // code block to get localReplica. Created for the purpose of having localReplicaId in ParitionInfo.
-      List<RemoteReplicaInfo> localReplicas = new ArrayList<RemoteReplicaInfo>();
-      for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64423))) {
-        if (replicaId.getDataNodeId().getPort() == 64423) {
-          for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
-            RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0), 1000000);
-            localReplicas.add(remoteReplicaInfo);
-          }
+        for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
+          RemoteReplicaInfo remoteReplicaInfo =
+              new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0), 1000000);
+          remoteReplicas.add(remoteReplicaInfo);
         }
       }
 
@@ -540,10 +534,12 @@ public class ReplicationTest {
         messageBufferListLocalReplica3.add(ByteBuffer.wrap(bytes));
       }
 
+      // fetching a local replicaId to be passed in during initialization of PartitionInfo
+      ReplicaId localReplicaId = clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64423)).get(0);
+
       PartitionInfo partitionInfo =
           new PartitionInfo(remoteReplicas, remoteReplicas.get(0).getReplicaId().getPartitionId(),
-              new MockStore(messageInfoListLocalReplica, messageBufferListLocalReplica),
-              localReplicas.get(0).getReplicaId());
+              new MockStore(messageInfoListLocalReplica, messageBufferListLocalReplica), localReplicaId);
       ArrayList<PartitionInfo> partitionInfoList = new ArrayList<PartitionInfo>();
       partitionInfoList.add(partitionInfo);
       Map<String, List<MessageInfo>> replicaStores = new HashMap<String, List<MessageInfo>>();

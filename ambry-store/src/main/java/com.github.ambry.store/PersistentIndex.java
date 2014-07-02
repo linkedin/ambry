@@ -473,8 +473,10 @@ public class PersistentIndex {
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
           eliminateDuplicates(messageEntries);
           if (messageEntries.size() == 0) {
+            // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
             return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), logEndOffsetBeforeFind);
           } else {
+            // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
             return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), offsetEnd + lastEntrySize);
           }
         } else {
