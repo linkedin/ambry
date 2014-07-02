@@ -701,6 +701,7 @@ class StoreFindToken implements FindToken {
   private long indexStartOffset;
   private StoreKey storeKey;
   private UUID sessionId;
+  private long bytesRead;
 
   private static final short version = 0;
   private static final int Version_Size = 2;
@@ -727,6 +728,23 @@ class StoreFindToken implements FindToken {
     this.indexStartOffset = indexStartOffset;
     this.storeKey = key;
     this.sessionId = sessionId;
+    initializeBytesRead(indexStartOffset, offset);
+  }
+
+  private void initializeBytesRead(long indexStartOffset, long offset) {
+    if (offset == Uninitialized_Offset) {
+      if (indexStartOffset == Uninitialized_Offset) {
+        bytesRead = 0;
+      } else {
+        bytesRead = indexStartOffset;
+      }
+    } else {
+      bytesRead = offset;
+    }
+  }
+
+  public long getBytesRead() {
+    return this.bytesRead;
   }
 
   public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory)
@@ -808,6 +826,7 @@ class StoreFindToken implements FindToken {
     } else {
       tokenStringFormat += " offset " + offset;
     }
+    tokenStringFormat += " bytesRead " + bytesRead;
     return tokenStringFormat;
   }
 }

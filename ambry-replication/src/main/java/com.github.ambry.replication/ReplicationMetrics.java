@@ -27,7 +27,7 @@ public class ReplicationMetrics {
   public final Histogram remoteReplicaTokensRestoreTime;
   public Gauge<Integer> numberOfReplicaThreads;
   private List<ReplicaThread> replicaThreads;
-  public List<Gauge<Long>> replicaLagsInBytes;
+  public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
 
   public ReplicationMetrics(String name, MetricRegistry registry, List<ReplicaThread> replicaThreads) {
@@ -61,7 +61,7 @@ public class ReplicationMetrics {
     };
 
     registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreads"), numberOfReplicaThreads);
-    this.replicaLagsInBytes = new ArrayList<Gauge<Long>>();
+    this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
   }
 
   private int getLiveThreads() {
@@ -82,8 +82,8 @@ public class ReplicationMetrics {
       }
     };
     registry.register(
-        MetricRegistry.name(ReplicationMetrics.class, remoteReplicaInfo.getReplicaId() + "-replicaLagsInBytes"),
+        MetricRegistry.name(ReplicationMetrics.class, remoteReplicaInfo.getReplicaId() + "-replicaLagInBytes"),
         replicaLag);
-    replicaLagsInBytes.add(replicaLag);
+    replicaLagInBytes.add(replicaLag);
   }
 }

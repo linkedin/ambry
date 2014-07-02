@@ -9,4 +9,7 @@ public interface FindToken {
    * @return The byte array representing the token
    */
   byte[] toBytes();
+
+  // returns the total bytes read so far until this token
+  public long getBytesRead();
 }

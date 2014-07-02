@@ -22,6 +22,7 @@ import java.util.Properties;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -594,7 +595,6 @@ public class CoordinatorTest {
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
-    System.out.println("BlobId: " + blobId);
 
     BlobProperties getBlobProperties = ac.getBlobProperties(blobId);
     assertEquals(putBlobProperties.getBlobSize(), getBlobProperties.getBlobSize());
@@ -612,23 +612,72 @@ public class CoordinatorTest {
 
     try {
       getBlobOutput = ac.getBlob(blobId);
+      fail("GetBlob for a deleted blob should have thrown CoordinatorException " + blobId);
     } catch (CoordinatorException coordinatorException) {
       assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
     }
     try {
       getBlobProperties = ac.getBlobProperties(blobId);
+      fail("GetBlobProperties for a deleted blob should have thrown CoordinatorException " + blobId);
     } catch (CoordinatorException coordinatorException) {
       assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
     }
     try {
       getUserMetadata = ac.getBlobUserMetadata(blobId);
+      fail("GetUserMetaData for a deleted blob should have thrown CoordinatorException " + blobId);
     } catch (CoordinatorException coordinatorException) {
       assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
     }
     try {
       ac.deleteBlob(blobId);
     } catch (CoordinatorException coordinatorException) {
-      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+      fail("Deletion of a deleted blob should not have thrown CoordinatorException " + blobId);
+    }
+  }
+
+  void GetNonExistantBlob(AmbryCoordinator ac)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+    BlobProperties putBlobProperties =
+        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
+    for (byte b = 0; b < 10; b++) {
+      putUserMetadata.put(b);
+    }
+
+    ByteBuffer putContent = ByteBuffer.allocate(100);
+    for (byte b = 0; b < 100; b++) {
+      putContent.put(b);
+    }
+    putContent.flip();
+    InputStream blobData = new ByteBufferInputStream(putContent);
+
+    String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
+
+    //create dummy blobid
+    String nonExistantBlobId = (char) (blobId.charAt(0) + 1) + blobId.substring(1);
+
+    try {
+      BlobOutput getBlobOutput = ac.getBlob(nonExistantBlobId);
+      fail("GetBlob for a non existing blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDoesNotExist);
+    }
+    try {
+      BlobProperties getBlobProperties = ac.getBlobProperties(nonExistantBlobId);
+      fail("GetBlobProperties for a non existing blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDoesNotExist);
+    }
+    try {
+      ByteBuffer getUserMetadata = ac.getBlobUserMetadata(nonExistantBlobId);
+      fail("GetUserMetaData for a non existing blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDoesNotExist);
+    }
+    try {
+      ac.deleteBlob(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      fail("DeleteBlob of a non existing blob should not have thrown CoordinatorException " + blobId);
     }
   }
 
@@ -642,10 +691,19 @@ public class CoordinatorTest {
     ac.close();
   }
 
+  void simpleGetNonExistantBlob(ClusterMap clusterMap)
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+    GetNonExistantBlob(ac);
+    ac.close();
+  }
+
   @Test
   public void simpleOneDCOneNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     simple(getClusterMapOneDCOneNodeOneDiskOnePartition());
+    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition());
   }
 
   @Test
@@ -703,7 +761,6 @@ public class CoordinatorTest {
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = acOne.putBlob(putBlobProperties, putUserMetadata, blobData);
-    System.out.println("BlobId: " + blobId);
 
     BlobProperties getBlobProperties = acTwo.getBlobProperties(blobId);
     assertEquals(putBlobProperties.getBlobSize(), getBlobProperties.getBlobSize());

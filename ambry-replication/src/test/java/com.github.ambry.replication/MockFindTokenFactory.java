@@ -18,30 +18,38 @@ public class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
   public FindToken getNewFindToken() {
-    return new MockFindToken(0);
+    return new MockFindToken(0, 0);
   }
 }
 
 class MockFindToken implements FindToken {
   int index;
+  long bytesRead;
 
-  public MockFindToken(int index) {
+  public MockFindToken(int index, long bytesRead) {
     this.index = index;
+    this.bytesRead = bytesRead;
   }
 
   public MockFindToken(DataInputStream stream)
       throws IOException {
     this.index = stream.readInt();
+    this.bytesRead = stream.readLong();
   }
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer intarr = ByteBuffer.allocate(4);
-    intarr.putInt(index);
-    return intarr.array();
+    ByteBuffer byteBuffer = ByteBuffer.allocate(12);
+    byteBuffer.putInt(index);
+    byteBuffer.putLong(bytesRead);
+    return byteBuffer.array();
   }
 
   public int getIndex() {
     return index;
+  }
+
+  public long getBytesRead() {
+    return this.bytesRead;
   }
 }

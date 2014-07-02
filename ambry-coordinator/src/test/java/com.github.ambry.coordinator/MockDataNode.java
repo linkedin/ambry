@@ -152,8 +152,15 @@ public class MockDataNode {
   }
 
   public synchronized ServerErrorCode delete(BlobId blobId) {
-    deletedBlobs.add(blobId);
-    return ServerErrorCode.No_Error;
+    if (deletedBlobs.contains(blobId)) {
+      return ServerErrorCode.Blob_Deleted;
+    } else if (!blobs.containsKey(blobId)) {
+      return ServerErrorCode.Blob_Not_Found;
+    } else {
+      blobs.remove(blobId);
+      deletedBlobs.add(blobId);
+      return ServerErrorCode.No_Error;
+    }
   }
 
   @Override

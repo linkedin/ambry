@@ -240,11 +240,11 @@ public class ReplicationTest {
         throws StoreException {
       MockFindToken tokenmock = (MockFindToken) token;
       List<MessageInfo> entriesToReturn = new ArrayList<MessageInfo>();
-      long currentSizeOfEntries = 0;
+      long currentSizeOfEntriesInBytes = 0;
       int index = 0;
-      while (currentSizeOfEntries < maxSizeOfEntries && index < messageInfoList.size()) {
+      while (currentSizeOfEntriesInBytes < maxSizeOfEntries && index < messageInfoList.size()) {
         entriesToReturn.add(messageInfoList.get(tokenmock.getIndex() + index));
-        currentSizeOfEntries += messageInfoList.get(tokenmock.getIndex() + index).getSize();
+        currentSizeOfEntriesInBytes += messageInfoList.get(tokenmock.getIndex() + index).getSize();
         index++;
       }
 
@@ -253,9 +253,9 @@ public class ReplicationTest {
       for (int i = 0; i < startIndex; i++) {
         totalSizeRead += messageInfoList.get(i).getSize();
       }
-      totalSizeRead += currentSizeOfEntries;
-      return new FindInfo(entriesToReturn, new MockFindToken(tokenmock.getIndex() + entriesToReturn.size()),
-          totalSizeRead);
+      totalSizeRead += currentSizeOfEntriesInBytes;
+      return new FindInfo(entriesToReturn,
+          new MockFindToken(tokenmock.getIndex() + entriesToReturn.size(), totalSizeRead), totalSizeRead);
     }
 
     @Override
@@ -351,6 +351,7 @@ public class ReplicationTest {
     List<MessageInfo> messageInfoList;
     List<ByteBuffer> bufferList;
     int indexRequested;
+    long bytesRead;
     List<ByteBuffer> bufferToReturn;
     List<MessageInfo> messageInfoToReturn;
     String host;
@@ -373,6 +374,7 @@ public class ReplicationTest {
         ReplicaMetadataRequest metadataRequest = (ReplicaMetadataRequest) request;
         MockFindToken token = (MockFindToken) metadataRequest.getToken();
         indexRequested = token.getIndex();
+        bytesRead = token.getBytesRead();
       }
       if (request instanceof GetRequest) {
         indexRequested = -1;
@@ -405,7 +407,7 @@ public class ReplicationTest {
           indexRequested = i;
         }
         response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error,
-            new MockFindToken(indexRequested), messageInfoToReturn);
+            new MockFindToken(indexRequested, bytesRead), messageInfoToReturn);
         indexRequested = -1;
       } else {
         response = new GetResponse(1, "replication", messageInfoToReturn, new MockSend(bufferToReturn),
@@ -481,7 +483,7 @@ public class ReplicationTest {
       for (ReplicaId replicaId : clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422))) {
         for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
           RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0), 1000000);
+              new RemoteReplicaInfo(peerReplicaId, null, new MockFindToken(0, 0), 1000000);
           remoteReplicas.add(remoteReplicaInfo);
         }
       }

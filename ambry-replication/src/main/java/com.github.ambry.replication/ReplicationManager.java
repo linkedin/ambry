@@ -139,7 +139,7 @@ final class PartitionInfo {
     return partitionId;
   }
 
-  public List<RemoteReplicaInfo> getRemoteReplicaInfo() {
+  public List<RemoteReplicaInfo> getRemoteReplicaInfos() {
     return remoteReplicas;
   }
 
@@ -312,17 +312,17 @@ public final class ReplicationManager {
   }
 
   /**
-   * Used to fetch the remote replica from the local store with the given PartitionId, ReplicaPath and Hostname
+   * Gets the replica info for the remote peer replica identified by PartitionId, ReplicaPath and Hostname
    * @param partitionId PartitionId to which the replica belongs to
-   * @param hostName HostName of the datanode where the replica belongs to
-   * @param replicaPath Replica Path of the replica interested in
+   * @param hostName hostname of the remote peer replica
+   * @param replicaPath replica path on the remote peer replica
    * @return RemoteReplicaInfo
    */
   private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-    for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfo()) {
+    for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
       if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
           .getDataNodeId().getHostname().equals(hostName)) {
         foundRemoteReplicaInfo = remoteReplicaInfo;
@@ -378,7 +378,7 @@ public final class ReplicationManager {
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
-              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
+              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
                     && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
                     .equals(replicaPath)) {
@@ -436,7 +436,7 @@ public final class ReplicationManager {
           writer.writeShort(version);
           // Get all partitions for the mount path and persist the tokens for them
           for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
-            for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfo()) {
+            for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
               FindToken tokenToPersist = remoteReplica.getTokenToPersist();
               if (tokenToPersist != null) {
                 writer.write(info.getPartitionId().getBytes());
