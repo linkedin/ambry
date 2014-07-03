@@ -221,7 +221,6 @@ public class AmbryCoordinator implements Coordinator {
           new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
               operationTimeoutMs);
       deleteOperation.execute();
-
       notificationSystem.onBlobDeleted(blobIdString);
       coordinatorMetrics.deleteBlobOperationRate.mark();
       coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);

@@ -231,6 +231,11 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return log.getLogEndOffset();
+  }
+
+  @Override
   public void shutdown()
       throws StoreException {
     synchronized (lock) {

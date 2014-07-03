@@ -24,7 +24,6 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,7 +93,7 @@ class ReplicaThread implements Runnable {
           if (!running) {
             break;
           }
-          List<RemoteReplicaInfo> remoteReplicas = partitionInfo.getRemoteReplicaInfo();
+          List<RemoteReplicaInfo> remoteReplicas = partitionInfo.getRemoteReplicaInfos();
           Collections.shuffle(remoteReplicas);
           for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
             if (!running) {
@@ -188,7 +187,8 @@ class ReplicaThread implements Runnable {
 
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname(), partitionInfo.getPartitionId(),
-        remoteReplicaInfo.getToken(), replicationConfig.replicationFetchSizeInBytes);
+        remoteReplicaInfo.getToken(), dataNodeId.getHostname(), partitionInfo.getLocalReplicaId().getReplicaPath(),
+        replicationConfig.replicationFetchSizeInBytes);
     connectedChannel.send(request);
     InputStream stream = connectedChannel.receive();
     ReplicaMetadataResponse response =

@@ -48,8 +48,10 @@ final class RemoteReplicaInfo {
   private FindToken tokenToPersist = null;
   private long timeTokenSetInMs;
   private FindToken tokenPersisted = null;
+  private final Store localStore;
+  private long totalBytesReadFromLocalStore;
 
-  public RemoteReplicaInfo(ReplicaId replicaId, FindToken token, long tokenPersistIntervalInMs) {
+  public RemoteReplicaInfo(ReplicaId replicaId, Store localStore, FindToken token, long tokenPersistIntervalInMs) {
     this.replicaId = replicaId;
     this.currentToken = token;
     if (tokenToPersist == null) {
@@ -57,16 +59,34 @@ final class RemoteReplicaInfo {
       timeTokenSetInMs = SystemTime.getInstance().milliseconds();
     }
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
+    this.totalBytesReadFromLocalStore = 0;
+    this.localStore = localStore;
   }
 
   public ReplicaId getReplicaId() {
     return replicaId;
   }
 
+  public long getReplicaLagInBytes() {
+    if (localStore != null) {
+      return this.localStore.getSizeInBytes() - this.totalBytesReadFromLocalStore;
+    } else {
+      return 0;
+    }
+  }
+
   public FindToken getToken() {
     synchronized (lock) {
       return currentToken;
     }
+  }
+
+  public void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
+    this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
+  }
+
+  public long getTotalBytesReadFromLocalStore() {
+    return this.totalBytesReadFromLocalStore;
   }
 
   public void setToken(FindToken token) {
@@ -105,23 +125,30 @@ final class PartitionInfo {
   private final List<RemoteReplicaInfo> remoteReplicas;
   private final PartitionId partitionId;
   private final Store store;
+  private final ReplicaId localReplicaId;
 
-  public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store) {
+  public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
+      ReplicaId localReplicaId) {
     this.remoteReplicas = remoteReplicas;
     this.partitionId = partitionId;
     this.store = store;
+    this.localReplicaId = localReplicaId;
   }
 
   public PartitionId getPartitionId() {
     return partitionId;
   }
 
-  public List<RemoteReplicaInfo> getRemoteReplicaInfo() {
+  public List<RemoteReplicaInfo> getRemoteReplicaInfos() {
     return remoteReplicas;
   }
 
   public Store getStore() {
     return store;
+  }
+
+  public ReplicaId getLocalReplicaId() {
+    return this.localReplicaId;
   }
 
   @Override
@@ -166,9 +193,7 @@ public final class ReplicationManager {
       this.replicationConfig = replicationConfig;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
-      this.replicationMetrics =
-          new ReplicationMetrics("replication-" + dataNode.getHostname() + "-" + dataNode.getPort(), metricRegistry,
-              replicaThreads);
+      this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -185,17 +210,19 @@ public final class ReplicationManager {
         List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
         if (peerReplicas != null) {
           List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
-          for (ReplicaId remoteReplica : replicaId.getPeerReplicaIds()) {
+          for (ReplicaId remoteReplica : peerReplicas) {
             // We need to ensure that replica tokens gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, factory.getNewFindToken(),
-                storeConfig.storeDataFlushIntervalSeconds *
+            RemoteReplicaInfo remoteReplicaInfo =
+                new RemoteReplicaInfo(remoteReplica, storeManager.getStore(replicaId.getPartitionId()),
+                    factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier);
+            replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
-              storeManager.getStore(replicaId.getPartitionId()));
+              storeManager.getStore(replicaId.getPartitionId()), replicaId);
           partitionsToReplicate.put(replicaId.getPartitionId(), partitionInfo);
           List<PartitionInfo> partitionInfos = partitionGroupedByMountPath.get(replicaId.getMountPath());
           if (partitionInfos == null) {
@@ -267,6 +294,45 @@ public final class ReplicationManager {
     }
   }
 
+  /**
+   * Updates the total bytes read by a remote replica from local store
+   * @param partitionId PartitionId to which the replica belongs to
+   * @param hostName HostName of the datanode where the replica belongs to
+   * @param replicaPath Replica Path of the replica interested in
+   * @param totalBytesRead Total bytes read by the replica
+   */
+  public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
+      long totalBytesRead) {
+    RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
+    if (remoteReplicaInfo != null) {
+      remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesRead);
+    }
+  }
+
+  /**
+   * Gets the replica info for the remote peer replica identified by PartitionId, ReplicaPath and Hostname
+   * @param partitionId PartitionId to which the replica belongs to
+   * @param hostName hostname of the remote peer replica
+   * @param replicaPath replica path on the remote peer replica
+   * @return RemoteReplicaInfo
+   */
+  private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
+    RemoteReplicaInfo foundRemoteReplicaInfo = null;
+
+    PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
+    for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+      if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
+          .getDataNodeId().getHostname().equals(hostName)) {
+        foundRemoteReplicaInfo = remoteReplicaInfo;
+      }
+    }
+    if (foundRemoteReplicaInfo == null) {
+      replicationMetrics.unknownRemoteReplicaRequestCount.inc();
+      logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
+    }
+    return foundRemoteReplicaInfo;
+  }
+
   public void shutdown()
       throws ReplicationException {
     try {
@@ -285,6 +351,7 @@ public final class ReplicationManager {
   private void readFromFile(String mountPath)
       throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
+    long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
@@ -298,17 +365,23 @@ public final class ReplicationManager {
               PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
               // read remote node host name
               String hostname = Utils.readIntString(stream);
+              // read remote replica path
+              String replicaPath = Utils.readIntString(stream);
               // read remote port
               int port = stream.readInt();
+              // read total bytes read from local store
+              long totalBytesReadFromLocalStore = stream.readLong();
               // read replica token
               FindToken token = factory.getFindToken(stream);
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
-              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfo()) {
+              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port) {
+                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
+                    .equals(replicaPath)) {
                   info.setToken(token);
+                  info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   logger
                       .trace("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
@@ -332,6 +405,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while reading from replica token file " + e);
       } finally {
         stream.close();
+        replicationMetrics.remoteReplicaTokensRestoreTime
+            .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
   }
@@ -340,8 +415,6 @@ public final class ReplicationManager {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
-    // TODO add metric to indicate existence of thread
-    // TODO add metric to indicate time taken
 
     /**
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
@@ -349,6 +422,7 @@ public final class ReplicationManager {
      */
     public void write()
         throws IOException, ReplicationException {
+      long writeStartTimeMs = SystemTime.getInstance().milliseconds();
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         File temp = new File(mountPath, replicaTokenFileName + ".tmp");
         File actual = new File(mountPath, replicaTokenFileName);
@@ -360,13 +434,16 @@ public final class ReplicationManager {
           writer.writeShort(version);
           // Get all partitions for the mount path and persist the tokens for them
           for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
-            for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfo()) {
+            for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
               FindToken tokenToPersist = remoteReplica.getTokenToPersist();
               if (tokenToPersist != null) {
                 writer.write(info.getPartitionId().getBytes());
-                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().length());
+                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes().length);
                 writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
+                writer.writeInt(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
+                writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
                 writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
+                writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
                 writer.write(remoteReplica.getTokenToPersist().toBytes());
                 remoteReplica.onTokenPersisted();
               }
@@ -384,6 +461,8 @@ public final class ReplicationManager {
           throw new ReplicationException("IO error while persisting replica tokens to disk ");
         } finally {
           writer.close();
+          replicationMetrics.remoteReplicaTokensPersistTime
+              .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
         }
         logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
       }

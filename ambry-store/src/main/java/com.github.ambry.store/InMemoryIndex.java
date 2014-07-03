@@ -288,6 +288,7 @@ public class InMemoryIndex {
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
+    long logEndOffsetBeforeFind = log.getLogEndOffset();
     StoreFindToken storeToken = (StoreFindToken) token;
     // validate token
     if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -317,20 +318,26 @@ public class InMemoryIndex {
       // read the entire index and return it
       if (index.entrySet().size() > 0) {
         long largestOffset = 0;
+        long lastEntrySize = 0;
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           messageEntries.add(new MessageInfo(entry.getKey(), entry.getValue().getSize(),
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs()));
           if (entry.getValue().getOffset() > largestOffset) {
             largestOffset = entry.getValue().getOffset();
+            lastEntrySize = entry.getValue().getSize();
           }
         }
-        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId));
+        StoreFindToken storeFindToken = new StoreFindToken(largestOffset, sessionId);
+        storeFindToken.setBytesRead(largestOffset + lastEntrySize);
+        return new FindInfo(messageEntries, storeFindToken);
       } else {
+        storeToken.setBytesRead(logEndOffsetBeforeFind);
         return new FindInfo(messageEntries, storeToken);
       }
     } else {
       long endOffset = storeToken.getOffset();
       long currentTotalSize = 0;
+      long lastEntrySize = 0;
       for (JournalEntry entry : entries) {
         IndexValue value = index.get(entry.getKey());
         messageEntries.add(
@@ -338,12 +345,23 @@ public class InMemoryIndex {
                 value.getTimeToLiveInMs()));
         endOffset = entry.getOffset();
         currentTotalSize += value.getSize();
+        lastEntrySize = value.getSize();
         if (currentTotalSize >= maxTotalSizeOfEntries) {
           break;
         }
       }
       eliminateDuplicates(messageEntries);
-      return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
+      if (messageEntries.size() > 0) {
+        // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
+        StoreFindToken storeFindToken = new StoreFindToken(endOffset, sessionId);
+        storeFindToken.setBytesRead(endOffset + lastEntrySize);
+        return new FindInfo(messageEntries, storeFindToken);
+      } else {
+        // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
+        StoreFindToken storeFindToken = new StoreFindToken(endOffset, sessionId);
+        storeFindToken.setBytesRead(logEndOffsetBeforeFind);
+        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
+      }
     }
   }
 

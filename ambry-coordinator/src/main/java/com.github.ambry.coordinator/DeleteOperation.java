@@ -22,12 +22,19 @@ import java.util.concurrent.ExecutorService;
  */
 final public class DeleteOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private int blobNotFoundCount;
+  // Number of replicas in the partition. This is used to set threshold to determine blob not found (all replicas
+  // must reply).
+  private final int replicaIdCount;
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
         new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
+
+    this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
+    this.blobNotFoundCount = 0;
   }
 
   @Override
@@ -45,6 +52,12 @@ final public class DeleteOperation extends Operation {
         return true;
       // Cannot delete if blob is not found
       case Blob_Not_Found:
+        blobNotFoundCount++;
+        if (blobNotFoundCount == replicaIdCount) {
+          String message = "Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          logger.trace(message);
+          throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
+        }
         return false;
       case Blob_Expired:
       default:

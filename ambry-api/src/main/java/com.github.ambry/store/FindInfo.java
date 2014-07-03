@@ -8,8 +8,8 @@ import java.util.List;
  * new find token that can be used for subsequent searches.
  */
 public class FindInfo {
-  private List<MessageInfo> messageEntries;
-  private FindToken findToken;
+  private final List<MessageInfo> messageEntries;
+  private final FindToken findToken;
 
   public FindInfo(List<MessageInfo> messageEntries, FindToken findToken) {
     this.messageEntries = messageEntries;
