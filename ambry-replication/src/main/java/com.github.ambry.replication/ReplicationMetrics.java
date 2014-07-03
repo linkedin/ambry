@@ -30,23 +30,23 @@ public class ReplicationMetrics {
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
 
-  public ReplicationMetrics(String name, MetricRegistry registry, List<ReplicaThread> replicaThreads) {
+  public ReplicationMetrics(MetricRegistry registry, List<ReplicaThread> replicaThreads) {
     interColoReplicationBytesCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-interColoReplicationBytesCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesCount"));
     intraColoReplicationBytesCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationBytesCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesCount"));
     interColoBlobsReplicatedCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-interColoReplicationBlobsCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBlobsCount"));
     intraColoBlobsReplicatedCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoBlobsReplicatedCount"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoBlobsReplicatedCount"));
     unknownRemoteReplicaRequestCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-unknownRemoteReplicaRequestCount"));
-    registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationBlobsCount"));
-    replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, name + "-replicationErrors"));
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "UnknownRemoteReplicaRequestCount"));
+    registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBlobsCount"));
+    replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
     interColoReplicationLatency =
-        registry.timer(MetricRegistry.name(ReplicaThread.class, name + "-interColoReplicationLatency"));
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =
-        registry.timer(MetricRegistry.name(ReplicaThread.class, name + "-intraColoReplicationLatency"));
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationLatency"));
     remoteReplicaTokensPersistTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensPersistTime"));
     remoteReplicaTokensRestoreTime =

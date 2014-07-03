@@ -23,8 +23,4 @@ public class FindInfo {
   public FindToken getFindToken() {
     return findToken;
   }
-
-  public long getBytesReadSoFar() {
-    return this.findToken.getBytesRead();
-  }
 }
