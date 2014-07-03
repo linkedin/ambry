@@ -481,7 +481,7 @@ public class PersistentIndex {
             // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
             StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
             storeFindToken.setBytesRead(offsetEnd + lastEntrySize);
-            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId));
+            return new FindInfo(messageEntries, storeFindToken);
           }
         } else {
           // find index segment closest to the offset. get all entries after that
@@ -734,9 +734,6 @@ class StoreFindToken implements FindToken {
     this.indexStartOffset = indexStartOffset;
     this.storeKey = key;
     this.sessionId = sessionId;
-   // if(offset != Uninitialized_Offset)
-     // this.bytesRead = offset;
-    //else
     this.bytesRead = Uninitialized_Offset;
   }
 
@@ -791,9 +788,7 @@ class StoreFindToken implements FindToken {
   @Override
   public long getBytesRead() {
     if (this.bytesRead == Uninitialized_Offset) {
-      System.out.println("Exception thrown ------- ");
-    //  throw new IllegalStateException("Bytes read not initialized");
-     // return 0;
+      throw new IllegalStateException("Bytes read not initialized");
     }
     return this.bytesRead;
   }

@@ -133,7 +133,6 @@ class ReplicaThread implements Runnable {
                   " Token after speaking to remote node " +
                   exchangeMetadataResponse.remoteToken);
             } catch (Exception e) {
-              e.printStackTrace();
               logger.error("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
                   " Thread name " + threadName +
                   " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
