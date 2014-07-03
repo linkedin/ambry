@@ -75,15 +75,16 @@ public class ReplicationMetrics {
   }
 
   public void addRemoteReplicaToLagMetrics(final RemoteReplicaInfo remoteReplicaInfo) {
+    final String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-replicaLagInBytes";
     Gauge<Long> replicaLag = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return remoteReplicaInfo.getReplicaLagInBytes();
       }
     };
-    registry.register(
-        MetricRegistry.name(ReplicationMetrics.class, remoteReplicaInfo.getReplicaId() + "-replicaLagInBytes"),
-        replicaLag);
+    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
   }
 }
