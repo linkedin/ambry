@@ -204,6 +204,7 @@ public class ServerTest {
       BlobId blobId10 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
       BlobId blobId11 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
 
+      System.out.println("1 ");
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -211,6 +212,7 @@ public class ServerTest {
       BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000);
       BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000);
 
+      System.out.println("2 ");
       channel1.connect();
       channel2.connect();
       channel3.connect();
@@ -218,7 +220,7 @@ public class ServerTest {
       InputStream putResponseStream = channel1.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
-
+      System.out.println("3 ");
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -226,7 +228,7 @@ public class ServerTest {
       putResponseStream = channel2.receive();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
-
+      System.out.println("4 ");
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -258,7 +260,7 @@ public class ServerTest {
       putResponseStream = channel3.receive();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
-
+      System.out.println("5");
       // wait till replication can complete
       notificationSystem.awaitBlobCreations(blobId1.toString());
       notificationSystem.awaitBlobCreations(blobId2.toString());
@@ -273,6 +275,7 @@ public class ServerTest {
       ids.add(blobId3);
       GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
       channel2.send(getRequest1);
+      System.out.println("6 ");
       InputStream stream = channel2.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
@@ -283,7 +286,7 @@ public class ServerTest {
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
-
+      System.out.println("7 ");
       // get user metadata
       ids.clear();
       ids.add(blobId2);
@@ -298,6 +301,8 @@ public class ServerTest {
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
+
+      System.out.println("8 ");
 
       // get blob
       ids.clear();
@@ -318,7 +323,7 @@ public class ServerTest {
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
-
+      System.out.println("9");
       try {
         // get blob data
         // Use coordinator to get the blob
@@ -336,6 +341,7 @@ public class ServerTest {
         Assert.assertEquals(false, true);
       }
 
+      System.out.println("10 ");
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
@@ -347,6 +353,7 @@ public class ServerTest {
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp4.getError(), ServerErrorCode.Blob_Not_Found);
 
+      System.out.println("11 ");
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
       channel1.send(deleteRequest);
@@ -355,7 +362,7 @@ public class ServerTest {
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
       notificationSystem.awaitBlobDeletions(blobId1.toString());
-
+      System.out.println("12 ");
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
       GetRequest getRequest5 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partition, ids);
@@ -368,7 +375,7 @@ public class ServerTest {
 
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
-
+      System.out.println("13 ");
       // read the replica file and check correctness
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 64422);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
@@ -384,6 +391,7 @@ public class ServerTest {
               peerReplica.getDataNodeId().getPort());
         }
       }
+      System.out.println("14 ");
       for (String mountPath : mountPaths) {
         File replicaTokenFile = new File(mountPath, "replicaTokens");
         if (replicaTokenFile.exists()) {
@@ -428,6 +436,7 @@ public class ServerTest {
           Assert.assertTrue(false);
         }
       }
+      System.out.println("14 ");
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
@@ -469,6 +478,8 @@ public class ServerTest {
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
+      System.out.println("16 ");
+
       cluster.getServers().get(0).startup();
       // wait for server to recover
       notificationSystem.awaitBlobCreations(blobId7.toString());
@@ -478,6 +489,8 @@ public class ServerTest {
       notificationSystem.awaitBlobCreations(blobId11.toString());
       channel1.disconnect();
       channel1.connect();
+
+      System.out.println("17 ");
 
       // check all ids exist on server 1
       // get blob
@@ -499,6 +512,8 @@ public class ServerTest {
       // Shutdown server 1. Remove all its data from all mount path. Recover server 1 and ensure node is built
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
+
+      System.out.println("17");
 
       File mountFile = new File(clusterMap.getReplicaIds(dataNodeId).get(0).getMountPath());
       for (File toDelete : mountFile.listFiles()) {
@@ -530,6 +545,7 @@ public class ServerTest {
       channel1.disconnect();
       channel1.connect();
 
+      System.out.println("18 ");
       // check all ids exist on server 1
       // get blob
       try {

@@ -81,6 +81,7 @@ public interface Store {
 
   /**
    * Returns the size of the store in bytes
+   * @return The size of the store in bytes
    */
   long getSizeInBytes();
 

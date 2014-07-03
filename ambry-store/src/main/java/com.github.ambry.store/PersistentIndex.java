@@ -734,27 +734,14 @@ class StoreFindToken implements FindToken {
     this.indexStartOffset = indexStartOffset;
     this.storeKey = key;
     this.sessionId = sessionId;
-    initializeBytesRead(indexStartOffset, offset);
-  }
-
-  private void initializeBytesRead(long indexStartOffset, long offset) {
-    if (offset == Uninitialized_Offset) {
-      if (indexStartOffset == Uninitialized_Offset) {
-        bytesRead = 0;
-      } else {
-        bytesRead = indexStartOffset;
-      }
-    } else {
-      bytesRead = offset;
-    }
+   // if(offset != Uninitialized_Offset)
+     // this.bytesRead = offset;
+    //else
+    this.bytesRead = Uninitialized_Offset;
   }
 
   public void setBytesRead(long bytesRead) {
     this.bytesRead = bytesRead;
-  }
-
-  public long getBytesRead() {
-    return this.bytesRead;
   }
 
   public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory)
@@ -799,6 +786,16 @@ class StoreFindToken implements FindToken {
     this.offset = offset;
     this.storeKey = null;
     this.indexStartOffset = Uninitialized_Offset;
+  }
+
+  @Override
+  public long getBytesRead() {
+    if (this.bytesRead == Uninitialized_Offset) {
+      System.out.println("Exception thrown ------- ");
+    //  throw new IllegalStateException("Bytes read not initialized");
+     // return 0;
+    }
+    return this.bytesRead;
   }
 
   @Override
