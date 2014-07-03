@@ -255,7 +255,7 @@ public class ReplicationTest {
       }
       totalSizeRead += currentSizeOfEntriesInBytes;
       return new FindInfo(entriesToReturn,
-          new MockFindToken(tokenmock.getIndex() + entriesToReturn.size(), totalSizeRead), totalSizeRead);
+          new MockFindToken(tokenmock.getIndex() + entriesToReturn.size(), totalSizeRead));
     }
 
     @Override

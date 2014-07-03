@@ -327,10 +327,12 @@ public class InMemoryIndex {
             lastEntrySize = entry.getValue().getSize();
           }
         }
-        return new FindInfo(messageEntries, new StoreFindToken(largestOffset, sessionId),
-            largestOffset + lastEntrySize);
+        StoreFindToken storeFindToken = new StoreFindToken(largestOffset, sessionId);
+        storeFindToken.setBytesRead(largestOffset + lastEntrySize);
+        return new FindInfo(messageEntries, storeFindToken);
       } else {
-        return new FindInfo(messageEntries, storeToken, logEndOffsetBeforeFind);
+        storeToken.setBytesRead(logEndOffsetBeforeFind);
+        return new FindInfo(messageEntries, storeToken);
       }
     } else {
       long endOffset = storeToken.getOffset();
@@ -351,10 +353,14 @@ public class InMemoryIndex {
       eliminateDuplicates(messageEntries);
       if (messageEntries.size() > 0) {
         // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
-        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), endOffset + lastEntrySize);
+        StoreFindToken storeFindToken = new StoreFindToken(endOffset, sessionId);
+        storeFindToken.setBytesRead(endOffset + lastEntrySize);
+        return new FindInfo(messageEntries, storeFindToken);
       } else {
         // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
-        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId), logEndOffsetBeforeFind);
+        StoreFindToken storeFindToken = new StoreFindToken(endOffset, sessionId);
+        storeFindToken.setBytesRead(logEndOffsetBeforeFind);
+        return new FindInfo(messageEntries, new StoreFindToken(endOffset, sessionId));
       }
     }
   }

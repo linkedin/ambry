@@ -474,10 +474,14 @@ public class PersistentIndex {
           eliminateDuplicates(messageEntries);
           if (messageEntries.size() == 0) {
             // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
-            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), logEndOffsetBeforeFind);
+            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
+            storeFindToken.setBytesRead(logEndOffsetBeforeFind);
+            return new FindInfo(messageEntries, storeFindToken);
           } else {
             // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
-            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId), offsetEnd + lastEntrySize);
+            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
+            storeFindToken.setBytesRead(offsetEnd + lastEntrySize);
+            return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId));
           }
         } else {
           // find index segment closest to the offset. get all entries after that
@@ -494,7 +498,8 @@ public class PersistentIndex {
               " offset : " + (newToken.getOffset() != StoreFindToken.Uninitialized_Offset ? newToken.getOffset()
               : newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
           long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
-          return new FindInfo(messageEntries, newToken, totalBytesRead);
+          newToken.setBytesRead(totalBytesRead);
+          return new FindInfo(messageEntries, newToken);
         }
       } else {
         // find index segment closest to the offset. get all entries after that
@@ -503,7 +508,8 @@ public class PersistentIndex {
             findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
         eliminateDuplicates(messageEntries);
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
-        return new FindInfo(messageEntries, newToken, totalBytesRead);
+        newToken.setBytesRead(totalBytesRead);
+        return new FindInfo(messageEntries, newToken);
       }
     } catch (IOException e) {
       logger.error("FindEntriesSince : IO error {}", e);
@@ -741,6 +747,10 @@ class StoreFindToken implements FindToken {
     } else {
       bytesRead = offset;
     }
+  }
+
+  public void setBytesRead(long bytesRead) {
+    this.bytesRead = bytesRead;
   }
 
   public long getBytesRead() {

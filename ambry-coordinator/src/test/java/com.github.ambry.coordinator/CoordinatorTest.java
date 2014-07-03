@@ -675,9 +675,10 @@ public class CoordinatorTest {
       assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDoesNotExist);
     }
     try {
-      ac.deleteBlob(blobId);
+      ac.deleteBlob(nonExistantBlobId);
+      fail("DeleteBlob of a non existing blob should have thrown CoordinatorException " + blobId);
     } catch (CoordinatorException coordinatorException) {
-      fail("DeleteBlob of a non existing blob should not have thrown CoordinatorException " + blobId);
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDoesNotExist);
     }
   }
 
