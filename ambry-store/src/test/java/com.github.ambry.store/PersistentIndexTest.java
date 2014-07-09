@@ -254,7 +254,6 @@ public class PersistentIndexTest {
     }
   }
 
-  /*
   @Test
   public void testIndexRestore()
       throws IOException {
@@ -352,18 +351,18 @@ public class PersistentIndexTest {
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));
-          infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
+          infos.add(new MessageInfo(blobId5, 100, true));
           return infos;
         }
       });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(IndexValue.Flags.Delete_Index), true);
-      Assert.assertEquals(value5.getTimeToLiveInMs(), Utils.Infinite_Time);
-      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+      Assert.assertEquals(value4.getSize(), 100);
       Assert.assertEquals(value4.getOriginalMessageOffset(), 5000);
       Assert.assertEquals(value4.getOffset(), 7000);
-      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getSize(), 100);
       Assert.assertEquals(value5.getOriginalMessageOffset(), 6000);
       Assert.assertEquals(value5.getOffset(), 7100);
       indexNew.stopScheduler();
@@ -457,7 +456,6 @@ public class PersistentIndexTest {
       }
     }
   }
-  */
 
   @Test
   public void testIndexBatch()

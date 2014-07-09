@@ -137,13 +137,13 @@ public class BlobStoreRecoveryTest {
           msg2.getSize() +
           msg3.getSize() +
           msg4.getSize() +
-          msg5.getSize()));
+          msg5.getSize() / 2));
 
       writeToBuffer(msg1, (int) msg1.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
       writeToBuffer(msg3, (int) msg3.getSize());
       writeToBuffer(msg4, (int) msg4.getSize());
-      writeToBuffer(msg5, (int) msg5.getSize());
+      writeToBuffer(msg5, (int) msg5.getSize() / 2);
       buffer.position(0);
     }
 
@@ -177,7 +177,7 @@ public class BlobStoreRecoveryTest {
     readrecovery.initialize();
     List<MessageInfo> recoveredMessages =
         recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
-    Assert.assertEquals(recoveredMessages.size(), 5);
+    Assert.assertEquals(recoveredMessages.size(), 4);
     Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
     Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);
     Assert.assertEquals(recoveredMessages.get(1).getStoreKey(), readrecovery.keys[1]);
