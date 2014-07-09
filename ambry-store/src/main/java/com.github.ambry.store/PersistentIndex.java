@@ -398,6 +398,7 @@ public class PersistentIndex {
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
     try {
+      long logEndOffsetBeforeFind = log.getLogEndOffset();
       StoreFindToken storeToken = (StoreFindToken) token;
       // validate token
       if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -424,7 +425,7 @@ public class PersistentIndex {
       if (storeToken.getStoreKey() == null) {
         boolean inclusive = false;
         long offsetToStart = storeToken.getOffset();
-        if (storeToken.getOffset() == -1) {
+        if (storeToken.getOffset() == StoreFindToken.Uninitialized_Offset) {
           inclusive = true;
           offsetToStart = 0;
         }
@@ -434,6 +435,7 @@ public class PersistentIndex {
         if (entries != null) {
           long offsetEnd = offsetToStart;
           long currentTotalSizeOfEntries = 0;
+          long lastEntrySize = 0;
           for (JournalEntry entry : entries) {
             IndexValue value = findKey(entry.getKey());
             messageEntries.add(
@@ -441,13 +443,24 @@ public class PersistentIndex {
                     value.getTimeToLiveInMs()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
+            lastEntrySize = value.getSize();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
               break;
             }
           }
           logger.trace("Index: " + dataDir + " New offset from find info" + offsetEnd);
           eliminateDuplicates(messageEntries);
-          return new FindInfo(messageEntries, new StoreFindToken(offsetEnd, sessionId));
+          if (messageEntries.size() == 0) {
+            // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
+            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
+            storeFindToken.setBytesRead(logEndOffsetBeforeFind);
+            return new FindInfo(messageEntries, storeFindToken);
+          } else {
+            // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
+            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
+            storeFindToken.setBytesRead(offsetEnd + lastEntrySize);
+            return new FindInfo(messageEntries, storeFindToken);
+          }
         } else {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
@@ -460,8 +473,10 @@ public class PersistentIndex {
           eliminateDuplicates(messageEntries);
           logger.trace("Index: " + dataDir +
               " New offset from find info" +
-              " offset : " + (newToken.getOffset() != -1 ? newToken.getOffset()
+              " offset : " + (newToken.getOffset() != StoreFindToken.Uninitialized_Offset ? newToken.getOffset()
               : newToken.getIndexStartOffset() + ":" + newToken.getStoreKey()));
+          long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
+          newToken.setBytesRead(totalBytesRead);
           return new FindInfo(messageEntries, newToken);
         }
       } else {
@@ -470,11 +485,31 @@ public class PersistentIndex {
         StoreFindToken newToken =
             findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
         eliminateDuplicates(messageEntries);
+        long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
+        newToken.setBytesRead(totalBytesRead);
         return new FindInfo(messageEntries, newToken);
       }
     } catch (IOException e) {
       logger.error("FindEntriesSince : IO error {}", e);
       throw new StoreException("IOError when finding entries", StoreErrorCodes.IOError);
+    }
+  }
+
+  private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
+      long logEndOffsetBeforeFind) {
+    if (newToken.getOffset() == StoreFindToken.Uninitialized_Offset) {
+      if (newToken.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset) {
+        return 0;
+      } else {
+        return newToken.getIndexStartOffset();
+      }
+    } else {
+      if (messageEntries.size() > 0) {
+        MessageInfo lastMsgInfo = messageEntries.get(messageEntries.size() - 1);
+        return newToken.getOffset() + lastMsgInfo.getSize();
+      } else {
+        return logEndOffsetBeforeFind;
+      }
     }
   }
 
@@ -486,7 +521,7 @@ public class PersistentIndex {
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
     long lastSegmentIndex = offset;
-    long offsetEnd = -1;
+    long offsetEnd = StoreFindToken.Uninitialized_Offset;
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
@@ -512,7 +547,7 @@ public class PersistentIndex {
         break;
       }
     }
-    if (offsetEnd != -1) {
+    if (offsetEnd != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(offsetEnd, sessionId);
     } else {
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex,
@@ -650,6 +685,7 @@ class StoreFindToken implements FindToken {
   private long indexStartOffset;
   private StoreKey storeKey;
   private UUID sessionId;
+  private long bytesRead;
 
   private static final short version = 0;
   private static final int Version_Size = 2;
@@ -657,16 +693,18 @@ class StoreFindToken implements FindToken {
   private static final int Offset_Size = 8;
   private static final int Start_Offset_Size = 8;
 
+  public static final int Uninitialized_Offset = -1;
+
   public StoreFindToken() {
-    this(-1, -1, null, null);
+    this(Uninitialized_Offset, Uninitialized_Offset, null, null);
   }
 
   public StoreFindToken(StoreKey key, long indexStartOffset, UUID sessionId) {
-    this(-1, indexStartOffset, key, sessionId);
+    this(Uninitialized_Offset, indexStartOffset, key, sessionId);
   }
 
   public StoreFindToken(long offset, UUID sessionId) {
-    this(offset, -1, null, sessionId);
+    this(offset, Uninitialized_Offset, null, sessionId);
   }
 
   private StoreFindToken(long offset, long indexStartOffset, StoreKey key, UUID sessionId) {
@@ -674,6 +712,11 @@ class StoreFindToken implements FindToken {
     this.indexStartOffset = indexStartOffset;
     this.storeKey = key;
     this.sessionId = sessionId;
+    this.bytesRead = Uninitialized_Offset;
+  }
+
+  public void setBytesRead(long bytesRead) {
+    this.bytesRead = bytesRead;
   }
 
   public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory)
@@ -691,7 +734,7 @@ class StoreFindToken implements FindToken {
     // read index start offset
     long indexStartOffset = stream.readLong();
     // read store key if needed
-    if (indexStartOffset != -1) {
+    if (indexStartOffset != Uninitialized_Offset) {
       return new StoreFindToken(factory.getStoreKey(stream), indexStartOffset, sessionIdUUID);
     } else {
       return new StoreFindToken(offset, sessionIdUUID);
@@ -717,7 +760,15 @@ class StoreFindToken implements FindToken {
   public void setOffset(long offset) {
     this.offset = offset;
     this.storeKey = null;
-    this.indexStartOffset = -1;
+    this.indexStartOffset = Uninitialized_Offset;
+  }
+
+  @Override
+  public long getBytesRead() {
+    if (this.bytesRead == Uninitialized_Offset) {
+      throw new IllegalStateException("Bytes read not initialized");
+    }
+    return this.bytesRead;
   }
 
   @Override
@@ -755,6 +806,7 @@ class StoreFindToken implements FindToken {
     } else {
       tokenStringFormat += " offset " + offset;
     }
+    tokenStringFormat += " bytesRead " + bytesRead;
     return tokenStringFormat;
   }
 }

@@ -218,7 +218,6 @@ public class ServerTest {
       InputStream putResponseStream = channel1.receive();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
-
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -226,7 +225,6 @@ public class ServerTest {
       putResponseStream = channel2.receive();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
-
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -258,7 +256,6 @@ public class ServerTest {
       putResponseStream = channel3.receive();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
-
       // wait till replication can complete
       notificationSystem.awaitBlobCreations(blobId1.toString());
       notificationSystem.awaitBlobCreations(blobId2.toString());
@@ -283,7 +280,6 @@ public class ServerTest {
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
-
       // get user metadata
       ids.clear();
       ids.add(blobId2);
@@ -355,7 +351,6 @@ public class ServerTest {
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
       notificationSystem.awaitBlobDeletions(blobId1.toString());
-
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
       GetRequest getRequest5 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partition, ids);
@@ -365,10 +360,8 @@ public class ServerTest {
       Assert.assertEquals(resp5.getError(), ServerErrorCode.Blob_Deleted);
 
       // persist and restore to check state
-
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
-
       // read the replica file and check correctness
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 64422);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
