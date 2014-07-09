@@ -17,14 +17,14 @@ public class DeleteRequest extends RequestOrResponse {
   private int sizeSent;
 
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    super(RequestResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
+    super(RequestOrResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
     this.blobId = blobId;
     sizeSent = 0;
   }
 
   public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
-    RequestResponseType type = RequestResponseType.DeleteRequest;
+    RequestOrResponseType type = RequestOrResponseType.DeleteRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);

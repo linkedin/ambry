@@ -39,7 +39,6 @@ public class Utils {
       return null;
     }
     byte[] bytes = new byte[size];
-    // TODO: Why not 'input.readFully(bytes);' instead of next 3 lines?
     int read = input.read(bytes);
     if (read != size) {
       throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size");

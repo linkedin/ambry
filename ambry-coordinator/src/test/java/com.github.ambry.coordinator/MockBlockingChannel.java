@@ -14,7 +14,6 @@ import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.TTLRequest;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Crc32;
 
@@ -117,9 +116,9 @@ class MockBlockingChannel extends BlockingChannel {
             getResponseErrorCode = bpae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
               BlobProperties blobProperties = bpae.getBlobProperties();
-              byteBufferSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(blobProperties);
+              byteBufferSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(byteBuffer, blobProperties);
+              MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(byteBuffer, blobProperties);
             }
             break;
 
@@ -180,12 +179,6 @@ class MockBlockingChannel extends BlockingChannel {
         ServerErrorCode error = mockDataNode.delete(blobId);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
         break;
-      }
-
-      case TTLRequest: {
-        TTLRequest ttlRequest = (TTLRequest) request;
-        throw new IOException("TTLRequest is not yet mocked: " + ttlRequest.getRequestType());
-        // break;
       }
 
       default: {

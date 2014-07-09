@@ -26,6 +26,9 @@ public class ConnectionPoolConfig {
   @Default("10000")
   public final int connectionPoolReadTimeoutMs;
 
+  /**
+   * The max connections allowed per host
+   */
   @Config("connectionpool.max.connections.per.host")
   @Default("40")
   public final int connectionPoolMaxConnectionsPerHost;

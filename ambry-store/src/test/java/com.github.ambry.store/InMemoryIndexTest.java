@@ -210,14 +210,14 @@ public class InMemoryIndexTest {
                 throws IOException {
               List<MessageInfo> infos = new ArrayList<MessageInfo>();
               infos.add(new MessageInfo(blobId4, 1000, true));
-              infos.add(new MessageInfo(blobId5, 1000, Utils.Infinite_Time));
+              infos.add(new MessageInfo(blobId5, 1000, true, Utils.Infinite_Time));
               return infos;
             }
           });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(IndexValue.Flags.Delete_Index), true);
-      Assert.assertEquals(value5.getTimeToLiveInMs(), Utils.Infinite_Time);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
       indexNew.stopScheduler();
       indexNew.deleteAll();
       indexNew.close();
@@ -328,7 +328,7 @@ public class InMemoryIndexTest {
 
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0));
       IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(200, 100));
-      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(300, 300, System.currentTimeMillis()));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(300, 300, 0));
       ArrayList<IndexEntry> list = new ArrayList<IndexEntry>();
       list.add(entry1);
       list.add(entry2);
@@ -357,9 +357,8 @@ public class InMemoryIndexTest {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       // read ttl expired item
-      index.updateTTL(blobId1, 1234, new FileSpan(700, 800));
       try {
-        index.getBlobReadInfo(blobId1);
+        index.getBlobReadInfo(blobId3);
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
@@ -368,12 +367,6 @@ public class InMemoryIndexTest {
       // try to delete or update a missing blob
       try {
         index.markAsDeleted(new MockId("id5"), new FileSpan(800, 900));
-        Assert.assertTrue(false);
-      } catch (StoreException e) {
-        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
-      }
-      try {
-        index.updateTTL(new MockId("id6"), 1234, new FileSpan(900, 1000));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);

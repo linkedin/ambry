@@ -9,7 +9,7 @@ import java.io.IOException;
  */
 public interface RequestAPI {
   /**
-   * This request puts a blob into the store. It accepts a blob property, user metadata and the blob
+   * Puts a blob into the store. It accepts a blob property, user metadata and the blob
    * as a stream and stores them
    * @param request The request that contains the blob property, user metadata and blob as a stream
    * @throws IOException
@@ -19,7 +19,7 @@ public interface RequestAPI {
       throws IOException, InterruptedException;
 
   /**
-   * This request gets blob property, user metadata or the blob from the specified partition
+   * Gets blob property, user metadata or the blob from the specified partition
    * @param request The request that contains the partition and id of the blob whose blob property, user metadata or
    *                blob needs to be returned
    * @throws IOException
@@ -29,7 +29,7 @@ public interface RequestAPI {
       throws IOException, InterruptedException;
 
   /**
-   * This request deletes the blob from the store
+   * Deletes the blob from the store
    * @param request The request that contains the partition and id of the blob that needs to be deleted
    * @throws IOException
    * @throws InterruptedException
@@ -38,11 +38,11 @@ public interface RequestAPI {
       throws IOException, InterruptedException;
 
   /**
-   * This request cancels the time to live (ttl) value set on a blob. Once the ttl is cancelled, the blob lives for ever
-   * @param request The request that contains the partition and id of the blob whose ttl needs to be cancelled
+   * Gets the metadata required for replication
+   * @param request The request that contains the partition for which the metadata is needed
    * @throws IOException
    * @throws InterruptedException
    */
-  void handleTTLRequest(Request request)
+  public void handleReplicaMetadataRequest(Request request)
       throws IOException, InterruptedException;
 }

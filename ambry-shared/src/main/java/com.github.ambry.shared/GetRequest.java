@@ -31,7 +31,7 @@ public class GetRequest extends RequestOrResponse {
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, PartitionId partitionId,
       ArrayList<BlobId> blobIds) {
-    super(RequestResponseType.GetRequest, Request_Response_Version, correlationId, clientId);
+    super(RequestOrResponseType.GetRequest, Request_Response_Version, correlationId, clientId);
 
     this.flags = flags;
     this.partitionId = partitionId;
@@ -63,7 +63,7 @@ public class GetRequest extends RequestOrResponse {
 
   public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
-    RequestResponseType type = RequestResponseType.GetRequest;
+    RequestOrResponseType type = RequestOrResponseType.GetRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);

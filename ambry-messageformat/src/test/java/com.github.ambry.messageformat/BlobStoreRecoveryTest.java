@@ -100,13 +100,12 @@ public class BlobStoreRecoveryTest {
 
     public void initialize()
         throws MessageFormatException, IOException {
-      // write 3 new blob messages, and 2 ttl and delete update messages. write the last
+      // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
       byte[] usermetadata = new byte[2000];
       byte[] blob = new byte[4000];
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(blob);
-      long sizeToWrite = 0;
 
       // 1st message
       BlobProperties blobProperties = new BlobProperties(4000, "test", "mem1", "img", false, 9999);
@@ -127,13 +126,10 @@ public class BlobStoreRecoveryTest {
               new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
-      TTLMessageFormatInputStream msg4 = new TTLMessageFormatInputStream(keys[0], -1);
+      DeleteMessageFormatInputStream msg4 = new DeleteMessageFormatInputStream(keys[1]);
 
       // 5th message
-      DeleteMessageFormatInputStream msg5 = new DeleteMessageFormatInputStream(keys[1]);
-
-      // 6th message
-      PutMessageFormatInputStream msg6 =
+      PutMessageFormatInputStream msg5 =
           new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
               new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
@@ -141,15 +137,13 @@ public class BlobStoreRecoveryTest {
           msg2.getSize() +
           msg3.getSize() +
           msg4.getSize() +
-          msg5.getSize() +
-          msg6.getSize() / 2));
+          msg5.getSize() / 2));
 
       writeToBuffer(msg1, (int) msg1.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
       writeToBuffer(msg3, (int) msg3.getSize());
       writeToBuffer(msg4, (int) msg4.getSize());
-      writeToBuffer(msg5, (int) msg5.getSize());
-      writeToBuffer(msg6, (int) msg6.getSize() / 2);
+      writeToBuffer(msg5, (int) msg5.getSize() / 2);
       buffer.position(0);
     }
 
@@ -183,14 +177,12 @@ public class BlobStoreRecoveryTest {
     readrecovery.initialize();
     List<MessageInfo> recoveredMessages =
         recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
-    Assert.assertEquals(recoveredMessages.size(), 5);
+    Assert.assertEquals(recoveredMessages.size(), 4);
     Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
     Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);
     Assert.assertEquals(recoveredMessages.get(1).getStoreKey(), readrecovery.keys[1]);
     Assert.assertEquals(recoveredMessages.get(2).getStoreKey(), readrecovery.keys[2]);
-    Assert.assertEquals(recoveredMessages.get(3).getStoreKey(), readrecovery.keys[0]);
-    Assert.assertEquals(recoveredMessages.get(3).getExpirationTimeInMs(), Utils.Infinite_Time);
-    Assert.assertEquals(recoveredMessages.get(4).getStoreKey(), readrecovery.keys[1]);
-    Assert.assertEquals(recoveredMessages.get(4).isDeleted(), true);
+    Assert.assertEquals(recoveredMessages.get(3).getStoreKey(), readrecovery.keys[1]);
+    Assert.assertEquals(recoveredMessages.get(3).isDeleted(), true);
   }
 }

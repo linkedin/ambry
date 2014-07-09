@@ -14,7 +14,9 @@ public class StoreMetrics {
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
-  public final Timer ttlResponse;
+  public final Timer findEntriesSinceResponse;
+  public final Timer findMissingKeysResponse;
+  public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
   public final Counter overflowWriteError;
   public final Counter overflowReadError;
@@ -34,7 +36,11 @@ public class StoreMetrics {
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeDeleteResponse"));
-    ttlResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeTTLResponse"));
+    findEntriesSinceResponse =
+        registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeFindEntriesSinceResponse"));
+    findMissingKeysResponse =
+        registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeFindMissingKeyResponse"));
+    isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "-isKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "-storeStartTime"));
     overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "-overflowWriteError"));
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "-overflowReadError"));

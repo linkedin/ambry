@@ -107,20 +107,27 @@ public class DumpData {
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
             System.out.println(" Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-                " blobPropertyRelativeOffset " + header.getBlobPropertyRecordRelativeOffset() +
+                " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
                 " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
                 " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
                 " crc " + header.getCrc());
             // read blob id
             BlobId id = new BlobId(stream, map);
             System.out.println("Id - " + id.toString());
-            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
-            System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
-                " serviceId " + props.getServiceId());
-            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(stream);
-            System.out.println(" Metadata - size " + metadata.capacity());
-            BlobOutput output = MessageFormatRecord.deserializeBlob(stream);
-            System.out.println("Blob - size " + output.getSize());
+
+            if (header.getBlobPropertiesRecordRelativeOffset()
+                != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+              BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
+              System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
+                  " serviceId " + props.getServiceId());
+              ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(stream);
+              System.out.println(" Metadata - size " + metadata.capacity());
+              BlobOutput output = MessageFormatRecord.deserializeBlob(stream);
+              System.out.println("Blob - size " + output.getSize());
+            } else {
+              boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
+              System.out.println("delete change " + deleteFlag);
+            }
           }
         }
       } else {

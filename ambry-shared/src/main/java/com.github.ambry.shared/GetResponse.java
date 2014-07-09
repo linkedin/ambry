@@ -25,7 +25,7 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, Send send,
       ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.toSend = send;
@@ -33,14 +33,14 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<MessageInfo> messageInfoList, InputStream stream,
       ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.stream = stream;
   }
 
   public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
     this.messageInfoListSerDe = new MessageInfoListSerde(null);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
   }
@@ -56,8 +56,8 @@ public class GetResponse extends Response {
   public static GetResponse readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short typeval = stream.readShort();
-    RequestResponseType type = RequestResponseType.values()[typeval];
-    if (type != RequestResponseType.GetResponse) {
+    RequestOrResponseType type = RequestOrResponseType.values()[typeval];
+    if (type != RequestOrResponseType.GetResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId = stream.readShort();

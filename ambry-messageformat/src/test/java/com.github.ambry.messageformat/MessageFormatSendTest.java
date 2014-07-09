@@ -62,16 +62,15 @@ public class MessageFormatSendTest {
       // create one buffer of size 1004
 
       // add header,system metadata, user metadata and data to the buffers
-      ByteBuffer buf1 = ByteBuffer.allocate(1016);
+      ByteBuffer buf1 = ByteBuffer.allocate(1012);
       // fill header
       buf1.putShort((short) 1);                    // version
       buf1.putLong(950);                          // total size
       // put relative offsets
-      buf1.putInt(66);                           // blob property relative offset
-      buf1.putInt(-1);
-      buf1.putInt(-1);
-      buf1.putInt(87);                           // user metadata relative offset
-      buf1.putInt(197);                          // data relative offset
+      buf1.putInt(62);                           // blob property relative offset
+      buf1.putInt(-1);                           // delete relative offset
+      buf1.putInt(83);                           // user metadata relative offset
+      buf1.putInt(193);                          // data relative offset
       Crc32 crc = new Crc32();
       crc.update(buf1.array(), 0, buf1.position());
       buf1.putLong(crc.getValue());                          // crc
@@ -114,8 +113,8 @@ public class MessageFormatSendTest {
       MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
       // get all
       MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics);
-      Assert.assertEquals(send.sizeInBytes(), 1016);
-      ByteBuffer bufresult = ByteBuffer.allocate(1016);
+      Assert.assertEquals(send.sizeInBytes(), 1012);
+      ByteBuffer bufresult = ByteBuffer.allocate(1012);
       WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
       while (!send.isSendComplete()) {
         send.writeTo(channel1);
@@ -168,6 +167,7 @@ public class MessageFormatSendTest {
       Assert.assertEquals(1, bufresult.get());
       Assert.assertEquals(456, bufresult.getInt());
     } catch (MessageFormatException e) {
+      e.printStackTrace();
       Assert.assertEquals(true, false);
     }
   }

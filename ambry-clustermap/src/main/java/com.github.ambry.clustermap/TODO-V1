@@ -2,9 +2,6 @@ For initial clustermap:
 TODO: Run with test coverage to assess how much more testing is required.
 TODO: More unit tests; separate unit tests for public interface from detailed interface (i.e., replicaId vs replica)
 
-For tools:
-TODO: Better partition allocation tool. Currently, simple hacks included as ClusterMapManager.allocatePartitions
-
 For V1
 TODO: Implement Ints.checkedCast(index) or depend on Guava. See ClusterMapManager.getWritablePartitionIdAt
 TODO: Document JSON format by defining json schema for HardwareLayout and PartitionLayout.

@@ -306,7 +306,7 @@ class PutPolicy extends ParallelOperationPolicy {
 
 /**
  * Sends requests in parallel to all replicas. Durability threshold is 2, so  long as there are more than 2 replicas in
- * the partition. Policy is used for both delete and cancelTTL.
+ * the partition. Policy is used for delete
  */
 class AllInParallelOperationPolicy extends ParallelOperationPolicy {
   public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId)

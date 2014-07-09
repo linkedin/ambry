@@ -12,13 +12,13 @@ import java.io.IOException;
 public class PutResponse extends Response {
 
   public PutResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestResponseType.PutResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.PutResponse, Request_Response_Version, correlationId, clientId, error);
   }
 
   public static PutResponse readFrom(DataInputStream stream)
       throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.PutResponse) {
+    RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+    if (type != RequestOrResponseType.PutResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible: " + type);
     }
     Short versionId = stream.readShort();

@@ -206,17 +206,16 @@ public class PersistentIndex {
       }
       IndexValue value = findKey(info.getStoreKey());
       if (value != null) {
-        // if the key already exist in the index, update it if it is deleted or ttl updated
+        // if the key already exist in the index, update it if it is deleted
         logger.info("Msg already exist with key {}", info.getStoreKey());
         if (info.isDeleted()) {
           value.setFlag(IndexValue.Flags.Delete_Index);
-        } else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
-          value.setTimeToLive(Utils.Infinite_Time);
+          value.setNewOffset(runningOffset);
+          value.setNewSize(info.getSize());
         } else {
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         }
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
-        value.setNewOffset(runningOffset);
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Updated message with key {} size {} ttl {} deleted {}", info.getStoreKey(), value.getSize(),
@@ -344,27 +343,6 @@ public class PersistentIndex {
     value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
     value.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
-    indexes.lastEntry().getValue().addEntry(new IndexEntry(id, value), fileSpan.getEndOffset());
-    journal.addEntry(fileSpan.getStartOffset(), id);
-  }
-
-  /**
-   * Updates the ttl for the index entry represented by the key
-   * @param id The id of the entry that needs its ttl to be updated
-   * @param ttl The new ttl value that needs to be set
-   * @param fileSpan The file range represented by this entry in the log
-   * @throws StoreException
-   */
-  public void updateTTL(StoreKey id, long ttl, FileSpan fileSpan)
-      throws StoreException {
-    verifyFileEndOffset(fileSpan);
-    IndexValue value = findKey(id);
-    if (value == null) {
-      logger.error("id {} not present in index. updating ttl failed", id);
-      throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
-    }
-    value.setTimeToLive(ttl);
-    value.setNewOffset(fileSpan.getStartOffset());
     indexes.lastEntry().getValue().addEntry(new IndexEntry(id, value), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }

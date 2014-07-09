@@ -221,21 +221,6 @@ public class ReplicationTest {
     }
 
     @Override
-    public void updateTTL(MessageWriteSet messageSetToUpdateTTL)
-        throws StoreException {
-      int index = 0;
-      MessageInfo messageInfoFound = null;
-      for (MessageInfo messageInfo : messageInfoList) {
-        if (messageInfo.getStoreKey().equals(messageSetToUpdateTTL.getMessageSetInfo().get(0).getStoreKey())) {
-          messageInfoFound = messageInfo;
-          break;
-        }
-        index++;
-      }
-      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(), messageInfoFound.getSize(), -1));
-    }
-
-    @Override
     public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries)
         throws StoreException {
       MockFindToken tokenmock = (MockFindToken) token;

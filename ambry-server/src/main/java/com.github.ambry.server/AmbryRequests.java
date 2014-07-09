@@ -16,13 +16,13 @@ import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.messageformat.TTLMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.metrics.MetricsHistogram;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.shared.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
@@ -30,12 +30,9 @@ import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.ReplicaMetadataRequest;
 import com.github.ambry.shared.ReplicaMetadataResponse;
-import com.github.ambry.shared.RequestResponseType;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.TTLRequest;
-import com.github.ambry.shared.TTLResponse;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.Send;
 import com.github.ambry.store.FindInfo;
@@ -48,7 +45,6 @@ import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,7 +92,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       logger.trace("{}", request);
       DataInputStream stream = new DataInputStream(request.getInputStream());
-      RequestResponseType type = RequestResponseType.values()[stream.readShort()];
+      RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
       switch (type) {
         case PutRequest:
           handlePutRequest(request);
@@ -106,9 +102,6 @@ public class AmbryRequests implements RequestAPI {
           break;
         case DeleteRequest:
           handleDeleteRequest(request);
-          break;
-        case TTLRequest:
-          handleTTLRequest(request);
           break;
         case ReplicaMetadataRequest:
           handleReplicaMetadataRequest(request);
@@ -334,60 +327,6 @@ public class AmbryRequests implements RequestAPI {
             new HistogramMeasurement(metrics.deleteBlobTotalTimeInMs), null, null, totalTimeSpent));
   }
 
-  public void handleTTLRequest(Request request)
-      throws IOException, InterruptedException {
-    TTLRequest ttlRequest = TTLRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
-    long totalTimeSpent = requestQueueTime;
-    metrics.ttlBlobRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.ttlBlobRequestRate.mark();
-    long startTime = SystemTime.getInstance().milliseconds();
-    TTLResponse response = null;
-    try {
-      ServerErrorCode error = validateRequest(ttlRequest.getBlobId().getPartition(), false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating ttl request failed with error {}", error);
-        response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), error);
-      } else {
-        MessageFormatInputStream stream =
-            new TTLMessageFormatInputStream(ttlRequest.getBlobId(), ttlRequest.getNewTTL());
-        MessageInfo info = new MessageInfo(ttlRequest.getBlobId(), stream.getSize(), ttlRequest.getNewTTL());
-        ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
-        infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
-        Store storeToUpdateTTL = storeManager.getStore(ttlRequest.getBlobId().getPartition());
-        storeToUpdateTTL.updateTTL(writeset);
-        response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), ServerErrorCode.No_Error);
-      }
-    } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
-      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        metrics.idDeletedError.inc();
-      } else {
-        metrics.unExpectedStoreTTLError.inc();
-      }
-      response = new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(),
-          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-    } catch (Exception e) {
-      logger.error("Unknown exception on ttl ", e);
-      response =
-          new TTLResponse(ttlRequest.getCorrelationId(), ttlRequest.getClientId(), ServerErrorCode.Unknown_Error);
-    } finally {
-      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      startTime += processingTime;
-      metrics.ttlBlobProcessingTimeInMs.update(processingTime);
-    }
-
-    requestResponseChannel.sendResponse(response, request,
-        new NetworkRequestMetrics(new HistogramMeasurement(metrics.ttlBlobResponseQueueTimeInMs),
-            new HistogramMeasurement(metrics.ttlBlobSendTimeInMs),
-            new HistogramMeasurement(metrics.ttlBlobTotalTimeInMs), null, null, totalTimeSpent));
-  }
-
   public void handleReplicaMetadataRequest(Request request)
       throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
@@ -443,7 +382,7 @@ public class AmbryRequests implements RequestAPI {
             new HistogramMeasurement(metrics.replicaMetadataTotalTimeInMs), null, null, totalTimeSpent));
   }
 
-  public void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
+  private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
       MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime, MetricsHistogram requestTotalTime,
       long totalTimeSpent, long blobSize, ServerMetrics metrics)
       throws InterruptedException {
@@ -471,7 +410,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  public void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
+  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
       MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime, MetricsHistogram requestTotalTime,
       long totalTimeSpent, long blobSize, MessageFormatFlags flags, ServerMetrics metrics)
       throws InterruptedException {

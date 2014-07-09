@@ -2,7 +2,7 @@ package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobPropertySerDe;
+import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.utils.Utils;
 
 import java.io.DataInputStream;
@@ -27,7 +27,7 @@ public class PutRequest extends RequestOrResponse {
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, InputStream data) {
-    super(RequestResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
+    super(RequestOrResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
 
     this.blobId = blobId;
     this.properties = properties;
@@ -42,7 +42,7 @@ public class PutRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     BlobId id = new BlobId(stream, map);
-    BlobProperties properties = BlobPropertySerDe.getBlobPropertyFromStream(stream);
+    BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
     ByteBuffer metadata = Utils.readIntBuffer(stream);
     InputStream data = stream;
     return new PutRequest(correlationId, clientId, id, properties, metadata, data);
@@ -77,7 +77,7 @@ public class PutRequest extends RequestOrResponse {
   private int sizeExcludingData() {
     // header + blobId size + blobId + metadata size + metadata + blob property size
     return (int) super.sizeInBytes() + blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
-        BlobPropertySerDe.getBlobPropertySize(properties);
+        BlobPropertiesSerDe.getBlobPropertiesSize(properties);
   }
 
   @Override
@@ -87,7 +87,7 @@ public class PutRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
-      BlobPropertySerDe.putBlobPropertyToBuffer(bufferToSend, properties);
+      BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());
       bufferToSend.put(usermetadata);
       bufferToSend.flip();

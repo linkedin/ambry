@@ -351,18 +351,18 @@ public class PersistentIndexTest {
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));
-          infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
+          infos.add(new MessageInfo(blobId5, 100, true));
           return infos;
         }
       });
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.isFlagSet(IndexValue.Flags.Delete_Index), true);
-      Assert.assertEquals(value5.getTimeToLiveInMs(), Utils.Infinite_Time);
-      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+      Assert.assertEquals(value4.getSize(), 100);
       Assert.assertEquals(value4.getOriginalMessageOffset(), 5000);
       Assert.assertEquals(value4.getOffset(), 7000);
-      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getSize(), 100);
       Assert.assertEquals(value5.getOriginalMessageOffset(), 6000);
       Assert.assertEquals(value5.getOffset(), 7100);
       indexNew.stopScheduler();
@@ -469,7 +469,6 @@ public class PersistentIndexTest {
       }
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
@@ -537,7 +536,7 @@ public class PersistentIndexTest {
 
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0));
       IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(200, 100));
-      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(300, 300, System.currentTimeMillis()));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(300, 300, 0));
       ArrayList<IndexEntry> list = new ArrayList<IndexEntry>();
       list.add(entry1);
       list.add(entry2);
@@ -566,9 +565,8 @@ public class PersistentIndexTest {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       // read ttl expired item
-      index.updateTTL(blobId1, 1234, new FileSpan(700, 800));
       try {
-        index.getBlobReadInfo(blobId1);
+        index.getBlobReadInfo(blobId3);
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
@@ -577,12 +575,6 @@ public class PersistentIndexTest {
       // try to delete or update a missing blob
       try {
         index.markAsDeleted(new MockId("id5"), new FileSpan(800, 900));
-        Assert.assertTrue(false);
-      } catch (StoreException e) {
-        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
-      }
-      try {
-        index.updateTTL(new MockId("id6"), 1234, new FileSpan(900, 1000));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);

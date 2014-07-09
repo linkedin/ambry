@@ -12,13 +12,13 @@ import java.io.IOException;
 public class DeleteResponse extends Response {
 
   public DeleteResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestResponseType.DeleteResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.DeleteResponse, Request_Response_Version, correlationId, clientId, error);
   }
 
   public static DeleteResponse readFrom(DataInputStream stream)
       throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.DeleteResponse) {
+    RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+    if (type != RequestOrResponseType.DeleteResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId = stream.readShort();

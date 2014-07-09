@@ -25,7 +25,7 @@ public class ReplicaMetadataResponse extends Response {
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error, FindToken token,
       List<MessageInfo> messageInfoList) {
-    super(RequestResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     if (token == null || messageInfoList == null) {
       throw new IllegalArgumentException("Invalid token or message info list");
     }
@@ -35,7 +35,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     token = null;
     this.messageInfoListSerDe = new MessageInfoListSerde(null);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
@@ -52,8 +52,8 @@ public class ReplicaMetadataResponse extends Response {
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
       ClusterMap clusterMap)
       throws IOException {
-    RequestResponseType type = RequestResponseType.values()[stream.readShort()];
-    if (type != RequestResponseType.ReplicaMetadataResponse) {
+    RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+    if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId = stream.readShort();

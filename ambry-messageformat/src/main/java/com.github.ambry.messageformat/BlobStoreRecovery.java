@@ -58,7 +58,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
             StoreKey key = factory.getStoreKey(new DataInputStream(stream));
 
             // read the appropriate type of message based on the relative offset that is set
-            if (headerFormat.getBlobPropertyRecordRelativeOffset()
+            if (headerFormat.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
               BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
               // we do not use the user metadata or blob during recovery but we still deserialize them to check
@@ -68,12 +68,6 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               MessageInfo info =
                   new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), Utils
                       .addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
-              messageRecovered.add(info);
-            } else if (headerFormat.getTTLRecordRelativeOffset()
-                != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              long ttl = MessageFormatRecord.deserializeTTLRecord(stream);
-              MessageInfo info =
-                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), ttl);
               messageRecovered.add(info);
             } else {
               boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
