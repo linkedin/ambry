@@ -184,50 +184,44 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public void updateTTL(MessageWriteSet messageSetToUpdateTTL)
-      throws StoreException {
-    synchronized (lock) {
-      final Timer.Context context = metrics.ttlResponse.time();
-      checkStarted();
-      try {
-        messageSetToUpdateTTL.writeTo(log);
-        List<MessageInfo> infoList = messageSetToUpdateTTL.getMessageSetInfo();
-        for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
-          index.updateTTL(info.getStoreKey(), info.getExpirationTimeInMs(), fileSpan);
-        }
-      } catch (IOException e) {
-        throw new StoreException("io error while trying to update ttl for blobs : " + e, StoreErrorCodes.IOError);
-      } finally {
-        context.stop();
-      }
-    }
-  }
-
-  @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
-    // TODO add metrics
-    return index.findEntriesSince(token, maxTotalSizeOfEntries);
+    final Timer.Context context = metrics.findEntriesSinceResponse.time();
+    checkStarted();
+    try {
+      return index.findEntriesSince(token, maxTotalSizeOfEntries);
+    } finally {
+      context.stop();
+    }
   }
 
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
       throws StoreException {
-    // TODO add metrics
-    return index.findMissingKeys(keys);
+    final Timer.Context context = metrics.findMissingKeysResponse.time();
+    checkStarted();
+    try {
+      return index.findMissingKeys(keys);
+    } finally {
+      context.stop();
+    }
   }
 
   @Override
   public boolean isKeyDeleted(StoreKey key)
       throws StoreException {
-    // TODO add metrics
-    IndexValue value = index.findKey(key);
-    if (value == null) {
-      throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
-          StoreErrorCodes.ID_Not_Found);
+    final Timer.Context context = metrics.isKeyDeletedResponse.time();
+    checkStarted();
+    try {
+      IndexValue value = index.findKey(key);
+      if (value == null) {
+        throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
+            StoreErrorCodes.ID_Not_Found);
+      }
+      return value.isFlagSet(IndexValue.Flags.Delete_Index);
+    } finally {
+      context.stop();
     }
-    return value.isFlagSet(IndexValue.Flags.Delete_Index);
   }
 
   @Override

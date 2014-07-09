@@ -309,27 +309,10 @@ public class BlobStoreTest {
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
 
-      // update TTL
-      byte[] bufToUpdateTTL = new byte[1000];
-      new Random().nextBytes(bufToUpdateTTL);
-
-      MessageInfo info3 = new MessageInfo(blobId1, 1000, 1234);
-      ArrayList<MessageInfo> listInfo1 = new ArrayList<MessageInfo>(1);
-      listInfo1.add(info3);
-      MessageWriteSet setToUpdateTTL = new MockMessageWriteSet(ByteBuffer.wrap(bufToUpdateTTL), listInfo1);
-      store.updateTTL(setToUpdateTTL);
       ArrayList<StoreKey> keysUpdated = new ArrayList<StoreKey>();
-      keysUpdated.add(blobId1);
-      try {
-        store.get(keysUpdated);
-        Assert.assertEquals(false, true);
-      } catch (StoreException e) {
-        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
-      }
       keysUpdated.clear();
       keysUpdated.add(blobId2);
       store.get(keysUpdated);
-      Assert.assertEquals(true, true);
     } catch (Exception e) {
       Assert.assertTrue(false);
     } finally {

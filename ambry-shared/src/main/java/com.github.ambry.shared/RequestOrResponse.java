@@ -11,7 +11,7 @@ import java.nio.ByteBuffer;
  * Request Response for serialization and de-serialization
  */
 public abstract class RequestOrResponse implements Send {
-  protected final RequestResponseType type;
+  protected final RequestOrResponseType type;
   protected final int correlationId;
   protected short versionId;
   protected String clientId;
@@ -26,7 +26,7 @@ public abstract class RequestOrResponse implements Send {
   private static final int Correlation_Id_Size_In_Bytes = 4;
   private static final int ClientId_Field_Size_In_Bytes = 4;
 
-  public RequestOrResponse(RequestResponseType type, short versionId, int correlationId, String clientId) {
+  public RequestOrResponse(RequestOrResponseType type, short versionId, int correlationId, String clientId) {
     this.type = type;
     this.versionId = versionId;
     this.correlationId = correlationId;
@@ -34,7 +34,7 @@ public abstract class RequestOrResponse implements Send {
     this.bufferToSend = null;
   }
 
-  public RequestResponseType getRequestType() {
+  public RequestOrResponseType getRequestType() {
     return type;
   }
 

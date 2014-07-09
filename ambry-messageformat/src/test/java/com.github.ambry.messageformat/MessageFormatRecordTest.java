@@ -16,8 +16,8 @@ public class MessageFormatRecordTest {
       // Test Blob property V1 Record
       BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
       ByteBuffer stream =
-          ByteBuffer.allocate(MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(properties));
-      MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(stream, properties);
+          ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
+      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
       stream.flip();
       BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
       Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
@@ -55,11 +55,11 @@ public class MessageFormatRecordTest {
 
       // Test message header V1
       ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-      MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, -1, 20, 30);
+      MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, 20, 30);
       header.flip();
       MessageFormatRecord.MessageHeader_Format_V1 format = new MessageFormatRecord.MessageHeader_Format_V1(header);
       Assert.assertEquals(format.getMessageSize(), 1000);
-      Assert.assertEquals(format.getBlobPropertyRecordRelativeOffset(), 10);
+      Assert.assertEquals(format.getBlobPropertiesRecordRelativeOffset(), 10);
       Assert.assertEquals(format.getUserMetadataRecordRelativeOffset(), 20);
       Assert.assertEquals(format.getBlobRecordRelativeOffset(), 30);
 
@@ -68,23 +68,6 @@ public class MessageFormatRecordTest {
       format = new MessageFormatRecord.MessageHeader_Format_V1(header);
       try {
         format.verifyHeader();
-        Assert.assertEquals(true, false);
-      } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-      }
-
-      // Test TTL record V1
-      ByteBuffer ttl = ByteBuffer.allocate(MessageFormatRecord.TTL_Format_V1.getTTLRecordSize());
-      MessageFormatRecord.TTL_Format_V1.serializeTTLRecord(ttl, -1);
-      ttl.flip();
-      long ttlValue = MessageFormatRecord.deserializeTTLRecord(new ByteBufferInputStream(ttl));
-      Assert.assertEquals(ttlValue, -1);
-
-      // corrupt ttl record V1
-      ttl.flip();
-      ttl.put(10, (byte) 4);
-      try {
-        ttlValue = MessageFormatRecord.deserializeTTLRecord(new ByteBufferInputStream(ttl));
         Assert.assertEquals(true, false);
       } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);

@@ -12,7 +12,7 @@ public abstract class Response extends RequestOrResponse {
   private ServerErrorCode error;
   private static final int Error_Size_InBytes = 2;
 
-  public Response(RequestResponseType type, short requestResponseVersion, int correlationId, String clientId,
+  public Response(RequestOrResponseType type, short requestResponseVersion, int correlationId, String clientId,
       ServerErrorCode error) {
     super(type, requestResponseVersion, correlationId, clientId);
     this.error = error;

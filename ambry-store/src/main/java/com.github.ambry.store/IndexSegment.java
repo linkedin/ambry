@@ -552,8 +552,9 @@ class IndexSegment {
               }
             } else {
               logger.info(
-                  "Index {} Ignoring index entry outside the log end offset that was not synced logEndOffset {} key {}",
-                  indexFile.getPath(), logEndOffset, key);
+                  "Index {} Ignoring index entry outside the log end offset that was not synced logEndOffset {} "
+                      + "key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getPath(), logEndOffset,
+                  key, blobValue.getOffset(), blobValue.getSize(), blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
             }
           }
           if (maxEndOffset != logEndOffset) {

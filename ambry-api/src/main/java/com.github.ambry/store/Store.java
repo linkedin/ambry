@@ -42,14 +42,6 @@ public interface Store {
       throws StoreException;
 
   /**
-   * Updates TTL for all the messages that are part of the message set
-   * @param messageSetToUpdateTTL The list of messages whose ttl needs to be updated
-   * @throws StoreException
-   */
-  void updateTTL(MessageWriteSet messageSetToUpdateTTL)
-      throws StoreException;
-
-  /**
    * Finds all the entries from the store given a find token
    * @param token The token that acts as a bookmark to make subsequent searches
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to

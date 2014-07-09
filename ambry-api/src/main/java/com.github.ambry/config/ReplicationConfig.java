@@ -14,7 +14,7 @@ public class ReplicationConfig {
   /**
    * The number of replica threads on each server that runs the replication protocol
    */
-  @Config("replication.num.replica.threads")
+  @Config("replication.no.of.replica.threads")
   @Default("1")
   public final int replicationNumReplicaThreads;
 

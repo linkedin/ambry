@@ -100,11 +100,12 @@ public class MessageFormatSend implements Send {
             headerFormat.verifyHeader();
 
             if (flag == MessageFormatFlags.BlobProperties) {
-              int blobPropertyRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                  .getBlobPropertyRecordRelativeOffset();
+              int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
+                  .getBlobPropertiesRecordRelativeOffset();
 
-              infoList.add(i, new SendInfo(headerFormat.getBlobPropertyRecordRelativeOffset(), blobPropertyRecordSize));
-              totalSizeToWrite += blobPropertyRecordSize;
+              infoList
+                  .add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
+              totalSizeToWrite += blobPropertiesRecordSize;
               logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                   infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
             } else if (flag == MessageFormatFlags.BlobUserMetadata) {
@@ -118,7 +119,7 @@ public class MessageFormatSend implements Send {
             } else if (flag == MessageFormatFlags.Blob) {
               long blobRecordSize =
                   headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
-                      .getBlobPropertyRecordRelativeOffset());
+                      .getBlobPropertiesRecordRelativeOffset());
               infoList.add(i, new SendInfo(headerFormat.getBlobRecordRelativeOffset(), blobRecordSize));
               totalSizeToWrite += blobRecordSize;
               logger.trace("Sending data for message relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),

@@ -25,8 +25,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
     MessageFormatRecord.MessageHeader_Format_V1
         .serializeHeader(buffer, deleteRecordSize, MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-            MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
-            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            headerSize + key.sizeInBytes(), MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
             MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     buffer.put(key.toBytes());
     // set the message as deleted

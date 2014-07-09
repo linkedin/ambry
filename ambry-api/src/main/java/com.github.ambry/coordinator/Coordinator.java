@@ -35,16 +35,6 @@ public interface Coordinator extends Closeable {
       throws CoordinatorException;
 
   /**
-   * Cancels the ttl of the blob that correspond to the specified blob id. If the cancel succeeds, the blob will not
-   * expire.
-   *
-   * @param id The id of the blob that needs its TTL cancelled
-   * @throws CoordinatorException If the operation experienced an error
-   */
-  void cancelTTL(String id)
-      throws CoordinatorException;
-
-  /**
    * Gets the properties of the blob that corresponds to the specified blob id.
    *
    * @param blobId The id of the blob for which to retrieve its blob properties.

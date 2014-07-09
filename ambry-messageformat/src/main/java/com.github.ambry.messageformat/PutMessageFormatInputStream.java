@@ -22,31 +22,29 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - - -
  * |       Blob Record         |
  *  - - - - - - - - - - - - - -
- *
- * TODO rename blob property to blob properties across code base
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
-  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperty, ByteBuffer userMetadata,
+  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
       InputStream data, long streamSize)
       throws MessageFormatException {
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
-    int blobPropertyRecordSize = MessageFormatRecord.BlobProperty_Format_V1.getBlobPropertyRecordSize(blobProperty);
+    int blobPropertiesRecordSize =
+        MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
     long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
 
-    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize +
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize +
         (int) (blobSize - streamSize - MessageFormatRecord.Crc_Size));
 
     MessageFormatRecord.MessageHeader_Format_V1
-        .serializeHeader(buffer, blobPropertyRecordSize + userMetadataSize + blobSize, headerSize + key.sizeInBytes(),
+        .serializeHeader(buffer, blobPropertiesRecordSize + userMetadataSize + blobSize, headerSize + key.sizeInBytes(),
             MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-            headerSize + key.sizeInBytes() + blobPropertyRecordSize,
-            headerSize + key.sizeInBytes() + blobPropertyRecordSize + userMetadataSize);
+            headerSize + key.sizeInBytes() + blobPropertiesRecordSize,
+            headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize);
     buffer.put(key.toBytes());
-    MessageFormatRecord.BlobProperty_Format_V1.serializeBlobPropertyRecord(buffer, blobProperty);
+    MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
     MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(buffer, streamSize);

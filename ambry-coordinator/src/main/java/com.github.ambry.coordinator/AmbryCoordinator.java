@@ -32,11 +32,10 @@ import static com.github.ambry.utils.Utils.getRandomLong;
 
 
 /**
- * Ambry Coordinator performs put, delete, cancelTTL, and get(Blob/BlobUserMetadata/BlobProperties) operations.
+ * Ambry Coordinator performs put, delete, and get(Blob/BlobUserMetadata/BlobProperties) operations.
  */
 public class AmbryCoordinator implements Coordinator {
 
-  private final VerifiableProperties properties;
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
@@ -60,7 +59,6 @@ public class AmbryCoordinator implements Coordinator {
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
-    this.properties = properties;
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
@@ -230,17 +228,6 @@ public class AmbryCoordinator implements Coordinator {
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.DeleteBlob, e.getErrorCode());
       throw e;
     }
-  }
-
-  @Override
-  public void cancelTTL(String blobIdString)
-      throws CoordinatorException {
-    logger.trace("cancelTTL. " + blobIdString);
-    BlobId blobId = getBlobIdFromString(blobIdString);
-    CancelTTLOperation cancelTTLOperation =
-        new CancelTTLOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-            operationTimeoutMs);
-    cancelTTLOperation.execute();
   }
 
   @Override

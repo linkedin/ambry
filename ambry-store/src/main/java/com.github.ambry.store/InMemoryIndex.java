@@ -80,7 +80,6 @@ public class InMemoryIndex {
       this.journal = new InMemoryJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
           config.storeMaxNumberOfEntriesToReturnFromJournal);
       logEndOffset = new AtomicLong(0);
-      //indexJournal = new BlobJournal();
       this.log = log;
       this.factory = factory;
       // check if file exist and recover from it
@@ -117,9 +116,6 @@ public class InMemoryIndex {
           if (info.isDeleted()) {
             FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
             markAsDeleted(info.getStoreKey(), fileSpan);
-          } else if (info.getExpirationTimeInMs() == Utils.Infinite_Time) {
-            FileSpan fileSpan = new FileSpan(logEndOffset.get(), logEndOffset.get() + info.getSize());
-            updateTTL(info.getStoreKey(), Utils.Infinite_Time, fileSpan);
           } else {
             throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
           }
@@ -212,28 +208,7 @@ public class InMemoryIndex {
     }
     value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
-    index.put(id, value);
-    this.logEndOffset.set(fileSpan.getEndOffset());
-    journal.addEntry(fileSpan.getStartOffset(), id);
-  }
-
-  /**
-   * Updates the ttl for the index entry represented by the key
-   * @param id The id of the entry that needs its ttl to be updated
-   * @param ttl The new ttl value that needs to be set
-   * @param fileSpan The file range represented by this entry in the log
-   * @throws StoreException
-   */
-  public void updateTTL(StoreKey id, long ttl, FileSpan fileSpan)
-      throws StoreException {
-    verifyFileEndOffset(fileSpan);
-    IndexValue value = index.get(id);
-    if (value == null) {
-      logger.error("id {} not present in index. updating ttl failed", id);
-      throw new StoreException("id not present in index : " + id, StoreErrorCodes.ID_Not_Found);
-    }
-    value.setTimeToLive(ttl);
-    value.setNewOffset(fileSpan.getStartOffset());
+    value.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
     index.put(id, value);
     this.logEndOffset.set(fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
