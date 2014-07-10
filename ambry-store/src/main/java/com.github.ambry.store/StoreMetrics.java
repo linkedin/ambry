@@ -27,6 +27,7 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public Gauge<Long> currentCapacityUsed;
+  public Gauge<Double> ratioOfCurrentToTotalCapacity;
   private final MetricRegistry registry;
   private final String name;
 
@@ -54,7 +55,7 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
   }
 
-  public void initializeCapacityUsedMetric(final Log log) {
+  public void initializeCapacityUsedMetric(final Log log, final long capacityInBytes) {
     currentCapacityUsed = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -62,5 +63,12 @@ public class StoreMetrics {
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "-currentCapacityUsed"), currentCapacityUsed);
+    ratioOfCurrentToTotalCapacity = new Gauge<Double>() {
+      @Override
+      public Double getValue() {
+        return ((double)log.getLogEndOffset()/capacityInBytes);
+      }
+    };
+    registry.register(MetricRegistry.name(Log.class, name + "-ratioOfCurrentToTotalCapacity"), currentCapacityUsed);
   }
 }
