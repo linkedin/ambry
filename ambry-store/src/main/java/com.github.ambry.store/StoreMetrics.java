@@ -69,6 +69,6 @@ public class StoreMetrics {
         return ((double)log.getLogEndOffset()/capacityInBytes);
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "-ratioOfCurrentToTotalCapacity"), currentCapacityUsed);
+    registry.register(MetricRegistry.name(Log.class, name + "-ratioOfCurrentToTotalCapacity"), ratioOfCurrentToTotalCapacity);
   }
 }
