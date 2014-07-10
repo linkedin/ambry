@@ -66,9 +66,10 @@ public class StoreMetrics {
     ratioOfCurrentToTotalCapacity = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double)log.getLogEndOffset()/capacityInBytes);
+        return ((double) log.getLogEndOffset() / capacityInBytes);
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "-ratioOfCurrentToTotalCapacity"), ratioOfCurrentToTotalCapacity);
+    registry.register(MetricRegistry.name(Log.class, name + "-ratioOfCurrentToTotalCapacity"),
+        ratioOfCurrentToTotalCapacity);
   }
 }
