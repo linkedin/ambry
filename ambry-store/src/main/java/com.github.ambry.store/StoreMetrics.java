@@ -66,10 +66,9 @@ public class StoreMetrics {
     precentageUsedCapacity = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) log.getLogEndOffset() / capacityInBytes)*100;
+        return ((double) log.getLogEndOffset() / capacityInBytes) * 100;
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "-precentageUsedCapacity"),
-        precentageUsedCapacity);
+    registry.register(MetricRegistry.name(Log.class, name + "-precentageUsedCapacity"), precentageUsedCapacity);
   }
 }
