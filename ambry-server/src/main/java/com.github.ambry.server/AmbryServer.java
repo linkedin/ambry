@@ -22,6 +22,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
@@ -48,6 +49,7 @@ public class AmbryServer {
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
+  private ServerMetrics metrics = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
       throws IOException {
@@ -66,7 +68,9 @@ public class AmbryServer {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
+      long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
+      this.metrics = new ServerMetrics(registry);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -106,12 +110,14 @@ public class AmbryServer {
       networkServer = new SocketServer(networkConfig, registry);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenFactory, notificationSystem, replicationManager);
+              findTokenFactory, notificationSystem, replicationManager, metrics);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
       logger.info("started");
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      metrics.serverStartTimeInMs.update(processingTime);
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
@@ -119,6 +125,8 @@ public class AmbryServer {
   }
 
   public void shutdown() {
+
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
 
@@ -156,6 +164,8 @@ public class AmbryServer {
       logger.error("Error while shutting down server", e);
     } finally {
       shutdownLatch.countDown();
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      metrics.serverShutdownTimeInMs.update(processingTime);
     }
   }
 

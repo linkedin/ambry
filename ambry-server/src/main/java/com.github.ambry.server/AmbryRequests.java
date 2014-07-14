@@ -75,12 +75,12 @@ public class AmbryRequests implements RequestAPI {
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-      NotificationSystem operationNotification, ReplicationManager replicationManager) {
+      NotificationSystem operationNotification, ReplicationManager replicationManager, ServerMetrics metrics) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
     this.currentNode = nodeId;
-    this.metrics = new ServerMetrics(registry);
+    this.metrics = metrics;
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
     this.findTokenFactory = findTokenFactory;
     this.notification = operationNotification;
