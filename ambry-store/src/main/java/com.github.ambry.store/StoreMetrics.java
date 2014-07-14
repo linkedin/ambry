@@ -27,7 +27,7 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public Gauge<Long> currentCapacityUsed;
-  public Gauge<Double> precentageUsedCapacity;
+  public Gauge<Double> percentageUsedCapacity;
   private final MetricRegistry registry;
   private final String name;
 
@@ -63,12 +63,12 @@ public class StoreMetrics {
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "-currentCapacityUsed"), currentCapacityUsed);
-    precentageUsedCapacity = new Gauge<Double>() {
+    percentageUsedCapacity = new Gauge<Double>() {
       @Override
       public Double getValue() {
         return ((double) log.getLogEndOffset() / capacityInBytes) * 100;
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "-precentageUsedCapacity"), precentageUsedCapacity);
+    registry.register(MetricRegistry.name(Log.class, name + "-percentageUsedCapacity"), percentageUsedCapacity);
   }
 }
