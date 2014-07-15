@@ -118,6 +118,7 @@ public class AmbryServer {
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
+      logger.info("Server startup time in Ms "+processingTime);
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
@@ -158,7 +159,6 @@ public class AmbryServer {
           logger.error("Error while closing notification system.", e);
         }
       }
-
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);
@@ -166,6 +166,7 @@ public class AmbryServer {
       shutdownLatch.countDown();
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverShutdownTimeInMs.update(processingTime);
+      logger.info("Server shutdown time in Ms "+processingTime);
     }
   }
 
