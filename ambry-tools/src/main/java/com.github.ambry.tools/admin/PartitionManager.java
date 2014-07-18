@@ -48,8 +48,10 @@ public class PartitionManager {
           parser.accepts("replicaCapacityInBytes", "The capacity of each replica in bytes for the partitions to add")
               .withOptionalArg().ofType(Long.class);
 
-      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt = parser.accepts("partitionIdToAddReplicasTo",
-          "The partitionIds to add replicas to. This can either take a comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in the partitionLayout ")
+      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt =
+          parser.accepts("partitionIdToAddReplicasTo", "The partitionIds to add replicas to. This can either take a " +
+              "comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in " +
+              "the partitionLayout ")
           .withOptionalArg().ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterToAddReplicasToOpt =
