@@ -13,6 +13,11 @@ public class MockPartitionId extends PartitionId {
   Long partition;
   public List<ReplicaId> replicaIds;
 
+  public MockPartitionId() {
+    partition = 0L;
+    replicaIds = new ArrayList<ReplicaId>(0);
+  }
+
   public MockPartitionId(long partition, List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
     this.partition = partition;
 
@@ -46,6 +51,11 @@ public class MockPartitionId extends PartitionId {
   @Override
   public int compareTo(PartitionId o) {
     return 0;
+  }
+
+  @Override
+  public boolean isEqual(String partitionId) {
+    return partition.toString().equals(partitionId);
   }
 
   @Override

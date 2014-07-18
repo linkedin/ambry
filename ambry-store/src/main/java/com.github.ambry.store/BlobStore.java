@@ -156,7 +156,7 @@ public class BlobStore implements Store {
         index.addToIndex(indexEntries, fileSpan);
       }
     } catch (IOException e) {
-      throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
+      throw new StoreException("io error while trying to put blobs : ", e, StoreErrorCodes.IOError);
     } finally {
       context.stop();
     }

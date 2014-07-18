@@ -27,4 +27,11 @@ public abstract class PartitionId implements Comparable<PartitionId> {
    * @return state of this PartitionId.
    */
   public abstract PartitionState getPartitionState();
+
+  /**
+   * Compares the PartitionId to a string representation of another PartitionId
+   * @param partitionId  The string form of the partition that needs to be compared against
+   * @return True, if the partitions match, false otherwise
+   */
+  public abstract boolean isEqual(String partitionId);
 }

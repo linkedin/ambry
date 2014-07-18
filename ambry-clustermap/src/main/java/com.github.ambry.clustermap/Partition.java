@@ -89,6 +89,11 @@ public class Partition extends PartitionId {
     return partitionState;
   }
 
+  @Override
+  public boolean isEqual(String partitionId) {
+    return id.toString().equals(partitionId);
+  }
+
   public long getAllocatedRawCapacityInBytes() {
     return replicaCapacityInBytes * replicas.size();
   }
