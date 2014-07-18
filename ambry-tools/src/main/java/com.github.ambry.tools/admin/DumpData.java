@@ -2,11 +2,17 @@ package com.github.ambry.tools.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.IndexValue;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.Utils;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -39,7 +45,7 @@ public class DumpData {
               .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfFileOpt =
-          parser.accepts("typeOfFile", "The type of file to read - log or index").withRequiredArg()
+          parser.accepts("typeOfFile", "The type of file to read - log or index or replicatoken").withRequiredArg()
               .describedAs("The type of file").ofType(String.class).defaultsTo("log");
 
       OptionSet options = parser.parse(args);
@@ -75,25 +81,22 @@ public class DumpData {
         if (version == 0) {
           int keysize = stream.readInt();
           int valueSize = stream.readInt();
+          long fileEndPointer = stream.readLong();
           System.out.println("key size " + keysize);
           System.out.println("value size " + valueSize);
-          long totalDataToRead = file.length() - 26;
-          long numberOfEntries = totalDataToRead / (keysize + valueSize);
-          System.out.println("Number of entries " + numberOfEntries);
-          long numberOfEntriesRead = 0;
-          while (numberOfEntriesRead < numberOfEntries) {
-            short idsize = stream.readShort();
-            byte[] idRead = new byte[idsize];
-            stream.read(idRead);
-            String id = new String(idRead);
-            System.out.print(id + " ");
-            byte[] valueRead = new byte[IndexValue.Index_Value_Size_In_Bytes];
-            stream.read(valueRead);
-            IndexValue value = new IndexValue(ByteBuffer.wrap(valueRead));
-            System.out.println("offset " + value.getOffset() + " size " + value.getSize());
-            numberOfEntriesRead++;
+          System.out.println("file end pointer " + fileEndPointer);
+          int Crc_Size = 8;
+          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", map);
+          while (stream.available() > Crc_Size) {
+            StoreKey key = storeKeyFactory.getStoreKey(stream);
+            byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+            stream.read(value);
+            IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+            System.out.println("key " + key + " value - offset " + blobValue.getOffset() + " size " +
+                blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
+                " Flag " + blobValue.getFlags());
           }
-          System.out.println("log end offset " + stream.readLong());
+          System.out.println("crc " + stream.readLong());
         }
       } else if (typeOfFile.compareTo("log") == 0) {
         System.out.println("Dumping log");
@@ -129,6 +132,34 @@ public class DumpData {
               System.out.println("delete change " + deleteFlag);
             }
           }
+        }
+      } else if (typeOfFile.compareTo("replicatoken") == 0) {
+        System.out.println("Dumping replica token");
+        short version = stream.readShort();
+        switch (version) {
+          case 0:
+            int Crc_Size = 8;
+            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", map);
+            FindTokenFactory findTokenFactory =
+                Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
+            while (stream.available() > Crc_Size) {
+              // read partition id
+              PartitionId partitionId = map.getPartitionIdFromStream(stream);
+              // read remote node host name
+              String hostname = Utils.readIntString(stream);
+              // read remote replica path
+              String replicaPath = Utils.readIntString(stream);
+              // read remote port
+              int port = stream.readInt();
+              // read total bytes read from local store
+              long totalBytesReadFromLocalStore = stream.readLong();
+              // read replica token
+              FindToken token = findTokenFactory.getFindToken(stream);
+              System.out.println(
+                  "partitionId " + partitionId + " hostname " + hostname + " replicaPath " + replicaPath + " port "
+                      + port + " totalBytesReadFromLocalStore " + totalBytesReadFromLocalStore + " token " + token);
+            }
+            System.out.println("crc " + stream.readLong());
         }
       } else {
         System.out.println("Unknown file to read option");

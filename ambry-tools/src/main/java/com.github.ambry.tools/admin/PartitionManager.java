@@ -5,7 +5,6 @@ import com.github.ambry.clustermap.HardwareLayout;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -23,38 +22,39 @@ public class PartitionManager {
   public static void main(String args[]) {
     try {
       OptionParser parser = new OptionParser();
+
+      ArgumentAcceptingOptionSpec<String> operationTypeOpt = parser.accepts("operationType",
+          " REQUIRED: The type of operation to perform on the partition. Currently supported"
+              + " operations are 'AddPartition', 'AddReplicas'").withRequiredArg().describedAs("operation_type")
+          .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
-          parser.accepts("hardwareLayoutPath", "The path to the hardware layout map").withRequiredArg()
+          parser.accepts("hardwareLayoutPath", " REQUIRED: The path to the hardware layout map").withRequiredArg()
               .describedAs("hardware_layout_path").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutPathOpt = parser.accepts("partitionLayoutPath",
-          "The path to the partition layout map. The file is updated with the new partitions").withRequiredArg()
-          .describedAs("partition_layout_path").ofType(String.class).defaultsTo("");
-
-      ArgumentAcceptingOptionSpec<String> operationTypeOpt = parser.accepts("operationType",
-          "The type of operation to perform on the partition. Currently supported"
-              + "operations are 'AddPartition', 'AddReplicas'").withRequiredArg().describedAs("operation_type")
-          .ofType(String.class);
+          "The path to the partition layout map. The file is updated with the new partitions").withOptionalArg();
 
       ArgumentAcceptingOptionSpec<Integer> numberOfPartitionsOpt =
-          parser.accepts("numberOfPartitionsToAdd", "The number of partitions to add").withRequiredArg()
-              .describedAs("number_of_partitions_to_add").ofType(Integer.class);
+          parser.accepts("numberOfPartitionsToAdd", "The number of partitions to add").withOptionalArg()
+              .ofType(Integer.class);
 
-      ArgumentAcceptingOptionSpec<Integer> numberOfReplicasPerDatacenterOpt =
-          parser.accepts("numberOfReplicasPerDatacenter", "The number of replicas for the partition per datacenter")
-              .withRequiredArg().describedAs("number_of_replicas_per_datacenter").ofType(Integer.class);
+      ArgumentAcceptingOptionSpec<Integer> numberOfReplicasPerDatacenterOpt = parser
+          .accepts("numberOfReplicasPerDatacenter",
+              "The number of replicas for the partition per datacenter when adding partitions").withOptionalArg()
+          .ofType(Integer.class);
 
       ArgumentAcceptingOptionSpec<Long> replicaCapacityInBytesOpt =
-          parser.accepts("replicaCapacityInBytes", "The capacity of each replica in bytes").withRequiredArg()
-              .describedAs("replica_capacity_in_bytes").ofType(Long.class);
+          parser.accepts("replicaCapacityInBytes", "The capacity of each replica in bytes for the partitions to add")
+              .withOptionalArg().ofType(Long.class);
 
-      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt =
-          parser.accepts("partitionIdToAddReplicasTo", "The partitionIds to add replicas to").withRequiredArg()
-              .describedAs("partition_id_to_add_replicas_to").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt = parser.accepts("partitionIdToAddReplicasTo",
+          "The partitionIds to add replicas to. This can either take a comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in the partitionLayout ")
+          .withOptionalArg().ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterToAddReplicasToOpt =
           parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")
-              .withRequiredArg().describedAs("datacenter_to_add_replicas_to").ofType(String.class);
+              .withOptionalArg().ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -115,7 +115,7 @@ public class PartitionManager {
         }
         String partitionIdsToAddReplicas = options.valueOf(partitionIdsToAddReplicasToOpt);
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
-        if (partitionIdsToAddReplicas.compareToIgnoreCase("*") == 0) {
+        if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {
           for (PartitionId partitionId : manager.getAllPartitions()) {
             manager.addReplicas(partitionId, datacenterToAddReplicasTo);
           }
@@ -123,7 +123,7 @@ public class PartitionManager {
           String[] partitionIds = partitionIdsToAddReplicas.split(",");
           for (String partitionId : partitionIds) {
             for (PartitionId partitionInCluster : manager.getAllPartitions()) {
-              if (new String(partitionInCluster.getBytes()).compareToIgnoreCase(partitionId) == 0) {
+              if (partitionInCluster.isEqual(partitionId)) {
                 manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo);
               }
             }

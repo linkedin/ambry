@@ -1,5 +1,6 @@
 package com.github.ambry.shared;
 
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
@@ -70,65 +71,5 @@ public class RequestResponseTest {
   @Test
   public void ttlRequestResponseTest() {
 
-  }
-}
-
-/**
- * Mock partition id for unit tests
- */
-class MockPartitionId extends PartitionId {
-  private Long partition = 88L;
-
-  public MockPartitionId() {
-  }
-
-  @Override
-  public byte[] getBytes() {
-    ByteBuffer buf = ByteBuffer.allocate(8);
-    buf.putLong(partition);
-    return buf.array();
-  }
-
-  @Override
-  public List<ReplicaId> getReplicaIds() {
-    return null;
-  }
-
-  @Override
-  public PartitionState getPartitionState() {
-    return PartitionState.READ_WRITE;
-  }
-
-  @Override
-  public int compareTo(PartitionId o) {
-    return 0;
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
-    MockPartitionId mockPartition = (MockPartitionId) o;
-
-    if (partition != mockPartition.partition) {
-      return false;
-    }
-
-    return true;
-  }
-
-  @Override
-  public int hashCode() {
-    return (int) (partition ^ (partition >>> 32));
-  }
-
-  @Override
-  public String toString() {
-    return partition.toString();
   }
 }
