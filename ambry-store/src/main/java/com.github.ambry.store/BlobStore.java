@@ -84,7 +84,7 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, metrics);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
-        metrics.initializeCapacityUsedMetric(log);
+        metrics.initializeCapacityUsedMetric(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
         logger.error("Error while starting store for directory " + dataDir, e);
