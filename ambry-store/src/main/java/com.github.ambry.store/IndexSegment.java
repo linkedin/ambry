@@ -444,11 +444,13 @@ class IndexSegment {
         int numOfEntries = 0;
         // write the entries
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
-          writer.write(entry.getKey().toBytes());
-          writer.write(entry.getValue().getBytes().array());
-          logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(),
-              entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
-          numOfEntries++;
+          if (entry.getValue().getOffset() + entry.getValue().getSize() <= fileEndPointer) {
+            writer.write(entry.getKey().toBytes());
+            writer.write(entry.getValue().getBytes().array());
+            logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(),
+                entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
+            numOfEntries++;
+          }
         }
         prevNumOfEntriesWritten = numOfEntries;
         long crcValue = crc.getValue();
@@ -556,11 +558,6 @@ class IndexSegment {
                       + "key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getPath(), logEndOffset,
                   key, blobValue.getOffset(), blobValue.getSize(), blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
             }
-          }
-          if (maxEndOffset != logEndOffset) {
-            logger.error("Index {} MaxEndOffset {} of index entries does not match the log end offset {} in index ",
-                indexFile.getPath(), maxEndOffset, logEndOffset);
-            throw new StoreException("Index inconsistency error", StoreErrorCodes.Initialization_Error);
           }
           this.endOffset.set(maxEndOffset);
           logger.trace("Index {} Setting end offset for index {}", indexFile.getPath(), maxEndOffset);
