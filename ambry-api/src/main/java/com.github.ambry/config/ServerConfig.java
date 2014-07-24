@@ -14,7 +14,7 @@ public class ServerConfig {
   public final int serverRequestHandlerNumOfThreads;
 
   /**
-   * The number of scheduler threads the server will use to perform background tasks
+   * The number of scheduler threads the server will use to perform background tasks (store, replication)
    */
   @Config("server.scheduler.num.of.threads")
   @Default("10")

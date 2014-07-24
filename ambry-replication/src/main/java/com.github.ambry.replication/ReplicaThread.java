@@ -211,7 +211,7 @@ class ReplicaThread implements Runnable {
     // We apply the wait time between replication from remote replicas here. Any new objects that get written
     // in the remote replica are given time to be written to the local replica and avoids failing the request
     // from the client.
-    //Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
+    Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
 
     // 2. Check the local store to find the messages that are missing locally
     // find ids that are missing
