@@ -8,6 +8,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -42,6 +43,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -72,10 +74,13 @@ public class AmbryRequests implements RequestAPI {
   private final FindTokenFactory findTokenFactory;
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
+  private final ServerConfig serverConfig;
+  private final StoreKeyFactory storeKeyFactory;
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-      NotificationSystem operationNotification, ReplicationManager replicationManager) {
+      NotificationSystem operationNotification, ReplicationManager replicationManager, ServerConfig serverConfig,
+      StoreKeyFactory storeKeyFactory) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -85,6 +90,8 @@ public class AmbryRequests implements RequestAPI {
     this.findTokenFactory = findTokenFactory;
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
+    this.serverConfig = serverConfig;
+    this.storeKeyFactory = storeKeyFactory;
   }
 
   public void handleRequests(Request request)
@@ -139,7 +146,8 @@ public class AmbryRequests implements RequestAPI {
                 putRequest.getBlobProperties().getTimeToLiveInSeconds()));
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
+        MessageFormatWriteSet writeset =
+            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxPutWriteTimeMs);
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
@@ -222,7 +230,8 @@ public class AmbryRequests implements RequestAPI {
         Store storeToGet = storeManager.getStore(getRequest.getPartition());
         StoreInfo info = storeToGet.get(getRequest.getBlobIds());
         Send blobsToSend =
-            new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics);
+            new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
+                storeKeyFactory);
         response =
             new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), info.getMessageReadSetInfo(),
                 blobsToSend, ServerErrorCode.No_Error);
@@ -289,7 +298,8 @@ public class AmbryRequests implements RequestAPI {
         MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList);
+        MessageFormatWriteSet writeset =
+            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxDeleteWriteTimeMs);
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
         response =

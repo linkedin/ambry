@@ -14,6 +14,8 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.DeleteRequest;
+import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.ServerErrorCode;
@@ -255,6 +257,14 @@ public class ServerWritePerformance {
               totalLatencyInNanoSeconds = 0;
             }
             totalTimeTaken.addAndGet(endTime - startTime);
+
+            // delete the blob
+            DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);
+            channel.send(deleteRequest);
+            DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel.receive()));
+            if (deleteResponse.getError() != ServerErrorCode.No_Error) {
+              throw new UnexpectedException("error " + deleteResponse.getError());
+            }
             throttler.maybeThrottle(1);
           } catch (Exception e) {
             System.out.println("Exception when putting blob " + e);

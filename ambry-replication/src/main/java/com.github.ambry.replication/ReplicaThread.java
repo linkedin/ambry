@@ -122,7 +122,7 @@ class ReplicaThread implements Runnable {
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
 
               ExchangeMetadataResponse exchangeMetadataResponse =
-                  exchangeMetadata(connectedChannel, partitionInfo, remoteReplicaInfo);
+                  exchangeMetadata(connectedChannel, partitionInfo, remoteReplicaInfo, remoteColo);
               fixMissingStoreKeys(exchangeMetadataResponse.missingStoreKeys, partitionInfo, connectedChannel,
                   remoteColo);
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
@@ -174,7 +174,7 @@ class ReplicaThread implements Runnable {
    * @throws InterruptedException
    */
   protected ExchangeMetadataResponse exchangeMetadata(ConnectedChannel connectedChannel, PartitionInfo partitionInfo,
-      RemoteReplicaInfo remoteReplicaInfo)
+      RemoteReplicaInfo remoteReplicaInfo, boolean remoteColo)
       throws IOException, StoreException, MessageFormatException, ReplicationException, InterruptedException {
 
     // 1. Sends a ReplicaMetadataRequest to the remote replica and gets all the message entries since the last
@@ -211,7 +211,7 @@ class ReplicaThread implements Runnable {
     // We apply the wait time between replication from remote replicas here. Any new objects that get written
     // in the remote replica are given time to be written to the local replica and avoids failing the request
     // from the client.
-    Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
+    //Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
 
     // 2. Check the local store to find the messages that are missing locally
     // find ids that are missing
@@ -244,7 +244,8 @@ class ReplicaThread implements Runnable {
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList);
+          MessageFormatWriteSet writeset =
+              new MessageFormatWriteSet(deleteStream, infoList, replicationConfig.replicationMaxDeleteWriteTimeMs);
           partitionInfo.getStore().delete(writeset);
           logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
               " Thread name " + threadName +
@@ -279,6 +280,11 @@ class ReplicaThread implements Runnable {
               " key in expired state remotely. " + messageInfo.getStoreKey());
         }
       }
+    }
+    if (remoteColo) {
+      replicationMetrics.interColoMetadataExchangeCount.inc();
+    } else {
+      replicationMetrics.intraColoMetadataExchangeCount.inc();
     }
     return new ExchangeMetadataResponse(missingStoreKeys, response.getFindToken());
   }
@@ -318,7 +324,8 @@ class ReplicaThread implements Runnable {
             " Get Request returned error when trying to get missing keys " + getResponse.getError());
       }
       MessageFormatWriteSet writeset =
-          new MessageFormatWriteSet(getResponse.getInputStream(), getResponse.getMessageInfoList());
+          new MessageFormatWriteSet(getResponse.getInputStream(), getResponse.getMessageInfoList(),
+              replicationConfig.replicationMaxPutWriteTimeMs);
       partitionInfo.getStore().put(writeset);
 
       long totalSizeInBytesReplicated = 0;

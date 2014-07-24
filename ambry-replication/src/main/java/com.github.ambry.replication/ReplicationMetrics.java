@@ -17,6 +17,8 @@ public class ReplicationMetrics {
 
   public final Counter interColoReplicationBytesCount;
   public final Counter intraColoReplicationBytesCount;
+  public final Counter interColoMetadataExchangeCount;
+  public final Counter intraColoMetadataExchangeCount;
   public final Counter interColoBlobsReplicatedCount;
   public final Counter intraColoBlobsReplicatedCount;
   public final Counter unknownRemoteReplicaRequestCount;
@@ -35,6 +37,10 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesCount"));
     intraColoReplicationBytesCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesCount"));
+    interColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoMetadataExchangeCount"));
+    intraColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoMetadataExchangeCount"));
     interColoBlobsReplicatedCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBlobsCount"));
     intraColoBlobsReplicatedCount =
