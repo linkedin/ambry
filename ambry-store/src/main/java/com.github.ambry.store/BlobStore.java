@@ -156,6 +156,7 @@ public class BlobStore implements Store {
         index.addToIndex(indexEntries, fileSpan);
       }
     } catch (IOException e) {
+      logger.error("Exception on store ", e);
       throw new StoreException("io error while trying to put blobs : ", e, StoreErrorCodes.IOError);
     } finally {
       context.stop();
@@ -165,12 +166,18 @@ public class BlobStore implements Store {
   @Override
   public void delete(MessageWriteSet messageSetToDelete)
       throws StoreException {
+    final Timer.Context context = metrics.deleteResponse.time();
+    checkStarted();
+    List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
+    for (MessageInfo info : infoList) {
+      if (!index.exists(info.getStoreKey())) {
+        throw new StoreException("cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+            StoreErrorCodes.ID_Not_Found);
+      }
+    }
     synchronized (lock) {
-      final Timer.Context context = metrics.deleteResponse.time();
-      checkStarted();
       try {
         messageSetToDelete.writeTo(log);
-        List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
           index.markAsDeleted(info.getStoreKey(), fileSpan);

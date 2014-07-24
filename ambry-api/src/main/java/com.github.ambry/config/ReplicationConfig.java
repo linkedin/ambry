@@ -55,6 +55,20 @@ public class ReplicationConfig {
   @Default("1000")
   public final int replicaWaitTimeBetweenReplicasMs;
 
+  /**
+   *The max time a put write request to the store can take before timing out during replication
+   */
+  @Config("replication.max.put.write.time.ms")
+  @Default("10000")
+  public final int replicationMaxPutWriteTimeMs;
+
+  /**
+   * The max time a delete write request to the store can take before timing out during replication
+   */
+  @Config("replication.max.delete.write.time.ms")
+  @Default("5000")
+  public final int replicationMaxDeleteWriteTimeMs;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -67,8 +81,12 @@ public class ReplicationConfig {
     replicationTokenFlushDelaySeconds =
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
-        verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 256000, 0, 2097152);
+        verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 0, 2097152);
     replicaWaitTimeBetweenReplicasMs =
         verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
+    replicationMaxPutWriteTimeMs =
+        verifiableProperties.getIntInRange("replication.max.put.write.time.ms", 10000, 0, 100000);
+    replicationMaxDeleteWriteTimeMs =
+        verifiableProperties.getIntInRange("replication.max.delete.write.time.ms", 5000, 0, 100000);
   }
 }

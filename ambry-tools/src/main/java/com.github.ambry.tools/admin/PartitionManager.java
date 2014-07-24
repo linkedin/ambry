@@ -51,8 +51,7 @@ public class PartitionManager {
       ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt =
           parser.accepts("partitionIdToAddReplicasTo", "The partitionIds to add replicas to. This can either take a " +
               "comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in " +
-              "the partitionLayout ")
-          .withOptionalArg().ofType(String.class);
+              "the partitionLayout ").withOptionalArg().ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterToAddReplicasToOpt =
           parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")
