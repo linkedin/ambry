@@ -185,7 +185,7 @@ public class BlobStore implements Store {
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       } catch (IOException e) {
-        throw new StoreException("IO error while trying to delete blobs : " + e, StoreErrorCodes.IOError);
+        throw new StoreException("IO error while trying to delete blobs", e, StoreErrorCodes.IOError);
       } finally {
         context.stop();
       }

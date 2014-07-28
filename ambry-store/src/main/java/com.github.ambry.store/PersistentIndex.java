@@ -158,8 +158,7 @@ public class PersistentIndex {
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
     } catch (Exception e) {
-      throw new StoreException("Error while creating index " + datadir + " with error " + e.getMessage(),
-          StoreErrorCodes.Index_Creation_Failure);
+      throw new StoreException("Error while creating index " + datadir, e, StoreErrorCodes.Index_Creation_Failure);
     }
   }
 
@@ -330,7 +329,7 @@ public class PersistentIndex {
     verifyFileEndOffset(fileSpan);
     IndexValue value = findKey(id);
     if (value == null) {
-      throw new StoreException("id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     }
     value.setFlag(IndexValue.Flags.Delete_Index);
     value.setNewOffset(fileSpan.getStartOffset());
@@ -349,11 +348,11 @@ public class PersistentIndex {
       throws StoreException {
     IndexValue value = findKey(id);
     if (value == null) {
-      throw new StoreException("id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new StoreException("id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+      throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     } else if (value.isExpired()) {
-      throw new StoreException("id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
+      throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
   }
@@ -479,7 +478,7 @@ public class PersistentIndex {
         return new FindInfo(messageEntries, newToken);
       }
     } catch (IOException e) {
-      throw new StoreException("IOError when finding entries for index " + dataDir, StoreErrorCodes.IOError);
+      throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
     }
   }
 

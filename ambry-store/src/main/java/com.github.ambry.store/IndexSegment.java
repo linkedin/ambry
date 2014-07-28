@@ -151,7 +151,8 @@ class IndexSegment {
               || e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
-            logger.error("Index Segment : {} error while reading from index {}", indexFile.getAbsolutePath(), e);
+            logger.error("Index Segment : {} error while reading from index {}",
+                indexFile.getAbsolutePath(), e.getMessage());
           } else {
             throw e;
           }
@@ -456,9 +457,9 @@ class IndexSegment {
           if (entry.getValue().getOffset() + entry.getValue().getSize() <= fileEndPointer) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
-            logger.trace("IndexSegment : {} writing key {} offset {} size {} fileEndOffset {}",
+            logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
                 getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(),
-                entry.getValue().getOffset(), fileEndPointer);
+                entry.getValue().getSize(), fileEndPointer);
             numOfEntries++;
           }
         }
