@@ -97,7 +97,6 @@ public class AmbryRequests implements RequestAPI {
   public void handleRequests(Request request)
       throws InterruptedException {
     try {
-      logger.trace("{}", request);
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
       switch (type) {
@@ -117,7 +116,7 @@ public class AmbryRequests implements RequestAPI {
           throw new UnsupportedOperationException("Request type not supported");
       }
     } catch (Exception e) {
-      logger.error("Error while handling request" + request + "Closing connection", e);
+      logger.error("Error while handling request " + request + " closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
   }
@@ -125,7 +124,6 @@ public class AmbryRequests implements RequestAPI {
   public void handlePutRequest(Request request)
       throws IOException, InterruptedException {
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}", putRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -175,6 +173,7 @@ public class AmbryRequests implements RequestAPI {
       response =
           new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
+      publicAccessLogger.info("{} {}", putRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       metrics.putBlobProcessingTimeInMs.update(processingTime);
@@ -188,7 +187,6 @@ public class AmbryRequests implements RequestAPI {
   public void handleGetRequest(Request request)
       throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}", getRequest);
     HistogramMeasurement responseQueueTimeMeasurement = null;
     HistogramMeasurement responseSendTimeMeasurement = null;
     HistogramMeasurement responseTotalTimeMeasurement = null;
@@ -237,15 +235,18 @@ public class AmbryRequests implements RequestAPI {
                 blobsToSend, ServerErrorCode.No_Error);
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        logger.trace("Store exception on a get with error code " + e.getErrorCode(), e);
         metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        metrics.idDeletedError.inc();
       } else {
-        metrics.unExpectedStoreGetError.inc();
+        logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
+        if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+          metrics.ttlExpiredError.inc();
+        } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+          metrics.idDeletedError.inc();
+        } else {
+          metrics.unExpectedStoreGetError.inc();
+        }
       }
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -263,6 +264,7 @@ public class AmbryRequests implements RequestAPI {
       response =
           new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
+      publicAccessLogger.info("{} {}", getRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
@@ -281,7 +283,6 @@ public class AmbryRequests implements RequestAPI {
   public void handleDeleteRequest(Request request)
       throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    publicAccessLogger.info("{}", deleteRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -310,7 +311,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a delete with error code " + e.getErrorCode(), e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
@@ -326,7 +327,9 @@ public class AmbryRequests implements RequestAPI {
       logger.error("Unknown exception on delete ", e);
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
+      metrics.unExpectedStoreDeleteError.inc();
     } finally {
+      publicAccessLogger.info("{} {}", deleteRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       metrics.deleteBlobProcessingTimeInMs.update(processingTime);
@@ -341,7 +344,6 @@ public class AmbryRequests implements RequestAPI {
       throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
-    publicAccessLogger.info("{}", replicaMetadataRequest);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
@@ -381,6 +383,7 @@ public class AmbryRequests implements RequestAPI {
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.Unknown_Error);
     } finally {
+      publicAccessLogger.info("{} {}", replicaMetadataRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);

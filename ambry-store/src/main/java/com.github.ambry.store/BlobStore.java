@@ -62,7 +62,7 @@ public class BlobStore implements Store {
         // Check if the data dir exist. If it does not exist, create it
         File dataFile = new File(dataDir);
         if (!dataFile.exists()) {
-          logger.info("data directory {} not found. creating it", dataDir);
+          logger.info("Store : {} data directory not found. creating it", dataDir);
           boolean created = dataFile.mkdir();
           if (!created) {
             throw new StoreException("Failed to create directory for data dir " + dataDir,
@@ -87,7 +87,6 @@ public class BlobStore implements Store {
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
-        logger.error("Error while starting store for directory " + dataDir, e);
         throw new StoreException("Error while starting store for dir " + dataDir, e,
             StoreErrorCodes.Initialization_Error);
       } finally {
@@ -120,7 +119,7 @@ public class BlobStore implements Store {
       }
       return new StoreInfo(readSet, messageInfoList);
     } catch (IOException e) {
-      throw new StoreException("io error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
+      throw new StoreException("IO error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
     } finally {
       context.stop();
     }
@@ -138,12 +137,13 @@ public class BlobStore implements Store {
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.exists(info.getStoreKey())) {
-          throw new StoreException("key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+          throw new StoreException("Key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
         }
       }
       synchronized (lock) {
         long writeStartOffset = log.getLogEndOffset();
         messageSetToWrite.writeTo(log);
+        logger.trace("Store : {} message set written to log", dataDir);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<IndexEntry> indexEntries = new ArrayList<IndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
@@ -154,10 +154,10 @@ public class BlobStore implements Store {
         }
         FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), log.getLogEndOffset());
         index.addToIndex(indexEntries, fileSpan);
+        logger.trace("Store : {} message set written to index ", dataDir);
       }
     } catch (IOException e) {
-      logger.error("Exception on store ", e);
-      throw new StoreException("io error while trying to put blobs : ", e, StoreErrorCodes.IOError);
+      throw new StoreException("IO error while trying to put blobs : ", e, StoreErrorCodes.IOError);
     } finally {
       context.stop();
     }
@@ -171,19 +171,21 @@ public class BlobStore implements Store {
     List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
     for (MessageInfo info : infoList) {
       if (!index.exists(info.getStoreKey())) {
-        throw new StoreException("cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+        throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
             StoreErrorCodes.ID_Not_Found);
       }
     }
     synchronized (lock) {
       try {
         messageSetToDelete.writeTo(log);
+        logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
         }
+        logger.trace("Store : {} delete has been marked in the index ", dataDir);
       } catch (IOException e) {
-        throw new StoreException("io error while trying to delete blobs : " + e, StoreErrorCodes.IOError);
+        throw new StoreException("IO error while trying to delete blobs", e, StoreErrorCodes.IOError);
       } finally {
         context.stop();
       }
@@ -242,17 +244,17 @@ public class BlobStore implements Store {
     synchronized (lock) {
       checkStarted();
       try {
-        logger.info("Shutting down store " + dataDir);
+        logger.info("Store : " + dataDir + " shutting down");
         index.close();
         log.close();
         started = false;
       } catch (Exception e) {
-        logger.error("Shutdown of store failed for directory " + dataDir, e);
+        logger.error("Store : " + dataDir + " shutdown of store failed for directory ", e);
       } finally {
         try {
           fileLock.destroy();
         } catch (IOException e) {
-          logger.error("IO Exception while trying to close the file lock", e);
+          logger.error("Store : " + dataDir + " IO Exception while trying to close the file lock", e);
         }
       }
     }

@@ -135,7 +135,8 @@ class IndexSegment {
           // we don't recover the filter. we just by pass the filter. Crc corrections will be done
           // by the scrubber
           bloomFilter = null;
-          logger.error("Error validating crc for bloom filter for {}", bloomFile.getAbsolutePath());
+          logger.error("IndexSegment : {} error validating crc for bloom filter for {}",
+              indexFile.getAbsolutePath(), bloomFile.getAbsolutePath());
         }
         stream.close();
       } else {
@@ -150,16 +151,16 @@ class IndexSegment {
               || e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
-            logger.error("Error while reading from index {}", e);
+            logger.error("Index Segment : {} error while reading from index {}",
+                indexFile.getAbsolutePath(), e.getMessage());
           } else {
             throw e;
           }
         }
       }
     } catch (Exception e) {
-      logger.error("Error while loading index from file", e);
-      throw new StoreException("Error while loading index from file Exception: " + e,
-          StoreErrorCodes.Index_Creation_Failure);
+      throw new StoreException("Index Segment : " + indexFile.getAbsolutePath() +
+          " error while loading index from file Exception: " + e.getMessage(), StoreErrorCodes.Index_Creation_Failure);
     }
     this.metrics = metrics;
   }
@@ -231,8 +232,10 @@ class IndexSegment {
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
           bloomSaysYes = true;
           metrics.bloomPositiveCount.inc(1);
-          logger.trace(bloomFilter == null ? "Bloom filter empty. Searching file with start offset {} and for key {} "
-              : "Found in bloom filter for index with start offset {} and for key {} ", startOffset.get(), keyToFind);
+          logger.trace(bloomFilter == null ?
+              "IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {} " :
+              "IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
+              indexFile.getAbsolutePath(), startOffset.get(), keyToFind);
           // binary search on the mapped file
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
@@ -241,7 +244,8 @@ class IndexSegment {
           while (low <= high) {
             int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
             StoreKey found = getKeyAt(duplicate, mid);
-            logger.trace("Binary search - key found on iteration {}", found);
+            logger.trace("Index Segment {} binary search - key found on iteration {}",
+                indexFile.getAbsolutePath(), found);
             int result = found.compareTo(keyToFind);
             if (result == 0) {
               byte[] buf = new byte[valueSize];
@@ -260,9 +264,8 @@ class IndexSegment {
         return null;
       }
     } catch (IOException e) {
-      logger.error("IO error while searching the index {}", indexFile.getAbsoluteFile());
-      throw new StoreException("IO error while searching the index " + indexFile.getAbsolutePath(), e,
-          StoreErrorCodes.IOError);
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while searching",
+          e, StoreErrorCodes.IOError);
     } finally {
       rwLock.readLock().unlock();
     }
@@ -283,11 +286,11 @@ class IndexSegment {
     // binary search on the mapped file
     int low = 0;
     int high = numberOfEntries(mmap) - 1;
-    logger.trace("binary search low : {} high : {}", low, high);
+    logger.trace("IndexSegment {} binary search low : {} high : {}", indexFile.getAbsolutePath(), low, high);
     while (low <= high) {
       int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
       StoreKey found = getKeyAt(mmap, mid);
-      logger.trace("Binary search - key found on iteration {}", found);
+      logger.trace("IndexSegment {} binary search - key found on iteration {}", indexFile.getAbsolutePath(), found);
       int result = found.compareTo(keyToFind);
       if (result == 0) {
         return mid;
@@ -311,12 +314,13 @@ class IndexSegment {
     try {
       rwLock.readLock().lock();
       if (mapped.get()) {
-        throw new StoreException("Cannot add to a mapped index " + indexFile.getAbsolutePath(),
-            StoreErrorCodes.Illegal_Index_Operation);
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
+            " cannot add to a mapped index ", StoreErrorCodes.Illegal_Index_Operation);
       }
-      logger.trace("Inserting key {} value offset {} size {} ttl {} originalMessageOffset {} fileEndOffset {}",
-          entry.getKey(), entry.getValue().getOffset(), entry.getValue().getSize(),
-          entry.getValue().getTimeToLiveInMs(), entry.getValue().getOriginalMessageOffset(), fileEndOffset);
+      logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} " +
+          "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
+          entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getTimeToLiveInMs(),
+          entry.getValue().getOriginalMessageOffset(), fileEndOffset);
       index.put(entry.getKey(), entry.getValue());
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getSize());
       numberOfItems.incrementAndGet();
@@ -324,11 +328,13 @@ class IndexSegment {
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
         keySize = entry.getKey().sizeInBytes();
-        logger.info("Setting key size to {} for index with start offset {}", keySize, startOffset);
+        logger.info("IndexSegment : {} setting key size to {} for index with start offset {}",
+            indexFile.getAbsolutePath(), keySize, startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entry.getValue().getBytes().capacity();
-        logger.info("Setting value size to {} for index with start offset {}", valueSize, startOffset);
+        logger.info("IndexSegment : {} setting value size to {} for index with start offset {}",
+            indexFile.getAbsolutePath(), valueSize, startOffset);
       }
     } finally {
       rwLock.readLock().unlock();
@@ -346,16 +352,18 @@ class IndexSegment {
     try {
       rwLock.readLock().lock();
       if (mapped.get()) {
-        throw new StoreException("Cannot add to a mapped index" + indexFile.getAbsolutePath(),
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a mapped index",
             StoreErrorCodes.Illegal_Index_Operation);
       }
       if (entries.size() == 0) {
-        throw new IllegalArgumentException("No entries to add to the index. The entries provided is empty");
+        throw new IllegalArgumentException("IndexSegment : " + indexFile.getAbsolutePath() +
+            " no entries to add to the index. The entries provided is empty");
       }
       for (IndexEntry entry : entries) {
-        logger.trace("Inserting key {} value offset {} size {} ttl {} originalMessageOffset {} fileEndOffset {}",
-            entry.getKey(), entry.getValue().getOffset(), entry.getValue().getSize(),
-            entry.getValue().getTimeToLiveInMs(), entry.getValue().getOriginalMessageOffset(), fileEndOffset);
+        logger.trace("IndexSegment {} Inserting key - {} value - offset {} size {} ttl {} " +
+            "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
+            entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getTimeToLiveInMs(),
+            entry.getValue().getOriginalMessageOffset(), fileEndOffset);
         index.put(entry.getKey(), entry.getValue());
         sizeWritten.addAndGet(entry.getKey().sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
         numberOfItems.incrementAndGet();
@@ -364,11 +372,13 @@ class IndexSegment {
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
         keySize = entries.get(0).getKey().sizeInBytes();
-        logger.info("Setting key size to {} for index with start offset {}", keySize, startOffset);
+        logger.info("IndexSegment : {} setting key size to {} for index with start offset {}",
+            indexFile.getAbsolutePath(), keySize, startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entries.get(0).getValue().getBytes().capacity();
-        logger.info("Setting value size to {} for index with start offset {}", valueSize, startOffset);
+        logger.info("IndexSegment : {} setting value size to {} for index with start offset {}",
+            indexFile.getAbsolutePath(), valueSize, startOffset);
       }
     } finally {
       rwLock.readLock().unlock();
@@ -447,8 +457,9 @@ class IndexSegment {
           if (entry.getValue().getOffset() + entry.getValue().getSize() <= fileEndPointer) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
-            logger.trace("Index {} writing key {} offset {} size {} fileEndOffset {}", getFile().getAbsolutePath(),
-                entry.getKey(), entry.getValue().getOffset(), entry.getValue().getOffset(), fileEndPointer);
+            logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
+                getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(),
+                entry.getValue().getSize(), fileEndPointer);
             numOfEntries++;
           }
         }
@@ -461,14 +472,13 @@ class IndexSegment {
         // swap temp file with the original file
         temp.renameTo(getFile());
       } catch (IOException e) {
-        logger.error("IO error while persisting index to disk " + indexFile.getAbsoluteFile());
-        throw new StoreException("IO error while persisting index to disk " + indexFile.getAbsolutePath(), e,
-            StoreErrorCodes.IOError);
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
+            " IO error while persisting index to disk", e, StoreErrorCodes.IOError);
       } finally {
         writer.close();
         rwLock.readLock().unlock();
       }
-      logger.debug("Completed writing index to file {}", indexFile.getAbsolutePath());
+      logger.trace("IndexSegment : {} completed writing index to file", indexFile.getAbsolutePath());
     }
   }
 
@@ -493,7 +503,8 @@ class IndexSegment {
           this.endOffset.set(mmap.getLong());
           break;
         default:
-          throw new StoreException("Unknown version in index file", StoreErrorCodes.Index_Version_Error);
+          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
+              " unknown version in index file", StoreErrorCodes.Index_Version_Error);
       }
       mapped.set(true);
       index = null;
@@ -520,7 +531,7 @@ class IndexSegment {
    */
   private void readFromFile(File fileToRead, InMemoryJournal journal)
       throws StoreException, IOException {
-    logger.info("Reading index from file {}", indexFile.getPath());
+    logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
     DataInputStream stream = new DataInputStream(crcStream);
@@ -531,7 +542,8 @@ class IndexSegment {
           this.keySize = stream.readInt();
           this.valueSize = stream.readInt();
           long logEndOffset = stream.readLong();
-          logger.trace("Index {} Reading log end offset from file {}", indexFile.getPath(), logEndOffset);
+          logger.trace("IndexSegment : {} reading log end offset {} from file",
+              indexFile.getAbsolutePath(), logEndOffset);
           long maxEndOffset = Long.MIN_VALUE;
           while (stream.available() > Crc_Size) {
             StoreKey key = factory.getStoreKey(stream);
@@ -541,8 +553,8 @@ class IndexSegment {
             // ignore entries that have offsets outside the log end offset that this index represents
             if (blobValue.getOffset() + blobValue.getSize() <= logEndOffset) {
               index.put(key, blobValue);
-              logger.trace("Index {} Putting key {} in index offset {} size {}", indexFile.getPath(), key,
-                  blobValue.getOffset(), blobValue.getSize());
+              logger.trace("IndexSegment : {} putting key {} in index offset {} size {}",
+                  indexFile.getAbsolutePath(), key, blobValue.getOffset(), blobValue.getSize());
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
               // add to the journal
@@ -554,13 +566,14 @@ class IndexSegment {
               }
             } else {
               logger.info(
-                  "Index {} Ignoring index entry outside the log end offset that was not synced logEndOffset {} "
-                      + "key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getPath(), logEndOffset,
-                  key, blobValue.getOffset(), blobValue.getSize(), blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
+                  "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset {} "
+                      + "key {} entryOffset {} entrySize {} entryDeleteState {}",
+                  indexFile.getAbsolutePath(), logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
+                  blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
             }
           }
           this.endOffset.set(maxEndOffset);
-          logger.trace("Index {} Setting end offset for index {}", indexFile.getPath(), maxEndOffset);
+          logger.trace("IndexSegment : {} setting end offset for index {}", indexFile.getAbsolutePath(), maxEndOffset);
           long crc = crcStream.getValue();
           if (crc != stream.readLong()) {
             // reset structures
@@ -569,15 +582,17 @@ class IndexSegment {
             this.endOffset.set(0);
             index.clear();
             bloomFilter.clear();
-            throw new StoreException("Crc check does not match", StoreErrorCodes.Index_Creation_Failure);
+            throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+                StoreErrorCodes.Index_Creation_Failure);
           }
           break;
         default:
-          throw new StoreException("Invalid version in index file", StoreErrorCodes.Index_Version_Error);
+          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
+              " invalid version in index file", StoreErrorCodes.Index_Version_Error);
       }
     } catch (IOException e) {
-      throw new StoreException("IO error while reading from file " + indexFile.getAbsolutePath(), e,
-          StoreErrorCodes.IOError);
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
+          " IO error while reading from file ", e, StoreErrorCodes.IOError);
     } finally {
       stream.close();
     }
