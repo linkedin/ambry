@@ -42,7 +42,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
     long writeStartTimeInMs = System.currentTimeMillis();
     while (sizeWritten < sizeToWrite) {
       sizeWritten += writeChannel.appendFrom(readableByteChannel, sizeToWrite);
-      logger.info("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
+      logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
           readableByteChannel.isOpen());
       if (System.currentTimeMillis() - writeStartTimeInMs > maxWriteTimeInMs) {
         throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs);

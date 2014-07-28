@@ -28,4 +28,13 @@ public class DeleteResponse extends Response {
     // ignore version for now
     return new DeleteResponse(correlationId, clientId, error);
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("DeleteResponse[");
+    sb.append("ServerErrorCode=").append(getError());
+    sb.append("]");
+    return sb.toString();
+  }
 }

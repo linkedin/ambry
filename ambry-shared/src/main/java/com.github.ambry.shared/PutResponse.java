@@ -28,4 +28,13 @@ public class PutResponse extends Response {
     // ignore version for now
     return new PutResponse(correlationId, clientId, error);
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("PutResponse[");
+    sb.append("ServerErrorCode=").append(getError());
+    sb.append("]");
+    return sb.toString();
+  }
 }
