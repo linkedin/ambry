@@ -28,6 +28,7 @@ project(':ambry-utils') {
     apply plugin: 'java'
 
     dependencies {
+        compile "commons-codec:commons-codec:$commonsVersion"
         compile "log4j:log4j:$log4jVersion"
         compile "org.json:json:$jsonVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"

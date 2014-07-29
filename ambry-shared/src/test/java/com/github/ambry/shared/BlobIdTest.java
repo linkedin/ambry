@@ -18,6 +18,6 @@ public class BlobIdTest {
 
     assertEquals(blobId.getPartition(), partitionId);
     System.out.println("Blob Id toString: " + blobId);
-    System.out.println("Blob id sizeInBytes: " + blobId.sizeInBytes());
+    System.out.println("Blob id sizeInBytes: " + blobId.toString().length());
   }
 }
