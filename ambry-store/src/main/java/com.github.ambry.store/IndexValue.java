@@ -89,10 +89,6 @@ public class IndexValue {
     return false;
   }
 
-  public void setTimeToLive(long timeToLiveInMs) {
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes, timeToLiveInMs);
-  }
-
   public void setFlag(Flags flag) {
     value.put(Blob_Size_In_Bytes + Offset_Size_In_Bytes, (byte) (getFlags() | (1 << flag.ordinal())));
   }

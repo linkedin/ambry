@@ -7,6 +7,7 @@ import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
@@ -654,7 +655,9 @@ public class CoordinatorTest {
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
 
     //create dummy blobid
-    String nonExistantBlobId = (char) (blobId.charAt(0) + 1) + blobId.substring(1);
+    System.out.println("blob Id " + blobId);
+    String nonExistantBlobId = blobId.substring(0, blobId.length() - 1) + 5;
+    System.out.println("non existent blob Id " + nonExistantBlobId);
 
     try {
       BlobOutput getBlobOutput = ac.getBlob(nonExistantBlobId);

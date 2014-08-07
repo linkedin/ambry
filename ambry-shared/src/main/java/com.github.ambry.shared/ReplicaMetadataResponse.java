@@ -101,7 +101,7 @@ public class ReplicaMetadataResponse extends Response {
     if (token != null) {
       sb.append("Token=").append(token);
     }
-    sb.append("ServerErrorCode=").append(getError());
+    sb.append(" ServerErrorCode=").append(getError());
     sb.append("]");
     return sb.toString();
   }
