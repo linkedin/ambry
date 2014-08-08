@@ -92,6 +92,7 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public PartitionId getPartitionIdFromStream(DataInputStream stream)
       throws IOException {
+    short version = stream.readShort();
     long id = stream.readLong();
     return partitions.get(id);
   }

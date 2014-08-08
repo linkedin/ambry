@@ -33,7 +33,8 @@ public class MockPartitionId extends PartitionId {
 
   @Override
   public byte[] getBytes() {
-    ByteBuffer buf = ByteBuffer.allocate(8);
+    ByteBuffer buf = ByteBuffer.allocate(10);
+    buf.putShort((short)1);
     buf.putLong(partition);
     return buf.array();
   }

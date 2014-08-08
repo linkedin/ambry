@@ -133,7 +133,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(putRequest.getBlobId().getPartition(), true);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating put request failed with error {}", error);
+        logger.error("Validating put request failed with error {} for request {}", error, putRequest);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
@@ -158,7 +158,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + putRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -169,13 +169,13 @@ public class AmbryRequests implements RequestAPI {
       response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a put ", e);
+      logger.error("Unknown exception on a put for request " + putRequest, e);
       response =
           new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", putRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", putRequest, response, processingTime);
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
     sendPutResponse(requestResponseChannel, response, request,
@@ -222,7 +222,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(getRequest.getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating get request failed with error {}", error);
+        logger.error("Validating get request failed with error {} for request {}", error, getRequest);
         response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
       } else {
         Store storeToGet = storeManager.getStore(getRequest.getPartition());
@@ -236,10 +236,10 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.trace("Store exception on a get with error code " + e.getErrorCode(), e);
+        logger.trace("Store exception on a get with error code " + e.getErrorCode() + " for request " + getRequest, e);
         metrics.idNotFoundError.inc();
       } else {
-        logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
+        logger.error("Store exception on a get with error code " + e.getErrorCode() + " for request " + getRequest, e);
         if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
           metrics.ttlExpiredError.inc();
         } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
@@ -251,7 +251,8 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (MessageFormatException e) {
-      logger.error("Message format exception on a get with error code " + e.getErrorCode(), e);
+      logger.error("Message format exception on a get with error code " + e.getErrorCode() +
+          " for request " + getRequest, e);
       if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
         metrics.dataCorruptError.inc();
       } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
@@ -260,13 +261,13 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a get ", e);
+      logger.error("Unknown exception for request " + getRequest, e);
       response =
           new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", getRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", getRequest, response, processingTime);
       if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
         metrics.getBlobProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
@@ -292,7 +293,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(deleteRequest.getBlobId().getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating delete request failed with error {}", error);
+        logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
@@ -311,7 +312,8 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a delete with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a delete with error code " + e.getErrorCode() +
+          " for request " + deleteRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
@@ -324,14 +326,14 @@ public class AmbryRequests implements RequestAPI {
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on delete ", e);
+      logger.error("Unknown exception for delete request " + deleteRequest, e);
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
       metrics.unExpectedStoreDeleteError.inc();
     } finally {
-      publicAccessLogger.info("{} {}", deleteRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", deleteRequest, response, processingTime);
       metrics.deleteBlobProcessingTimeInMs.update(processingTime);
     }
     requestResponseChannel.sendResponse(response, request,
@@ -353,7 +355,8 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(replicaMetadataRequest.getPartitionId(), false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating replica metadata request failed with error {}", error);
+        logger.error("Validating replica metadata request failed with error {} for request {}",
+            error, replicaMetadataRequest);
         response =
             new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
                 error);
@@ -368,7 +371,8 @@ public class AmbryRequests implements RequestAPI {
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() +
+          " for request " + replicaMetadataRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
         metrics.storeIOError.inc();
       } else {
@@ -378,14 +382,14 @@ public class AmbryRequests implements RequestAPI {
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on replica metadata request ", e);
+      logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", replicaMetadataRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
 

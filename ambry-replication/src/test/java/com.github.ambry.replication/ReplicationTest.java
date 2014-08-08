@@ -604,6 +604,7 @@ public class ReplicationTest {
         Assert.assertTrue(found);
       }
     } catch (Exception e) {
+      e.printStackTrace();
       Assert.assertTrue(false);
     }
   }
