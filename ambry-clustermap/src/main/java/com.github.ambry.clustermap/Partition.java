@@ -21,10 +21,10 @@ import java.util.Set;
  */
 public class Partition extends PartitionId {
 
-  private static final long MinReplicaCapacityInBytes = 1 * 1024 * 1024 * 1024L;
-  private static final long MaxReplicaCapacityInBytes = 10995116277760L; // 10 TB
-  private static final short VersionFieldSizeInBytes = 2;
-  private static final int Partition_Size_In_Bytes = VersionFieldSizeInBytes + 8;
+  private static final long Min_Replica_Capacity_In_Bytes = 1 * 1024 * 1024 * 1024L;
+  private static final long Max_Replica_Capacity_In_Bytes = 10995116277760L; // 10 TB
+  private static final short Version_Field_Size_In_Bytes = 2;
+  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
   private static final short Current_Version = 1;
 
   private Long id;
@@ -126,12 +126,12 @@ public class Partition extends PartitionId {
   }
 
   protected void validateReplicaCapacityInBytes() {
-    if (replicaCapacityInBytes < MinReplicaCapacityInBytes) {
+    if (replicaCapacityInBytes < Min_Replica_Capacity_In_Bytes) {
       throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + MinReplicaCapacityInBytes);
-    } else if (replicaCapacityInBytes > MaxReplicaCapacityInBytes) {
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + Min_Replica_Capacity_In_Bytes);
+    } else if (replicaCapacityInBytes > Max_Replica_Capacity_In_Bytes) {
       throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + MaxReplicaCapacityInBytes);
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + Max_Replica_Capacity_In_Bytes);
     }
   }
 
