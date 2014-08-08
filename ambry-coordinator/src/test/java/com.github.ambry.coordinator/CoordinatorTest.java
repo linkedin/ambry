@@ -7,7 +7,6 @@ import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;

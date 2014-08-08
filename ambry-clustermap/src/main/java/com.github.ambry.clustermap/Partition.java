@@ -23,7 +23,9 @@ public class Partition extends PartitionId {
 
   private static final long MinReplicaCapacityInBytes = 1 * 1024 * 1024 * 1024L;
   private static final long MaxReplicaCapacityInBytes = 10995116277760L; // 10 TB
-  private static final int Partition_Size_In_Bytes = 8;
+  private static final short VersionFieldSizeInBytes = 2;
+  private static final int Partition_Size_In_Bytes = VersionFieldSizeInBytes + 8;
+  private static final short Current_Version = 1;
 
   private Long id;
   PartitionState partitionState;
@@ -74,6 +76,7 @@ public class Partition extends PartitionId {
   @Override
   public byte[] getBytes() {
     ByteBuffer buffer = ByteBuffer.allocate(Partition_Size_In_Bytes);
+    buffer.putShort(Current_Version);
     buffer.putLong(id);
     return buffer.array();
   }
