@@ -78,7 +78,8 @@ public abstract class GetOperation extends Operation {
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
-          String message = "Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          String message =
+              "GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
@@ -86,8 +87,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Deleted:
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
-          String message = "Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
-              + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message =
+              "GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
+                  + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
@@ -95,8 +97,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Expired:
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
-          String message = "Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
-              + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message =
+              "GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
+                  + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }
