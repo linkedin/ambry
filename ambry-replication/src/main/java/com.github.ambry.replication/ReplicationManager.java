@@ -310,6 +310,21 @@ public final class ReplicationManager {
   }
 
   /**
+   * Gets the replica lag of the remote replica with the local store
+   * @param partitionId The partition to which the remote replica belongs to
+   * @param hostName The hostname where the remote replica is present
+   * @param replicaPath The path of the remote replica on the host
+   * @return The lag in bytes that the remote replica is behind the local store
+   */
+  public long getRemoteReplicaLagInBytes(PartitionId partitionId, String hostName, String replicaPath) {
+    RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
+    if (remoteReplicaInfo != null) {
+      return remoteReplicaInfo.getReplicaLagInBytes();
+    }
+    return 0;
+  }
+
+  /**
    * Gets the replica info for the remote peer replica identified by PartitionId, ReplicaPath and Hostname
    * @param partitionId PartitionId to which the replica belongs to
    * @param hostName hostname of the remote peer replica

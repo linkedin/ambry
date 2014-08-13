@@ -842,14 +842,15 @@ public class PersistentIndexTest {
       index.addToIndex(entry13, new FileSpan(1200, 1300));
       index.addToIndex(entry14, new FileSpan(1300, 1400));
       index.addToIndex(entry15, new FileSpan(1400, 1500));
-
       IndexValue value1 = index.getValue(blobId1);
       IndexValue value2 = index.getValue(blobId2);
       IndexValue value3 = index.getValue(blobId3);
       Assert.assertEquals(value1.getOffset(), 0);
       Assert.assertEquals(value2.getOffset(), 100);
       Assert.assertEquals(value3.getOffset(), 200);
-      ByteBuffer buffer = ByteBuffer.allocate(1500);
+
+      index.markAsDeleted(blobId1, new FileSpan(1500, 1600));
+      ByteBuffer buffer = ByteBuffer.allocate(1600);
       log.appendFrom(buffer);
       index.close();
       index = new MockIndex(logFile, scheduler, log, config, factory);
@@ -858,14 +859,16 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
       Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
+      Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
       Assert.assertEquals(messageEntries.size(), 12);
       Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId12);
 
       FindInfo info1 = index.findEntriesSince(info.getFindToken(), 400);
       messageEntries = info1.getMessageEntries();
-      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.size(), 4);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId13);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
+      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId1);
 
       index.close();
       props = new Properties();
@@ -898,6 +901,9 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId14);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 1);
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);

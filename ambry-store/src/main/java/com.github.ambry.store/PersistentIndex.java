@@ -120,8 +120,9 @@ public class PersistentIndex {
           map = true;
         }
         IndexSegment info = new IndexSegment(indexFiles[i], map, factory, config, metrics, journal);
-        logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir, indexFiles[i],
-            info.getStartOffset(), info.getEndOffset());
+        logger
+            .info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir, indexFiles[i],
+                info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
@@ -178,9 +179,8 @@ public class PersistentIndex {
       startOffsetForRecovery =
           segmentToRecover.getEndOffset() == -1 ? segmentToRecover.getStartOffset() : segmentToRecover.getEndOffset();
     }
-    logger
-        .info("Index : {} performing recovery on index with start offset {} and end offset {}",
-            dataDir, startOffsetForRecovery, endOffset);
+    logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
+        startOffsetForRecovery, endOffset);
     List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
     if (messagesRecovered.size() > 0) {
       metrics.nonzeroMessageRecovery.inc(1);
@@ -210,16 +210,16 @@ public class PersistentIndex {
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
-        logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}",
-            dataDir, info.getStoreKey(), value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
+        logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}", dataDir, info.getStoreKey(),
+            value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
       } else {
         // create a new entry in the index
         IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
-        logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}",
-            dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
+        logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
+            info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
       }
       runningOffset += info.getSize();
     }
@@ -331,10 +331,12 @@ public class PersistentIndex {
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     }
-    value.setFlag(IndexValue.Flags.Delete_Index);
-    value.setNewOffset(fileSpan.getStartOffset());
-    value.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
-    indexes.lastEntry().getValue().addEntry(new IndexEntry(id, value), fileSpan.getEndOffset());
+    IndexValue newValue =
+        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getTimeToLiveInMs());
+    newValue.setFlag(IndexValue.Flags.Delete_Index);
+    newValue.setNewOffset(fileSpan.getStartOffset());
+    newValue.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
+    indexes.lastEntry().getValue().addEntry(new IndexEntry(id, newValue), fileSpan.getEndOffset());
     journal.addEntry(fileSpan.getStartOffset(), id);
   }
 
@@ -438,23 +440,22 @@ public class PersistentIndex {
           }
           logger.trace("Index : " + dataDir + " new offset from find info " + offsetEnd);
           eliminateDuplicates(messageEntries);
+          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
           if (messageEntries.size() == 0) {
             // if there are no messageEntries, total bytes read is equivalent to the logEndOffsetBeforeFind
-            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
             storeFindToken.setBytesRead(logEndOffsetBeforeFind);
-            return new FindInfo(messageEntries, storeFindToken);
           } else {
             // if we have messageEntries, then the total bytes read is sum of endOffset and the size of the last message entry
-            StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
             storeFindToken.setBytesRead(offsetEnd + lastEntrySize);
-            return new FindInfo(messageEntries, storeFindToken);
           }
+          return new FindInfo(messageEntries, storeFindToken);
         } else {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
           if (entry != null) {
             newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
+            messageEntries = updateDeleteStateForMessages(messageEntries);
           } else {
             newToken = storeToken;
           }
@@ -472,6 +473,7 @@ public class PersistentIndex {
         long prevOffset = storeToken.getIndexStartOffset();
         StoreFindToken newToken =
             findEntriesFromOffset(prevOffset, storeToken.getStoreKey(), messageEntries, maxTotalSizeOfEntries);
+        messageEntries = updateDeleteStateForMessages(messageEntries);
         eliminateDuplicates(messageEntries);
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
         newToken.setBytesRead(totalBytesRead);
@@ -507,18 +509,24 @@ public class PersistentIndex {
     // Use atomic long here to pass by reference
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
+    logger.trace("Index : " + dataDir + " findEntriesFromOffset from index start offset " + offset +
+        " with key " + key + " total entries received " + messageEntries.size());
     long lastSegmentIndex = offset;
     long offsetEnd = StoreFindToken.Uninitialized_Offset;
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
       IndexSegment lastSegment = indexes.lastEntry().getValue();
-      if (segment != lastSegment) {
+      if (segment.getStartOffset() != lastSegment.getStartOffset()) {
         segment.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
         lastSegmentIndex = segment.getStartOffset();
+        logger.trace("Index : " + dataDir + " findEntriesFromOffset from index start offset " + offset +
+            " with key " + key + " total entries received " + messageEntries.size());
       } else {
         List<JournalEntry> entries = journal.getEntriesSince(lastSegment.getStartOffset(), true);
         if (entries != null) {
+          logger.trace("Index : " + dataDir + " findEntriesFromOffset from journal offset " +
+              lastSegment.getStartOffset() + " total entries received " + entries.size());
           for (JournalEntry entry : entries) {
             offsetEnd = entry.getOffset();
             IndexValue value = findKey(entry.getKey());
@@ -530,6 +538,9 @@ public class PersistentIndex {
               break;
             }
           }
+        } else {
+          logger.trace("Index : " + dataDir + " findEntriesFromOffset from journal offset " +
+              lastSegment.getStartOffset() + " offset not in journal");
         }
         break;
       }
@@ -537,6 +548,9 @@ public class PersistentIndex {
     if (offsetEnd != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(offsetEnd, sessionId);
     } else {
+      if (messageEntries.size() == 0) {
+        new IllegalStateException("Message entries cannot be null. Expect atleast one entry");
+      }
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex,
           sessionId);
     }
@@ -560,6 +574,25 @@ public class PersistentIndex {
         setToFindDuplicate.add(messageInfo.getStoreKey());
       }
     }
+  }
+
+  /**
+   * Updates the messages with their deleted state. This method can be used when
+   * the messages have been retrieved from an old index segment and needs to be updates with the deleted state
+   * from the new index segment
+   * @param currentMessageEntries The message entries that needs to be updated with the delete state
+   * @return The new list of message entries with the updated state
+   */
+  private List<MessageInfo> updateDeleteStateForMessages(List<MessageInfo> currentMessageEntries)
+      throws StoreException {
+    List<MessageInfo> newMessageEntries = new ArrayList<MessageInfo>(currentMessageEntries.size());
+    for (MessageInfo messageInfo : currentMessageEntries) {
+      IndexValue indexValue = findKey(messageInfo.getStoreKey());
+      MessageInfo newMessageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
+          indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
+      newMessageEntries.add(newMessageInfo);
+    }
+    return newMessageEntries;
   }
 
   /**

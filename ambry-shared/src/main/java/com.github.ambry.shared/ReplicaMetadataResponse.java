@@ -22,9 +22,11 @@ public class ReplicaMetadataResponse extends Response {
   private FindToken token;
   private MessageInfoListSerde messageInfoListSerDe;
   private final int messageInfoListSize;
+  private final long remoteReplicaLagInBytes;
+  private static final int Remote_Replica_Lag_Size_In_Bytes = 8;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error, FindToken token,
-      List<MessageInfo> messageInfoList) {
+      List<MessageInfo> messageInfoList, long remoteReplicaLag) {
     super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     if (token == null || messageInfoList == null) {
       throw new IllegalArgumentException("Invalid token or message info list");
@@ -32,6 +34,7 @@ public class ReplicaMetadataResponse extends Response {
     this.token = token;
     this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
+    this.remoteReplicaLagInBytes = remoteReplicaLag;
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
@@ -39,6 +42,7 @@ public class ReplicaMetadataResponse extends Response {
     token = null;
     this.messageInfoListSerDe = new MessageInfoListSerde(null);
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
+    this.remoteReplicaLagInBytes = 0;
   }
 
   public List<MessageInfo> getMessageInfoList() {
@@ -47,6 +51,10 @@ public class ReplicaMetadataResponse extends Response {
 
   public FindToken getFindToken() {
     return token;
+  }
+
+  public long getRemoteReplicaLagInBytes() {
+    return remoteReplicaLagInBytes;
   }
 
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
@@ -62,9 +70,10 @@ public class ReplicaMetadataResponse extends Response {
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     FindToken token = factory.getFindToken(stream);
     List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
+    long remoteReplicaLag = stream.readLong();
 
     // ignore version for now
-    return new ReplicaMetadataResponse(correlationId, clientId, error, token, messageInfoList);
+    return new ReplicaMetadataResponse(correlationId, clientId, error, token, messageInfoList, remoteReplicaLag);
   }
 
   @Override
@@ -77,6 +86,7 @@ public class ReplicaMetadataResponse extends Response {
         bufferToSend.put(token.toBytes());
         messageInfoListSerDe.serializeMessageInfoList(bufferToSend);
       }
+      bufferToSend.putLong(remoteReplicaLagInBytes);
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -91,7 +101,8 @@ public class ReplicaMetadataResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + messageInfoListSize + (token == null ? 0 : token.toBytes().length);
+    return super.sizeInBytes() + messageInfoListSize + (token == null ? 0 : token.toBytes().length)
+        + Remote_Replica_Lag_Size_In_Bytes;
   }
 
   @Override
@@ -102,6 +113,7 @@ public class ReplicaMetadataResponse extends Response {
       sb.append("Token=").append(token);
     }
     sb.append(" ServerErrorCode=").append(getError());
+    sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     sb.append("]");
     return sb.toString();
   }

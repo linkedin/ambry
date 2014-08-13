@@ -56,6 +56,15 @@ public class ReplicationConfig {
   public final int replicaWaitTimeBetweenReplicasMs;
 
   /**
+   * The max lag above which replication does not wait between replicas. A larger value would slow down replication
+   * while reduces the chance of conflicts with direct puts. A smaller value would speed up replication but
+   * increase the chance of conflicts with direct puts
+   */
+  @Config("replication.max.lag.for.wait.time.in.bytes")
+  @Default("5242880")
+  public final long replicationMaxLagForWaitTimeInBytes;
+
+  /**
    *The max time a put write request to the store can take before timing out during replication
    */
   @Config("replication.max.put.write.time.ms")
@@ -84,6 +93,8 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 0, 2097152);
     replicaWaitTimeBetweenReplicasMs =
         verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
+    replicationMaxLagForWaitTimeInBytes =
+        verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationMaxPutWriteTimeMs =
         verifiableProperties.getIntInRange("replication.max.put.write.time.ms", 10000, 0, 100000);
     replicationMaxDeleteWriteTimeMs =

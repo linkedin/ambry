@@ -355,21 +355,26 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(replicaMetadataRequest.getPartitionId(), false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating replica metadata request failed with error {} for request {}",
-            error, replicaMetadataRequest);
+        logger.error("Validating replica metadata request failed with error {} for request {}", error,
+            replicaMetadataRequest);
         response =
             new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
                 error);
+      } else {
+        Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
+        FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
+            replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+        replicationManager.updateTotalBytesReadByRemoteReplica(replicaMetadataRequest.getPartitionId(),
+            replicaMetadataRequest.getHostName(), replicaMetadataRequest.getReplicaPath(),
+            findInfo.getFindToken().getBytesRead());
+        long remoteReplicaLagInBytes = replicationManager
+            .getRemoteReplicaLagInBytes(replicaMetadataRequest.getPartitionId(), replicaMetadataRequest.getHostName(),
+                replicaMetadataRequest.getReplicaPath());
+        response =
+            new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+                ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries(),
+                remoteReplicaLagInBytes);
       }
-      Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
-      FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
-          replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-      replicationManager.updateTotalBytesReadByRemoteReplica(replicaMetadataRequest.getPartitionId(),
-          replicaMetadataRequest.getHostName(), replicaMetadataRequest.getReplicaPath(),
-          findInfo.getFindToken().getBytesRead());
-      response =
-          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());
     } catch (StoreException e) {
       logger.error("Store exception on a put with error code " + e.getErrorCode() +
           " for request " + replicaMetadataRequest, e);
