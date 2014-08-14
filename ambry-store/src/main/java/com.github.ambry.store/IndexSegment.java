@@ -454,7 +454,6 @@ class IndexSegment {
         int numOfEntries = 0;
         // write the entries
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
-          long offsetEnd = entry.getValue().getOffset() + entry.getValue().getSize();
           if (entry.getValue().getOffset() + entry.getValue().getSize() <= fileEndPointer) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
