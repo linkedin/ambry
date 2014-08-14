@@ -42,8 +42,7 @@ public class BlobId extends StoreKey {
    */
   public BlobId(String id, ClusterMap clusterMap)
       throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))),
-        clusterMap);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap);
   }
 
   /**

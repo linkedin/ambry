@@ -208,10 +208,13 @@ class ReplicaThread implements Runnable {
         " Token from remote " + response.getFindToken());
     List<MessageInfo> messageInfoList = response.getMessageInfoList();
 
-    // We apply the wait time between replication from remote replicas here. Any new objects that get written
-    // in the remote replica are given time to be written to the local replica and avoids failing the request
-    // from the client.
-    Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
+    if (response.getRemoteReplicaLagInBytes() < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
+      // We apply the wait time between replication from remote replicas here. Any new objects that get written
+      // in the remote replica are given time to be written to the local replica and avoids failing the request
+      // from the client. This is done only when the replication lag with that node is less than
+      // replicationMaxLagForWaitTimeInBytes
+      Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
+    }
 
     // 2. Check the local store to find the messages that are missing locally
     // find ids that are missing

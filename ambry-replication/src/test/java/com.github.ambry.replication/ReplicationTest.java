@@ -392,7 +392,7 @@ public class ReplicationTest {
           indexRequested = i;
         }
         response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error,
-            new MockFindToken(indexRequested, bytesRead), messageInfoToReturn);
+            new MockFindToken(indexRequested, bytesRead), messageInfoToReturn, 0);
         indexRequested = -1;
       } else {
         response = new GetResponse(1, "replication", messageInfoToReturn, new MockSend(bufferToReturn),

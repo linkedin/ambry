@@ -93,8 +93,9 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
       logger.error("Trying to read more than the available bytes");
     }
     for (MessageInfo messageInfo : messageRecovered) {
-      logger.info("Message Recovered key {} size {} ttl {} deleted {}", messageInfo.getStoreKey(),
-          messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted());
+      logger
+          .info("Message Recovered key {} size {} ttl {} deleted {}", messageInfo.getStoreKey(), messageInfo.getSize(),
+              messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted());
     }
     return messageRecovered;
   }
