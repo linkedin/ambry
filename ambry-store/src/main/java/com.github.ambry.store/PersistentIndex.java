@@ -549,7 +549,7 @@ public class PersistentIndex {
       return new StoreFindToken(offsetEnd, sessionId);
     } else {
       if (messageEntries.size() == 0) {
-        new IllegalStateException("Message entries cannot be null. Expect atleast one entry");
+        new IllegalStateException("Message entries cannot be null. Expect at least one entry");
       }
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex,
           sessionId);

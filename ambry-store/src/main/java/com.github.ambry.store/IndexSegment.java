@@ -600,7 +600,8 @@ class IndexSegment {
   }
 
   /**
-   * Gets all the entries upto maxEntries from the start of a given key(exclusive).
+   * Gets all the entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
+   * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved upto maxentries
    * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
@@ -623,6 +624,7 @@ class IndexSegment {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
+          // we include the key in the final list if it is not the initial key or if the initial key was null
           if (key == null || newKey.compareTo(key) != 0) {
             IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
             MessageInfo info =
