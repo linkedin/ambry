@@ -209,6 +209,13 @@ class ReplicaThread implements Runnable {
     List<MessageInfo> messageInfoList = response.getMessageInfoList();
 
     if (response.getRemoteReplicaLagInBytes() < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
+      logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+          " Thread name " + threadName +
+          " Remote " + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + ":" +
+          remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() +
+          " Remote Replica Lag " + response.getRemoteReplicaLagInBytes() +
+          " ReplicationMaxLagForWaitTimeInBytes " +  replicationConfig.replicationMaxLagForWaitTimeInBytes +
+          " Waiting for " + replicationConfig.replicaWaitTimeBetweenReplicasMs + " ms");
       // We apply the wait time between replication from remote replicas here. Any new objects that get written
       // in the remote replica are given time to be written to the local replica and avoids failing the request
       // from the client. This is done only when the replication lag with that node is less than
