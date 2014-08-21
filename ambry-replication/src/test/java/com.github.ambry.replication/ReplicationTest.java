@@ -565,7 +565,7 @@ public class ReplicationTest {
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 11);
       replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
           new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
-          false);
+          false, remoteReplicas.get(1));
       remoteReplicas.get(1).setToken(response.remoteToken);
 
       response = replicaThread.exchangeMetadata(
@@ -575,7 +575,7 @@ public class ReplicationTest {
       Assert.assertEquals(((MockFindToken) response.remoteToken).getIndex(), 14);
       replicaThread.fixMissingStoreKeys(response.missingStoreKeys, partitionInfo,
           new MockConnection("localhost", 64423, messageInfoListRemoteReplica2, messageBufferListLocalReplica2, 4),
-          false);
+          false, remoteReplicas.get(1));
       remoteReplicas.get(1).setToken(response.remoteToken);
 
       response = replicaThread.exchangeMetadata(

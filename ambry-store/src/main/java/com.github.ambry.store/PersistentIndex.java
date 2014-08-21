@@ -423,6 +423,8 @@ public class PersistentIndex {
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
         if (entries != null) {
+          logger.trace("Index : " + dataDir + " retrieving from journal from offset " +
+              offsetToStart + " total entries " + entries.size());
           long offsetEnd = offsetToStart;
           long currentTotalSizeOfEntries = 0;
           long lastEntrySize = 0;
@@ -506,6 +508,11 @@ public class PersistentIndex {
       long maxTotalSizeOfEntries)
       throws IOException, StoreException {
     IndexSegment segment = indexes.get(offset);
+    IndexSegment lastSegment = indexes.lastEntry().getValue();
+    if (segment.getStartOffset() == lastSegment.getStartOffset()) {
+      throw new IllegalArgumentException("Index : " + dataDir +
+          " findEntriesFromOffset from offset " + offset + " is in the last segment");
+    }
     // Use atomic long here to pass by reference
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
     segment.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
@@ -516,7 +523,7 @@ public class PersistentIndex {
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && indexes.higherEntry(offset) != null) {
       segment = indexes.higherEntry(offset).getValue();
       offset = segment.getStartOffset();
-      IndexSegment lastSegment = indexes.lastEntry().getValue();
+      lastSegment = indexes.lastEntry().getValue();
       if (segment.getStartOffset() != lastSegment.getStartOffset()) {
         segment.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
         lastSegmentIndex = segment.getStartOffset();
@@ -549,7 +556,7 @@ public class PersistentIndex {
       return new StoreFindToken(offsetEnd, sessionId);
     } else {
       if (messageEntries.size() == 0) {
-        new IllegalStateException("Message entries cannot be null. Expect at least one entry");
+        throw new IllegalStateException("Message entries cannot be null. Expect at least one entry");
       }
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), lastSegmentIndex,
           sessionId);

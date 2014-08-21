@@ -100,6 +100,7 @@ public class DumpData {
         }
       } else if (typeOfFile.compareTo("log") == 0) {
         System.out.println("Dumping log");
+        long currentOffset = 0;
         while (true) {
           short version = stream.readShort();
           if (version == 1) {
@@ -110,6 +111,7 @@ public class DumpData {
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
             System.out.println(" Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
+                " currentOffset " + currentOffset +
                 " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
                 " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
                 " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
@@ -131,6 +133,7 @@ public class DumpData {
               boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
               System.out.println("delete change " + deleteFlag);
             }
+            currentOffset += header.getMessageSize();
           }
         }
       } else if (typeOfFile.compareTo("replicatoken") == 0) {
