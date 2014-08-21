@@ -104,6 +104,9 @@ public class GetResponse extends Response {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("GetResponse[");
+    if (toSend != null) {
+      sb.append("SizeToSend=").append(toSend.sizeInBytes());
+    }
     sb.append("ServerErrorCode=").append(getError());
     sb.append("]");
     return sb.toString();
