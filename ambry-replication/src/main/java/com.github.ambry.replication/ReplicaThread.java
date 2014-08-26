@@ -208,7 +208,8 @@ class ReplicaThread implements Runnable {
     logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
         " Thread name " + threadName +
         " Remote " + remoteReplicaInfo.getReplicaId() +
-        " Token from remote " + response.getFindToken());
+        " Token from remote " + response.getFindToken() +
+        " Replica lag " + response.getRemoteReplicaLagInBytes());
     List<MessageInfo> messageInfoList = response.getMessageInfoList();
 
     if (response.getRemoteReplicaLagInBytes() < replicationConfig.replicationMaxLagForWaitTimeInBytes) {

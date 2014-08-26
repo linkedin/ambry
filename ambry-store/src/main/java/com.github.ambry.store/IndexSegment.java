@@ -558,6 +558,11 @@ class IndexSegment {
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
               // add to the journal
+              if (blobValue.getOffset() != blobValue.getOriginalMessageOffset()
+                  && blobValue.getOriginalMessageOffset() >= startOffset.get()) {
+                // we add an entry for the original message offset if it is within the same index segment
+                journal.addEntry(blobValue.getOriginalMessageOffset(), key);
+              }
               journal.addEntry(blobValue.getOffset(), key);
               sizeWritten.addAndGet(key.sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
               numberOfItems.incrementAndGet();
