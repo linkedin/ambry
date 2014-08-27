@@ -1,10 +1,6 @@
 package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.Replica;
-import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
 
@@ -12,30 +8,30 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
  * Replica metadata request to get new entries for replication
  */
 public class ReplicaMetadataRequest extends RequestOrResponse {
-  private FindToken token;
-  private String hostName;
-  private String replicaPath;
-  private PartitionId partitionId;
+  private List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList;
   private long maxTotalSizeOfEntriesInBytes;
+  private long replicaMetadataRequestInfoListSizeInBytes;
 
   private static final int Max_Entries_Size_In_Bytes = 8;
-  private static final int ReplicaPath_Field_Size_In_Bytes = 4;
-  private static final int HostName_Field_Size_In_Bytes = 4;
+  private static final int Replica_Metadata_Request_Info_List_Size_In_Bytes = 4;
 
-  public ReplicaMetadataRequest(int correlationId, String clientId, PartitionId partitionId, FindToken token,
-      String hostName, String replicaPath, long maxTotalSizeOfEntriesInBytes) {
+  public ReplicaMetadataRequest(int correlationId, String clientId,
+      List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes) {
     super(RequestOrResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
-    this.token = token;
-    this.hostName = hostName;
-    this.replicaPath = replicaPath;
-    this.partitionId = partitionId;
+    this.replicaMetadataRequestInfoList = replicaMetadataRequestInfoList;
     this.maxTotalSizeOfEntriesInBytes = maxTotalSizeOfEntriesInBytes;
+    this.replicaMetadataRequestInfoListSizeInBytes = 0;
+    for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
+      this.replicaMetadataRequestInfoListSizeInBytes += replicaMetadataRequestInfo.sizeInBytes();
+    }
   }
 
   public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactory factory)
@@ -44,30 +40,21 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    String hostName = Utils.readIntString(stream);
-    String replicaPath = Utils.readIntString(stream);
-    PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    FindToken token = factory.getFindToken(stream);
+    int replicaMetadataRequestInfoListCount = stream.readInt();
+    ArrayList<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList =
+        new ArrayList<ReplicaMetadataRequestInfo>(replicaMetadataRequestInfoListCount);
+    for (int i = 0; i < replicaMetadataRequestInfoListCount; i++) {
+      ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
+          ReplicaMetadataRequestInfo.readFrom(stream, clusterMap, factory);
+      replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
+    }
     long maxTotalSizeOfEntries = stream.readLong();
     // ignore version for now
-    return new ReplicaMetadataRequest(correlationId, clientId, partitionId, token, hostName, replicaPath,
-        maxTotalSizeOfEntries);
+    return new ReplicaMetadataRequest(correlationId, clientId, replicaMetadataRequestInfoList, maxTotalSizeOfEntries);
   }
 
-  public FindToken getToken() {
-    return token;
-  }
-
-  public String getHostName() {
-    return this.hostName;
-  }
-
-  public String getReplicaPath() {
-    return this.replicaPath;
-  }
-
-  public PartitionId getPartitionId() {
-    return partitionId;
+  public List<ReplicaMetadataRequestInfo> getReplicaMetadataRequestInfoList() {
+    return replicaMetadataRequestInfoList;
   }
 
   public long getMaxTotalSizeOfEntriesInBytes() {
@@ -80,12 +67,10 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putInt(hostName.getBytes().length);
-      bufferToSend.put(hostName.getBytes());
-      bufferToSend.putInt(replicaPath.getBytes().length);
-      bufferToSend.put(replicaPath.getBytes());
-      bufferToSend.put(partitionId.getBytes());
-      bufferToSend.put(token.toBytes());
+      bufferToSend.putInt(replicaMetadataRequestInfoList.size());
+      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
+        replicaMetadataRequestInfo.writeTo(bufferToSend);
+      }
       bufferToSend.putLong(maxTotalSizeOfEntriesInBytes);
       bufferToSend.flip();
     }
@@ -101,19 +86,17 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + HostName_Field_Size_In_Bytes + hostName.getBytes().length
-        + ReplicaPath_Field_Size_In_Bytes + replicaPath.getBytes().length +
-        +partitionId.getBytes().length + token.toBytes().length + Max_Entries_Size_In_Bytes;
+    return super.sizeInBytes() + Replica_Metadata_Request_Info_List_Size_In_Bytes +
+        replicaMetadataRequestInfoListSizeInBytes + Max_Entries_Size_In_Bytes;
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("ReplicaMetadataRequest[");
-    sb.append("Token=").append(token);
-    sb.append(", ").append("PartitionId=").append(partitionId);
-    sb.append(", ").append("HostName=").append(hostName);
-    sb.append(", ").append("ReplicaPath=").append(replicaPath);
+    for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
+      sb.append(replicaMetadataRequestInfo.toString());
+    }
     sb.append(", ").append("maxTotalSizeOfEntriesInBytes=").append(maxTotalSizeOfEntriesInBytes);
     sb.append("]");
     return sb.toString();

@@ -10,6 +10,7 @@ import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionResponseInfo;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.RequestOrResponse;
@@ -100,11 +101,13 @@ class MockBlockingChannel extends BlockingChannel {
 
       case GetRequest: {
         GetRequest getRequest = (GetRequest) request;
-        if (getRequest.getBlobIds().size() != 1) {
-          throw new IOException("Number of blob ids in get request should be 1: " + getRequest.getBlobIds().size());
+        if (getRequest.getPartitionInfoList().get(0).getBlobIds().size() != 1) {
+          throw new IOException(
+              "Number of blob ids in get request should be 1: " + getRequest.getPartitionInfoList().get(0).getBlobIds()
+                  .size());
         }
 
-        BlobId blobId = (BlobId) getRequest.getBlobIds().get(0);
+        BlobId blobId = (BlobId) getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
 
         int byteBufferSize = 0;
         ByteBuffer byteBuffer = null;
@@ -162,9 +165,12 @@ class MockBlockingChannel extends BlockingChannel {
           ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
           List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
           messageInfoList.add(new MessageInfo(blobId, byteBufferSize));
-          response =
-              new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), messageInfoList, responseSend,
-                  getResponseErrorCode);
+          List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
+          PartitionResponseInfo partitionResponseInfo =
+              new PartitionResponseInfo(getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList);
+          partitionResponseInfoList.add(partitionResponseInfo);
+          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
+              responseSend, getResponseErrorCode);
         } else {
           response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), getResponseErrorCode);
         }
