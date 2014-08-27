@@ -240,6 +240,7 @@ abstract class OperationRequest implements Runnable {
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
       countError(RequestResponseError.TIMEOUT_ERROR);
     } catch (Exception e) {
+      e.printStackTrace();
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
       countError(RequestResponseError.UNEXPECTED_ERROR);

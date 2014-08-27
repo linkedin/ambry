@@ -16,7 +16,9 @@ import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataRequestInfo;
 import com.github.ambry.shared.ReplicaMetadataResponse;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindToken;
@@ -190,9 +192,13 @@ class ReplicaThread implements Runnable {
         " Remote " + remoteReplicaInfo.getReplicaId() +
         " Token sent to remote " + remoteReplicaInfo.getToken());
 
+    List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
+    ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
+        new ReplicaMetadataRequestInfo(partitionInfo.getPartitionId(), remoteReplicaInfo.getToken(),
+            dataNodeId.getHostname(), partitionInfo.getLocalReplicaId().getReplicaPath());
+    replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
-        "replication-metadata-" + dataNodeId.getHostname(), partitionInfo.getPartitionId(),
-        remoteReplicaInfo.getToken(), dataNodeId.getHostname(), partitionInfo.getLocalReplicaId().getReplicaPath(),
+        "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,
         replicationConfig.replicationFetchSizeInBytes);
     connectedChannel.send(request);
     InputStream stream = connectedChannel.receive();
@@ -208,15 +214,16 @@ class ReplicaThread implements Runnable {
     logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
         " Thread name " + threadName +
         " Remote " + remoteReplicaInfo.getReplicaId() +
-        " Token from remote " + response.getFindToken() +
-        " Replica lag " + response.getRemoteReplicaLagInBytes());
-    List<MessageInfo> messageInfoList = response.getMessageInfoList();
+        " Token from remote " + response.getReplicaMetadataResponseInfoList().get(0).getFindToken() +
+        " Replica lag " + response.getReplicaMetadataResponseInfoList().get(0).getRemoteReplicaLagInBytes());
+    List<MessageInfo> messageInfoList = response.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList();
+    long remoteReplicaLag = response.getReplicaMetadataResponseInfoList().get(0).getRemoteReplicaLagInBytes();
 
-    if (response.getRemoteReplicaLagInBytes() < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
+    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
       logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
           " Thread name " + threadName +
           " Remote " + remoteReplicaInfo.getReplicaId() +
-          " Remote Replica Lag " + response.getRemoteReplicaLagInBytes() +
+          " Remote Replica Lag " + remoteReplicaLag +
           " ReplicationMaxLagForWaitTimeInBytes " + replicationConfig.replicationMaxLagForWaitTimeInBytes +
           " Waiting for " + replicationConfig.replicaWaitTimeBetweenReplicasMs + " ms");
       // We apply the wait time between replication from remote replicas here. Any new objects that get written
@@ -256,7 +263,8 @@ class ReplicaThread implements Runnable {
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset =
-              new MessageFormatWriteSet(deleteStream, infoList, replicationConfig.replicationMaxDeleteWriteTimeMs);
+              new MessageFormatWriteSet(deleteStream, infoList, replicationConfig.replicationMaxDeleteWriteTimeMs,
+                  false);
           partitionInfo.getStore().delete(writeset);
           logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
               " Thread name " + threadName +
@@ -298,7 +306,8 @@ class ReplicaThread implements Runnable {
       replicationMetrics.intraColoExchangeMetadataTime
           .update(SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs);
     }
-    return new ExchangeMetadataResponse(missingStoreKeys, response.getFindToken());
+    return new ExchangeMetadataResponse(missingStoreKeys,
+        response.getReplicaMetadataResponseInfoList().get(0).getFindToken());
   }
 
   /**
@@ -321,9 +330,12 @@ class ReplicaThread implements Runnable {
       for (StoreKey storeKey : missingStoreKeys) {
         keysToFetch.add((BlobId) storeKey);
       }
+      List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionInfo.getPartitionId(), keysToFetch);
+      partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest =
           new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
-              MessageFormatFlags.All, partitionInfo.getPartitionId(), keysToFetch);
+              MessageFormatFlags.All, partitionRequestInfoList);
       connectedChannel.send(getRequest);
       InputStream getStream = connectedChannel.receive();
       GetResponse getResponse = GetResponse.readFrom(new DataInputStream(getStream), clusterMap);
@@ -341,13 +353,13 @@ class ReplicaThread implements Runnable {
           " Messages to fix " + missingStoreKeys +
           " Partition " + partitionInfo.getPartitionId() +
           " Mount Path " + partitionInfo.getPartitionId().getReplicaIds().get(0).getMountPath());
-      MessageFormatWriteSet writeset =
-          new MessageFormatWriteSet(getResponse.getInputStream(), getResponse.getMessageInfoList(),
-              replicationConfig.replicationMaxPutWriteTimeMs);
+      List<MessageInfo> messageInfoList = getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList();
+      MessageFormatWriteSet writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList,
+          replicationConfig.replicationMaxPutWriteTimeMs, true);
       partitionInfo.getStore().put(writeset);
 
       long totalSizeInBytesReplicated = 0;
-      for (MessageInfo messageInfo : getResponse.getMessageInfoList()) {
+      for (MessageInfo messageInfo : messageInfoList) {
         totalSizeInBytesReplicated += messageInfo.getSize();
         logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
             " Thread name " + threadName +
@@ -363,12 +375,12 @@ class ReplicaThread implements Runnable {
       }
       if (remoteColo) {
         replicationMetrics.interColoReplicationBytesCount.inc(totalSizeInBytesReplicated);
-        replicationMetrics.interColoBlobsReplicatedCount.inc(getResponse.getMessageInfoList().size());
+        replicationMetrics.interColoBlobsReplicatedCount.inc(messageInfoList.size());
         replicationMetrics.interColoFixMissingKeysTime
             .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
       } else {
         replicationMetrics.intraColoReplicationBytesCount.inc(totalSizeInBytesReplicated);
-        replicationMetrics.intraColoBlobsReplicatedCount.inc(getResponse.getMessageInfoList().size());
+        replicationMetrics.intraColoBlobsReplicatedCount.inc(messageInfoList.size());
         replicationMetrics.intraColoFixMissingKeysTime
             .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
       }

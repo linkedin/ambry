@@ -21,6 +21,7 @@ import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.ServerErrorCode;
@@ -126,7 +127,11 @@ public class ServerTest {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
       ids.add(blobId1);
-      GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
+      ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      GetRequest getRequest1 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel.send(getRequest1);
       InputStream stream = channel.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -139,7 +144,8 @@ public class ServerTest {
       }
 
       // get user metadata
-      GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partition, ids);
+      GetRequest getRequest2 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
       channel.send(getRequest2);
       stream = channel.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -170,7 +176,11 @@ public class ServerTest {
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
       ids.add(new BlobId(partition));
-      GetRequest getRequest4 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
+      partitionRequestInfoList.clear();
+      partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      GetRequest getRequest4 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel.send(getRequest4);
       stream = channel.receive();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -268,7 +278,10 @@ public class ServerTest {
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
       ids.add(blobId3);
-      GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
+      ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel2.send(getRequest1);
       InputStream stream = channel2.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -283,7 +296,7 @@ public class ServerTest {
       // get user metadata
       ids.clear();
       ids.add(blobId2);
-      GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partition, ids);
+      GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
       channel1.send(getRequest2);
       stream = channel1.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -298,7 +311,7 @@ public class ServerTest {
       // get blob
       ids.clear();
       ids.add(blobId1);
-      GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partition, ids);
+      GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
       channel3.send(getRequest3);
       stream = channel3.receive();
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -337,7 +350,10 @@ public class ServerTest {
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
       ids.add(new BlobId(partition));
-      GetRequest getRequest4 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partition, ids);
+      partitionRequestInfoList.clear();
+      partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      GetRequest getRequest4 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel3.send(getRequest4);
       stream = channel3.receive();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -353,7 +369,10 @@ public class ServerTest {
       notificationSystem.awaitBlobDeletions(blobId1.toString());
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
-      GetRequest getRequest5 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partition, ids);
+      partitionRequestInfoList.clear();
+      partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      GetRequest getRequest5 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
       channel3.send(getRequest5);
       stream = channel3.receive();
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -662,11 +681,15 @@ public class ServerTest {
           channel = channel3;
         }
 
+        ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
         for (int j = 0; j < blobIds.size(); j++) {
           ArrayList<BlobId> ids = new ArrayList<BlobId>();
           ids.add(blobIds.get(j));
+          partitionRequestInfoList.clear();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, blobIds.get(j).getPartition(), ids);
+              new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
           channel.send(getRequest);
           InputStream stream = channel.receive();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -681,8 +704,11 @@ public class ServerTest {
           // get user metadata
           ids.clear();
           ids.add(blobIds.get(j));
+          partitionRequestInfoList.clear();
+          partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
           getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, blobIds.get(j).getPartition(), ids);
+              new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
           channel.send(getRequest);
           stream = channel.receive();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -697,7 +723,10 @@ public class ServerTest {
           // get blob
           ids.clear();
           ids.add(blobIds.get(j));
-          getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, blobIds.get(j).getPartition(), ids);
+          partitionRequestInfoList.clear();
+          partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
           channel.send(getRequest);
           stream = channel.receive();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -742,6 +771,7 @@ public class ServerTest {
       }
 
       Iterator<BlobId> iterator = blobsDeleted.iterator();
+      ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       while (iterator.hasNext()) {
         BlobId deletedId = iterator.next();
         notificationSystem.awaitBlobDeletions(deletedId.toString());
@@ -756,8 +786,11 @@ public class ServerTest {
 
           ArrayList<BlobId> ids = new ArrayList<BlobId>();
           ids.add(deletedId);
+          partitionRequestInfoList.clear();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(deletedId.getPartition(), ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, deletedId.getPartition(), ids);
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
           channel.send(getRequest);
           InputStream stream = channel.receive();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -803,8 +836,11 @@ public class ServerTest {
         }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
+        partitionRequestInfoList.clear();
+        PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
         GetRequest getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, blobIds.get(j).getPartition(), ids);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
         channel1.send(getRequest);
         InputStream stream = channel1.receive();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -823,8 +859,11 @@ public class ServerTest {
         // get user metadata
         ids.clear();
         ids.add(blobIds.get(j));
+        partitionRequestInfoList.clear();
+        partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
         getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, blobIds.get(j).getPartition(), ids);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -842,7 +881,10 @@ public class ServerTest {
         // get blob
         ids.clear();
         ids.add(blobIds.get(j));
-        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.clear();
+        partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -900,8 +942,11 @@ public class ServerTest {
         }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
+        partitionRequestInfoList.clear();
+        PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
         GetRequest getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, blobIds.get(j).getPartition(), ids);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
         channel1.send(getRequest);
         InputStream stream = channel1.receive();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -920,8 +965,11 @@ public class ServerTest {
         // get user metadata
         ids.clear();
         ids.add(blobIds.get(j));
+        partitionRequestInfoList.clear();
+        partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
         getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, blobIds.get(j).getPartition(), ids);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -939,7 +987,10 @@ public class ServerTest {
         // get blob
         ids.clear();
         ids.add(blobIds.get(j));
-        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.clear();
+        partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
+        partitionRequestInfoList.add(partitionRequestInfo);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1044,6 +1095,7 @@ public class ServerTest {
     @Override
     public void run() {
       try {
+        ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
         while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
@@ -1054,8 +1106,11 @@ public class ServerTest {
               channel1.connect();
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
               ids.add(new BlobId(payload.blobId, clusterMap));
+              partitionRequestInfoList.clear();
+              PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+              partitionRequestInfoList.add(partitionRequestInfo);
               GetRequest getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, ids.get(0).getPartition(), ids);
+                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
               channel1.send(getRequest);
               InputStream stream = channel1.receive();
               GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1084,8 +1139,11 @@ public class ServerTest {
               // get user metadata
               ids.clear();
               ids.add(new BlobId(payload.blobId, clusterMap));
+              partitionRequestInfoList.clear();
+              partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+              partitionRequestInfoList.add(partitionRequestInfo);
               getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, ids.get(0).getPartition(), ids);
+                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
               channel1.send(getRequest);
               stream = channel1.receive();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1107,7 +1165,10 @@ public class ServerTest {
               // get blob
               ids.clear();
               ids.add(new BlobId(payload.blobId, clusterMap));
-              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, ids.get(0).getPartition(), ids);
+              partitionRequestInfoList.clear();
+              partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+              partitionRequestInfoList.add(partitionRequestInfo);
+              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
               channel1.send(getRequest);
               stream = channel1.receive();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1202,7 +1263,11 @@ public class ServerTest {
       throws IOException, MessageFormatException {
     ArrayList<BlobId> listIds = new ArrayList<BlobId>();
     listIds.add(blobId);
-    GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, blobId.getPartition(), listIds);
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    partitionRequestInfoList.clear();
+    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), listIds);
+    partitionRequestInfoList.add(partitionRequestInfo);
+    GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
     channel.send(getRequest3);
     InputStream stream = channel.receive();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), cluster.getClusterMap());
