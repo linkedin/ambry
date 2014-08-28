@@ -210,6 +210,10 @@ public class PersistentIndex {
         verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
+        if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
+            .getStartOffset()) {
+          journal.addEntry(value.getOriginalMessageOffset(), info.getStoreKey());
+        }
         logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}", dataDir, info.getStoreKey(),
             value.getSize(), value.getTimeToLiveInMs(), info.isDeleted());
       } else {

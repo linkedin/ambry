@@ -281,7 +281,8 @@ public class ServerTest {
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
-      GetRequest getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
+      GetRequest getRequest1 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel2.send(getRequest1);
       InputStream stream = channel2.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -296,7 +297,8 @@ public class ServerTest {
       // get user metadata
       ids.clear();
       ids.add(blobId2);
-      GetRequest getRequest2 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+      GetRequest getRequest2 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
       channel1.send(getRequest2);
       stream = channel1.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -353,7 +355,8 @@ public class ServerTest {
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
-      GetRequest getRequest4 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
+      GetRequest getRequest4 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel3.send(getRequest4);
       stream = channel3.receive();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -707,8 +710,7 @@ public class ServerTest {
           partitionRequestInfoList.clear();
           partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
-          getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+          getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
           channel.send(getRequest);
           stream = channel.receive();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -789,8 +791,7 @@ public class ServerTest {
           partitionRequestInfoList.clear();
           PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(deletedId.getPartition(), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
-          GetRequest getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
+          GetRequest getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
           channel.send(getRequest);
           InputStream stream = channel.receive();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -862,8 +863,7 @@ public class ServerTest {
         partitionRequestInfoList.clear();
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
-        getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -968,8 +968,7 @@ public class ServerTest {
         partitionRequestInfoList.clear();
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
-        getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
