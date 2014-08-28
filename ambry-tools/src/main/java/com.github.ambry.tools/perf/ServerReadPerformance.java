@@ -143,8 +143,7 @@ public class ServerReadPerformance {
             partitionRequestInfoList.clear();
             PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
-            GetRequest getRequest =
-                new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList);
+            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList);
             channel = connectionPool
                 .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                     10000);
