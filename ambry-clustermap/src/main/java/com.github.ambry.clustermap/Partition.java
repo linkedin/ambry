@@ -109,6 +109,10 @@ public class Partition extends PartitionId {
     return replicas;
   }
 
+  public long getId() {
+    return id;
+  }
+
   /**
    * Construct name based on Partition ID appropriate for use as a file or directory name.
    *

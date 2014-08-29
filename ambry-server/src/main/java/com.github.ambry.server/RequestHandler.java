@@ -36,7 +36,7 @@ public class RequestHandler implements Runnable {
         // TODO add metric to track background threads
         logger.error("Exception when handling request", e);
         // this is bad and we need to shutdown the app
-        System.exit(1);
+        Runtime.getRuntime().halt(1);
       }
     }
   }
