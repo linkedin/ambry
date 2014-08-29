@@ -138,9 +138,8 @@ public class PartitionLayout {
     if (partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition) != null) {
       throw new IllegalStateException("Duplicate Partition detected: " + partition.toString());
     }
-    long id = ByteBuffer.wrap(partition.getBytes()).getLong();
-    if (id >= maxPartitionId) {
-      maxPartitionId = id + 1;
+    if (partition.getId() >= maxPartitionId) {
+      maxPartitionId = partition.getId() + 1;
     }
   }
 
@@ -157,7 +156,7 @@ public class PartitionLayout {
 
   protected void validatePartitionIds() {
     for (Partition partition : partitionMap.values()) {
-      long partitionId = ByteBuffer.wrap(partition.getBytes()).getLong();
+      long partitionId = partition.getId();
       if (partitionId < MinPartitionId) {
         throw new IllegalStateException("Partition has invalid ID: Less than " + MinPartitionId);
       }
