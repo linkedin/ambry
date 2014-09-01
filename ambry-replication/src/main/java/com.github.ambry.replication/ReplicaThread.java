@@ -187,7 +187,7 @@ class ReplicaThread implements Runnable {
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
     // 1. Sends a ReplicaMetadataRequest to the remote replica and gets all the message entries since the last
     //    token
-    logger.trace("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
+    logger.info("Node : " + dataNodeId.getHostname() + ":" + dataNodeId.getPort() +
         " Thread name " + threadName +
         " Remote " + remoteReplicaInfo.getReplicaId() +
         " Token sent to remote " + remoteReplicaInfo.getToken());
