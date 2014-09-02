@@ -9,37 +9,37 @@ import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
-import com.github.ambry.messageformat.MessageFormatErrorCodes;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatSend;
-import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.metrics.MetricsHistogram;
 import com.github.ambry.network.CompositeSend;
 import com.github.ambry.network.NetworkRequestMetrics;
+import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.shared.PartitionRequestInfo;
-import com.github.ambry.shared.PartitionResponseInfo;
-import com.github.ambry.shared.ReplicaMetadataRequestInfo;
-import com.github.ambry.shared.ReplicaMetadataResponseInfo;
-import com.github.ambry.shared.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
+import com.github.ambry.shared.PartitionResponseInfo;
 import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataRequestInfo;
 import com.github.ambry.shared.ReplicaMetadataResponse;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ReplicaMetadataResponseInfo;
+import com.github.ambry.shared.RequestOrResponseType;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
-import com.github.ambry.network.Request;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
@@ -52,13 +52,12 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -279,7 +278,6 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      e.printStackTrace();
       logger.error("Unknown exception for request " + getRequest, e);
       response =
           new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
