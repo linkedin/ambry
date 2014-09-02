@@ -35,7 +35,8 @@ public class MessageFormatWriteSet implements MessageWriteSet {
     this.streamInfo = streamInfo;
     this.maxWriteTimeInMs = maxWriteTimeInMs;
     if (materializeStream) {
-      ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(stream, (int) sizeToWrite);
+      ByteBufferInputStream byteBufferInputStream =
+          new ByteBufferInputStream(stream, (int) sizeToWrite, maxWriteTimeInMs);
       streamToWrite = byteBufferInputStream;
     } else {
       streamToWrite = stream;

@@ -175,7 +175,8 @@ public class BlobStore implements Store {
         throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
             StoreErrorCodes.ID_Not_Found);
       } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+        throw new StoreException(
+            "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
             StoreErrorCodes.ID_Deleted);
       }
     }

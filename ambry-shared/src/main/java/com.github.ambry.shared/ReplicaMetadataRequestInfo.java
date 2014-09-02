@@ -47,24 +47,18 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public void writeTo(ByteBuffer buffer) {
-    logger.info("writing hostName length " + hostName.getBytes().length + " to buffer");
     buffer.putInt(hostName.getBytes().length);
-    logger.info("writing hostName " + hostName + " to buffer");
     buffer.put(hostName.getBytes());
-    logger.info("writing replicaPath length " + replicaPath.getBytes().length + " to buffer");
     buffer.putInt(replicaPath.getBytes().length);
-    logger.info("writing replicaPath " + replicaPath + " to buffer");
     buffer.put(replicaPath.getBytes());
-    logger.info("writing partitionId " + partitionId + " to buffer");
     buffer.put(partitionId.getBytes());
-    logger.info("writing token " + token + " to buffer");
     buffer.put(token.toBytes());
   }
 
   public long sizeInBytes() {
     return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes + replicaPath
         .getBytes().length +
-        + partitionId.getBytes().length + token.toBytes().length;
+        +partitionId.getBytes().length + token.toBytes().length;
   }
 
   public String toString() {

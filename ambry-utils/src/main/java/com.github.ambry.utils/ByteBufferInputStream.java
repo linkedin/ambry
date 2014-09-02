@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 
 public class ByteBufferInputStream extends InputStream {
@@ -17,12 +18,40 @@ public class ByteBufferInputStream extends InputStream {
     this.readLimit = -1;
   }
 
+  /**
+   * Reads 'size' amount of bytes from the stream into the buffer
+   * @param stream The stream from which bytes needs to be read
+   * @param size The size that needs to be read from the stream
+   * @throws IOException
+   */
   public ByteBufferInputStream(InputStream stream, int size)
+      throws IOException {
+    this(stream, size, -1);
+  }
+
+  /**
+   * Reads 'size' amount of bytes from the stream into the buffer. It spends 'readTimeoutMs' amount of time
+   * reading from the stream. If the timeout exceeds, IOException is thrown.
+   * @param stream The stream from which bytes need to be read
+   * @param size The size that needs to be read from the stream
+   * @param readTimeoutMs The max amount of time spent on reading from the input stream
+   * @throws IOException
+   */
+  public ByteBufferInputStream(InputStream stream, int size, long readTimeoutMs)
       throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
     int read = 0;
+    long elapsedTimeMs = 0;
+    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
     while (read < size) {
-      read += Channels.newChannel(stream).read(byteBuffer);
+      long readStartTimeMs = SystemTime.getInstance().milliseconds();
+      read += readableByteChannel.read(byteBuffer);
+      long readTime = SystemTime.getInstance().milliseconds() - readStartTimeMs;
+      elapsedTimeMs += readTime;
+      if (read < size && readTimeoutMs != -1 && elapsedTimeMs > readTimeoutMs) {
+        throw new IOException(
+            "Time taken to read from stream to buffer is greater than readTimeoutMs " + readTimeoutMs);
+      }
     }
     byteBuffer.flip();
     this.mark = -1;

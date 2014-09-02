@@ -18,6 +18,7 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.metrics.MetricsHistogram;
+import com.github.ambry.network.CompositeSend;
 import com.github.ambry.network.NetworkRequestMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
@@ -29,13 +30,15 @@ import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.PartitionResponseInfo;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataRequestInfo;
 import com.github.ambry.shared.ReplicaMetadataResponse;
 import com.github.ambry.shared.ReplicaMetadataResponseInfo;
 import com.github.ambry.shared.RequestOrResponseType;
+import com.github.ambry.shared.PutRequest;
+import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
@@ -221,23 +224,32 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(getRequest.getPartitionInfoList().get(0).getPartition(), false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating get request failed with error {} for request {}", error, getRequest);
-        response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
-      } else {
-        Store storeToGet = storeManager.getStore(getRequest.getPartitionInfoList().get(0).getPartition());
-        StoreInfo info = storeToGet.get(getRequest.getPartitionInfoList().get(0).getBlobIds());
-        Send blobsToSend =
-            new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                storeKeyFactory);
-        List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-        PartitionResponseInfo partitionResponseInfo =
-            new PartitionResponseInfo(getRequest.getPartitionInfoList().get(0).getPartition(),
-                info.getMessageReadSetInfo());
-        partitionResponseInfoList.add(partitionResponseInfo);
+      for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
+        ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating get request failed with error {} for request {}", error, getRequest);
+          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
+          break;
+        }
+      }
+      if (response == null) {
+        List<Send> messagesToSendList = new ArrayList<Send>(getRequest.getPartitionInfoList().size());
+        List<PartitionResponseInfo> partitionResponseInfoList =
+            new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
+        for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
+          Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
+          StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds());
+          MessageFormatSend blobsToSend =
+              new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
+                  storeKeyFactory);
+          PartitionResponseInfo partitionResponseInfo =
+              new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo());
+          messagesToSendList.add(blobsToSend);
+          partitionResponseInfoList.add(partitionResponseInfo);
+        }
+        CompositeSend compositeSend = new CompositeSend(messagesToSendList);
         response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
-            blobsToSend, ServerErrorCode.No_Error);
+            compositeSend, ServerErrorCode.No_Error);
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
@@ -358,30 +370,38 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
     try {
-      ServerErrorCode error =
-          validateRequest(replicaMetadataRequest.getReplicaMetadataRequestInfoList().get(0).getPartitionId(), false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating replica metadata request failed with error {} for request {}", error,
-            replicaMetadataRequest);
-        response =
-            new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-                error);
-      } else {
-        PartitionId partitionId = replicaMetadataRequest.getReplicaMetadataRequestInfoList().get(0).getPartitionId();
-        FindToken findToken = replicaMetadataRequest.getReplicaMetadataRequestInfoList().get(0).getToken();
-        String hostName = replicaMetadataRequest.getReplicaMetadataRequestInfoList().get(0).getHostName();
-        String replicaPath = replicaMetadataRequest.getReplicaMetadataRequestInfoList().get(0).getReplicaPath();
-        Store store = storeManager.getStore(partitionId);
-        FindInfo findInfo = store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-        replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
-            findInfo.getFindToken().getBytesRead());
-        long remoteReplicaLagInBytes =
-            replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
-        List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<ReplicaMetadataResponseInfo>();
-        ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-            new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
-                remoteReplicaLagInBytes);
-        replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
+          .getReplicaMetadataRequestInfoList()) {
+        ServerErrorCode error = validateRequest(replicaMetadataRequestInfo.getPartitionId(), false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating replica metadata request failed with error {} for request {}", error,
+              replicaMetadataRequest);
+          response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
+              replicaMetadataRequest.getClientId(), error);
+          break;
+        }
+      }
+      if (response == null) {
+        List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<ReplicaMetadataResponseInfo>(
+            replicaMetadataRequest.getReplicaMetadataRequestInfoList().size());
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
+            .getReplicaMetadataRequestInfoList()) {
+          PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
+          FindToken findToken = replicaMetadataRequestInfo.getToken();
+          String hostName = replicaMetadataRequestInfo.getHostName();
+          String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
+          Store store = storeManager.getStore(partitionId);
+          FindInfo findInfo =
+              store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+          replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
+              findInfo.getFindToken().getBytesRead());
+          long remoteReplicaLagInBytes =
+              replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
+                  remoteReplicaLagInBytes);
+          replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+        }
         response =
             new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
                 ServerErrorCode.No_Error, replicaMetadataResponseList);
