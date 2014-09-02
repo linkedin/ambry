@@ -18,11 +18,27 @@ public class ByteBufferInputStream extends InputStream {
     this.readLimit = -1;
   }
 
-  public ByteBufferInputStream(InputStream stream, int size) throws IOException {
+  /**
+   * Reads 'size' amount of bytes from the stream into the buffer
+   * @param stream The stream from which bytes needs to be read
+   * @param size The size that needs to be read from the stream
+   * @throws IOException
+   */
+  public ByteBufferInputStream(InputStream stream, int size)
+      throws IOException {
     this(stream, size, -1);
   }
 
-  public ByteBufferInputStream(InputStream stream, int size, long readTimeoutMs) throws IOException {
+  /**
+   * Reads 'size' amount of bytes from the stream into the buffer. It spends 'readTimeoutMs' amount of time
+   * reading from the stream. If the timeout exceeds, IOException is thrown.
+   * @param stream The stream from which bytes need to be read
+   * @param size The size that needs to be read from the stream
+   * @param readTimeoutMs The max amount of time spent on reading from the input stream
+   * @throws IOException
+   */
+  public ByteBufferInputStream(InputStream stream, int size, long readTimeoutMs)
+      throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
     int read = 0;
     long elapsedTimeMs = 0;

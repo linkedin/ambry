@@ -11,6 +11,7 @@ import java.util.Random;
 import junit.framework.Assert;
 import org.junit.Test;
 
+
 class ByteArraySend implements Send {
 
   private ByteBuffer bytesToSend;
@@ -18,6 +19,7 @@ class ByteArraySend implements Send {
   public ByteArraySend(byte[] bytes) {
     this.bytesToSend = ByteBuffer.wrap(bytes);
   }
+
   @Override
   public void writeTo(WritableByteChannel channel)
       throws IOException {
@@ -35,11 +37,11 @@ class ByteArraySend implements Send {
   }
 }
 
-
 public class CompositeSendTest {
 
   @Test
-  public void testCompositeSend() throws IOException {
+  public void testCompositeSend()
+      throws IOException {
     byte[] buf1 = new byte[1024];
     byte[] buf2 = new byte[2048];
     byte[] buf3 = new byte[4096];
