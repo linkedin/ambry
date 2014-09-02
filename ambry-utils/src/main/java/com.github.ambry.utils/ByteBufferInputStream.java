@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 
 public class ByteBufferInputStream extends InputStream {
@@ -17,12 +18,24 @@ public class ByteBufferInputStream extends InputStream {
     this.readLimit = -1;
   }
 
-  public ByteBufferInputStream(InputStream stream, int size)
-      throws IOException {
+  public ByteBufferInputStream(InputStream stream, int size) throws IOException {
+    this(stream, size, -1);
+  }
+
+  public ByteBufferInputStream(InputStream stream, int size, long readTimeoutMs) throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
     int read = 0;
+    long elapsedTimeMs = 0;
+    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
     while (read < size) {
-      read += Channels.newChannel(stream).read(byteBuffer);
+      long readStartTimeMs = SystemTime.getInstance().milliseconds();
+      read += readableByteChannel.read(byteBuffer);
+      long readTime = SystemTime.getInstance().milliseconds() - readStartTimeMs;
+      elapsedTimeMs += readTime;
+      if (read < size && readTimeoutMs != -1 && elapsedTimeMs > readTimeoutMs) {
+        throw new IOException(
+            "Time taken to read from stream to buffer is greater than readTimeoutMs " + readTimeoutMs);
+      }
     }
     byteBuffer.flip();
     this.mark = -1;

@@ -73,7 +73,6 @@ class MockFindToken implements FindToken {
   }
 }
 
-
 // TODO
 public class RequestResponseTest {
 
@@ -128,26 +127,28 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void replicaMetadataRequestTest() throws IOException {
+  public void replicaMetadataRequestTest()
+      throws IOException {
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
-    ByteBuffer buffer = ByteBuffer.allocate((int)request.sizeInBytes());
+    ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
     ByteBufferOutputStream byteBufferOutputStream = new ByteBufferOutputStream(buffer);
     request.writeTo(Channels.newChannel(byteBufferOutputStream));
     buffer.flip();
     buffer.getLong();
     buffer.getShort();
-    ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest.readFrom(
-        new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(), new MockFindTokenFactory());
+    ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest
+        .readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
+            new MockFindTokenFactory());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
     try {
       request = new ReplicaMetadataRequest(1, "id", null, 12);
-      buffer = ByteBuffer.allocate((int)request.sizeInBytes());
+      buffer = ByteBuffer.allocate((int) request.sizeInBytes());
       byteBufferOutputStream = new ByteBufferOutputStream(buffer);
       request.writeTo(Channels.newChannel(byteBufferOutputStream));
       Assert.assertEquals(true, false);
@@ -155,12 +156,10 @@ public class RequestResponseTest {
       Assert.assertEquals(true, true);
     }
     try {
-      replicaMetadataRequestInfo =
-          new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path");
+      replicaMetadataRequestInfo = new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path");
       Assert.assertTrue(false);
     } catch (IllegalArgumentException e) {
       Assert.assertTrue(true);
     }
-
   }
 }
