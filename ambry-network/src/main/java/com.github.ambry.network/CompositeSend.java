@@ -6,7 +6,7 @@ import java.util.List;
 
 
 /**
- * Holds multiple MessageFormatSend instances and sends them over the network
+ * Holds multiple Send instances and sends them over the network
  */
 public class CompositeSend implements Send {
 
