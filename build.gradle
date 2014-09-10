@@ -28,6 +28,7 @@ project(':ambry-utils') {
     apply plugin: 'java'
 
     dependencies {
+        compile "commons-codec:commons-codec:$commonsVersion"
         compile "log4j:log4j:$log4jVersion"
         compile "org.json:json:$jsonVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
@@ -77,6 +78,7 @@ project(':ambry-shared') {
         compile "org.slf4j:slf4j-api:$slf4jVersion"
         compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile "junit:junit:$junitVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }
 

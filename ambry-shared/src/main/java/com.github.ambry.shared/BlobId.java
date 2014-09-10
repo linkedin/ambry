@@ -6,11 +6,11 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 
-import javax.xml.bind.DatatypeConverter;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
+import org.apache.commons.codec.binary.Base64;
 
 
 /**
@@ -42,7 +42,7 @@ public class BlobId extends StoreKey {
    */
   public BlobId(String id, ClusterMap clusterMap)
       throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(DatatypeConverter.parseHexBinary(id)))),
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))),
         clusterMap);
   }
 
@@ -79,8 +79,8 @@ public class BlobId extends StoreKey {
 
   @Override
   public String toString() {
-    // return DatatypeConverter.printBase64Binary(toBytes());
-    return DatatypeConverter.printHexBinary(toBytes());
+    // TODO Java 8 - Use Base64 Utils in java 8 and remove external dependencies
+    return Base64.encodeBase64URLSafeString(toBytes());
   }
 
   @Override

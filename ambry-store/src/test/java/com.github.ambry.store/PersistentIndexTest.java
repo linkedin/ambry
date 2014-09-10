@@ -277,7 +277,7 @@ public class PersistentIndexTest {
       final MockId blobId4 = new MockId("id4");
       final MockId blobId5 = new MockId("id5");
 
-      ByteBuffer buffer = ByteBuffer.allocate(5000);
+      ByteBuffer buffer = ByteBuffer.allocate(6000);
       log.appendFrom(buffer);
       byte flags = 3;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(3000, 0, flags, 12345));

@@ -441,6 +441,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public boolean isEqual(String partitionId) {
+      throw new IllegalStateException("Should not be invoked.");
+    }
+
+    @Override
     public List<ReplicaId> getReplicaIds() {
       return replicaIds;
     }

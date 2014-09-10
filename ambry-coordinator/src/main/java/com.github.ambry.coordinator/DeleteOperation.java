@@ -35,6 +35,20 @@ final public class DeleteOperation extends Operation {
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
+    populateOperationErrorMappings();
+  }
+
+  private void populateOperationErrorMappings() {
+    operationErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
+    operationErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
+    operationErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
+    operationErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
+    operationErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.BlobDoesNotExist);
+
+    precedenceLevels.put(CoordinatorError.BlobExpired, 1);
+    precedenceLevels.put(CoordinatorError.AmbryUnavailable, 2);
+    precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 3);
+    precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 4);
   }
 
   @Override
@@ -50,6 +64,7 @@ final public class DeleteOperation extends Operation {
       case No_Error:
       case Blob_Deleted:
         return true;
+
       // Cannot delete if blob is not found
       case Blob_Not_Found:
         blobNotFoundCount++;
@@ -58,8 +73,24 @@ final public class DeleteOperation extends Operation {
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       case Blob_Expired:
+        logger.trace("Server returned Blob Expired error for DeleteOperation");
+        setCurrentError(CoordinatorError.BlobExpired);
+        return false;
+      case Disk_Unavailable:
+        logger.trace("Server returned Disk Unavailable error for DeleteOperation");
+        setCurrentError(CoordinatorError.AmbryUnavailable);
+        return false;
+      case IO_Error:
+        logger.trace("Server returned IO error for DeleteOperation");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
+        return false;
+      case Partition_Unknown:
+        logger.trace("Server returned Partition Unknown error for DeleteOperation");
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
+        return false;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for DeleteOperation.",
             CoordinatorError.UnexpectedInternalError);

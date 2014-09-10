@@ -57,25 +57,24 @@ public class MessageFormatSendTest {
   @Test
   public void sendWriteTest()
       throws IOException, MessageFormatException {
-
     try {
       // create one buffer of size 1004
 
       // add header,system metadata, user metadata and data to the buffers
-      ByteBuffer buf1 = ByteBuffer.allocate(1012);
+      ByteBuffer buf1 = ByteBuffer.allocate(1010);
       // fill header
       buf1.putShort((short) 1);                    // version
       buf1.putLong(950);                          // total size
       // put relative offsets
-      buf1.putInt(62);                           // blob property relative offset
+      buf1.putInt(60);                           // blob property relative offset
       buf1.putInt(-1);                           // delete relative offset
-      buf1.putInt(83);                           // user metadata relative offset
-      buf1.putInt(193);                          // data relative offset
+      buf1.putInt(81);                           // user metadata relative offset
+      buf1.putInt(191);                          // data relative offset
       Crc32 crc = new Crc32();
       crc.update(buf1.array(), 0, buf1.position());
       buf1.putLong(crc.getValue());                          // crc
       String id = new String("012345678910123456789012");     // blob id
-      buf1.putInt(id.length());
+      buf1.putShort((short) id.length());
       buf1.put(id.getBytes());
 
       buf1.putShort((short) 1); // blob property version
@@ -112,9 +111,9 @@ public class MessageFormatSendTest {
       MetricRegistry registry = new MetricRegistry();
       MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
       // get all
-      MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics);
-      Assert.assertEquals(send.sizeInBytes(), 1012);
-      ByteBuffer bufresult = ByteBuffer.allocate(1012);
+      MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics, new MockIdFactory());
+      Assert.assertEquals(send.sizeInBytes(), 1010);
+      ByteBuffer bufresult = ByteBuffer.allocate(1010);
       WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
       while (!send.isSendComplete()) {
         send.writeTo(channel1);
@@ -122,7 +121,7 @@ public class MessageFormatSendTest {
       Assert.assertArrayEquals(buf1.array(), bufresult.array());
 
       // get blob
-      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics);
+      MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
       Assert.assertEquals(send1.sizeInBytes(), 819);
       bufresult.clear();
       WritableByteChannel channel2 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -135,7 +134,8 @@ public class MessageFormatSendTest {
       }
 
       // get user metadata
-      MessageFormatSend send2 = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics);
+      MessageFormatSend send2 =
+          new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics, new MockIdFactory());
       Assert.assertEquals(send2.sizeInBytes(), 110);
       bufresult.clear();
       WritableByteChannel channel3 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -148,7 +148,8 @@ public class MessageFormatSendTest {
       }
 
       // get blob properties
-      MessageFormatSend send3 = new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties, metrics);
+      MessageFormatSend send3 =
+          new MessageFormatSend(readSet, MessageFormatFlags.BlobProperties, metrics, new MockIdFactory());
       Assert.assertEquals(send3.sizeInBytes(), 21);
       bufresult.clear();
       WritableByteChannel channel4 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -167,6 +168,130 @@ public class MessageFormatSendTest {
       Assert.assertEquals(1, bufresult.get());
       Assert.assertEquals(456, bufresult.getInt());
     } catch (MessageFormatException e) {
+      e.printStackTrace();
+      Assert.assertEquals(true, false);
+    }
+  }
+
+  @Test
+  public void sendWriteTestWithBadId()
+      throws IOException, MessageFormatException {
+    try {
+      // create one buffer of size 1004
+
+      // add header,system metadata, user metadata and data to the buffers
+      ByteBuffer buf1 = ByteBuffer.allocate(1010);
+      // fill header
+      buf1.putShort((short) 1);                    // version
+      buf1.putLong(950);                          // total size
+      // put relative offsets
+      buf1.putInt(60);                           // blob property relative offset
+      buf1.putInt(-1);                           // delete relative offset
+      buf1.putInt(81);                           // user metadata relative offset
+      buf1.putInt(191);                          // data relative offset
+      Crc32 crc = new Crc32();
+      crc.update(buf1.array(), 0, buf1.position());
+      buf1.putLong(crc.getValue());                          // crc
+      String id = new String("012345678910123456789012");     // blob id
+      buf1.putShort((short) id.length());
+      buf1.put(id.getBytes());
+
+      buf1.putShort((short) 1); // blob property version
+      String attribute1 = "ttl";
+      String attribute2 = "del";
+      buf1.put(attribute1.getBytes()); // ttl name
+      buf1.putLong(12345);             // ttl value
+      buf1.put(attribute2.getBytes()); // delete name
+      byte b = 1;
+      buf1.put(b);      // delete flag
+      buf1.putInt(456); //crc
+
+      buf1.putShort((short) 1); // user metadata version
+      buf1.putInt(100);
+      byte[] usermetadata = new byte[100];
+      new Random().nextBytes(usermetadata);
+      buf1.put(usermetadata);
+      buf1.putInt(123);
+
+      buf1.putShort((short) 0); // blob version
+      buf1.putLong(805);       // blob size
+      byte[] data = new byte[805];         // blob
+      new Random().nextBytes(data);
+      buf1.put(data);
+      buf1.putInt(123);                    // blob crc
+      buf1.flip();
+
+      ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
+      listbuf.add(buf1);
+      ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+      storeKeys.add(new MockId("012345678910123223233456789012"));
+      MessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
+
+      MetricRegistry registry = new MetricRegistry();
+      MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
+      // get all
+      MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics, new MockIdFactory());
+      Assert.assertEquals(send.sizeInBytes(), 1010);
+      ByteBuffer bufresult = ByteBuffer.allocate(1010);
+      WritableByteChannel channel1 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
+      while (!send.isSendComplete()) {
+        send.writeTo(channel1);
+      }
+      Assert.assertArrayEquals(buf1.array(), bufresult.array());
+      try {
+        // get blob
+        MessageFormatSend send1 = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
+        Assert.assertTrue(false);
+      } catch (MessageFormatException e) {
+        Assert.assertTrue(e.getErrorCode() == MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+      }
+    } catch (MessageFormatException e) {
+      e.printStackTrace();
+      Assert.assertEquals(true, false);
+    }
+  }
+
+  @Test
+  public void messageReadSetIndexInputStreamTest() {
+    try {
+      ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
+      byte[] buf1 = new byte[1024];
+      byte[] buf2 = new byte[2048];
+      byte[] buf3 = new byte[4096];
+      new Random().nextBytes(buf1);
+      new Random().nextBytes(buf2);
+      new Random().nextBytes(buf3);
+      listbuf.add(ByteBuffer.wrap(buf1));
+      listbuf.add(ByteBuffer.wrap(buf2));
+      listbuf.add(ByteBuffer.wrap(buf3));
+      ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+      storeKeys.add(new MockId("012345678910123223233456789012"));
+      storeKeys.add(new MockId("012345678910123223233456789013"));
+      storeKeys.add(new MockId("012345678910123223233456789014"));
+      MessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
+      MessageReadSetIndexInputStream stream1 = new MessageReadSetIndexInputStream(readSet, 0, 0);
+      byte[] buf1Output = new byte[1024];
+      stream1.read(buf1Output, 0, 1024);
+      Assert.assertArrayEquals(buf1Output, buf1);
+      MessageReadSetIndexInputStream stream2 = new MessageReadSetIndexInputStream(readSet, 1, 1024);
+      byte[] buf2Output = new byte[1024];
+      stream2.read(buf2Output, 0, 1024);
+      for (int i = 0; i < 1024; i++) {
+        Assert.assertEquals(buf2Output[i], buf2[i + 1024]);
+      }
+      MessageReadSetIndexInputStream stream3 = new MessageReadSetIndexInputStream(readSet, 2, 2048);
+      byte[] buf3Output = new byte[2048];
+      stream3.read(buf3Output, 0, 2048);
+      for (int i = 0; i < 2048; i++) {
+        Assert.assertEquals(buf3Output[i], buf3[i + 2048]);
+      }
+      try {
+        stream3.read(buf3Output, 0, 1024);
+        Assert.assertTrue(false);
+      } catch (IOException e) {
+        Assert.assertTrue(true);
+      }
+    } catch (Exception e) {
       e.printStackTrace();
       Assert.assertEquals(true, false);
     }

@@ -58,6 +58,23 @@ public abstract class GetOperation extends Operation {
     this.blobNotFoundCount = 0;
     this.blobDeletedCount = 0;
     this.blobExpiredCount = 0;
+    populateOperationErrorMappings();
+  }
+
+  private void populateOperationErrorMappings() {
+    operationErrorMappings.put(ServerErrorCode.Blob_Deleted, CoordinatorError.BlobDeleted);
+    operationErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
+    operationErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
+    operationErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
+    operationErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
+    operationErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
+    operationErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.BlobDoesNotExist);
+
+    precedenceLevels.put(CoordinatorError.BlobDeleted, 1);
+    precedenceLevels.put(CoordinatorError.BlobExpired, 2);
+    precedenceLevels.put(CoordinatorError.AmbryUnavailable, 3);
+    precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 4);
+    precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
 
   GetRequest makeGetRequest() {
@@ -73,7 +90,12 @@ public abstract class GetOperation extends Operation {
       case No_Error:
         return true;
       case IO_Error:
+        logger.trace("Server returned IO error for GetOperation");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
+        return false;
       case Data_Corrupt:
+        logger.trace("Server returned Data Corrupt error for GetOperation");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Blob_Not_Found:
         blobNotFoundCount++;
@@ -82,6 +104,7 @@ public abstract class GetOperation extends Operation {
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       case Blob_Deleted:
         blobDeletedCount++;
@@ -91,6 +114,7 @@ public abstract class GetOperation extends Operation {
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
+        setCurrentError(CoordinatorError.BlobDeleted);
         return false;
       case Blob_Expired:
         blobExpiredCount++;
@@ -100,6 +124,15 @@ public abstract class GetOperation extends Operation {
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }
+        setCurrentError(CoordinatorError.BlobExpired);
+        return false;
+      case Disk_Unavailable:
+        logger.trace("Server returned Disk Unavailable error for GetOperation");
+        setCurrentError(CoordinatorError.AmbryUnavailable);
+        return false;
+      case Partition_Unknown:
+        logger.trace("Server returned Partition Unknown error for GetOperation");
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for GetOperation.",

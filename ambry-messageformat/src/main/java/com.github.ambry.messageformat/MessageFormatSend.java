@@ -2,8 +2,12 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.network.Send;
 import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
+import java.io.DataInputStream;
+import java.io.InputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -27,6 +31,7 @@ public class MessageFormatSend implements Send {
   private long sizeWritten;
   private int currentWriteIndex;
   private long sizeWrittenFromCurrentIndex;
+  private StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private class SendInfo {
@@ -47,10 +52,12 @@ public class MessageFormatSend implements Send {
     }
   }
 
-  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics)
+  public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics,
+      StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
+    this.storeKeyFactory = storeKeyFactory;
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
     calculateOffsets();
@@ -98,6 +105,13 @@ public class MessageFormatSend implements Send {
             MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
                 new MessageFormatRecord.MessageHeader_Format_V1(header);
             headerFormat.verifyHeader();
+            StoreKey storeKey = storeKeyFactory
+                .getStoreKey(new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
+            if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
+              throw new MessageFormatException(
+                  "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
+                  MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+            }
 
             if (flag == MessageFormatFlags.BlobProperties) {
               int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
@@ -169,5 +183,58 @@ public class MessageFormatSend implements Send {
   @Override
   public long sizeInBytes() {
     return totalSizeToWrite;
+  }
+}
+
+/**
+ * A stream representation of the message read set. This helps to
+ * read the read set as a sequential stream even though the underlying
+ * representation can be random
+ */
+class MessageReadSetIndexInputStream extends InputStream {
+
+  private final MessageReadSet messageReadSet;
+  private final int indexToRead;
+  private int currentOffset;
+
+  public MessageReadSetIndexInputStream(MessageReadSet messageReadSet, int indexToRead, int startingOffset) {
+    this.messageReadSet = messageReadSet;
+    if (indexToRead >= messageReadSet.count()) {
+      throw new IllegalArgumentException("The index provided " + indexToRead + " " +
+          "is outside the bounds of the number of messages in the read set " + messageReadSet.count());
+    }
+    this.indexToRead = indexToRead;
+    this.currentOffset = startingOffset;
+  }
+
+  @Override
+  public int read()
+      throws IOException {
+    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
+      throw new IOException("Reached end of stream of message read set");
+    }
+    ByteBuffer buf = ByteBuffer.allocate(1);
+    ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
+    long bytesRead = messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, 1);
+    if (bytesRead != 1) {
+      throw new IllegalStateException("Number of bytes read for read from messageReadSet should be 1");
+    }
+    currentOffset++;
+    buf.flip();
+    return buf.get() & 0xFF;
+  }
+
+  @Override
+  public int read(byte b[], int off, int len)
+      throws IOException {
+    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
+      throw new IOException("Reached end of stream of message read set");
+    }
+    ByteBuffer buf = ByteBuffer.wrap(b);
+    ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
+    long bytesWritten = messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset,
+        Math.min(buf.remaining(), messageReadSet.sizeInBytes(indexToRead) - currentOffset));
+    currentOffset += bytesWritten;
+    return (int) bytesWritten;
   }
 }

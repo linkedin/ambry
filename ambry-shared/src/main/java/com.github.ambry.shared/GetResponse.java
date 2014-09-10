@@ -99,4 +99,13 @@ public class GetResponse extends Response {
   public long sizeInBytes() {
     return super.sizeInBytes() + messageInfoListSize + ((toSend == null) ? 0 : toSend.sizeInBytes());
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("GetResponse[");
+    sb.append("ServerErrorCode=").append(getError());
+    sb.append("]");
+    return sb.toString();
+  }
 }

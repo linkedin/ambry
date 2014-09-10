@@ -19,27 +19,34 @@ import org.slf4j.LoggerFactory;
 public class MessageFormatWriteSet implements MessageWriteSet {
 
   private final InputStream streamToWrite;
+  private final long maxWriteTimeInMs;
   private long sizeToWrite;
   private List<MessageInfo> streamInfo;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo) {
+  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, long maxWriteTimeInMs) {
     streamToWrite = stream;
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
       sizeToWrite += info.getSize();
     }
     this.streamInfo = streamInfo;
+    this.maxWriteTimeInMs = maxWriteTimeInMs;
   }
 
   @Override
   public long writeTo(Write writeChannel)
       throws IOException {
     long sizeWritten = 0;
+    ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
+    long writeStartTimeInMs = System.currentTimeMillis();
     while (sizeWritten < sizeToWrite) {
-      ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
       sizeWritten += writeChannel.appendFrom(readableByteChannel, sizeToWrite);
-      logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {}", sizeWritten, sizeToWrite);
+      logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
+          readableByteChannel.isOpen());
+      if (System.currentTimeMillis() - writeStartTimeInMs > maxWriteTimeInMs) {
+        throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs);
+      }
     }
     return sizeWritten;
   }
