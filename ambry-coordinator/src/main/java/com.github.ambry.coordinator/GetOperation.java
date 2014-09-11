@@ -9,6 +9,7 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
@@ -16,6 +17,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
@@ -80,7 +82,10 @@ public abstract class GetOperation extends Operation {
   GetRequest makeGetRequest() {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);
     blobIds.add(blobId);
-    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, blobId.getPartition(), blobIds);
+    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+    partitionRequestInfoList.add(partitionRequestInfo);
+    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, partitionRequestInfoList);
   }
 
   @Override
@@ -100,7 +105,8 @@ public abstract class GetOperation extends Operation {
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
-          String message = "Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          String message =
+              "GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
@@ -109,8 +115,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Deleted:
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
-          String message = "Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
-              + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message =
+              "GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
+                  + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
@@ -119,8 +126,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Expired:
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
-          String message = "Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
-              + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message =
+              "GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
+                  + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }
@@ -166,9 +174,9 @@ abstract class GetOperationRequest extends OperationRequest {
       throws IOException, MessageFormatException {
     GetResponse getResponse = (GetResponse) response;
     if (response.getError() == ServerErrorCode.No_Error) {
-      if (getResponse.getMessageInfoList().size() != 1) {
-        String message =
-            "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse.getMessageInfoList().size();
+      if (getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size() != 1) {
+        String message = "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse
+            .getPartitionResponseInfoList().get(0).getMessageInfoList().size();
         logger.error(message);
         throw new MessageFormatException(message, MessageFormatErrorCodes.Data_Corrupt);
       }

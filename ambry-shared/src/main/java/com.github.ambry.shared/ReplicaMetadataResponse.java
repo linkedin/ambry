@@ -10,6 +10,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -19,34 +20,29 @@ import java.util.List;
  */
 public class ReplicaMetadataResponse extends Response {
 
-  private FindToken token;
-  private MessageInfoListSerde messageInfoListSerDe;
-  private final int messageInfoListSize;
+  private List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList;
+  private int replicaMetadataResponseInfoListSizeInBytes;
 
-  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error, FindToken token,
-      List<MessageInfo> messageInfoList) {
+  private static int Replica_Metadata_Response_Info_List_Size_In_Bytes = 4;
+
+  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
+      List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
     super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
-    if (token == null || messageInfoList == null) {
-      throw new IllegalArgumentException("Invalid token or message info list");
+    this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
+    this.replicaMetadataResponseInfoListSizeInBytes = 0;
+    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+      this.replicaMetadataResponseInfoListSizeInBytes += replicaMetadataResponseInfo.sizeInBytes();
     }
-    this.token = token;
-    this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
-    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
-    token = null;
-    this.messageInfoListSerDe = new MessageInfoListSerde(null);
-    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
+    replicaMetadataResponseInfoList = null;
+    replicaMetadataResponseInfoListSizeInBytes = 0;
   }
 
-  public List<MessageInfo> getMessageInfoList() {
-    return messageInfoListSerDe.getMessageInfoList();
-  }
-
-  public FindToken getFindToken() {
-    return token;
+  public List<ReplicaMetadataResponseInfo> getReplicaMetadataResponseInfoList() {
+    return replicaMetadataResponseInfoList;
   }
 
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
@@ -60,11 +56,20 @@ public class ReplicaMetadataResponse extends Response {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    FindToken token = factory.getFindToken(stream);
-    List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
-
-    // ignore version for now
-    return new ReplicaMetadataResponse(correlationId, clientId, error, token, messageInfoList);
+    int replicaMetadataResponseInfoListCount = stream.readInt();
+    ArrayList<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
+        new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
+    for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          ReplicaMetadataResponseInfo.readFrom(stream, factory, clusterMap);
+      replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
+    }
+    if (error != ServerErrorCode.No_Error) {
+      return new ReplicaMetadataResponse(correlationId, clientId, error);
+    } else {
+      // ignore version for now
+      return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList);
+    }
   }
 
   @Override
@@ -73,9 +78,9 @@ public class ReplicaMetadataResponse extends Response {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      if (token != null) {
-        bufferToSend.put(token.toBytes());
-        messageInfoListSerDe.serializeMessageInfoList(bufferToSend);
+      bufferToSend.putInt(replicaMetadataResponseInfoList.size());
+      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+        replicaMetadataResponseInfo.writeTo(bufferToSend);
       }
       bufferToSend.flip();
     }
@@ -91,17 +96,19 @@ public class ReplicaMetadataResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + messageInfoListSize + (token == null ? 0 : token.toBytes().length);
+    return super.sizeInBytes() + Replica_Metadata_Response_Info_List_Size_In_Bytes
+        + replicaMetadataResponseInfoListSizeInBytes;
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("ReplicaMetadataResponse[");
-    if (token != null) {
-      sb.append("Token=").append(token);
-    }
     sb.append("ServerErrorCode=").append(getError());
+    sb.append(" ReplicaMetadataResponseInfo ");
+    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+      sb.append(replicaMetadataResponseInfo.toString());
+    }
     sb.append("]");
     return sb.toString();
   }

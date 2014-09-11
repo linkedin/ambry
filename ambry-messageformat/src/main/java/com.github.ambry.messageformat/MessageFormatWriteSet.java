@@ -4,6 +4,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Write;
 
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;
@@ -24,14 +25,22 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private List<MessageInfo> streamInfo;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, long maxWriteTimeInMs) {
-    streamToWrite = stream;
+  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, long maxWriteTimeInMs,
+      boolean materializeStream)
+      throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
       sizeToWrite += info.getSize();
     }
     this.streamInfo = streamInfo;
     this.maxWriteTimeInMs = maxWriteTimeInMs;
+    if (materializeStream) {
+      ByteBufferInputStream byteBufferInputStream =
+          new ByteBufferInputStream(stream, (int) sizeToWrite, maxWriteTimeInMs);
+      streamToWrite = byteBufferInputStream;
+    } else {
+      streamToWrite = stream;
+    }
   }
 
   @Override
@@ -44,7 +53,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
       sizeWritten += writeChannel.appendFrom(readableByteChannel, sizeToWrite);
       logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
           readableByteChannel.isOpen());
-      if (System.currentTimeMillis() - writeStartTimeInMs > maxWriteTimeInMs) {
+      if (sizeWritten < sizeToWrite && (System.currentTimeMillis() - writeStartTimeInMs) > maxWriteTimeInMs) {
         throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs);
       }
     }

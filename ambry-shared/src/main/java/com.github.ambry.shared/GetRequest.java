@@ -1,9 +1,7 @@
 package com.github.ambry.shared;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
 
 import java.io.DataInputStream;
@@ -11,7 +9,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 
@@ -21,44 +18,34 @@ import java.util.List;
 public class GetRequest extends RequestOrResponse {
 
   private MessageFormatFlags flags;
-  private PartitionId partitionId;
-  private ArrayList<BlobId> blobIds;
+  private List<PartitionRequestInfo> partitionRequestInfoList;
   private int sizeSent;
-  private long totalIdSize;
+  private int totalPartitionRequestInfoListSize;
 
   private static final int MessageFormat_Size_InBytes = 2;
-  private static final int Blob_Id_Count_Size_InBytes = 4;
+  private static final int Partition_Request_Info_List_Size = 4;
 
-  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags, PartitionId partitionId,
-      ArrayList<BlobId> blobIds) {
+  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
+      List<PartitionRequestInfo> partitionRequestInfoList) {
     super(RequestOrResponseType.GetRequest, Request_Response_Version, correlationId, clientId);
 
     this.flags = flags;
-    this.partitionId = partitionId;
-    if (partitionId == null) {
-      throw new IllegalArgumentException("No blob IDs specified in GetRequest");
+    if (partitionRequestInfoList == null) {
+      throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
-    this.blobIds = blobIds;
+    this.partitionRequestInfoList = partitionRequestInfoList;
+    for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
+      totalPartitionRequestInfoListSize += partitionRequestInfo.sizeInBytes();
+    }
     this.sizeSent = 0;
-    totalIdSize = 0;
-    for (BlobId id : blobIds) {
-      totalIdSize += id.sizeInBytes();
-      if (!partitionId.equals(id.getPartition())) {
-        throw new IllegalArgumentException("Not all blob IDs in GetRequest are from the same partition.");
-      }
-    }
   }
 
   public MessageFormatFlags getMessageFormatFlag() {
     return flags;
   }
 
-  public PartitionId getPartition() {
-    return partitionId;
-  }
-
-  public List<? extends StoreKey> getBlobIds() {
-    return blobIds;
+  public List<PartitionRequestInfo> getPartitionInfoList() {
+    return partitionRequestInfoList;
   }
 
   public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
@@ -68,19 +55,15 @@ public class GetRequest extends RequestOrResponse {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     MessageFormatFlags messageType = MessageFormatFlags.values()[stream.readShort()];
-    int blobCount = stream.readInt();
-    ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
-    PartitionId partitionId = null;
-    while (blobCount > 0) {
-      BlobId id = new BlobId(stream, clusterMap);
-      if (partitionId == null) {
-        partitionId = id.getPartition();
-      }
-      ids.add(id);
-      blobCount--;
+    int totalNumberOfPartitionInfo = stream.readInt();
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList =
+        new ArrayList<PartitionRequestInfo>(totalNumberOfPartitionInfo);
+    for (int i = 0; i < totalNumberOfPartitionInfo; i++) {
+      PartitionRequestInfo partitionRequestInfo = PartitionRequestInfo.readFrom(stream, clusterMap);
+      partitionRequestInfoList.add(partitionRequestInfo);
     }
     // ignore version for now
-    return new GetRequest(correlationId, clientId, messageType, partitionId, ids);
+    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList);
   }
 
   @Override
@@ -90,9 +73,9 @@ public class GetRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.putShort((short) flags.ordinal());
-      bufferToSend.putInt(blobIds.size());
-      for (BlobId blobId : blobIds) {
-        bufferToSend.put(blobId.toBytes());
+      bufferToSend.putInt(partitionRequestInfoList.size());
+      for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
+        partitionRequestInfo.writeTo(bufferToSend);
       }
       bufferToSend.flip();
     }
@@ -109,18 +92,19 @@ public class GetRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + error
-    return super.sizeInBytes() + MessageFormat_Size_InBytes + Blob_Id_Count_Size_InBytes + totalIdSize;
+    // header + message format size + partition request info size + total partition request info list size
+    return super.sizeInBytes() + MessageFormat_Size_InBytes +
+        Partition_Request_Info_List_Size + totalPartitionRequestInfoListSize;
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("GetRequest[");
-    sb.append("ListOfBlobIDs=").append(blobIds);
-    sb.append(", ").append("PartitionId=").append(partitionId);
     sb.append(", ").append("MessageFormatFlags=").append(flags);
-    sb.append(", ").append("TotalIdSize=").append(totalIdSize);
+    for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
+      sb.append(", ").append(partitionRequestInfo.toString());
+    }
     sb.append("]");
     return sb.toString();
   }

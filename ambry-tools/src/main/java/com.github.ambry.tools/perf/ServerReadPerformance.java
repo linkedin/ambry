@@ -19,6 +19,7 @@ import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -137,9 +138,12 @@ public class ServerReadPerformance {
         blobIds.add(blobId);
         for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
           long startTimeGetBlob = 0;
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
           try {
-            GetRequest getRequest =
-                new GetRequest(1, "getperf", MessageFormatFlags.Blob, blobId.getPartition(), blobIds);
+            partitionRequestInfoList.clear();
+            PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+            partitionRequestInfoList.add(partitionRequestInfo);
+            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList);
             channel = connectionPool
                 .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                     10000);
@@ -174,8 +178,11 @@ public class ServerReadPerformance {
               minLatencyForGetBlobs = Long.MAX_VALUE;
             }
 
+            partitionRequestInfoList.clear();
+            partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+            partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestProperties =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, blobId.getPartition(), blobIds);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
             InputStream receivePropertyStream = channel.receive();
@@ -184,8 +191,11 @@ public class ServerReadPerformance {
                 MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
             long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
 
+            partitionRequestInfoList.clear();
+            partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+            partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestUserMetadata =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, blobId.getPartition(), blobIds);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);

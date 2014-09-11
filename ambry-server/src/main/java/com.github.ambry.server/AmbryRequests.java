@@ -3,40 +3,45 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
-import com.github.ambry.messageformat.MessageFormatErrorCodes;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatSend;
-import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.metrics.MetricsHistogram;
+import com.github.ambry.network.CompositeSend;
 import com.github.ambry.network.NetworkRequestMetrics;
+import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.network.Send;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.shared.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
+import com.github.ambry.shared.PartitionResponseInfo;
 import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataRequestInfo;
 import com.github.ambry.shared.ReplicaMetadataResponse;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ReplicaMetadataResponseInfo;
+import com.github.ambry.shared.RequestOrResponseType;
 import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
-import com.github.ambry.network.Request;
-import com.github.ambry.network.Send;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -47,13 +52,12 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -133,7 +137,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(putRequest.getBlobId().getPartition(), true);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating put request failed with error {}", error);
+        logger.error("Validating put request failed with error {} for request {}", error, putRequest);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
@@ -145,7 +149,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset =
-            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxPutWriteTimeMs);
+            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxPutWriteTimeMs, false);
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
@@ -158,7 +162,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + putRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -169,13 +173,13 @@ public class AmbryRequests implements RequestAPI {
       response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a put ", e);
+      logger.error("Unknown exception on a put for request " + putRequest, e);
       response =
           new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", putRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", putRequest, response, processingTime);
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
     sendPutResponse(requestResponseChannel, response, request,
@@ -220,26 +224,39 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(getRequest.getPartition(), false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating get request failed with error {}", error);
-        response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
-      } else {
-        Store storeToGet = storeManager.getStore(getRequest.getPartition());
-        StoreInfo info = storeToGet.get(getRequest.getBlobIds());
-        Send blobsToSend =
-            new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                storeKeyFactory);
-        response =
-            new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), info.getMessageReadSetInfo(),
-                blobsToSend, ServerErrorCode.No_Error);
+      for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
+        ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating get request failed with error {} for request {}", error, getRequest);
+          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), error);
+          break;
+        }
+      }
+      if (response == null) {
+        List<Send> messagesToSendList = new ArrayList<Send>(getRequest.getPartitionInfoList().size());
+        List<PartitionResponseInfo> partitionResponseInfoList =
+            new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
+        for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
+          Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
+          StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds());
+          MessageFormatSend blobsToSend =
+              new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
+                  storeKeyFactory);
+          PartitionResponseInfo partitionResponseInfo =
+              new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo());
+          messagesToSendList.add(blobsToSend);
+          partitionResponseInfoList.add(partitionResponseInfo);
+        }
+        CompositeSend compositeSend = new CompositeSend(messagesToSendList);
+        response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
+            compositeSend, ServerErrorCode.No_Error);
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.trace("Store exception on a get with error code " + e.getErrorCode(), e);
+        logger.trace("Store exception on a get with error code " + e.getErrorCode() + " for request " + getRequest, e);
         metrics.idNotFoundError.inc();
       } else {
-        logger.error("Store exception on a get with error code " + e.getErrorCode(), e);
+        logger.error("Store exception on a get with error code " + e.getErrorCode() + " for request " + getRequest, e);
         if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
           metrics.ttlExpiredError.inc();
         } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
@@ -251,7 +268,8 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (MessageFormatException e) {
-      logger.error("Message format exception on a get with error code " + e.getErrorCode(), e);
+      logger.error("Message format exception on a get with error code " + e.getErrorCode() +
+          " for request " + getRequest, e);
       if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
         metrics.dataCorruptError.inc();
       } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
@@ -260,13 +278,13 @@ public class AmbryRequests implements RequestAPI {
       response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
           ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a get ", e);
+      logger.error("Unknown exception for request " + getRequest, e);
       response =
           new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", getRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", getRequest, response, processingTime);
       if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
         metrics.getBlobProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
@@ -292,7 +310,7 @@ public class AmbryRequests implements RequestAPI {
     try {
       ServerErrorCode error = validateRequest(deleteRequest.getBlobId().getPartition(), false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating delete request failed with error {}", error);
+        logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
@@ -300,7 +318,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset =
-            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxDeleteWriteTimeMs);
+            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxDeleteWriteTimeMs, false);
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
         response =
@@ -311,7 +329,8 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a delete with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a delete with error code " + e.getErrorCode() +
+          " for request " + deleteRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
@@ -324,14 +343,14 @@ public class AmbryRequests implements RequestAPI {
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on delete ", e);
+      logger.error("Unknown exception for delete request " + deleteRequest, e);
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
       metrics.unExpectedStoreDeleteError.inc();
     } finally {
-      publicAccessLogger.info("{} {}", deleteRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", deleteRequest, response, processingTime);
       metrics.deleteBlobProcessingTimeInMs.update(processingTime);
     }
     requestResponseChannel.sendResponse(response, request,
@@ -351,24 +370,45 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(replicaMetadataRequest.getPartitionId(), false);
-      if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating replica metadata request failed with error {}", error);
+      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
+          .getReplicaMetadataRequestInfoList()) {
+        ServerErrorCode error = validateRequest(replicaMetadataRequestInfo.getPartitionId(), false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating replica metadata request failed with error {} for request {}", error,
+              replicaMetadataRequest);
+          response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
+              replicaMetadataRequest.getClientId(), error);
+          break;
+        }
+      }
+      if (response == null) {
+        List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<ReplicaMetadataResponseInfo>(
+            replicaMetadataRequest.getReplicaMetadataRequestInfoList().size());
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
+            .getReplicaMetadataRequestInfoList()) {
+          PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
+          FindToken findToken = replicaMetadataRequestInfo.getToken();
+          String hostName = replicaMetadataRequestInfo.getHostName();
+          String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
+          Store store = storeManager.getStore(partitionId);
+          FindInfo findInfo =
+              store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+          replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
+              findInfo.getFindToken().getBytesRead());
+          long remoteReplicaLagInBytes =
+              replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
+                  remoteReplicaLagInBytes);
+          replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+        }
         response =
             new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-                error);
+                ServerErrorCode.No_Error, replicaMetadataResponseList);
       }
-      Store store = storeManager.getStore(replicaMetadataRequest.getPartitionId());
-      FindInfo findInfo = store.findEntriesSince(replicaMetadataRequest.getToken(),
-          replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-      replicationManager.updateTotalBytesReadByRemoteReplica(replicaMetadataRequest.getPartitionId(),
-          replicaMetadataRequest.getHostName(), replicaMetadataRequest.getReplicaPath(),
-          findInfo.getFindToken().getBytesRead());
-      response =
-          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, findInfo.getFindToken(), findInfo.getMessageEntries());
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode(), e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() +
+          " for request " + replicaMetadataRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
         metrics.storeIOError.inc();
       } else {
@@ -378,14 +418,14 @@ public class AmbryRequests implements RequestAPI {
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on replica metadata request ", e);
+      logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.Unknown_Error);
     } finally {
-      publicAccessLogger.info("{} {}", replicaMetadataRequest, response);
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
 

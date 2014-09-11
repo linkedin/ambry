@@ -82,7 +82,7 @@ class StoreMessageReadSet implements MessageReadSet {
   public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
       throws IOException {
     if (index >= readOptions.size()) {
-      throw new IndexOutOfBoundsException("index out of the messageset");
+      throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
     logger.trace("Blob Message Read Set position {} count {}", startOffset,

@@ -150,14 +150,14 @@ public abstract class Operation {
         sendRequests();
       } catch (CoordinatorException e) {
         operationComplete.set(true);
-        logger.error(context + " operation threw CoordinatorException during execute", e);
+        logger.error(context + " operation threw CoordinatorException during execute: " + e);
         throw e;
       } catch (InterruptedException e) {
         operationComplete.set(true);
         // Slightly abuse the notion of "unexpected" internal error since InterruptedException does not indicate
         // something truly unexpected.
         logger.error(context + " operation interrupted during execute");
-        throw new CoordinatorException("Operation interrupted.", CoordinatorError.UnexpectedInternalError);
+        throw new CoordinatorException("Operation interrupted.", e, CoordinatorError.UnexpectedInternalError);
       }
     }
   }

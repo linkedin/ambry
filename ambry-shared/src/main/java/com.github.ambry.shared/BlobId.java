@@ -37,26 +37,30 @@ public class BlobId extends StoreKey {
    * Re-constructs existing blobId by deserializing from BlobId "string"
    *
    * @param id of Blob as output by BlobId.toString()
-   * @param clusterMap
+   * @param clusterMap of the cluster that the blob id belongs to
    * @throws IOException
    */
   public BlobId(String id, ClusterMap clusterMap)
       throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))),
-        clusterMap);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap);
   }
 
   /**
    * Re-constructs existing blobId by deserializing from data input stream
    *
-   * @param stream
+   * @param stream from which to deserialize the blobid
+   * @param clusterMap of the cluster that the blob id belongs to
    * @throws IOException
    */
   public BlobId(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
     this.version = stream.readShort();
-    this.partitionId = clusterMap.getPartitionIdFromStream(stream);
-    uuid = Utils.readIntString(stream);
+    if (version == 1) {
+      this.partitionId = clusterMap.getPartitionIdFromStream(stream);
+      uuid = Utils.readIntString(stream);
+    } else {
+      throw new IllegalArgumentException("version " + version + " not supported for blob id");
+    }
   }
 
   public short sizeInBytes() {

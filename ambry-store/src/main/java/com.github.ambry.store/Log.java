@@ -75,8 +75,9 @@ public class Log implements Write, Read {
       throws IOException {
     if (currentWriteOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
-      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to append to log from buffer since new data size " +
-          buffer.remaining() + " exceeds total log size " + capacityInBytes);
+      throw new IllegalArgumentException(
+          "Log : " + file.getAbsolutePath() + " error trying to append to log from buffer since new data size " +
+              buffer.remaining() + " exceeds total log size " + capacityInBytes);
     }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);

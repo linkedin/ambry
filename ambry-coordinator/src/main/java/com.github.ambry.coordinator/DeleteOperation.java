@@ -1,20 +1,19 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.Response;
 import com.github.ambry.shared.DeleteResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.github.ambry.shared.RequestOrResponse;
+import com.github.ambry.shared.Response;
+import com.github.ambry.shared.ServerErrorCode;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -69,7 +68,8 @@ final public class DeleteOperation extends Operation {
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
-          String message = "Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          String message =
+              "DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
