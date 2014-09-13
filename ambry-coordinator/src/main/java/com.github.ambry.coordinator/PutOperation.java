@@ -52,16 +52,9 @@ final public class PutOperation extends Operation {
       logger.error("Could not materialize blob ", ce);
       throw ce;
     }
-    populateOperationErrorMappings();
   }
 
-  private void populateOperationErrorMappings() {
-    operationErrorMappings.put(ServerErrorCode.Blob_Already_Exists, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
-    operationErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Partition_ReadOnly, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.UnexpectedInternalError);
-
+  static {
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 1);
     precedenceLevels.put(CoordinatorError.AmbryUnavailable, 2);
   }

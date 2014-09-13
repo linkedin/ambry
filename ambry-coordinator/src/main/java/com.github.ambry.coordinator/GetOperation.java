@@ -60,24 +60,16 @@ public abstract class GetOperation extends Operation {
     this.blobNotFoundCount = 0;
     this.blobDeletedCount = 0;
     this.blobExpiredCount = 0;
-    populateOperationErrorMappings();
   }
 
-  private void populateOperationErrorMappings() {
-    operationErrorMappings.put(ServerErrorCode.Blob_Deleted, CoordinatorError.BlobDeleted);
-    operationErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
-    operationErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
-    operationErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
-    operationErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.BlobDoesNotExist);
-
+  static {
     precedenceLevels.put(CoordinatorError.BlobDeleted, 1);
     precedenceLevels.put(CoordinatorError.BlobExpired, 2);
     precedenceLevels.put(CoordinatorError.AmbryUnavailable, 3);
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 4);
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
+
 
   GetRequest makeGetRequest() {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);

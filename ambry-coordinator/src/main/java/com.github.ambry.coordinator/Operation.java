@@ -46,9 +46,7 @@ public abstract class Operation {
   private Set<ReplicaId> requestsInFlight;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
-
-  protected HashMap<ServerErrorCode, CoordinatorError> operationErrorMappings = new HashMap<ServerErrorCode, CoordinatorError>();
-  protected HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
+  protected static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   protected CoordinatorError currentError;
   protected CoordinatorError resolvedError;
@@ -166,7 +164,7 @@ public abstract class Operation {
     if(this.resolvedError == null)
       this.resolvedError = newError;
     else{
-      if(precedenceLevels.get(newError) < precedenceLevels.get(resolvedError)){
+      if(getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedError)){
         this.resolvedError = newError;
       }
     }
@@ -176,11 +174,16 @@ public abstract class Operation {
     return this.resolvedError;
   }
 
+  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
+    return precedenceLevels.get(coordinatorError);
+  }
+
   public String getErrorMessage() {
     String message = null;
     switch(resolvedError) {
       case AmbryUnavailable:
-        message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy;
+        message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy +
+        "resulting in AmbryUnavailable";
         break;
       case BlobDoesNotExist:
         message += "BlobDoesNotExist to perform the operation " + context + ":" + operationPolicy;

@@ -34,16 +34,9 @@ final public class DeleteOperation extends Operation {
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
-    populateOperationErrorMappings();
   }
 
-  private void populateOperationErrorMappings() {
-    operationErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
-    operationErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
-    operationErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
-    operationErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
-    operationErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.BlobDoesNotExist);
-
+  static {
     precedenceLevels.put(CoordinatorError.BlobExpired, 1);
     precedenceLevels.put(CoordinatorError.AmbryUnavailable, 2);
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 3);

@@ -24,6 +24,9 @@ public class MockDataNode {
 
   private Map<BlobId, MaterializedBlob> blobs;
   private Set<BlobId> deletedBlobs;
+  private ServerErrorCode deleteErrorCode;
+  private ServerErrorCode getErrorCode;
+  private ServerErrorCode putErrorCode;
 
   public class MaterializedBlob extends Blob {
     final ByteBuffer materializedBlobOutput;
@@ -54,6 +57,9 @@ public class MockDataNode {
 
   public synchronized ServerErrorCode put(BlobId blobId, Blob blob)
       throws IOException {
+    if(putErrorCode != null) {
+      return putErrorCode;
+    }
     if (blobs.containsKey(blobId)) {
       return ServerErrorCode.Unknown_Error;
     }
@@ -140,6 +146,9 @@ public class MockDataNode {
   }
 
   public synchronized BlobOutputAndError getData(BlobId blobId) {
+    if(getErrorCode != null) {
+      return new BlobOutputAndError(null, getErrorCode);
+    }
     if (deletedBlobs.contains(blobId)) {
       return new BlobOutputAndError(null, ServerErrorCode.Blob_Deleted);
     }
@@ -152,6 +161,9 @@ public class MockDataNode {
   }
 
   public synchronized ServerErrorCode delete(BlobId blobId) {
+    if(deleteErrorCode != null) {
+      return deleteErrorCode;
+    }
     if (deletedBlobs.contains(blobId)) {
       return ServerErrorCode.Blob_Deleted;
     } else if (!blobs.containsKey(blobId)) {
@@ -180,5 +192,17 @@ public class MockDataNode {
       sb.append("\t").append(blobId).append(System.getProperty("line.separator"));
     }
     return sb.toString();
+  }
+
+  public void setDeleteException(ServerErrorCode serverErrorCode) {
+    this.deleteErrorCode = serverErrorCode;
+  }
+
+  public void setGetException(ServerErrorCode serverErrorCode) {
+    this.getErrorCode = serverErrorCode;
+  }
+
+  public void setPutException(ServerErrorCode serverErrorCode) {
+    this.putErrorCode = serverErrorCode;
   }
 }
