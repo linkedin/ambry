@@ -37,7 +37,7 @@ import static org.junit.Assert.fail;
 public class CoordinatorTest {
 
   // Below three configs are for testing error cases assuming getClusterMapOneDCThreeNodeOneDiskOnePartition
-  //  as cluster config
+  // as cluster config
   private ArrayList<Integer> exceptionHostPorts = new ArrayList(Arrays.asList(6667, 6668, 6669));
   private final int TOTAL_HOST_COUNT = 3;
   private final String host = "localhost";
@@ -49,9 +49,10 @@ public class CoordinatorTest {
   private static HashMap<ServerErrorCode, CoordinatorError> putErrorMappings =
       new HashMap<ServerErrorCode, CoordinatorError>();
 
+  private Random random = new Random();
+
   private void induceGetFailure(int count, ServerErrorCode errorCode) {
     List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
-    Random random = new Random();
     for (int i = 0; i < count; i++) {
       int nextRandom = random.nextInt(hostPorts.size());
       MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
@@ -62,7 +63,6 @@ public class CoordinatorTest {
 
   private void induceDeleteFailure(int count, ServerErrorCode errorCode) {
     List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
-    Random random = new Random();
     for (int i = 0; i < count; i++) {
       int nextRandom = random.nextInt(hostPorts.size());
       MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
@@ -73,7 +73,6 @@ public class CoordinatorTest {
 
   private void inducePutFailure(int count, ServerErrorCode errorCode) {
     List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
-    Random random = new Random();
     for (int i = 0; i < count; i++) {
       int nextRandom = random.nextInt(hostPorts.size());
       MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
@@ -661,16 +660,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -718,16 +709,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     return putBlobVerifyGet(ac, putBlobProperties, putUserMetadata, putContent);
   }
 
@@ -756,16 +739,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     return putBlob(ac, putBlobProperties, putUserMetadata, putContent);
   }
 
@@ -833,16 +808,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -888,6 +855,17 @@ public class CoordinatorTest {
     ac.close();
   }
 
+  /**
+   * Same as above simple method, but instead of performing all inline, this calls very spefific methods
+   * to perform something like the put, get and delete. Purpose of this method is to test the sanity of these
+   * smaller methods which are going to be used for execption cases after this test case.
+   * @param clusterMap
+   * @throws JSONException
+   * @throws InterruptedException
+   * @throws StoreException
+   * @throws IOException
+   * @throws CoordinatorException
+   */
   void simpleDecoupled(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
@@ -895,16 +873,8 @@ public class CoordinatorTest {
     for (int i = 0; i < 20; ++i) {
       BlobProperties putBlobProperties =
           new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-      ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-      for (byte b = 0; b < 10; b++) {
-        putUserMetadata.put(b);
-      }
-
-      ByteBuffer putContent = ByteBuffer.allocate(100);
-      for (byte b = 0; b < 100; b++) {
-        putContent.put(b);
-      }
-      putContent.flip();
+      ByteBuffer putUserMetadata = getByteBuffer(10, false);
+      ByteBuffer putContent = getByteBuffer(100, true);
       String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
       getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
       deleteBlob(ac, blobId);
@@ -922,15 +892,8 @@ public class CoordinatorTest {
       for (int i = 0; i < 20; ++i) {
         BlobProperties putBlobProperties =
             new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-        ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-        for (byte b = 0; b < 10; b++) {
-          putUserMetadata.put(b);
-        }
-        ByteBuffer putContent = ByteBuffer.allocate(100);
-        for (byte b = 0; b < 100; b++) {
-          putContent.put(b);
-        }
-        putContent.flip();
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
         String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
         getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
         try {
@@ -954,15 +917,8 @@ public class CoordinatorTest {
       for (int i = 0; i < 20; ++i) {
         BlobProperties putBlobProperties =
             new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-        ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-        for (byte b = 0; b < 10; b++) {
-          putUserMetadata.put(b);
-        }
-        ByteBuffer putContent = ByteBuffer.allocate(100);
-        for (byte b = 0; b < 100; b++) {
-          putContent.put(b);
-        }
-        putContent.flip();
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
         String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
         try {
           getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
@@ -986,15 +942,8 @@ public class CoordinatorTest {
       for (int i = 0; i < 20; ++i) {
         BlobProperties putBlobProperties =
             new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-        ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-        for (byte b = 0; b < 10; b++) {
-          putUserMetadata.put(b);
-        }
-        ByteBuffer putContent = ByteBuffer.allocate(100);
-        for (byte b = 0; b < 100; b++) {
-          putContent.put(b);
-        }
-        putContent.flip();
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
         String blobId = null;
         try {
           blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
@@ -1088,16 +1037,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = acOne.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -1134,5 +1075,16 @@ public class CoordinatorTest {
   public void remoteACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition());
+  }
+
+  private ByteBuffer getByteBuffer(int count, boolean toFlip) {
+    ByteBuffer byteBuffer = ByteBuffer.allocate(count);
+    for (byte b = 0; b < count; b++) {
+      byteBuffer.put(b);
+    }
+    if (toFlip) {
+      byteBuffer.flip();
+    }
+    return byteBuffer;
   }
 }

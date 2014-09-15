@@ -10,6 +10,7 @@ import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ final public class DeleteOperation extends Operation {
   // Number of replicas in the partition. This is used to set threshold to determine blob not found (all replicas
   // must reply).
   private final int replicaIdCount;
+  protected static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs)
@@ -91,6 +93,11 @@ final public class DeleteOperation extends Operation {
             context, blobId, replicaId, serverErrorCode, e);
         throw e;
     }
+  }
+
+  @Override
+  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
+    return precedenceLevels.get(coordinatorError);
   }
 }
 

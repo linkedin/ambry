@@ -17,6 +17,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -47,6 +48,7 @@ public abstract class GetOperation extends Operation {
   private static final int Blob_Expired_Count_Threshold = 2;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
+  protected static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
@@ -142,6 +144,11 @@ public abstract class GetOperation extends Operation {
                 blobId, replicaId, serverErrorCode, e);
         throw e;
     }
+  }
+
+  @Override
+  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
+    return precedenceLevels.get(coordinatorError);
   }
 }
 

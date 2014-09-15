@@ -107,6 +107,7 @@ public class MockDataNode {
     }
 
     public ByteBuffer getUserMetadata() {
+      //userMetadata.position(0);
       return userMetadata;
     }
 

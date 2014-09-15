@@ -22,7 +22,7 @@ class MockCluster {
   public synchronized MockDataNode getMockDataNode(String host, int port) {
     DataNodeId dataNodeId = clustermap.getDataNodeId(host, port);
     if (!mockDataNodes.containsKey(dataNodeId)) {
-        mockDataNodes.put(dataNodeId, new MockDataNode(dataNodeId));
+      mockDataNodes.put(dataNodeId, new MockDataNode(dataNodeId));
     }
     return mockDataNodes.get(dataNodeId);
   }

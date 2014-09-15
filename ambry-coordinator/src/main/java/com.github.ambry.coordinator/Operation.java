@@ -44,10 +44,7 @@ public abstract class Operation {
 
   BlockingQueue<OperationResponse> responseQueue;
   private Set<ReplicaId> requestsInFlight;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
-  protected static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
-
   protected CoordinatorError currentError;
   protected CoordinatorError resolvedError;
 
@@ -174,9 +171,7 @@ public abstract class Operation {
     return this.resolvedError;
   }
 
-  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
-    return precedenceLevels.get(coordinatorError);
-  }
+  abstract Integer getPrecedenceLevel(CoordinatorError coordinatorError);
 
   public String getErrorMessage() {
     String message = null;
@@ -195,7 +190,7 @@ public abstract class Operation {
         message += "Cannot perform the operation " + context + ":" + operationPolicy +" as Blob expired ";
         break;
       default:
-        message += "Experienced an unexpected internal error for operation " + context + ":" + operationPolicy;
+        message += "Experienced an unexpected internal "+ resolvedError +" error for operation " + context + ":" + operationPolicy;
     }
     return message;
   }
