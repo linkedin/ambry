@@ -35,7 +35,7 @@ final public class PutOperation extends Operation {
   private final ByteBufferInputStream materializedBlobStream;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
-  protected static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
+  private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
@@ -75,19 +75,19 @@ final public class PutOperation extends Operation {
       case No_Error:
         return true;
       case IO_Error:
-        logger.trace("Server returned IO error for PutOperation");
+        logger.trace(context + "Server returned IO error for PutOperation for ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Partition_ReadOnly:
-        logger.trace("Server returned Partition ReadOnly error for PutOperation");
+        logger.trace(context + "Server returned Partition ReadOnly error for PutOperation ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Disk_Unavailable:
-        logger.trace("Server returned Disk Unavailable error for PutOperation");
+        logger.trace(context + "Server returned Disk Unavailable error for PutOperation ");
         setCurrentError(CoordinatorError.AmbryUnavailable);
         return false;
       case Partition_Unknown:
-        logger.trace("Server returned Partition Unknown error for PutOperation");
+        logger.trace(context + "Server returned Partition Unknown error for PutOperation ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Blob_Already_Exists:
