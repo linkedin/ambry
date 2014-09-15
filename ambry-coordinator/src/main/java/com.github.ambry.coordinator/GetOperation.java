@@ -89,18 +89,18 @@ public abstract class GetOperation extends Operation {
       case No_Error:
         return true;
       case IO_Error:
-        logger.trace(context + "Server returned IO error for GetOperation");
+        logger.trace(context + " Server returned IO error for GetOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Data_Corrupt:
-        logger.trace(context + "Server returned Data Corrupt error for GetOperation");
+        logger.trace(context + " Server returned Data Corrupt error for GetOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
           String message =
-              context + "GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+              context + " GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
@@ -110,7 +110,7 @@ public abstract class GetOperation extends Operation {
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
           String message =
-              context + "GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
+              context + " GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
                   + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
@@ -121,7 +121,7 @@ public abstract class GetOperation extends Operation {
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
           String message =
-              context + "GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
+              context + " GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
                   + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
@@ -129,11 +129,11 @@ public abstract class GetOperation extends Operation {
         setCurrentError(CoordinatorError.BlobExpired);
         return false;
       case Disk_Unavailable:
-        logger.trace(context + "Server returned Disk Unavailable error for GetOperation");
+        logger.trace(context + " Server returned Disk Unavailable error for GetOperation");
         setCurrentError(CoordinatorError.AmbryUnavailable);
         return false;
       case Partition_Unknown:
-        logger.trace(context + "Server returned Partition Unknown error for GetOperation");
+        logger.trace(context + " Server returned Partition Unknown error for GetOperation");
         setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       default:

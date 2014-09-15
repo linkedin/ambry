@@ -64,26 +64,26 @@ final public class DeleteOperation extends Operation {
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
           String message =
-              context + "DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+              context + " DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
         setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       case Blob_Expired:
-        logger.trace(context + "Server returned Blob Expired error for DeleteOperation");
+        logger.trace(context + " Server returned Blob Expired error for DeleteOperation");
         setCurrentError(CoordinatorError.BlobExpired);
         return false;
       case Disk_Unavailable:
-        logger.trace(context + "Server returned Disk Unavailable error for DeleteOperation");
+        logger.trace(context + " Server returned Disk Unavailable error for DeleteOperation");
         setCurrentError(CoordinatorError.AmbryUnavailable);
         return false;
       case IO_Error:
-        logger.trace(context + "Server returned IO error for DeleteOperation");
+        logger.trace(context + " Server returned IO error for DeleteOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Partition_Unknown:
-        logger.trace(context + "Server returned Partition Unknown error for DeleteOperation");
+        logger.trace(context + " Server returned Partition Unknown error for DeleteOperation");
         setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       default:
