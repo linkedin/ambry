@@ -129,11 +129,11 @@ public abstract class GetOperation extends Operation {
         setCurrentError(CoordinatorError.BlobExpired);
         return false;
       case Disk_Unavailable:
-        logger.trace("Server returned Disk Unavailable error for GetOperation");
+        logger.trace(context + "Server returned Disk Unavailable error for GetOperation");
         setCurrentError(CoordinatorError.AmbryUnavailable);
         return false;
       case Partition_Unknown:
-        logger.trace("Server returned Partition Unknown error for GetOperation");
+        logger.trace(context + "Server returned Partition Unknown error for GetOperation");
         setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       default:
