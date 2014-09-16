@@ -14,6 +14,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -43,8 +44,9 @@ public abstract class Operation {
 
   BlockingQueue<OperationResponse> responseQueue;
   private Set<ReplicaId> requestsInFlight;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
+  protected CoordinatorError currentError;
+  protected CoordinatorError resolvedError;
 
   public Operation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
@@ -116,6 +118,7 @@ public abstract class Operation {
             } else {
               operationPolicy.onFailedResponse(replicaId);
             }
+            resolveCoordinatorError(currentError);
           }
         } else {
           if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
@@ -135,10 +138,9 @@ public abstract class Operation {
             logger.error("{} operation is corrupt.", context);
             context.getCoordinatorMetrics().corruptionError.inc();
           }
-          String message =
-              "Insufficient DataNodes replied to complete operation " + context + ": " + operationPolicy.toString();
+          String message = getErrorMessage();
           logger.error("{} {}", context, message);
-          throw new CoordinatorException(message, CoordinatorError.AmbryUnavailable);
+          throw new CoordinatorException(message, getResolvedError());
         }
         sendRequests();
       } catch (CoordinatorException e) {
@@ -154,6 +156,53 @@ public abstract class Operation {
       }
     }
   }
+
+  public void resolveCoordinatorError(CoordinatorError newError) {
+    if(this.resolvedError == null)
+      this.resolvedError = newError;
+    else{
+      if(getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedError)){
+        this.resolvedError = newError;
+      }
+    }
+  }
+
+  public CoordinatorError getResolvedError() {
+    return this.resolvedError;
+  }
+
+  abstract Integer getPrecedenceLevel(CoordinatorError coordinatorError);
+
+  public String getErrorMessage() {
+    String message = null;
+    switch(resolvedError) {
+      case AmbryUnavailable:
+        message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy +
+        "resulting in AmbryUnavailable";
+        break;
+      case BlobDoesNotExist:
+        message += "BlobDoesNotExist to perform the operation " + context + ":" + operationPolicy;
+        break;
+      case BlobDeleted:
+        message += "Cannot perform the operation " + context + ":" + operationPolicy +" as Blob is deleted ";
+        break;
+      case BlobExpired:
+        message += "Cannot perform the operation " + context + ":" + operationPolicy +" as Blob expired ";
+        break;
+      default:
+        message += "Experienced an unexpected internal "+ resolvedError +" error for operation " + context + ":" + operationPolicy;
+    }
+    return message;
+  }
+
+  public synchronized void setCurrentError(CoordinatorError currentError) {
+    this.currentError = currentError;
+  }
+
+  public synchronized CoordinatorError getCurrentError() {
+    return this.currentError;
+  }
+
 }
 
 /**

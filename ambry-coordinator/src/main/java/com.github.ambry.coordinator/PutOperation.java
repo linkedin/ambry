@@ -10,6 +10,7 @@ import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,7 @@ final public class PutOperation extends Operation {
   private final ByteBufferInputStream materializedBlobStream;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
@@ -54,6 +56,11 @@ final public class PutOperation extends Operation {
     }
   }
 
+  static {
+    precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 1);
+    precedenceLevels.put(CoordinatorError.AmbryUnavailable, 2);
+  }
+
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
@@ -68,6 +75,20 @@ final public class PutOperation extends Operation {
       case No_Error:
         return true;
       case IO_Error:
+        logger.trace(context + " Server returned IO error for PutOperation for ");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
+        return false;
+      case Partition_ReadOnly:
+        logger.trace(context + " Server returned Partition ReadOnly error for PutOperation ");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
+        return false;
+      case Disk_Unavailable:
+        logger.trace(context + " Server returned Disk Unavailable error for PutOperation ");
+        setCurrentError(CoordinatorError.AmbryUnavailable);
+        return false;
+      case Partition_Unknown:
+        logger.trace(context + " Server returned Partition Unknown error for PutOperation ");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
         return false;
       case Blob_Already_Exists:
         CoordinatorException e =
@@ -90,7 +111,13 @@ final public class PutOperation extends Operation {
         throw e;
     }
   }
+
+  @Override
+  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
+    return precedenceLevels.get(coordinatorError);
+  }
 }
+
 
 final class PutOperationRequest extends OperationRequest {
   protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,

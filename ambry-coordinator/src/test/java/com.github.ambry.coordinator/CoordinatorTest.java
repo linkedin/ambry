@@ -7,9 +7,15 @@ import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Random;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -29,6 +35,78 @@ import static org.junit.Assert.fail;
  *
  */
 public class CoordinatorTest {
+
+  // Below three configs are for testing error cases assuming getClusterMapOneDCThreeNodeOneDiskOnePartition
+  // as cluster config
+  private ArrayList<Integer> exceptionHostPorts = new ArrayList(Arrays.asList(6667, 6668, 6669));
+  private final int TOTAL_HOST_COUNT = 3;
+  private final String host = "localhost";
+
+  private static HashMap<ServerErrorCode, CoordinatorError> deleteErrorMappings =
+      new HashMap<ServerErrorCode, CoordinatorError>();
+  private static HashMap<ServerErrorCode, CoordinatorError> getErrorMappings =
+      new HashMap<ServerErrorCode, CoordinatorError>();
+  private static HashMap<ServerErrorCode, CoordinatorError> putErrorMappings =
+      new HashMap<ServerErrorCode, CoordinatorError>();
+
+  private Random random = new Random();
+
+  private void induceGetFailure(int count, ServerErrorCode errorCode) {
+    List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
+    for (int i = 0; i < count; i++) {
+      int nextRandom = random.nextInt(hostPorts.size());
+      MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
+      mockDataNode.setGetException(errorCode);
+      hostPorts.remove(nextRandom);
+    }
+  }
+
+  private void induceDeleteFailure(int count, ServerErrorCode errorCode) {
+    List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
+    for (int i = 0; i < count; i++) {
+      int nextRandom = random.nextInt(hostPorts.size());
+      MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
+      mockDataNode.setDeleteException(errorCode);
+      hostPorts.remove(nextRandom);
+    }
+  }
+
+  private void inducePutFailure(int count, ServerErrorCode errorCode) {
+    List<Integer> hostPorts = (ArrayList<Integer>) exceptionHostPorts.clone();
+    for (int i = 0; i < count; i++) {
+      int nextRandom = random.nextInt(hostPorts.size());
+      MockDataNode mockDataNode = MockConnectionPool.mockCluster.getMockDataNode(host, hostPorts.get(nextRandom));
+      mockDataNode.setPutException(errorCode);
+      hostPorts.remove(nextRandom);
+    }
+  }
+
+  static {
+    deleteErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
+    deleteErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
+    deleteErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
+    deleteErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
+    deleteErrorMappings.put(ServerErrorCode.Partition_ReadOnly, CoordinatorError.UnexpectedInternalError);
+
+    getErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
+    getErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
+    getErrorMappings.put(ServerErrorCode.Blob_Not_Found, CoordinatorError.BlobDoesNotExist);
+    getErrorMappings.put(ServerErrorCode.Blob_Deleted, CoordinatorError.BlobDeleted);
+    getErrorMappings.put(ServerErrorCode.Blob_Expired, CoordinatorError.BlobExpired);
+    getErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
+    getErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.BlobDoesNotExist);
+    //unknown
+    getErrorMappings.put(ServerErrorCode.Partition_ReadOnly, CoordinatorError.UnexpectedInternalError);
+
+    putErrorMappings.put(ServerErrorCode.IO_Error, CoordinatorError.UnexpectedInternalError);
+    putErrorMappings.put(ServerErrorCode.Partition_ReadOnly, CoordinatorError.UnexpectedInternalError);
+    putErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.UnexpectedInternalError);
+    putErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
+    putErrorMappings.put(ServerErrorCode.Blob_Already_Exists, CoordinatorError.UnexpectedInternalError);
+    //unknown
+    putErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
+  }
+
   ClusterMap getClusterMapOneDCOneNodeOneDiskOnePartition()
       throws JSONException {
     String HL = "  {\n" +
@@ -582,16 +660,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -635,20 +705,111 @@ public class CoordinatorTest {
     }
   }
 
+  private String putBlobVerifyGet(AmbryCoordinator ac)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+    BlobProperties putBlobProperties =
+        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
+    return putBlobVerifyGet(ac, putBlobProperties, putUserMetadata, putContent);
+  }
+
+  private String putBlobVerifyGet(AmbryCoordinator ac, BlobProperties putBlobProperties, ByteBuffer putUserMetadata,
+      ByteBuffer putContent)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+
+    InputStream blobData = new ByteBufferInputStream(putContent);
+    String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
+
+    BlobProperties getBlobProperties = ac.getBlobProperties(blobId);
+    assertEquals(putBlobProperties.getBlobSize(), getBlobProperties.getBlobSize());
+    assertEquals(putBlobProperties.getContentType(), getBlobProperties.getContentType());
+
+    ByteBuffer getUserMetadata = ac.getBlobUserMetadata(blobId);
+    assertArrayEquals(putUserMetadata.array(), getUserMetadata.array());
+
+    BlobOutput getBlobOutput = ac.getBlob(blobId);
+    byte[] blobDataBytes = new byte[(int) getBlobOutput.getSize()];
+    new DataInputStream(getBlobOutput.getStream()).readFully(blobDataBytes);
+    assertArrayEquals(blobDataBytes, putContent.array());
+    return blobId;
+  }
+
+  private String putBlob(AmbryCoordinator ac)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+    BlobProperties putBlobProperties =
+        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
+    return putBlob(ac, putBlobProperties, putUserMetadata, putContent);
+  }
+
+  private String putBlob(AmbryCoordinator ac, BlobProperties putBlobProperties, ByteBuffer putUserMetadata,
+      ByteBuffer putContent)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+
+    InputStream blobData = new ByteBufferInputStream(putContent);
+
+    String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
+    return blobId;
+  }
+
+  void getBlob(AmbryCoordinator ac, String blobId, BlobProperties putBlobProperties, ByteBuffer putUserMetadata,
+      ByteBuffer putContent)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+
+    BlobProperties getBlobProperties = ac.getBlobProperties(blobId);
+    assertEquals(putBlobProperties.getBlobSize(), getBlobProperties.getBlobSize());
+    assertEquals(putBlobProperties.getContentType(), getBlobProperties.getContentType());
+
+    ByteBuffer getUserMetadata = ac.getBlobUserMetadata(blobId);
+    assertArrayEquals(putUserMetadata.array(), getUserMetadata.array());
+
+    BlobOutput getBlobOutput = ac.getBlob(blobId);
+    byte[] blobDataBytes = new byte[(int) getBlobOutput.getSize()];
+    new DataInputStream(getBlobOutput.getStream()).readFully(blobDataBytes);
+    assertArrayEquals(blobDataBytes, putContent.array());
+  }
+
+  void deleteBlobAndGet(AmbryCoordinator ac, String blobId)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+    ac.deleteBlob(blobId);
+    try {
+      BlobOutput getBlobOutput = ac.getBlob(blobId);
+      fail("GetBlob for a deleted blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      BlobProperties getBlobProperties = ac.getBlobProperties(blobId);
+      fail("GetBlobProperties for a deleted blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      ByteBuffer getUserMetadata = ac.getBlobUserMetadata(blobId);
+      fail("GetUserMetaData for a deleted blob should have thrown CoordinatorException " + blobId);
+    } catch (CoordinatorException coordinatorException) {
+      assertEquals(coordinatorException.getErrorCode(), CoordinatorError.BlobDeleted);
+    }
+    try {
+      ac.deleteBlob(blobId);
+    } catch (CoordinatorException coordinatorException) {
+      fail("Deletion of a deleted blob should not have thrown CoordinatorException " + blobId);
+    }
+  }
+
+  void deleteBlob(AmbryCoordinator ac, String blobId)
+      throws InterruptedException, StoreException, IOException, CoordinatorException {
+    ac.deleteBlob(blobId);
+  }
+
   void GetNonExistantBlob(AmbryCoordinator ac)
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -694,6 +855,107 @@ public class CoordinatorTest {
     ac.close();
   }
 
+  /**
+   * Same as above simple method, but instead of performing all inline, this calls very spefific methods
+   * to perform something like the put, get and delete. Purpose of this method is to test the sanity of these
+   * smaller methods which are going to be used for execption cases after this test case.
+   * @param clusterMap
+   * @throws JSONException
+   * @throws InterruptedException
+   * @throws StoreException
+   * @throws IOException
+   * @throws CoordinatorException
+   */
+  void simpleDecoupled(ClusterMap clusterMap)
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+    for (int i = 0; i < 20; ++i) {
+      BlobProperties putBlobProperties =
+          new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+      ByteBuffer putUserMetadata = getByteBuffer(10, false);
+      ByteBuffer putContent = getByteBuffer(100, true);
+      String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
+      getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
+      deleteBlob(ac, blobId);
+    }
+    ac.close();
+  }
+
+  void simpleDeleteException(ClusterMap clusterMap)
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+
+    for (ServerErrorCode deleteErrorCode : deleteErrorMappings.keySet()) {
+      MockConnectionPool.mockCluster = new MockCluster(clusterMap);
+      induceDeleteFailure(TOTAL_HOST_COUNT, deleteErrorCode);
+      AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+      for (int i = 0; i < 20; ++i) {
+        BlobProperties putBlobProperties =
+            new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
+        String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
+        getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
+        try {
+          deleteBlobAndGet(ac, blobId);
+          fail("Deletion should have failed for " + deleteErrorCode);
+        } catch (CoordinatorException e) {
+          assertEquals(e.getErrorCode(), deleteErrorMappings.get(deleteErrorCode));
+        }
+      }
+      ac.close();
+    }
+  }
+
+  void simpleGetException(ClusterMap clusterMap)
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+
+    for (ServerErrorCode getErrorCode : getErrorMappings.keySet()) {
+      MockConnectionPool.mockCluster = new MockCluster(clusterMap);
+      induceGetFailure(TOTAL_HOST_COUNT, getErrorCode);
+      AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+      for (int i = 0; i < 20; ++i) {
+        BlobProperties putBlobProperties =
+            new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
+        String blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
+        try {
+          getBlob(ac, blobId, putBlobProperties, putUserMetadata, putContent);
+          fail("Get should have failed for " + getErrorCode);
+        } catch (CoordinatorException e) {
+          assertEquals(e.getErrorCode(), getErrorMappings.get(getErrorCode));
+        }
+        deleteBlob(ac, blobId);
+      }
+      ac.close();
+    }
+  }
+
+  void simplePutException(ClusterMap clusterMap)
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+
+    for (ServerErrorCode putErrorCode : putErrorMappings.keySet()) {
+      MockConnectionPool.mockCluster = new MockCluster(clusterMap);
+      inducePutFailure(TOTAL_HOST_COUNT, putErrorCode);
+      AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+      for (int i = 0; i < 20; ++i) {
+        BlobProperties putBlobProperties =
+            new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        ByteBuffer putUserMetadata = getByteBuffer(10, false);
+        ByteBuffer putContent = getByteBuffer(100, true);
+        String blobId = null;
+        try {
+          blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
+          fail("Put should have failed for " + putErrorCode);
+        } catch (CoordinatorException e) {
+          assertEquals(e.getErrorCode(), putErrorMappings.get(putErrorCode));
+        }
+      }
+      ac.close();
+    }
+  }
+
   void simpleGetNonExistantBlob(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
@@ -713,6 +975,30 @@ public class CoordinatorTest {
   public void simpleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     simple(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+  }
+
+  @Test
+  public void simpleOneDCThreeNodeOneDiskOnePartitionForDeleteException()
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+  }
+
+  @Test
+  public void simpleOneDCThreeNodeOneDiskOnePartitionForGetException()
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+  }
+
+  @Test
+  public void simpleOneDCThreeNodeOneDiskOnePartitionForPutException()
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+  }
+
+  @Test
+  public void simpleDecoupleOneDCThreeNodeOneDiskOnePartition()
+      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
@@ -751,16 +1037,8 @@ public class CoordinatorTest {
       throws InterruptedException, StoreException, IOException, CoordinatorException {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    ByteBuffer putUserMetadata = ByteBuffer.allocate(10);
-    for (byte b = 0; b < 10; b++) {
-      putUserMetadata.put(b);
-    }
-
-    ByteBuffer putContent = ByteBuffer.allocate(100);
-    for (byte b = 0; b < 100; b++) {
-      putContent.put(b);
-    }
-    putContent.flip();
+    ByteBuffer putUserMetadata = getByteBuffer(10, false);
+    ByteBuffer putContent = getByteBuffer(100, true);
     InputStream blobData = new ByteBufferInputStream(putContent);
 
     String blobId = acOne.putBlob(putBlobProperties, putUserMetadata, blobData);
@@ -797,5 +1075,16 @@ public class CoordinatorTest {
   public void remoteACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition());
+  }
+
+  private ByteBuffer getByteBuffer(int count, boolean toFlip) {
+    ByteBuffer byteBuffer = ByteBuffer.allocate(count);
+    for (byte b = 0; b < count; b++) {
+      byteBuffer.put(b);
+    }
+    if (toFlip) {
+      byteBuffer.flip();
+    }
+    return byteBuffer;
   }
 }

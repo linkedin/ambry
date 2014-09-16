@@ -90,6 +90,7 @@ public interface OperationPolicy {
    * @return count of replica Ids in partition.
    */
   public int getReplicaIdCount();
+
 }
 
 /**

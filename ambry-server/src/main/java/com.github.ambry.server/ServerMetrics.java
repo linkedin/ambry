@@ -91,6 +91,9 @@ public class ServerMetrics {
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
+  public final Histogram serverStartTimeInMs;
+  public final Histogram serverShutdownTimeInMs;
+
   public final Meter putBlobRequestRate;
   public final Meter getBlobRequestRate;
   public final Meter getBlobPropertiesRequestRate;
@@ -233,6 +236,9 @@ public class ServerMetrics {
 
     blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
+
+    serverStartTimeInMs = registry.histogram(MetricRegistry.name(AmbryServer.class, "ServerStartTimeInMs"));
+    serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(AmbryServer.class, "ServerShutdownTimeInMs"));
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestRate"));

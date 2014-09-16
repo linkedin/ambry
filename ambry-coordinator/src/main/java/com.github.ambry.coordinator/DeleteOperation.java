@@ -10,6 +10,7 @@ import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ final public class DeleteOperation extends Operation {
   // Number of replicas in the partition. This is used to set threshold to determine blob not found (all replicas
   // must reply).
   private final int replicaIdCount;
+  private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs)
@@ -34,6 +36,13 @@ final public class DeleteOperation extends Operation {
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
+  }
+
+  static {
+    precedenceLevels.put(CoordinatorError.BlobExpired, 1);
+    precedenceLevels.put(CoordinatorError.AmbryUnavailable, 2);
+    precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 3);
+    precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 4);
   }
 
   @Override
@@ -49,17 +58,34 @@ final public class DeleteOperation extends Operation {
       case No_Error:
       case Blob_Deleted:
         return true;
+
       // Cannot delete if blob is not found
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
           String message =
-              "DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+              context + " DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
         return false;
       case Blob_Expired:
+        logger.trace(context + " Server returned Blob Expired error for DeleteOperation");
+        setCurrentError(CoordinatorError.BlobExpired);
+        return false;
+      case Disk_Unavailable:
+        logger.trace(context + " Server returned Disk Unavailable error for DeleteOperation");
+        setCurrentError(CoordinatorError.AmbryUnavailable);
+        return false;
+      case IO_Error:
+        logger.trace(context + " Server returned IO error for DeleteOperation");
+        setCurrentError(CoordinatorError.UnexpectedInternalError);
+        return false;
+      case Partition_Unknown:
+        logger.trace(context + " Server returned Partition Unknown error for DeleteOperation");
+        setCurrentError(CoordinatorError.BlobDoesNotExist);
+        return false;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for DeleteOperation.",
             CoordinatorError.UnexpectedInternalError);
@@ -67,6 +93,11 @@ final public class DeleteOperation extends Operation {
             context, blobId, replicaId, serverErrorCode, e);
         throw e;
     }
+  }
+
+  @Override
+  public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
+    return precedenceLevels.get(coordinatorError);
   }
 }
 
