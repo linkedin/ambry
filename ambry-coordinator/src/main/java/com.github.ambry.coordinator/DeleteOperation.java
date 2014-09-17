@@ -32,7 +32,7 @@ final public class DeleteOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition()));
+        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
@@ -63,8 +63,8 @@ final public class DeleteOperation extends Operation {
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
-          String message =
-              context + " DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+          String message = context + " DeleteOperation : Blob not found : blobNotFoundCount == replicaIdCount == "
+              + blobNotFoundCount + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }

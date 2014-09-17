@@ -90,7 +90,6 @@ public interface OperationPolicy {
    * @return count of replica Ids in partition.
    */
   public int getReplicaIdCount();
-
 }
 
 /**
@@ -107,23 +106,22 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId)
+  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    this.replicaIdCount = partitionId.getReplicaIds().size();
+    this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds(), crossDCProxyCallEnabled);
+    this.replicaIdCount = this.orderedReplicaIds.size();
     if (replicaIdCount < 1) {
       CoordinatorException e =
           new CoordinatorException("Partition has invalid configuration.", CoordinatorError.UnexpectedInternalError);
       logger.error("PartitionId {} has invalid number of replicas {}: {}", partitionId, replicaIdCount, e);
       throw e;
     }
-    this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds());
-
     this.corruptRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.failedRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.successfulRequests = new ArrayList<ReplicaId>(replicaIdCount);
   }
 
-  Queue<ReplicaId> orderReplicaIds(String datacenterName, List<ReplicaId> replicaIds) {
+  Queue<ReplicaId> orderReplicaIds(String datacenterName, List<ReplicaId> replicaIds, boolean crossDCProxyCallEnabled) {
     Queue<ReplicaId> orderedReplicaIds = new ArrayDeque<ReplicaId>(replicaIdCount);
 
     List<ReplicaId> localReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
@@ -131,7 +129,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     for (ReplicaId replicaId : replicaIds) {
       if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
         localReplicaIds.add(replicaId);
-      } else {
+      } else if (crossDCProxyCallEnabled) {
         remoteReplicaIds.add(replicaId);
       }
     }
@@ -213,9 +211,9 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
  * Serially probes data nodes until blob is retrieved.
  */
 class GetPolicy extends ProbeLocalFirstOperationPolicy {
-  public GetPolicy(String datacenterName, PartitionId partitionId)
+  public GetPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
   }
 
   @Override
@@ -245,9 +243,9 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   int successTarget;
   int requestParallelism;
 
-  ParallelOperationPolicy(String datacenterName, PartitionId partitionId)
+  ParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
   }
 
   @Override
@@ -289,9 +287,9 @@ class PutPolicy extends ParallelOperationPolicy {
 
    (2) sending additional put requests (increasing the requestParallelism) after a short timeout.
   */
-  public PutPolicy(String datacenterName, PartitionId partitionId)
+  public PutPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
@@ -310,9 +308,9 @@ class PutPolicy extends ParallelOperationPolicy {
  * the partition. Policy is used for delete
  */
 class AllInParallelOperationPolicy extends ParallelOperationPolicy {
-  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId)
+  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;

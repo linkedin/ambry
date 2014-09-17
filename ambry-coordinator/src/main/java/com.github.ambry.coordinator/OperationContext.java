@@ -13,13 +13,16 @@ public class OperationContext {
   private String clientId;
   private int correlationId;
   private int connectionPoolCheckoutTimeout;
+  private boolean crossDCProxyCallEnable;
   private CoordinatorMetrics coordinatorMetrics;
 
-  public OperationContext(String clientId, int connectionPoolCheckoutTimeout, CoordinatorMetrics coordinatorMetrics) {
+  public OperationContext(String clientId, int connectionPoolCheckoutTimeout, boolean crossDCProxyCallEnable,
+      CoordinatorMetrics coordinatorMetrics) {
     this.clientId = clientId;
     this.correlationId = currentCount.incrementAndGet();
     this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
     this.coordinatorMetrics = coordinatorMetrics;
+    this.crossDCProxyCallEnable = crossDCProxyCallEnable;
   }
 
   public String getClientId() {
@@ -38,9 +41,14 @@ public class OperationContext {
     return coordinatorMetrics;
   }
 
+  public boolean isCrossDCProxyCallEnabled() {
+    return crossDCProxyCallEnable;
+  }
+
   @Override
   public String toString() {
-    return "OpContext{" + clientId + ':' + correlationId + '}';
+    return "OpContext{" + clientId + ':' + correlationId + ':' + connectionPoolCheckoutTimeout + ':'
+        + crossDCProxyCallEnable + '}';
   }
 }
 

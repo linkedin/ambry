@@ -57,7 +57,7 @@ public class MockDataNode {
 
   public synchronized ServerErrorCode put(BlobId blobId, Blob blob)
       throws IOException {
-    if(putErrorCode != null) {
+    if (putErrorCode != null) {
       return putErrorCode;
     }
     if (blobs.containsKey(blobId)) {
@@ -146,7 +146,7 @@ public class MockDataNode {
   }
 
   public synchronized BlobOutputAndError getData(BlobId blobId) {
-    if(getErrorCode != null) {
+    if (getErrorCode != null) {
       return new BlobOutputAndError(null, getErrorCode);
     }
     if (deletedBlobs.contains(blobId)) {
@@ -161,7 +161,7 @@ public class MockDataNode {
   }
 
   public synchronized ServerErrorCode delete(BlobId blobId) {
-    if(deleteErrorCode != null) {
+    if (deleteErrorCode != null) {
       return deleteErrorCode;
     }
     if (deletedBlobs.contains(blobId)) {
