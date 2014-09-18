@@ -158,10 +158,10 @@ public abstract class Operation {
   }
 
   public void resolveCoordinatorError(CoordinatorError newError) {
-    if(this.resolvedError == null)
+    if (this.resolvedError == null) {
       this.resolvedError = newError;
-    else{
-      if(getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedError)){
+    } else {
+      if (getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedError)) {
         this.resolvedError = newError;
       }
     }
@@ -175,22 +175,23 @@ public abstract class Operation {
 
   public String getErrorMessage() {
     String message = null;
-    switch(resolvedError) {
+    switch (resolvedError) {
       case AmbryUnavailable:
         message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy +
-        "resulting in AmbryUnavailable";
+            "resulting in AmbryUnavailable";
         break;
       case BlobDoesNotExist:
         message += "BlobDoesNotExist to perform the operation " + context + ":" + operationPolicy;
         break;
       case BlobDeleted:
-        message += "Cannot perform the operation " + context + ":" + operationPolicy +" as Blob is deleted ";
+        message += "Cannot perform the operation " + context + ":" + operationPolicy + " as Blob is deleted ";
         break;
       case BlobExpired:
-        message += "Cannot perform the operation " + context + ":" + operationPolicy +" as Blob expired ";
+        message += "Cannot perform the operation " + context + ":" + operationPolicy + " as Blob expired ";
         break;
       default:
-        message += "Experienced an unexpected internal "+ resolvedError +" error for operation " + context + ":" + operationPolicy;
+        message += "Experienced an unexpected internal " + resolvedError + " error for operation " + context + ":"
+            + operationPolicy;
     }
     return message;
   }
@@ -202,7 +203,6 @@ public abstract class Operation {
   public synchronized CoordinatorError getCurrentError() {
     return this.currentError;
   }
-
 }
 
 /**

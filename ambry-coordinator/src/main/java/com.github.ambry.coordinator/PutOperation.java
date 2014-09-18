@@ -42,7 +42,7 @@ final public class PutOperation extends Operation {
       ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutPolicy(datacenterName, blobId.getPartition()));
+        new PutPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
@@ -117,7 +117,6 @@ final public class PutOperation extends Operation {
     return precedenceLevels.get(coordinatorError);
   }
 }
-
 
 final class PutOperationRequest extends OperationRequest {
   protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,

@@ -50,6 +50,7 @@ public class AmbryCoordinator implements Coordinator {
   private ExecutorService requesterPool;
   private ConnectionPool connectionPool;
   private final Random randomForPartitionSelection;
+  private boolean crossDCProxyCallsEnabled;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -78,6 +79,7 @@ public class AmbryCoordinator implements Coordinator {
 
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
+      this.crossDCProxyCallsEnabled = coordinatorConfig.crossDCProxyCallEnable;
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
@@ -136,7 +138,7 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, coordinatorMetrics);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics);
   }
 
   private PartitionId getPartitionForPut()

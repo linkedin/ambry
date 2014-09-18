@@ -54,7 +54,7 @@ public abstract class GetOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new GetPolicy(datacenterName, blobId.getPartition()));
+        new GetPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -71,7 +71,6 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 4);
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
-
 
   GetRequest makeGetRequest() {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);
@@ -100,7 +99,8 @@ public abstract class GetOperation extends Operation {
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
           String message =
-              context + " GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount + ".";
+              context + " GetOperation : Blob not found : blobNotFoundCount == replicaIdCount == " + blobNotFoundCount
+                  + ".";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
@@ -109,9 +109,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Deleted:
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
-          String message =
-              context + " GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount + " >= min(deleteThreshold == "
-                  + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message = context + " GetOperation : Blob deleted : blobDeletedCount == " + blobDeletedCount
+              + " >= min(deleteThreshold == " + Blob_Deleted_Count_Threshold + ", replicaIdCount == " + replicaIdCount
+              + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
@@ -120,9 +120,9 @@ public abstract class GetOperation extends Operation {
       case Blob_Expired:
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
-          String message =
-              context + " GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount + " >= min(expiredThreshold == "
-                  + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount + ").";
+          String message = context + " GetOperation : Blob expired : blobExpiredCount == " + blobExpiredCount
+              + " >= min(expiredThreshold == " + Blob_Expired_Count_Threshold + ", replicaIdCount == " + replicaIdCount
+              + ").";
           logger.trace(message);
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }

@@ -45,6 +45,13 @@ public class CoordinatorConfig {
   @Default("2000")
   public final int connectionPoolCheckoutTimeoutMs;
 
+  /**
+   * Indicates if all operations should or should not do cross dc proxy calls
+   */
+  @Config("coordinator.cross.dc.proxy.call.enable")
+  @Default("true")
+  public final boolean crossDCProxyCallEnable;
+
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
     this.hostname = verifiableProperties.getString("coordinator.hostname");
     this.datacenterName = verifiableProperties.getString("coordinator.datacenter.name");
@@ -56,5 +63,6 @@ public class CoordinatorConfig {
         "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
+    this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
   }
 }
