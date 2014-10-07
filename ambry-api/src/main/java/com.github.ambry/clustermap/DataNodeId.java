@@ -3,33 +3,33 @@ package com.github.ambry.clustermap;
 /**
  * A DataNodeId has many devices. A DataNodeId stores one or more {@link ReplicaId}s upon each device.
  */
-public interface DataNodeId {
+public abstract class DataNodeId implements Comparable<DataNodeId> {
 
   /**
    * Gets the hostname of this DataNodeId.
    *
    * @return fully qualified domain name of the DataNodeId.
    */
-  public String getHostname();
+  public abstract String getHostname();
 
   /**
    * Gets the DataNodeId's connection port.
    *
    * @return port upon which to establish a connection with the DataNodeId.
    */
-  public int getPort();
+  public abstract int getPort();
 
   /**
    * Gets the state of the DataNodeId.
    *
    * @return state of the DataNodeId.
    */
-  public HardwareState getState();
+  public abstract HardwareState getState();
 
   /**
    * Gets the DataNodeId's datacenter
    *
    * @return name of the Datacenter
    */
-  public String getDatacenterName();
+  public abstract String getDatacenterName();
 }

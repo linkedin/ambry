@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 final class RemoteReplicaInfo {
   private final ReplicaId replicaId;
+  private final ReplicaId localReplicaId;
   private final Object lock = new Object();
 
   // tracks the point up to which a node is in sync with a remote replica
@@ -51,8 +52,10 @@ final class RemoteReplicaInfo {
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
 
-  public RemoteReplicaInfo(ReplicaId replicaId, Store localStore, FindToken token, long tokenPersistIntervalInMs) {
+  public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore,
+                           FindToken token, long tokenPersistIntervalInMs) {
     this.replicaId = replicaId;
+    this.localReplicaId = localReplicaId;
     this.currentToken = token;
     if (tokenToPersist == null) {
       this.tokenToPersist = token;
@@ -65,6 +68,14 @@ final class RemoteReplicaInfo {
 
   public ReplicaId getReplicaId() {
     return replicaId;
+  }
+
+  public ReplicaId getLocalReplicaId() {
+    return localReplicaId;
+  }
+
+  public Store getLocalStore() {
+    return localStore;
   }
 
   public long getReplicaLagInBytes() {
@@ -166,8 +177,9 @@ final class PartitionInfo {
 public final class ReplicationManager {
 
   private final Map<PartitionId, PartitionInfo> partitionsToReplicate;
-  private final List<ReplicaThread> replicaThreads;
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
+  private final List<ReplicaThread> replicationIntraDCThreads;
+  private final List<ReplicaThread> replicationInterDCThreads;
   private final ReplicationConfig replicationConfig;
   private final FindTokenFactory factory;
   private final ClusterMap clusterMap;
@@ -192,8 +204,12 @@ public final class ReplicationManager {
     try {
       this.replicationConfig = replicationConfig;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      this.replicaThreads = new ArrayList<ReplicaThread>(replicationConfig.replicationNumReplicaThreads);
-      this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaThreads);
+      this.replicationIntraDCThreads =
+              new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfIntraDCReplicaThreads);
+      this.replicationInterDCThreads =
+              new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfInterDCReplicaThreads);
+      this.replicationMetrics =
+              new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads);
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -215,7 +231,7 @@ public final class ReplicationManager {
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
             RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(remoteReplica, storeManager.getStore(replicaId.getPartitionId()),
+                new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier);
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
@@ -352,7 +368,10 @@ public final class ReplicationManager {
       throws ReplicationException {
     try {
       // stop all replica threads
-      for (ReplicaThread replicaThread : replicaThreads) {
+      for (ReplicaThread replicaThread : replicationIntraDCThreads) {
+        replicaThread.shutdown();
+      }
+      for (ReplicaThread replicaThread : replicationInterDCThreads) {
         replicaThread.shutdown();
       }
       // persist replica tokens

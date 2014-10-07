@@ -16,24 +16,39 @@ import java.util.List;
  * by replica metadata response to specify information for a partition
  */
 public class ReplicaMetadataResponseInfo {
-  private FindToken token;
-  private MessageInfoListSerde messageInfoListSerDe;
+  private final FindToken token;
+  private final MessageInfoListSerde messageInfoListSerDe;
   private final int messageInfoListSize;
   private final long remoteReplicaLagInBytes;
-  private PartitionId partitionId;
+  private final PartitionId partitionId;
+  private final ServerErrorCode errorCode;
 
+  private static final int Error_Size_InBytes = 2;
   private static final int Remote_Replica_Lag_Size_In_Bytes = 8;
 
   public ReplicaMetadataResponseInfo(PartitionId partitionId, FindToken findToken, List<MessageInfo> messageInfoList,
       long remoteReplicaLagInBytes) {
     if (partitionId == null || findToken == null || messageInfoList == null) {
-      throw new IllegalArgumentException("Invalid partition or token or message info list");
+      throw new IllegalArgumentException("Invalid partition or token or message info list for ReplicaMetadataResponseInfo");
     }
     this.partitionId = partitionId;
     this.remoteReplicaLagInBytes = remoteReplicaLagInBytes;
     messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
     messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.token = findToken;
+    this.errorCode = ServerErrorCode.No_Error;
+  }
+
+  public ReplicaMetadataResponseInfo(PartitionId partitionId, ServerErrorCode errorCode) {
+    if (partitionId == null) {
+      throw new IllegalArgumentException("Invalid partition for ReplicaMetadataResponseInfo");
+    }
+    this.partitionId = partitionId;
+    this.errorCode = errorCode;
+    this.token = null;
+    this.messageInfoListSerDe = null;
+    this.messageInfoListSize = 0;
+    this.remoteReplicaLagInBytes = 0;
   }
 
   public PartitionId getPartitionId() {
@@ -52,38 +67,50 @@ public class ReplicaMetadataResponseInfo {
     return remoteReplicaLagInBytes;
   }
 
+  public ServerErrorCode getError() {
+    return errorCode;
+  }
+
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactory factory,
       ClusterMap clusterMap)
       throws IOException {
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    FindToken token = factory.getFindToken(stream);
-    List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
-    long remoteReplicaLag = stream.readLong();
-    return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoList, remoteReplicaLag);
+    ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
+    if (error != ServerErrorCode.No_Error) {
+      return new ReplicaMetadataResponseInfo(partitionId, error);
+    } else {
+      FindToken token = factory.getFindToken(stream);
+      List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
+      long remoteReplicaLag = stream.readLong();
+      return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoList, remoteReplicaLag);
+    }
   }
 
   public void writeTo(ByteBuffer buffer) {
     buffer.put(partitionId.getBytes());
-    if (token != null) {
+    buffer.putShort((short) errorCode.ordinal());
+    if (errorCode == ServerErrorCode.No_Error) {
       buffer.put(token.toBytes());
       messageInfoListSerDe.serializeMessageInfoList(buffer);
+      buffer.putLong(remoteReplicaLagInBytes);
     }
-    buffer.putLong(remoteReplicaLagInBytes);
   }
 
   public long sizeInBytes() {
-    return messageInfoListSize + (token == null ? 0 : token.toBytes().length) + Remote_Replica_Lag_Size_In_Bytes
-        + partitionId.getBytes().length;
+    return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize)) +
+             + partitionId.getBytes().length + Error_Size_InBytes;
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append(partitionId);
-    if (token != null) {
+    sb.append(" ServerErrorCode=").append(errorCode);
+    if (errorCode == ServerErrorCode.No_Error) {
       sb.append(" Token=").append(token);
+      sb.append(" MessageInfoList=").append(messageInfoListSerDe.getMessageInfoList());
+      sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     }
-    sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     return sb.toString();
   }
 }

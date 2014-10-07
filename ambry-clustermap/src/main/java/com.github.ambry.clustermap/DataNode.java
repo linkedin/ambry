@@ -16,7 +16,7 @@ import java.util.List;
  * DataNode is uniquely identified by its hostname and port. A DataNode is in a {@link Datacenter}. A DataNode has zero
  * or more {@link Disk}s.
  */
-public class DataNode implements DataNodeId {
+public class DataNode extends DataNodeId {
   private static final int MinPort = 1025;
   private static final int MaxPort = 65535;
 
@@ -197,5 +197,19 @@ public class DataNode implements DataNodeId {
     int result = hostname.hashCode();
     result = 31 * result + port;
     return result;
+  }
+
+  @Override
+  public int compareTo(DataNodeId o) {
+    if (o == null) {
+      throw new NullPointerException("input argument null");
+    }
+
+    DataNode other = (DataNode) o;
+    int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
+    if (compare == 0) {
+      compare = hostname.compareTo(other.hostname);
+    }
+    return compare;
   }
 }

@@ -1,10 +1,6 @@
 package com.github.ambry.replication;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,8 +11,8 @@ import java.util.List;
  */
 public class ReplicationMetrics {
 
-  public final Counter interColoReplicationBytesCount;
-  public final Counter intraColoReplicationBytesCount;
+  public final Meter interColoReplicationBytesRate;
+  public final Meter intraColoReplicationBytesRate;
   public final Counter interColoMetadataExchangeCount;
   public final Counter intraColoMetadataExchangeCount;
   public final Counter interColoBlobsReplicatedCount;
@@ -31,16 +27,17 @@ public class ReplicationMetrics {
   public final Histogram intraColoFixMissingKeysTime;
   public final Histogram interColoExchangeMetadataTime;
   public final Histogram interColoFixMissingKeysTime;
-  public Gauge<Integer> numberOfReplicaThreads;
-  private List<ReplicaThread> replicaThreads;
+  public Gauge<Integer> numberOfIntraDCReplicaThreads;
+  public Gauge<Integer> numberOfInterDCReplicaThreads;
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
 
-  public ReplicationMetrics(MetricRegistry registry, List<ReplicaThread> replicaThreads) {
-    interColoReplicationBytesCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesCount"));
-    intraColoReplicationBytesCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesCount"));
+  public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
+                            final List<ReplicaThread> replicaInterDCThreads) {
+    interColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
+    intraColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     interColoMetadataExchangeCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoMetadataExchangeCount"));
     intraColoMetadataExchangeCount =
@@ -71,20 +68,28 @@ public class ReplicationMetrics {
     interColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoFixMissingKeysTime"));
 
-    this.replicaThreads = replicaThreads;
     this.registry = registry;
-    numberOfReplicaThreads = new Gauge<Integer>() {
+    numberOfIntraDCReplicaThreads = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return getLiveThreads();
+        return getLiveThreads(replicaIntraDCThreads);
+      }
+    };
+    numberOfInterDCReplicaThreads = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return getLiveThreads(replicaInterDCThreads);
       }
     };
 
-    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreads"), numberOfReplicaThreads);
+    registry.register(MetricRegistry.name(ReplicaThread.class,
+            "NumberOfIntraDCReplicaThreads"), numberOfIntraDCReplicaThreads);
+    registry.register(MetricRegistry.name(ReplicaThread.class,
+            "NumberOfInterDCReplicaThreads"), numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
   }
 
-  private int getLiveThreads() {
+  private int getLiveThreads(List<ReplicaThread> replicaThreads) {
     int count = 0;
     for (ReplicaThread thread : replicaThreads) {
       if (thread.isThreadUp()) {
