@@ -210,8 +210,8 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 /**
  * Serially probes data nodes until blob is retrieved.
  */
-class GetPolicy extends ProbeLocalFirstOperationPolicy {
-  public GetPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+class SerialOperationPolicy extends ProbeLocalFirstOperationPolicy {
+  public SerialOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
     super(datacenterName, partitionId, crossDCProxyCallEnabled);
   }
@@ -271,6 +271,23 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   @Override
   public boolean mayComplete() {
     return (replicaIdCount - failedRequests.size()) >= successTarget;
+  }
+}
+
+/**
+ * Sends get requests in parallel. Has up to two in flight to mask single server latency events.
+ */
+class GetPolicy extends ParallelOperationPolicy {
+  public GetPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+      throws CoordinatorException {
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
+    if (replicaIdCount == 1) {
+      super.successTarget = 1;
+      super.requestParallelism = 1;
+    } else {
+      super.successTarget = 1;
+      super.requestParallelism = 2;
+    }
   }
 }
 

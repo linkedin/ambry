@@ -24,6 +24,150 @@ public class OperationPolicyTest {
   final String datacenterBeta = "beta";
 
   @Test
+  public void testSerialOperationPolicy()
+      throws CoordinatorException {
+    // Simple success test
+    {
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 6);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
+
+      ReplicaId replicaId = op.getNextReplicaIdForSend();
+      assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      op.onSuccessfulResponse(replicaId);
+      assertTrue(op.isComplete());
+      assertFalse(op.isCorrupt());
+    }
+
+    // Failures but still succeed test
+    {
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 6);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
+
+      for (int i = 0; i < 5; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertTrue(op.mayComplete());
+        op.onFailedResponse(replicaId);
+      }
+      ReplicaId replicaId = op.getNextReplicaIdForSend();
+      assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterBeta);
+      assertTrue(op.mayComplete());
+      op.onSuccessfulResponse(replicaId);
+      assertTrue(op.mayComplete());
+      assertTrue(op.isComplete());
+      assertFalse(op.isCorrupt());
+    }
+
+    // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct
+    {
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 6);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
+
+      List<ReplicaId> replicasInFlight = new ArrayList<ReplicaId>();
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
+        replicasInFlight.add(replicaId);
+        assertFalse(op.sendMoreRequests(replicasInFlight));
+        assertTrue(op.mayComplete());
+        op.onFailedResponse(replicaId);
+        replicasInFlight.clear();
+        assertTrue(op.sendMoreRequests(replicasInFlight));
+      }
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterBeta);
+        replicasInFlight.add(replicaId);
+        assertFalse(op.sendMoreRequests(replicasInFlight));
+        assertTrue(op.mayComplete());
+        op.onFailedResponse(replicaId);
+        replicasInFlight.clear();
+        if (i != 2) {
+          assertTrue(op.sendMoreRequests(replicasInFlight));
+        } else {
+          assertFalse(op.sendMoreRequests(replicasInFlight));
+        }
+      }
+      assertFalse(op.mayComplete());
+      assertFalse(op.isComplete());
+      assertFalse(op.isCorrupt());
+    }
+
+    // Failure test;  ensure local probe policy is enforced and remote calls do not happen
+    {
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 3);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
+
+      List<ReplicaId> replicasInFlight = new ArrayList<ReplicaId>();
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
+        replicasInFlight.add(replicaId);
+        assertFalse(op.sendMoreRequests(replicasInFlight));
+        assertTrue(op.mayComplete());
+        op.onFailedResponse(replicaId);
+        replicasInFlight.clear();
+        boolean sendMoreRequests = op.sendMoreRequests(replicasInFlight);
+        if (i < 2) {
+          Assert.assertTrue(sendMoreRequests);
+        } else {
+          Assert.assertFalse(sendMoreRequests);
+        }
+      }
+
+      assertFalse(op.mayComplete());
+      assertFalse(op.isComplete());
+      assertFalse(op.isCorrupt());
+    }
+
+    // Corruption test
+    {
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 6);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
+
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
+        assertTrue(op.mayComplete());
+        op.onCorruptResponse(replicaId);
+      }
+      for (int i = 0; i < 3; i++) {
+        ReplicaId replicaId = op.getNextReplicaIdForSend();
+        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterBeta);
+        assertTrue(op.mayComplete());
+        op.onCorruptResponse(replicaId);
+      }
+      assertFalse(op.mayComplete());
+      assertFalse(op.isComplete());
+      assertTrue(op.isCorrupt());
+    }
+  }
+
+  @Test
   public void testGetPolicy()
       throws CoordinatorException {
     // Simple success test
@@ -67,7 +211,8 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct
+    // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
+    // plus 1 for good luck in flight)
     {
       OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
@@ -78,31 +223,73 @@ public class OperationPolicyTest {
       assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
 
       List<ReplicaId> replicasInFlight = new ArrayList<ReplicaId>();
-      for (int i = 0; i < 3; i++) {
-        ReplicaId replicaId = op.getNextReplicaIdForSend();
-        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
-        replicasInFlight.add(replicaId);
-        assertFalse(op.sendMoreRequests(replicasInFlight));
-        assertTrue(op.mayComplete());
-        op.onFailedResponse(replicaId);
-        replicasInFlight.clear();
-        assertTrue(op.sendMoreRequests(replicasInFlight));
-      }
-      for (int i = 0; i < 3; i++) {
-        ReplicaId replicaId = op.getNextReplicaIdForSend();
-        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterBeta);
-        replicasInFlight.add(replicaId);
-        assertFalse(op.sendMoreRequests(replicasInFlight));
-        assertTrue(op.mayComplete());
-        op.onFailedResponse(replicaId);
-        replicasInFlight.clear();
-        if (i != 2) {
-          assertTrue(op.sendMoreRequests(replicasInFlight));
-        } else {
-          assertFalse(op.sendMoreRequests(replicasInFlight));
-        }
-      }
+
+      ReplicaId replicaId0 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId0);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId1 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId1);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId0);
+      replicasInFlight.remove(replicaId0);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId2 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId2);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId1);
+      replicasInFlight.remove(replicaId1);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId3 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId3.getDataNodeId().getDatacenterName(), datacenterBeta);
+      replicasInFlight.add(replicaId3);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId2);
+      replicasInFlight.remove(replicaId2);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId4 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId4.getDataNodeId().getDatacenterName(), datacenterBeta);
+      replicasInFlight.add(replicaId4);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId3);
+      replicasInFlight.remove(replicaId3);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId5 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId5.getDataNodeId().getDatacenterName(), datacenterBeta);
+      replicasInFlight.add(replicaId5);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId4);
+      replicasInFlight.remove(replicaId4);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId5);
+      replicasInFlight.remove(replicaId5);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
       assertFalse(op.mayComplete());
+
       assertFalse(op.isComplete());
       assertFalse(op.isCorrupt());
     }
@@ -118,23 +305,40 @@ public class OperationPolicyTest {
       assertTrue(op.sendMoreRequests(new ArrayList<ReplicaId>()));
 
       List<ReplicaId> replicasInFlight = new ArrayList<ReplicaId>();
-      for (int i = 0; i < 3; i++) {
-        ReplicaId replicaId = op.getNextReplicaIdForSend();
-        assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
-        replicasInFlight.add(replicaId);
-        assertFalse(op.sendMoreRequests(replicasInFlight));
-        assertTrue(op.mayComplete());
-        op.onFailedResponse(replicaId);
-        replicasInFlight.clear();
-        boolean sendMoreRequests = op.sendMoreRequests(replicasInFlight);
-        if (i < 2) {
-          Assert.assertTrue(sendMoreRequests);
-        } else {
-          Assert.assertFalse(sendMoreRequests);
-        }
-      }
 
+      ReplicaId replicaId0 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId0);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId1 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId1);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId0);
+      replicasInFlight.remove(replicaId0);
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      ReplicaId replicaId2 = op.getNextReplicaIdForSend();
+      assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
+      replicasInFlight.add(replicaId2);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId1);
+      replicasInFlight.remove(replicaId1);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+      assertTrue(op.mayComplete());
+
+      op.onFailedResponse(replicaId2);
+      replicasInFlight.remove(replicaId2);
+      assertFalse(op.sendMoreRequests(replicasInFlight));
       assertFalse(op.mayComplete());
+
       assertFalse(op.isComplete());
       assertFalse(op.isCorrupt());
     }
