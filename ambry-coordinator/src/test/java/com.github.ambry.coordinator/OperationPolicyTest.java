@@ -187,7 +187,41 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    // Failures but still succeed test
+    // One failure but still succeeds
+    {
+      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+
+      List<ReplicaId> replicasInFlight = new ArrayList<ReplicaId>();
+
+      assertFalse(op.isCorrupt());
+      assertFalse(op.isComplete());
+      assertEquals(op.getReplicaIdCount(), 6);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+
+      ReplicaId replicaId0 = op.getNextReplicaIdForSend();
+      replicasInFlight.add(replicaId0);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+
+      ReplicaId replicaId1 = op.getNextReplicaIdForSend();
+      replicasInFlight.add(replicaId1);
+      assertTrue(op.mayComplete());
+      assertFalse(op.sendMoreRequests(replicasInFlight));
+
+      op.onFailedResponse(replicaId1);
+      replicasInFlight.remove(replicaId1);
+      assertTrue(op.mayComplete());
+      assertTrue(op.sendMoreRequests(replicasInFlight));
+
+      op.onSuccessfulResponse(replicaId0);
+      replicasInFlight.remove(replicaId0);
+      assertTrue(op.isComplete());
+      assertTrue(op.mayComplete());
+      assertFalse(op.isCorrupt());
+    }
+
+    // Many failures but still succeeds
     {
       OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
