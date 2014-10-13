@@ -6,7 +6,7 @@ import com.github.ambry.clustermap.HardwareState;
 import java.util.List;
 
 
-public class MockDataNodeId implements DataNodeId {
+public class MockDataNodeId extends DataNodeId {
   int port;
   List<String> mountPaths;
   String hostname = "localhost";
@@ -40,5 +40,43 @@ public class MockDataNodeId implements DataNodeId {
 
   public List<String> getMountPaths() {
     return mountPaths;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    MockDataNodeId dataNode = (MockDataNodeId) o;
+
+    if (port != dataNode.port) {
+      return false;
+    }
+    return hostname.equals(dataNode.hostname);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = hostname.hashCode();
+    result = 31 * result + port;
+    return result;
+  }
+
+  @Override
+  public int compareTo(DataNodeId o) {
+    if (o == null) {
+      throw new NullPointerException("input argument null");
+    }
+
+    MockDataNodeId other = (MockDataNodeId) o;
+    int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
+    if (compare == 0) {
+      compare = hostname.compareTo(other.hostname);
+    }
+    return compare;
   }
 }

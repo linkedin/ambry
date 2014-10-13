@@ -33,7 +33,7 @@ public class ReplicationMetrics {
   private MetricRegistry registry;
 
   public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
-                            final List<ReplicaThread> replicaInterDCThreads) {
+      final List<ReplicaThread> replicaInterDCThreads) {
     interColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
@@ -82,10 +82,10 @@ public class ReplicationMetrics {
       }
     };
 
-    registry.register(MetricRegistry.name(ReplicaThread.class,
-            "NumberOfIntraDCReplicaThreads"), numberOfIntraDCReplicaThreads);
-    registry.register(MetricRegistry.name(ReplicaThread.class,
-            "NumberOfInterDCReplicaThreads"), numberOfInterDCReplicaThreads);
+    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfIntraDCReplicaThreads"),
+        numberOfIntraDCReplicaThreads);
+    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInterDCReplicaThreads"),
+        numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
   }
 

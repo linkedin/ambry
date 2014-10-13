@@ -230,9 +230,10 @@ public class AmbryRequests implements RequestAPI {
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
         ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), false);
         if (error != ServerErrorCode.No_Error) {
-          logger.error("Validating get request failed for partition {} with error {}", partitionRequestInfo.getPartition(), error);
+          logger.error("Validating get request failed for partition {} with error {}",
+              partitionRequestInfo.getPartition(), error);
           PartitionResponseInfo partitionResponseInfo =
-                  new PartitionResponseInfo(partitionRequestInfo.getPartition(), error);
+              new PartitionResponseInfo(partitionRequestInfo.getPartition(), error);
           partitionResponseInfoList.add(partitionResponseInfo);
         } else {
           try {
@@ -248,11 +249,11 @@ public class AmbryRequests implements RequestAPI {
           } catch (StoreException e) {
             if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
               logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                      "for partition " + partitionRequestInfo.getPartition(), e);
+                  "for partition " + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else {
               logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                      " for partition " + partitionRequestInfo.getPartition(), e);
+                  " for partition " + partitionRequestInfo.getPartition(), e);
               if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
                 metrics.ttlExpiredError.inc();
               } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
@@ -261,21 +262,19 @@ public class AmbryRequests implements RequestAPI {
                 metrics.unExpectedStoreGetError.inc();
               }
             }
-            PartitionResponseInfo partitionResponseInfo =
-                    new PartitionResponseInfo(partitionRequestInfo.getPartition(),
-                            ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+            PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
+                ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (MessageFormatException e) {
             logger.error("Message format exception on a get with error code " + e.getErrorCode() +
-                    " for partition " + partitionRequestInfo.getPartition(), e);
+                " for partition " + partitionRequestInfo.getPartition(), e);
             if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
               metrics.dataCorruptError.inc();
             } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
               metrics.unknownFormatError.inc();
             }
-            PartitionResponseInfo partitionResponseInfo =
-                    new PartitionResponseInfo(partitionRequestInfo.getPartition(),
-                            ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
+            PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
+                ErrorMapping.getMessageFormatErrorMapping(e.getErrorCode()));
             partitionResponseInfoList.add(partitionResponseInfo);
           }
         }
@@ -376,52 +375,52 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
     try {
-        List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<ReplicaMetadataResponseInfo>(
-            replicaMetadataRequest.getReplicaMetadataRequestInfoList().size());
-        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
-            .getReplicaMetadataRequestInfoList()) {
-          ServerErrorCode error = validateRequest(replicaMetadataRequestInfo.getPartitionId(), false);
-          if (error != ServerErrorCode.No_Error) {
-            logger.error("Validating replica metadata request failed with error {} for partition {}", error,
-                    replicaMetadataRequestInfo.getPartitionId());
+      List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
+          new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataRequest.getReplicaMetadataRequestInfoList().size());
+      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
+          .getReplicaMetadataRequestInfoList()) {
+        ServerErrorCode error = validateRequest(replicaMetadataRequestInfo.getPartitionId(), false);
+        if (error != ServerErrorCode.No_Error) {
+          logger.error("Validating replica metadata request failed with error {} for partition {}", error,
+              replicaMetadataRequestInfo.getPartitionId());
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(), error);
+          replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+        } else {
+          try {
+            PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
+            FindToken findToken = replicaMetadataRequestInfo.getToken();
+            String hostName = replicaMetadataRequestInfo.getHostName();
+            String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
+            Store store = storeManager.getStore(partitionId);
+            FindInfo findInfo =
+                store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+            replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
+                findInfo.getFindToken().getBytesRead());
+            long remoteReplicaLagInBytes =
+                replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                    new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(), error);
+                new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
+                    remoteReplicaLagInBytes);
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
-          } else {
-            try {
-              PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
-              FindToken findToken = replicaMetadataRequestInfo.getToken();
-              String hostName = replicaMetadataRequestInfo.getHostName();
-              String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
-              Store store = storeManager.getStore(partitionId);
-              FindInfo findInfo =
-                  store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-              replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
-                  findInfo.getFindToken().getBytesRead());
-              long remoteReplicaLagInBytes =
-                  replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
-              ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                  new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
-                      remoteReplicaLagInBytes);
-              replicaMetadataResponseList.add(replicaMetadataResponseInfo);
-            } catch (StoreException e) {
-              logger.error("Store exception on a put with error code " + e.getErrorCode() +
-                      " for partition " + replicaMetadataRequestInfo.getPartitionId(), e);
-              if (e.getErrorCode() == StoreErrorCodes.IOError) {
-                metrics.storeIOError.inc();
-              } else {
-                metrics.unExpectedStoreFindEntriesError.inc();
-              }
-              ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                      new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(),
-                              ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
-              replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+          } catch (StoreException e) {
+            logger.error("Store exception on a put with error code " + e.getErrorCode() +
+                " for partition " + replicaMetadataRequestInfo.getPartitionId(), e);
+            if (e.getErrorCode() == StoreErrorCodes.IOError) {
+              metrics.storeIOError.inc();
+            } else {
+              metrics.unExpectedStoreFindEntriesError.inc();
             }
+            ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+                new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(),
+                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+            replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }
-        response =
-            new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-                ServerErrorCode.No_Error, replicaMetadataResponseList);
+      }
+      response =
+          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+              ServerErrorCode.No_Error, replicaMetadataResponseList);
     } catch (Exception e) {
       logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =

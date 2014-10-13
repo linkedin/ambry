@@ -90,9 +90,9 @@ public class ReplicationConfig {
     replicationTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
-            verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
+        verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
-            verifiableProperties.getInt("replication.no.of.inter.dc.replica.threads", 1);
+        verifiableProperties.getInt("replication.no.of.inter.dc.replica.threads", 1);
     replicationConnectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);
     replicationTokenFlushIntervalSeconds =

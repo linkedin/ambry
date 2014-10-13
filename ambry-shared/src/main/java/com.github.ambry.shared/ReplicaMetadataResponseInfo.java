@@ -29,7 +29,8 @@ public class ReplicaMetadataResponseInfo {
   public ReplicaMetadataResponseInfo(PartitionId partitionId, FindToken findToken, List<MessageInfo> messageInfoList,
       long remoteReplicaLagInBytes) {
     if (partitionId == null || findToken == null || messageInfoList == null) {
-      throw new IllegalArgumentException("Invalid partition or token or message info list for ReplicaMetadataResponseInfo");
+      throw new IllegalArgumentException(
+          "Invalid partition or token or message info list for ReplicaMetadataResponseInfo");
     }
     this.partitionId = partitionId;
     this.remoteReplicaLagInBytes = remoteReplicaLagInBytes;
@@ -98,7 +99,7 @@ public class ReplicaMetadataResponseInfo {
 
   public long sizeInBytes() {
     return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize)) +
-             + partitionId.getBytes().length + Error_Size_InBytes;
+        +partitionId.getBytes().length + Error_Size_InBytes;
   }
 
   @Override

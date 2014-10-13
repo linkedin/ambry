@@ -110,16 +110,16 @@ public class MessageFormatSend implements Send {
                   .getStoreKey(new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
               if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
                 throw new MessageFormatException(
-                    "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
-                    MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+                    "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId "
+                        + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
               }
 
               if (flag == MessageFormatFlags.BlobProperties) {
                 int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
                     .getBlobPropertiesRecordRelativeOffset();
 
-                infoList
-                    .add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
+                infoList.add(i,
+                    new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
                 totalSizeToWrite += blobPropertiesRecordSize;
                 logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                     infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
@@ -127,7 +127,8 @@ public class MessageFormatSend implements Send {
                 int userMetadataRecordSize =
                     headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset();
 
-                infoList.add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
+                infoList
+                    .add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
                 totalSizeToWrite += userMetadataRecordSize;
                 logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
                     infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
@@ -156,7 +157,7 @@ public class MessageFormatSend implements Send {
       }
     } catch (IOException e) {
       logger.trace("IOError when calculating offsets");
-      throw new MessageFormatException("IOError when calculating offsets ", e,  MessageFormatErrorCodes.IO_Error);
+      throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
     }
   }
 
