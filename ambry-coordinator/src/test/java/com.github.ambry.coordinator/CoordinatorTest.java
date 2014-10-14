@@ -814,10 +814,11 @@ public class CoordinatorTest {
 
     String blobId = ac.putBlob(putBlobProperties, putUserMetadata, blobData);
 
-    //create dummy blobid
-    System.out.println("blob Id " + blobId);
-    String nonExistantBlobId = blobId.substring(0, blobId.length() - 1) + 5;
-    System.out.println("non existent blob Id " + nonExistantBlobId);
+    // create dummy blobid by corrupting the actual blob id. Goal is to corrupt the UUID part of id rather than break
+    // the id so much that an exception is thrown during blob id construction.
+    System.err.println("blob Id " + blobId);
+    String nonExistantBlobId = blobId.substring(0, blobId.length() - 5) + "AAAAA";
+    System.err.println("non existent blob Id " + nonExistantBlobId);
 
     try {
       BlobOutput getBlobOutput = ac.getBlob(nonExistantBlobId);
