@@ -52,12 +52,14 @@ final public class DeleteOperation extends Operation {
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+  protected ServerErrorCode processResponseError(ReplicaId replicaId, Response response)
       throws CoordinatorException {
-    switch (serverErrorCode) {
+    ServerErrorCode errorCodeToReturn = ServerErrorCode.No_Error;
+    switch (response.getError()) {
       case No_Error:
       case Blob_Deleted:
-        return true;
+        errorCodeToReturn = ServerErrorCode.No_Error;
+        break;
 
       // Cannot delete if blob is not found
       case Blob_Not_Found:
@@ -69,30 +71,36 @@ final public class DeleteOperation extends Operation {
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
         setCurrentError(CoordinatorError.BlobDoesNotExist);
-        return false;
+        errorCodeToReturn = ServerErrorCode.Blob_Not_Found;
+        break;
       case Blob_Expired:
         logger.trace(context + " Server returned Blob Expired error for DeleteOperation");
         setCurrentError(CoordinatorError.BlobExpired);
-        return false;
+        errorCodeToReturn = ServerErrorCode.Blob_Expired;
+        break;
       case Disk_Unavailable:
         logger.trace(context + " Server returned Disk Unavailable error for DeleteOperation");
         setCurrentError(CoordinatorError.AmbryUnavailable);
-        return false;
+        errorCodeToReturn = ServerErrorCode.Disk_Unavailable;
+        break;
       case IO_Error:
         logger.trace(context + " Server returned IO error for DeleteOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        errorCodeToReturn = ServerErrorCode.IO_Error;
+        break;
       case Partition_Unknown:
         logger.trace(context + " Server returned Partition Unknown error for DeleteOperation");
         setCurrentError(CoordinatorError.BlobDoesNotExist);
-        return false;
+        errorCodeToReturn = ServerErrorCode.Partition_Unknown;
+        break;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for DeleteOperation.",
             CoordinatorError.UnexpectedInternalError);
         logger.error("{} DeleteResponse for BlobId {} received from ReplicaId {} had unexpected error code {}: {}",
-            context, blobId, replicaId, serverErrorCode, e);
+            context, blobId, replicaId, response.getError(), e);
         throw e;
     }
+    return errorCodeToReturn;
   }
 
   @Override
