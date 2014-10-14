@@ -184,7 +184,7 @@ public class ServerTest {
       channel.send(getRequest4);
       stream = channel.receive();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp4.getError(), ServerErrorCode.Blob_Not_Found);
+      Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
@@ -287,6 +287,7 @@ public class ServerTest {
       InputStream stream = channel2.receive();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(resp1.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 1000);
@@ -303,6 +304,7 @@ public class ServerTest {
       stream = channel1.receive();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(resp2.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
@@ -360,7 +362,8 @@ public class ServerTest {
       channel3.send(getRequest4);
       stream = channel3.receive();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp4.getError(), ServerErrorCode.Blob_Not_Found);
+      Assert.assertEquals(resp4.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
@@ -368,6 +371,7 @@ public class ServerTest {
       InputStream deleteResponseStream = channel1.receive();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
+
 
       notificationSystem.awaitBlobDeletions(blobId1.toString());
       ids = new ArrayList<BlobId>();
@@ -379,7 +383,8 @@ public class ServerTest {
       channel3.send(getRequest5);
       stream = channel3.receive();
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp5.getError(), ServerErrorCode.Blob_Deleted);
+      Assert.assertEquals(resp5.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(resp5.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
 
       // persist and restore to check state
       cluster.getServers().get(0).shutdown();
@@ -795,7 +800,7 @@ public class ServerTest {
           channel.send(getRequest);
           InputStream stream = channel.receive();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-          Assert.assertEquals(resp.getError(), ServerErrorCode.Blob_Deleted);
+          Assert.assertEquals(resp.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
         }
       }
 
@@ -845,7 +850,8 @@ public class ServerTest {
         channel1.send(getRequest);
         InputStream stream = channel1.receive();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
         } else {
           try {
@@ -867,7 +873,8 @@ public class ServerTest {
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
         } else {
           try {
@@ -889,7 +896,8 @@ public class ServerTest {
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         //System.out.println("response from get " + resp.getError());
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
           blobsDeleted.remove(blobIds.get(j));
           blobsChecked.add(blobIds.get(j));
@@ -950,7 +958,8 @@ public class ServerTest {
         channel1.send(getRequest);
         InputStream stream = channel1.receive();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
         } else {
           try {
@@ -972,7 +981,8 @@ public class ServerTest {
         channel1.send(getRequest);
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
         } else {
           try {
@@ -994,7 +1004,8 @@ public class ServerTest {
         stream = channel1.receive();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         //System.out.println("response from get " + resp.getError());
-        if (resp.getError() == ServerErrorCode.Blob_Deleted || resp.getError() == ServerErrorCode.Blob_Not_Found) {
+        if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted ||
+            resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
           Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
           blobsChecked.remove(blobIds.get(j));
         } else {

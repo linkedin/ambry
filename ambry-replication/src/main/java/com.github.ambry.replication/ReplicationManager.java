@@ -402,7 +402,7 @@ public final class ReplicationManager {
     if (replicaListForNode == null) {
       replicaListForNode = new ArrayList<RemoteReplicaInfo>();
       replicaListForNode.add(remoteReplicaInfo);
-      replicasToReplicateIntraDC.put(remoteReplicaInfo.getReplicaId().getDataNodeId(), replicaListForNode);
+      replicasToReplicateMap.put(remoteReplicaInfo.getReplicaId().getDataNodeId(), replicaListForNode);
     } else {
       replicaListForNode.add(remoteReplicaInfo);
     }

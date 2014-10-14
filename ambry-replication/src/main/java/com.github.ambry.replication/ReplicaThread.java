@@ -111,6 +111,7 @@ class ReplicaThread implements Runnable {
                 exchangeMetadata(connectedChannel, replicasToReplicatePerNode, remoteColo);
             fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, remoteColo, exchangeMetadataResponseList);
           } catch (Exception e) {
+            e.printStackTrace();
             if (logger.isTraceEnabled()) {
               logger.error("Remote node: " + remoteNode +
                   " Thread name: " + threadName +
