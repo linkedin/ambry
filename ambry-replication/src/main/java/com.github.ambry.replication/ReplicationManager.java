@@ -369,7 +369,8 @@ public final class ReplicationManager {
   }
 
   /**
-   *
+   * Shutsdown the replication manager. Shutsdown the individual replica threads and
+   * then persists all the replica tokens
    * @throws ReplicationException
    */
   public void shutdown()
@@ -391,9 +392,9 @@ public final class ReplicationManager {
   }
 
   /**
-   *
-   * @param replicasToReplicateMap
-   * @param remoteReplicaInfo
+   * Updates the replicasToReplicateMap with the remoteReplicaInfo.
+   * @param replicasToReplicateMap The map that contains mapping between data nodes and the remote replicas
+   * @param remoteReplicaInfo The remote replica that needs to be added to the map
    */
   private void updateReplicasToReplicate(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateMap,
       RemoteReplicaInfo remoteReplicaInfo) {
@@ -409,10 +410,10 @@ public final class ReplicationManager {
   }
 
   /**
-   *
-   * @param replicasToReplicate
-   * @param numberOfReplicaThreads
-   * @param replicaThreadList
+   * Partitions the list of data node to remote replica list mapping between given set of replica threads
+   * @param replicasToReplicate Map of data nodes to remote replicas
+   * @param numberOfReplicaThreads The total number of replica threads between which the partition needs to be done
+   * @param replicaThreadList The list of replica threads
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList) {
@@ -447,8 +448,8 @@ public final class ReplicationManager {
   }
 
   /**
-   *
-   * @param mountPath
+   * Reads the replica tokens from the file and populates the Remote replica info
+   * @param mountPath The mount path where the replica tokens are stored
    * @throws ReplicationException
    * @throws IOException
    */

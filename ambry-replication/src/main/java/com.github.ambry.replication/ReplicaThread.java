@@ -11,7 +11,18 @@ import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.shared.*;
+import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ConnectedChannel;
+import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetRequest;
+import com.github.ambry.shared.GetResponse;
+import com.github.ambry.shared.PartitionRequestInfo;
+import com.github.ambry.shared.PartitionResponseInfo;
+import com.github.ambry.shared.ReplicaMetadataRequest;
+import com.github.ambry.shared.ReplicaMetadataRequestInfo;
+import com.github.ambry.shared.ReplicaMetadataResponse;
+import com.github.ambry.shared.ReplicaMetadataResponseInfo;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
@@ -24,7 +35,11 @@ import org.slf4j.LoggerFactory;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -111,7 +126,6 @@ class ReplicaThread implements Runnable {
                 exchangeMetadata(connectedChannel, replicasToReplicatePerNode, remoteColo);
             fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, remoteColo, exchangeMetadataResponseList);
           } catch (Exception e) {
-            e.printStackTrace();
             if (logger.isTraceEnabled()) {
               logger.error("Remote node: " + remoteNode +
                   " Thread name: " + threadName +

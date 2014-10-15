@@ -162,7 +162,6 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      e.printStackTrace();
       logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + putRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
@@ -174,7 +173,6 @@ public class AmbryRequests implements RequestAPI {
       response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      e.printStackTrace();
       logger.error("Unknown exception on a put for request " + putRequest, e);
       response =
           new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
