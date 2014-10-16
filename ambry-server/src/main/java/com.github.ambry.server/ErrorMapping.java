@@ -30,6 +30,7 @@ public class ErrorMapping {
     Map<MessageFormatErrorCodes, ServerErrorCode> tempMap = new HashMap<MessageFormatErrorCodes, ServerErrorCode>();
     tempMap.put(MessageFormatErrorCodes.Data_Corrupt, ServerErrorCode.Data_Corrupt);
     tempMap.put(MessageFormatErrorCodes.Unknown_Format_Version, ServerErrorCode.Data_Corrupt);
+    tempMap.put(MessageFormatErrorCodes.IO_Error, ServerErrorCode.IO_Error);
     messageFormatErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 

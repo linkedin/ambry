@@ -71,87 +71,93 @@ public class MessageFormatSend implements Send {
   // based on the type of data requested as indicated by the flags
   private void calculateOffsets()
       throws IOException, MessageFormatException {
-    long startTime = SystemTime.getInstance().milliseconds();
-    // get size
-    int messageCount = readSet.count();
-    // for each message, determine the offset and size that needs to be sent based on the flag
-    infoList = new ArrayList<SendInfo>(messageCount);
-    for (int i = 0; i < messageCount; i++) {
-      if (flag == MessageFormatFlags.All) {
-        // just copy over the total size and use relative offset to be 0
-        // We do not have to check any version in this case as we dont
-        // have to read any data to deserialize anything.
-        infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
-        totalSizeToWrite += readSet.sizeInBytes(i);
-      } else {
-        // read header version
-        ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
-        readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
-            MessageFormatRecord.Version_Field_Size_In_Bytes);
-        headerVersion.flip();
-        short version = headerVersion.getShort();
-        switch (version) {
-          case MessageFormatRecord.Message_Header_Version_V1:
+    try {
+      long startTime = SystemTime.getInstance().milliseconds();
+      // get size
+      int messageCount = readSet.count();
+      // for each message, determine the offset and size that needs to be sent based on the flag
+      infoList = new ArrayList<SendInfo>(messageCount);
+      for (int i = 0; i < messageCount; i++) {
+        if (flag == MessageFormatFlags.All) {
+          // just copy over the total size and use relative offset to be 0
+          // We do not have to check any version in this case as we dont
+          // have to read any data to deserialize anything.
+          infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
+          totalSizeToWrite += readSet.sizeInBytes(i);
+        } else {
+          // read header version
+          ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
+          readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
+              MessageFormatRecord.Version_Field_Size_In_Bytes);
+          headerVersion.flip();
+          short version = headerVersion.getShort();
+          switch (version) {
+            case MessageFormatRecord.Message_Header_Version_V1:
 
-            // read the header
-            ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-            headerVersion.clear();
-            header.putShort(headerVersion.getShort());
-            readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(header)),
-                MessageFormatRecord.Version_Field_Size_In_Bytes,
-                MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
-                    - MessageFormatRecord.Version_Field_Size_In_Bytes);
-            header.flip();
-            MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
-                new MessageFormatRecord.MessageHeader_Format_V1(header);
-            headerFormat.verifyHeader();
-            StoreKey storeKey = storeKeyFactory
-                .getStoreKey(new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
-            if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
-              throw new MessageFormatException(
-                  "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
-                  MessageFormatErrorCodes.Store_Key_Id_MisMatch);
-            }
+              // read the header
+              ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+              headerVersion.clear();
+              header.putShort(headerVersion.getShort());
+              readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(header)),
+                  MessageFormatRecord.Version_Field_Size_In_Bytes,
+                  MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+                      - MessageFormatRecord.Version_Field_Size_In_Bytes);
+              header.flip();
+              MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
+                  new MessageFormatRecord.MessageHeader_Format_V1(header);
+              headerFormat.verifyHeader();
+              StoreKey storeKey = storeKeyFactory
+                  .getStoreKey(new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
+              if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
+                throw new MessageFormatException(
+                    "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId "
+                        + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+              }
 
-            if (flag == MessageFormatFlags.BlobProperties) {
-              int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                  .getBlobPropertiesRecordRelativeOffset();
+              if (flag == MessageFormatFlags.BlobProperties) {
+                int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
+                    .getBlobPropertiesRecordRelativeOffset();
 
-              infoList
-                  .add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
-              totalSizeToWrite += blobPropertiesRecordSize;
-              logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
-                  infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
-            } else if (flag == MessageFormatFlags.BlobUserMetadata) {
-              int userMetadataRecordSize =
-                  headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset();
+                infoList.add(i,
+                    new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
+                totalSizeToWrite += blobPropertiesRecordSize;
+                logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
+                    infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+              } else if (flag == MessageFormatFlags.BlobUserMetadata) {
+                int userMetadataRecordSize =
+                    headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset();
 
-              infoList.add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
-              totalSizeToWrite += userMetadataRecordSize;
-              logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
-                  infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
-            } else if (flag == MessageFormatFlags.Blob) {
-              long blobRecordSize =
-                  headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
-                      .getBlobPropertiesRecordRelativeOffset());
-              infoList.add(i, new SendInfo(headerFormat.getBlobRecordRelativeOffset(), blobRecordSize));
-              totalSizeToWrite += blobRecordSize;
-              logger.trace("Sending data for message relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
-                  infoList.get(i).sizetoSend());
-            } else { //just return the header
-              int messageHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
-                  + MessageFormatRecord.Version_Field_Size_In_Bytes;
-              infoList.add(i, new SendInfo(0, messageHeaderSize));
-              totalSizeToWrite += messageHeaderSize;
-              logger.trace("Sending message header relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
-                  infoList.get(i).sizetoSend());
-            }
-            break;
-          default:
-            throw new MessageFormatException("Version not known while reading message - " + version,
-                MessageFormatErrorCodes.Unknown_Format_Version);
+                infoList
+                    .add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
+                totalSizeToWrite += userMetadataRecordSize;
+                logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
+                    infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+              } else if (flag == MessageFormatFlags.Blob) {
+                long blobRecordSize =
+                    headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
+                        .getBlobPropertiesRecordRelativeOffset());
+                infoList.add(i, new SendInfo(headerFormat.getBlobRecordRelativeOffset(), blobRecordSize));
+                totalSizeToWrite += blobRecordSize;
+                logger.trace("Sending data for message relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
+                    infoList.get(i).sizetoSend());
+              } else { //just return the header
+                int messageHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+                    + MessageFormatRecord.Version_Field_Size_In_Bytes;
+                infoList.add(i, new SendInfo(0, messageHeaderSize));
+                totalSizeToWrite += messageHeaderSize;
+                logger.trace("Sending message header relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
+                    infoList.get(i).sizetoSend());
+              }
+              break;
+            default:
+              throw new MessageFormatException("Version not known while reading message - " + version,
+                  MessageFormatErrorCodes.Unknown_Format_Version);
+          }
         }
       }
+    } catch (IOException e) {
+      logger.trace("IOError when calculating offsets");
+      throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
     }
   }
 

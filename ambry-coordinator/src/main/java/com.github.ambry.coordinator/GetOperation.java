@@ -82,19 +82,24 @@ public abstract class GetOperation extends Operation {
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+  protected ServerErrorCode processResponseError(ReplicaId replicaId, Response response)
       throws CoordinatorException {
+    ServerErrorCode serverErrorCode = response.getError();
+    if (serverErrorCode == ServerErrorCode.No_Error) {
+      GetResponse getResponse = (GetResponse)response;
+      serverErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
+    }
     switch (serverErrorCode) {
       case No_Error:
-        return true;
+        break;
       case IO_Error:
         logger.trace(context + " Server returned IO error for GetOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        break;
       case Data_Corrupt:
         logger.trace(context + " Server returned Data Corrupt error for GetOperation");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        break;
       case Blob_Not_Found:
         blobNotFoundCount++;
         if (blobNotFoundCount == replicaIdCount) {
@@ -105,7 +110,7 @@ public abstract class GetOperation extends Operation {
           throw new CoordinatorException(message, CoordinatorError.BlobDoesNotExist);
         }
         setCurrentError(CoordinatorError.BlobDoesNotExist);
-        return false;
+        break;
       case Blob_Deleted:
         blobDeletedCount++;
         if (blobDeletedCount >= min(Blob_Deleted_Count_Threshold, replicaIdCount)) {
@@ -116,7 +121,7 @@ public abstract class GetOperation extends Operation {
           throw new CoordinatorException(message, CoordinatorError.BlobDeleted);
         }
         setCurrentError(CoordinatorError.BlobDeleted);
-        return false;
+        break;
       case Blob_Expired:
         blobExpiredCount++;
         if (blobExpiredCount >= min(Blob_Expired_Count_Threshold, replicaIdCount)) {
@@ -127,15 +132,15 @@ public abstract class GetOperation extends Operation {
           throw new CoordinatorException(message, CoordinatorError.BlobExpired);
         }
         setCurrentError(CoordinatorError.BlobExpired);
-        return false;
+        break;
       case Disk_Unavailable:
         logger.trace(context + " Server returned Disk Unavailable error for GetOperation");
         setCurrentError(CoordinatorError.AmbryUnavailable);
-        return false;
+        break;
       case Partition_Unknown:
         logger.trace(context + " Server returned Partition Unknown error for GetOperation");
         setCurrentError(CoordinatorError.BlobDoesNotExist);
-        return false;
+        break;
       default:
         CoordinatorException e = new CoordinatorException("Server returned unexpected error for GetOperation.",
             CoordinatorError.UnexpectedInternalError);
@@ -144,6 +149,7 @@ public abstract class GetOperation extends Operation {
                 blobId, replicaId, serverErrorCode, e);
         throw e;
     }
+    return serverErrorCode;
   }
 
   @Override
@@ -172,7 +178,8 @@ abstract class GetOperationRequest extends OperationRequest {
   protected void deserializeResponsePayload(Response response)
       throws IOException, MessageFormatException {
     GetResponse getResponse = (GetResponse) response;
-    if (response.getError() == ServerErrorCode.No_Error) {
+    if (response.getError() == ServerErrorCode.No_Error &&
+        getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
       if (getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size() != 1) {
         String message = "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse
             .getPartitionResponseInfoList().get(0).getMessageInfoList().size();

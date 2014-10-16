@@ -869,7 +869,7 @@ public class OperationPolicyTest {
     }
   }
 
-  class OperationPolicyDataNodeId implements DataNodeId {
+  class OperationPolicyDataNodeId extends DataNodeId {
     int index;
     String datacenter;
 
@@ -896,6 +896,44 @@ public class OperationPolicyTest {
     @Override
     public String getDatacenterName() {
       return datacenter;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+
+      OperationPolicyDataNodeId dataNode = (OperationPolicyDataNodeId) o;
+
+      if (index != dataNode.index) {
+        return false;
+      }
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      int result = datacenter.hashCode();
+      result = 31 * result + index;
+      return result;
+    }
+
+    @Override
+    public int compareTo(DataNodeId o) {
+      if (o == null) {
+        throw new NullPointerException("input argument null");
+      }
+
+      OperationPolicyDataNodeId other = (OperationPolicyDataNodeId) o;
+      int compare = (index < other.index) ? -1 : ((index == other.index) ? 0 : 1);
+      if (compare == 0) {
+        compare = datacenter.compareTo(other.datacenter);
+      }
+      return compare;
     }
   }
 }

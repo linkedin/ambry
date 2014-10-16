@@ -70,11 +70,11 @@ public abstract class Operation {
    * Processes error code in response to determine if request was successful or not.
    *
    * @param replicaId replica that sent response
-   * @param serverErrorCode error code in response
-   * @return true if response is successful
+   * @param response the response to process for any error
+   * @return The server error code after processing the response
    * @throws CoordinatorException
    */
-  protected abstract boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+  protected abstract ServerErrorCode processResponseError(ReplicaId replicaId, Response response)
       throws CoordinatorException;
 
   private void sendRequests() {
@@ -110,10 +110,11 @@ public abstract class Operation {
         }
 
         if (operationResponse.getError() == RequestResponseError.SUCCESS) {
-          if (processResponseError(replicaId, operationResponse.getResponse().getError())) {
+          ServerErrorCode errorCode = processResponseError(replicaId, operationResponse.getResponse());
+          if (errorCode == ServerErrorCode.No_Error) {
             operationPolicy.onSuccessfulResponse(replicaId);
           } else {
-            if (operationResponse.getResponse().getError() == ServerErrorCode.Data_Corrupt) {
+            if (errorCode == ServerErrorCode.Data_Corrupt) {
               operationPolicy.onCorruptResponse(replicaId);
             } else {
               operationPolicy.onFailedResponse(replicaId);

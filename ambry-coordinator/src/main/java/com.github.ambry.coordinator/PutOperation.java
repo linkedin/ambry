@@ -69,27 +69,27 @@ final public class PutOperation extends Operation {
   }
 
   @Override
-  protected boolean processResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode)
+  protected ServerErrorCode processResponseError(ReplicaId replicaId, Response response)
       throws CoordinatorException {
-    switch (serverErrorCode) {
+    switch (response.getError()) {
       case No_Error:
-        return true;
+        break;
       case IO_Error:
         logger.trace(context + " Server returned IO error for PutOperation for ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        break;
       case Partition_ReadOnly:
         logger.trace(context + " Server returned Partition ReadOnly error for PutOperation ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        break;
       case Disk_Unavailable:
         logger.trace(context + " Server returned Disk Unavailable error for PutOperation ");
         setCurrentError(CoordinatorError.AmbryUnavailable);
-        return false;
+        break;
       case Partition_Unknown:
         logger.trace(context + " Server returned Partition Unknown error for PutOperation ");
         setCurrentError(CoordinatorError.UnexpectedInternalError);
-        return false;
+        break;
       case Blob_Already_Exists:
         CoordinatorException e =
             new CoordinatorException("BlobId already exists.", CoordinatorError.UnexpectedInternalError);
@@ -107,9 +107,10 @@ final public class PutOperation extends Operation {
             CoordinatorError.UnexpectedInternalError);
         logger.error(context + " PutResponse for BlobId " +
             blobId + " received from ReplicaId " +
-            replicaId + " had unexpected error code " + serverErrorCode, e);
+            replicaId + " had unexpected error code " + response.getError(), e);
         throw e;
     }
+    return response.getError();
   }
 
   @Override

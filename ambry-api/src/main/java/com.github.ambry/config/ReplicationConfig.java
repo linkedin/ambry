@@ -12,11 +12,18 @@ public class ReplicationConfig {
   public final String replicationTokenFactory;
 
   /**
-   * The number of replica threads on each server that runs the replication protocol
+   * The number of replica threads on each server that runs the replication protocol for intra dc replication
    */
-  @Config("replication.no.of.replica.threads")
+  @Config("replication.no.of.intra.dc.replica.threads")
   @Default("1")
-  public final int replicationNumReplicaThreads;
+  public final int replicationNumOfIntraDCReplicaThreads;
+
+  /**
+   * The number of replica threads on each server that runs the replication protocol for inter dc replication
+   */
+  @Config("replication.no.of.inter.dc.replica.threads")
+  @Default("1")
+  public final int replicationNumOfInterDCReplicaThreads;
 
   /**
    * The timeout to get a connection checkout from the connection pool for replication
@@ -82,7 +89,10 @@ public class ReplicationConfig {
 
     replicationTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationNumReplicaThreads = verifiableProperties.getInt("replication.no.of.replica.threads", 1);
+    replicationNumOfIntraDCReplicaThreads =
+        verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
+    replicationNumOfInterDCReplicaThreads =
+        verifiableProperties.getInt("replication.no.of.inter.dc.replica.threads", 1);
     replicationConnectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("replication.connection.pool.checkout.timeout.ms", 5000, 1000, 10000);
     replicationTokenFlushIntervalSeconds =

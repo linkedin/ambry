@@ -94,8 +94,7 @@ public class GetResponse extends Response {
       throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(
-          (int) super.sizeInBytes() + (partitionResponseInfoSize == 0 ? partitionResponseInfoSize
-              : (Partition_Response_Info_List_Size + partitionResponseInfoSize)));
+          (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
       writeHeader();
       if (partitionResponseInfoList != null) {
         bufferToSend.putInt(partitionResponseInfoList.size());
@@ -120,9 +119,8 @@ public class GetResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + (partitionResponseInfoSize == 0 ? partitionResponseInfoSize
-        : (Partition_Response_Info_List_Size + partitionResponseInfoSize)) + ((toSend == null) ? 0
-        : toSend.sizeInBytes());
+    return super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize) +
+        ((toSend == null) ? 0 : toSend.sizeInBytes());
   }
 
   @Override

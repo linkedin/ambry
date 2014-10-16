@@ -172,7 +172,13 @@ class MockBlockingChannel extends BlockingChannel {
           response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
               responseSend, getResponseErrorCode);
         } else {
-          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), getResponseErrorCode);
+          List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
+          PartitionResponseInfo partitionResponseInfo =
+              new PartitionResponseInfo(getRequest.getPartitionInfoList().get(0).getPartition(), getResponseErrorCode);
+          partitionResponseInfoList.add(partitionResponseInfo);
+          ByteBufferSend responseSend = new ByteBufferSend(ByteBuffer.allocate(0));
+          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
+              responseSend, ServerErrorCode.No_Error);
         }
 
         break;
