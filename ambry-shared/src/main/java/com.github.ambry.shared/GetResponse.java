@@ -93,8 +93,8 @@ public class GetResponse extends Response {
   public void writeTo(WritableByteChannel channel)
       throws IOException {
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(
-          (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
+      bufferToSend = ByteBuffer
+          .allocate((int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
       writeHeader();
       if (partitionResponseInfoList != null) {
         bufferToSend.putInt(partitionResponseInfoList.size());

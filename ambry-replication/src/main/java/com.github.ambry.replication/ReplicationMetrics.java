@@ -1,9 +1,15 @@
 package com.github.ambry.replication;
 
-import com.codahale.metrics.*;
-
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -27,13 +33,30 @@ public class ReplicationMetrics {
   public final Histogram intraColoFixMissingKeysTime;
   public final Histogram interColoExchangeMetadataTime;
   public final Histogram interColoFixMissingKeysTime;
+  public final Histogram interColoReplicationMetadataRequestTime;
+  public final Histogram intraColoReplicationMetadataRequestTime;
+  public final Histogram interColoReplicationWaitTime;
+  public final Histogram intraColoReplicationWaitTime;
+  public final Histogram interColoCheckMissingKeysTime;
+  public final Histogram intraColoCheckMissingKeysTime;
+  public final Histogram interColoProcessMetadataResponseTime;
+  public final Histogram intraColoProcessMetadataResponseTime;
+  public final Histogram interColoGetRequestTime;
+  public final Histogram intraColoGetRequestTime;
+  public final Histogram interColoBatchStoreWriteTime;
+  public final Histogram intraColoBatchStoreWriteTime;
+
   public Gauge<Integer> numberOfIntraDCReplicaThreads;
   public Gauge<Integer> numberOfInterDCReplicaThreads;
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
+  private Map<String, Counter> metadataRequestErrorMap;
+  private Map<String, Counter> getRequestErrorMap;
 
   public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
       final List<ReplicaThread> replicaInterDCThreads) {
+    metadataRequestErrorMap = new HashMap<String, Counter>();
+    getRequestErrorMap = new HashMap<String, Counter>();
     interColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
@@ -58,7 +81,6 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensPersistTime"));
     remoteReplicaTokensRestoreTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensRestoreTime"));
-
     intraColoExchangeMetadataTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoExchangeMetadataTime"));
     intraColoFixMissingKeysTime =
@@ -67,6 +89,28 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoExchangeMetadataTime"));
     interColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoFixMissingKeysTime"));
+    interColoReplicationMetadataRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationMetadataRequestTime"));
+    intraColoReplicationMetadataRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationMetadataRequestTime"));
+    interColoReplicationWaitTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationWaitTime"));
+    intraColoReplicationWaitTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationWaitTime"));
+    interColoCheckMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoCheckMissingKeysTime"));
+    intraColoCheckMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoCheckMissingKeysTime"));
+    interColoProcessMetadataResponseTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoProcessMetadataResponseTime"));
+    intraColoProcessMetadataResponseTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoProcessMetadataResponseTime"));
+    interColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
+    intraColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
+    interColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoBatchStoreWriteTime"));
+    intraColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoBatchStoreWriteTime"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {
@@ -111,5 +155,34 @@ public class ReplicationMetrics {
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
+  }
+
+  public void createRemoteReplicaErrorMetrics(RemoteReplicaInfo remoteReplicaInfo) {
+    String metadataRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-metadataRequestError";
+    Counter metadataRequestError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, metadataRequestErrorMetricName));
+    metadataRequestErrorMap.put(metadataRequestErrorMetricName, metadataRequestError);
+    String getRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-getRequestError";
+    Counter getRequestError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
+    getRequestErrorMap.put(getRequestErrorMetricName, getRequestError);
+  }
+
+  public void updateMetadataRequestError(RemoteReplicaInfo remoteReplicaInfo) {
+    String metadataRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-metadataRequestError";
+    metadataRequestErrorMap.get(metadataRequestErrorMetricName).inc();
+  }
+
+  public void updateGetRequestError(RemoteReplicaInfo remoteReplicaInfo) {
+    String getRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-getRequestError";
+    getRequestErrorMap.get(getRequestErrorMetricName).inc();
   }
 }

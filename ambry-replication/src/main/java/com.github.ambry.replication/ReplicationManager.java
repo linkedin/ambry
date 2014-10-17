@@ -239,6 +239,7 @@ public final class ReplicationManager {
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier);
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
+            replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
             if (dataNodeId.getDatacenterName().compareToIgnoreCase(remoteReplica.getDataNodeId().getDatacenterName())
                 == 0) {
@@ -279,7 +280,7 @@ public final class ReplicationManager {
       if (replicasToReplicateIntraDC.size() >= replicationConfig.replicationNumOfIntraDCReplicaThreads) {
         logger.info("Number of replica threads for intra DC is less than or equal to the number of nodes");
         assignReplicasToThreads(replicasToReplicateIntraDC, replicationConfig.replicationNumOfIntraDCReplicaThreads,
-            replicationIntraDCThreads);
+            replicationIntraDCThreads, "Intra DC");
       } else {
 
       }
@@ -287,7 +288,7 @@ public final class ReplicationManager {
       if (replicasToReplicateInterDC.size() >= replicationConfig.replicationNumOfInterDCReplicaThreads) {
         logger.info("Number of replica threads for inter DC is less than or equal to the number of nodes");
         assignReplicasToThreads(replicasToReplicateInterDC, replicationConfig.replicationNumOfInterDCReplicaThreads,
-            replicationInterDCThreads);
+            replicationInterDCThreads, "Inter DC");
       } else {
 
       }
@@ -414,19 +415,17 @@ public final class ReplicationManager {
    * @param replicasToReplicate Map of data nodes to remote replicas
    * @param numberOfReplicaThreads The total number of replica threads between which the partition needs to be done
    * @param replicaThreadList The list of replica threads
+   * @param threadIdentity The identity that uniquely identifies the group of threads
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
-      int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList) {
-    int numberOfNodesPerThread =
-        replicasToReplicate.size() / numberOfReplicaThreads;
+      int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
+    int numberOfNodesPerThread = replicasToReplicate.size() / numberOfReplicaThreads;
     int remainingNodes = replicasToReplicate.size() % numberOfReplicaThreads;
-    Iterator<Map.Entry<DataNodeId, List<RemoteReplicaInfo>>> mapIterator =
-        replicasToReplicate.entrySet().iterator();
+    Iterator<Map.Entry<DataNodeId, List<RemoteReplicaInfo>>> mapIterator = replicasToReplicate.entrySet().iterator();
 
     for (int i = 0; i < numberOfReplicaThreads; i++) {
       // create the list of nodes for the replica thread
-      Map<DataNodeId, List<RemoteReplicaInfo>> replicasForThread =
-          new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+      Map<DataNodeId, List<RemoteReplicaInfo>> replicasForThread = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       int nodesAssignedToThread = 0;
       while (nodesAssignedToThread < numberOfNodesPerThread) {
         Map.Entry<DataNodeId, List<RemoteReplicaInfo>> mapEntry = mapIterator.next();
@@ -441,8 +440,8 @@ public final class ReplicationManager {
         remainingNodes--;
       }
       ReplicaThread replicaThread =
-          new ReplicaThread("Replica Thread " + i, replicasForThread, factory, clusterMap, correlationIdGenerator,
-              dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
+          new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
+              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
       replicaThreadList.add(replicaThread);
     }
   }
