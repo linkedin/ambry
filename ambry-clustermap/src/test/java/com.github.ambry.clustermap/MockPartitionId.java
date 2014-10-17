@@ -52,7 +52,7 @@ public class MockPartitionId extends PartitionId {
   @Override
   public int compareTo(PartitionId o) {
     MockPartitionId mockPartition = (MockPartitionId) o;
-    return Long.compare(partition, mockPartition.partition);
+    return (partition < mockPartition.partition) ? -1 : ((partition == mockPartition.partition) ? 0 : 1);
   }
 
   @Override
