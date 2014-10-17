@@ -29,10 +29,10 @@ public class ReplicationMetrics {
   public final Timer intraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
   public final Histogram remoteReplicaTokensRestoreTime;
-  public final Histogram intraColoExchangeMetadataTime;
-  public final Histogram intraColoFixMissingKeysTime;
   public final Histogram interColoExchangeMetadataTime;
+  public final Histogram intraColoExchangeMetadataTime;
   public final Histogram interColoFixMissingKeysTime;
+  public final Histogram intraColoFixMissingKeysTime;
   public final Histogram interColoReplicationMetadataRequestTime;
   public final Histogram intraColoReplicationMetadataRequestTime;
   public final Histogram interColoReplicationWaitTime;
@@ -81,14 +81,14 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensPersistTime"));
     remoteReplicaTokensRestoreTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensRestoreTime"));
-    intraColoExchangeMetadataTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoExchangeMetadataTime"));
-    intraColoFixMissingKeysTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFixMissingKeysTime"));
     interColoExchangeMetadataTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoExchangeMetadataTime"));
+    intraColoExchangeMetadataTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoExchangeMetadataTime"));
     interColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoFixMissingKeysTime"));
+    intraColoFixMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFixMissingKeysTime"));
     interColoReplicationMetadataRequestTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationMetadataRequestTime"));
     intraColoReplicationMetadataRequestTime =

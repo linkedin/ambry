@@ -304,7 +304,9 @@ class ReplicaThread implements Runnable {
       logger.error("Remote node: " + remoteNode +
           " Thread name: " + threadName +
           " Remote replicas: " + replicasToReplicatePerNode +
-          " Replica metadata response error: " + response.getError());
+          " Replica metadata response error: " + response.getError() +
+          " ReplicaMetadataResponseInfoListSize: " + response.getReplicaMetadataResponseInfoList().size() +
+          " ReplicasToReplicatePerNodeSize: " + replicasToReplicatePerNode.size());
       throw new ReplicationException("Replica Metadata Response Error " + response.getError());
     }
     return response;
@@ -347,7 +349,7 @@ class ReplicaThread implements Runnable {
   /**
    * Takes the missing keys and the message list from the remote store and identifies messages that are deleted
    * on the remote store and updates them locally. Also, if the message that is missing is deleted in the remote
-   * store, we remove the message from the remote store.
+   * store, we remove the message from the list of missing keys
    * @param missingStoreKeys The list of keys missing from the local store
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
