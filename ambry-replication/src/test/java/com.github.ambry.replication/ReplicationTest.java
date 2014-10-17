@@ -394,9 +394,10 @@ public class ReplicationTest {
       if (metadataRequest != null) {
         List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
             new ArrayList<ReplicaMetadataResponseInfo>();
-        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest
+            .getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
-          int startIndex = ((MockFindToken)(replicaMetadataRequestInfo.getToken())).getIndex();
+          int startIndex = ((MockFindToken) (replicaMetadataRequestInfo.getToken())).getIndex();
           int endIndex = Math.min(messageInfoForPartition.get(replicaMetadataRequestInfo.getPartitionId()).size(),
               startIndex + maxSizeToReturn);
           int indexRequested = 0;
@@ -493,10 +494,9 @@ public class ReplicationTest {
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422));
 
       Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
-          new HashMap<String, Map< PartitionId, List<MessageInfo>>>();
+          new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
       Map<String, Map<PartitionId, List<ByteBuffer>>> replicaBuffers =
           new HashMap<String, Map<PartitionId, List<ByteBuffer>>>();
-
 
       long partitionCount = clusterMap.getWritablePartitionIdsCount();
       Map<PartitionId, List<MessageInfo>> messageInfoNode1 = new HashMap<PartitionId, List<MessageInfo>>();
@@ -546,10 +546,9 @@ public class ReplicationTest {
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
       for (ReplicaId replicaId : replicaIds) {
         for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
-          RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(peerReplicaId, replicaId,
-                  new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
-                      bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000);
+          RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
+              new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
+                  bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000);
           remoteReplicas.add(remoteReplicaInfo);
         }
       }
@@ -557,7 +556,7 @@ public class ReplicationTest {
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       DataNodeId dataNodeId = null;
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
-        if(remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == 64423) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == 64423) {
           dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
           List<RemoteReplicaInfo> remoteReplicaInfoList =
               replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
@@ -580,8 +579,7 @@ public class ReplicationTest {
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null);
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-              replicaBuffers.get("localhost" + 64423), 5),
-          replicasToReplicate.get(dataNodeId), false);
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -591,8 +589,7 @@ public class ReplicationTest {
 
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-              replicaBuffers.get("localhost" + 64423), 5),
-          replicasToReplicate.get(dataNodeId), false);
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -602,8 +599,7 @@ public class ReplicationTest {
 
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-              replicaBuffers.get("localhost" + 64423), 4),
-          replicasToReplicate.get(dataNodeId), false);
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 2);
@@ -611,32 +607,28 @@ public class ReplicationTest {
       }
 
       replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId),
-          false, response);
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-              replicaBuffers.get("localhost" + 64423), 4),
-          replicasToReplicate.get(dataNodeId), false);
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
       }
       replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId),
-          false, response);
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
-              replicaBuffers.get("localhost" + 64423), 4),
-          replicasToReplicate.get(dataNodeId), false);
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);

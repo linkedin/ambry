@@ -86,7 +86,7 @@ public abstract class GetOperation extends Operation {
       throws CoordinatorException {
     ServerErrorCode serverErrorCode = response.getError();
     if (serverErrorCode == ServerErrorCode.No_Error) {
-      GetResponse getResponse = (GetResponse)response;
+      GetResponse getResponse = (GetResponse) response;
       serverErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     }
     switch (serverErrorCode) {
@@ -178,8 +178,8 @@ abstract class GetOperationRequest extends OperationRequest {
   protected void deserializeResponsePayload(Response response)
       throws IOException, MessageFormatException {
     GetResponse getResponse = (GetResponse) response;
-    if (response.getError() == ServerErrorCode.No_Error &&
-        getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
+    if (response.getError() == ServerErrorCode.No_Error
+        && getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
       if (getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size() != 1) {
         String message = "MessageInfoList indicates incorrect payload size. Should be 1: " + getResponse
             .getPartitionResponseInfoList().get(0).getMessageInfoList().size();
