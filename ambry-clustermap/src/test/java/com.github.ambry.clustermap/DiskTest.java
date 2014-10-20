@@ -80,8 +80,11 @@ public class DiskTest {
       // Expected.
     }
 
-    // Bad mount path
+    // Bad mount path (empty)
     failValidation(TestUtils.getJsonDisk("", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
+
+    // Bad mount path (relative path)
+    failValidation(TestUtils.getJsonDisk("mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L));
 
     // Bad capacity (too small)
     failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 0));
