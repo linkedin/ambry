@@ -101,10 +101,10 @@ public class GetRequest extends RequestOrResponse {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("GetRequest[");
-    sb.append(", ").append("MessageFormatFlags=").append(flags);
     for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
-      sb.append(", ").append(partitionRequestInfo.toString());
+      sb.append(partitionRequestInfo.toString());
     }
+    sb.append(", ").append("MessageFormatFlags=").append(flags);
     sb.append("]");
     return sb.toString();
   }
