@@ -99,7 +99,7 @@ public class ReplicaMetadataResponseInfo {
 
   public long sizeInBytes() {
     return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize)) +
-        +partitionId.getBytes().length + Error_Size_InBytes;
+        + partitionId.getBytes().length + Error_Size_InBytes;
   }
 
   @Override
