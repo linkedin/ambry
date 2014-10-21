@@ -63,10 +63,10 @@ public class ReplicaMetadataRequestInfo {
 
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("Token=").append(token);
-    sb.append(", ").append("PartitionId=").append(partitionId);
-    sb.append(", ").append("HostName=").append(hostName);
-    sb.append(", ").append("ReplicaPath=").append(replicaPath);
+    sb.append("[Token=").append(token);
+    sb.append(", ").append(" PartitionId=").append(partitionId);
+    sb.append(", ").append(" HostName=").append(hostName);
+    sb.append(", ").append(" ReplicaPath=").append(replicaPath).append("]");
     return sb.toString();
   }
 

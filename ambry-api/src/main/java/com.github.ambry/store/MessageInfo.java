@@ -50,4 +50,12 @@ public class MessageInfo {
   public boolean isExpired() {
     return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
+
+  @Override
+  public String toString() {
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder.append("[MessageInfo:").append("Key-").append(key).append("Size-").append(size)
+        .append("ExpirationTimeInMs-").append(expirationTimeInMs).append("IsDeleted-").append(isDeleted).append("]");
+    return stringBuilder.toString();
+  }
 }
