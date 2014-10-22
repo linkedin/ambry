@@ -58,21 +58,21 @@ public class MessageInfoListSerde {
       throws IOException {
     final Logger logger = LoggerFactory.getLogger(MessageInfoListSerde.class);
     int messageInfoListCount = stream.readInt();
-    logger.trace("MessageInfoListSerde messageInfoListCount " + messageInfoListCount);
+    logger.info("MessageInfoListSerde messageInfoListCount " + messageInfoListCount);
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
       BlobId id = new BlobId(stream, map);
-      logger.trace("MessageInfoListSerde blobId " + id);
+      logger.info("MessageInfoListSerde blobId " + id);
       long size = stream.readLong();
-      logger.trace("MessageInfoListSerde size " + size);
+      logger.info("MessageInfoListSerde size " + size);
       long ttl = stream.readLong();
-      logger.trace("MessageInfoListSerde ttl " + ttl);
+      logger.info("MessageInfoListSerde ttl " + ttl);
       byte b = stream.readByte();
       boolean isDeleted = false;
       if (b == 1) {
         isDeleted = true;
       }
-      logger.trace("MessageInfoListSerde isDeleted " + isDeleted);
+      logger.info("MessageInfoListSerde isDeleted " + isDeleted);
       messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
     }
     return messageListInfo;
