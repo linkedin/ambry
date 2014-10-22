@@ -12,6 +12,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,11 +54,19 @@ public class ReplicaMetadataResponse extends Response {
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
+
+    final Logger logger = LoggerFactory.getLogger(ReplicaMetadataRequest.class);
     Short versionId = stream.readShort();
+    logger.trace("ReplicaMetadataResponse: versionId " + versionId);
     int correlationId = stream.readInt();
+    logger.trace("ReplicaMetadataResponse: correlationId " + correlationId);
     String clientId = Utils.readIntString(stream);
+    logger.trace("ReplicaMetadataResponse: clientId " + clientId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
+    logger.trace("ReplicaMetadataResponse: error " + error);
     int replicaMetadataResponseInfoListCount = stream.readInt();
+    logger.trace("ReplicaMetadataResponse: replicaMetadataResponseInfoListCount " +
+        replicaMetadataResponseInfoListCount);
     ArrayList<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
     for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
