@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -54,17 +56,23 @@ public class MessageInfoListSerde {
 
   public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map)
       throws IOException {
+    final Logger logger = LoggerFactory.getLogger(MessageInfoListSerde.class);
     int messageInfoListCount = stream.readInt();
+    logger.trace("MessageInfoListSerde messageInfoListCount " + messageInfoListCount);
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
       BlobId id = new BlobId(stream, map);
+      logger.trace("MessageInfoListSerde blobId " + id);
       long size = stream.readLong();
+      logger.trace("MessageInfoListSerde size " + size);
       long ttl = stream.readLong();
+      logger.trace("MessageInfoListSerde ttl " + ttl);
       byte b = stream.readByte();
       boolean isDeleted = false;
       if (b == 1) {
         isDeleted = true;
       }
+      logger.trace("MessageInfoListSerde isDeleted " + isDeleted);
       messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
     }
     return messageListInfo;

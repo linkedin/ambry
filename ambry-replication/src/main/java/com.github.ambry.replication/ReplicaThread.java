@@ -145,6 +145,15 @@ class ReplicaThread implements Runnable {
               connectionPool.destroyConnection(connectedChannel);
               connectedChannel = null;
             }
+          } catch (Throwable e) {
+            logger.error("Remote node: " + remoteNode +
+                " Thread name: " + threadName +
+                " Remote replicas: " + replicasToReplicatePerNode +
+                " Error while replicating with remote replica ", e);
+            if (connectedChannel != null) {
+              connectionPool.destroyConnection(connectedChannel);
+              connectedChannel = null;
+            }
           } finally {
             if (connectedChannel != null) {
               connectionPool.checkInConnection(connectedChannel);

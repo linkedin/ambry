@@ -9,6 +9,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -75,14 +77,19 @@ public class ReplicaMetadataResponseInfo {
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactory factory,
       ClusterMap clusterMap)
       throws IOException {
+    final Logger logger = LoggerFactory.getLogger(ReplicaMetadataResponseInfo.class);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+    logger.trace("ReplicaMetadataResponseInfo partitionId " + partitionId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
+    logger.trace("ReplicaMetadataResponseInfo error " + error);
     if (error != ServerErrorCode.No_Error) {
       return new ReplicaMetadataResponseInfo(partitionId, error);
     } else {
       FindToken token = factory.getFindToken(stream);
+      logger.trace("ReplicaMetadataResponseInfo token " + token);
       List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
       long remoteReplicaLag = stream.readLong();
+      logger.trace("ReplicaMetadataResponseInfo remoteReplicaLag " + remoteReplicaLag);
       return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoList, remoteReplicaLag);
     }
   }
