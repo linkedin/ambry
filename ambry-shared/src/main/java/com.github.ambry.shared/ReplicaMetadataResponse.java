@@ -57,15 +57,15 @@ public class ReplicaMetadataResponse extends Response {
 
     final Logger logger = LoggerFactory.getLogger(ReplicaMetadataRequest.class);
     Short versionId = stream.readShort();
-    logger.trace("ReplicaMetadataResponse: versionId " + versionId);
+    logger.info("ReplicaMetadataResponse: versionId " + versionId);
     int correlationId = stream.readInt();
-    logger.trace("ReplicaMetadataResponse: correlationId " + correlationId);
+    logger.info("ReplicaMetadataResponse: correlationId " + correlationId);
     String clientId = Utils.readIntString(stream);
-    logger.trace("ReplicaMetadataResponse: clientId " + clientId);
+    logger.info("ReplicaMetadataResponse: clientId " + clientId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    logger.trace("ReplicaMetadataResponse: error " + error);
+    logger.info("ReplicaMetadataResponse: error " + error);
     int replicaMetadataResponseInfoListCount = stream.readInt();
-    logger.trace("ReplicaMetadataResponse: replicaMetadataResponseInfoListCount " +
+    logger.info("ReplicaMetadataResponse: replicaMetadataResponseInfoListCount " +
         replicaMetadataResponseInfoListCount);
     ArrayList<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
