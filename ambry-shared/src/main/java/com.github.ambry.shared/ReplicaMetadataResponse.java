@@ -54,19 +54,11 @@ public class ReplicaMetadataResponse extends Response {
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
-
-    final Logger logger = LoggerFactory.getLogger(ReplicaMetadataRequest.class);
     Short versionId = stream.readShort();
-    logger.info("ReplicaMetadataResponse: versionId " + versionId);
     int correlationId = stream.readInt();
-    logger.info("ReplicaMetadataResponse: correlationId " + correlationId);
     String clientId = Utils.readIntString(stream);
-    logger.info("ReplicaMetadataResponse: clientId " + clientId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    logger.info("ReplicaMetadataResponse: error " + error);
     int replicaMetadataResponseInfoListCount = stream.readInt();
-    logger.info("ReplicaMetadataResponse: replicaMetadataResponseInfoListCount " +
-        replicaMetadataResponseInfoListCount);
     ArrayList<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
     for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
@@ -115,9 +107,11 @@ public class ReplicaMetadataResponse extends Response {
     StringBuilder sb = new StringBuilder();
     sb.append("ReplicaMetadataResponse[");
     sb.append("ServerErrorCode=").append(getError());
-    sb.append(" ReplicaMetadataResponseInfo ");
-    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
-      sb.append(replicaMetadataResponseInfo.toString());
+    if (replicaMetadataResponseInfoList != null) {
+      sb.append(" ReplicaMetadataResponseInfo ");
+      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+        sb.append(replicaMetadataResponseInfo.toString());
+      }
     }
     sb.append("]");
     return sb.toString();
