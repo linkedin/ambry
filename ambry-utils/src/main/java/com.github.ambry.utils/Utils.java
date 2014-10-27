@@ -32,6 +32,7 @@ public class Utils {
    */
   public static final long Infinite_Time = -1;
 
+  // The read*String methods assume that the underlying stream is blocking
   public static String readShortString(DataInputStream input)
       throws IOException {
     Short size = input.readShort();
@@ -42,7 +43,7 @@ public class Utils {
     int read = 0;
     while (read < size) {
       int readBytes = input.read(bytes, read, size - read);
-      if (readBytes == -1) {
+      if (readBytes == -1 || readBytes == 0) {
         break;
       }
       read += readBytes;
@@ -63,7 +64,7 @@ public class Utils {
     int read = 0;
     while (read < size) {
       int readBytes = input.read(bytes, read, size - read);
-      if (readBytes == -1) {
+      if (readBytes == -1 || readBytes == 0) {
         break;
       }
       read += readBytes;
@@ -84,7 +85,7 @@ public class Utils {
     int read = 0;
     while (read < size) {
       int readBytes = input.read(buffer.array());
-      if (readBytes == -1) {
+      if (readBytes == -1 || readBytes == 0) {
         break;
       }
       read += readBytes;
@@ -105,7 +106,7 @@ public class Utils {
     int read = 0;
     while (read < size) {
       int readBytes = input.read(buffer.array());
-      if (readBytes == -1) {
+      if (readBytes == -1 || readBytes == 0) {
         break;
       }
       read += readBytes;
