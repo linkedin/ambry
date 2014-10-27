@@ -32,6 +32,7 @@ public class Utils {
    */
   public static final long Infinite_Time = -1;
 
+  // The read*String methods assume that the underlying stream is blocking
   public static String readShortString(DataInputStream input)
       throws IOException {
     Short size = input.readShort();
@@ -39,7 +40,14 @@ public class Utils {
       return null;
     }
     byte[] bytes = new byte[size];
-    int read = input.read(bytes);
+    int read = 0;
+    while (read < size) {
+      int readBytes = input.read(bytes, read, size - read);
+      if (readBytes == -1 || readBytes == 0) {
+        break;
+      }
+      read += readBytes;
+    }
     if (read != size) {
       throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size");
     }
@@ -53,7 +61,14 @@ public class Utils {
       return null;
     }
     byte[] bytes = new byte[size];
-    int read = input.read(bytes);
+    int read = 0;
+    while (read < size) {
+      int readBytes = input.read(bytes, read, size - read);
+      if (readBytes == -1 || readBytes == 0) {
+        break;
+      }
+      read += readBytes;
+    }
     if (read != size) {
       throw new IllegalArgumentException("readIntString : the size of the input does not match the actual data size");
     }
@@ -67,7 +82,14 @@ public class Utils {
       return null;
     }
     ByteBuffer buffer = ByteBuffer.allocate(size);
-    int read = input.read(buffer.array());
+    int read = 0;
+    while (read < size) {
+      int readBytes = input.read(buffer.array());
+      if (readBytes == -1 || readBytes == 0) {
+        break;
+      }
+      read += readBytes;
+    }
     if (read != size) {
       throw new IllegalArgumentException("readIntBuffer : the size of the input does not match the actual data size");
     }
@@ -81,7 +103,14 @@ public class Utils {
       return null;
     }
     ByteBuffer buffer = ByteBuffer.allocate(size);
-    int read = input.read(buffer.array());
+    int read = 0;
+    while (read < size) {
+      int readBytes = input.read(buffer.array());
+      if (readBytes == -1 || readBytes == 0) {
+        break;
+      }
+      read += readBytes;
+    }
     if (read != size) {
       throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
     }

@@ -77,19 +77,14 @@ public class ReplicaMetadataResponseInfo {
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactory factory,
       ClusterMap clusterMap)
       throws IOException {
-    final Logger logger = LoggerFactory.getLogger(ReplicaMetadataResponseInfo.class);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    logger.info("ReplicaMetadataResponseInfo partitionId " + partitionId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    logger.info("ReplicaMetadataResponseInfo error " + error);
     if (error != ServerErrorCode.No_Error) {
       return new ReplicaMetadataResponseInfo(partitionId, error);
     } else {
       FindToken token = factory.getFindToken(stream);
-      logger.info("ReplicaMetadataResponseInfo token " + token);
       List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, clusterMap);
       long remoteReplicaLag = stream.readLong();
-      logger.info("ReplicaMetadataResponseInfo remoteReplicaLag " + remoteReplicaLag);
       return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoList, remoteReplicaLag);
     }
   }

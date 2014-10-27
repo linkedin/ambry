@@ -56,23 +56,17 @@ public class MessageInfoListSerde {
 
   public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map)
       throws IOException {
-    final Logger logger = LoggerFactory.getLogger(MessageInfoListSerde.class);
     int messageInfoListCount = stream.readInt();
-    logger.info("MessageInfoListSerde messageInfoListCount " + messageInfoListCount);
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
       BlobId id = new BlobId(stream, map);
-      logger.info("MessageInfoListSerde blobId " + id);
       long size = stream.readLong();
-      logger.info("MessageInfoListSerde size " + size);
       long ttl = stream.readLong();
-      logger.info("MessageInfoListSerde ttl " + ttl);
       byte b = stream.readByte();
       boolean isDeleted = false;
       if (b == 1) {
         isDeleted = true;
       }
-      logger.info("MessageInfoListSerde isDeleted " + isDeleted);
       messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
     }
     return messageListInfo;
