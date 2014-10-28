@@ -87,6 +87,7 @@ public class ReplicaMetadataResponse extends Response {
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
+      logger.info("ReplicaMetadataResponse host " + clientId + " buffer remaining " + bufferToSend.remaining());
       channel.write(bufferToSend);
     }
   }
