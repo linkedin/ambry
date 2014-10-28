@@ -79,6 +79,8 @@ public class ReplicaMetadataResponse extends Response {
       throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
+      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
+          correlationId + " ByteBuffer allocated " + bufferToSend.capacity());
       writeHeader();
       bufferToSend.putInt(replicaMetadataResponseInfoList.size());
       for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
@@ -87,8 +89,11 @@ public class ReplicaMetadataResponse extends Response {
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
-      logger.info("ReplicaMetadataResponse host " + clientId + " buffer remaining " + bufferToSend.remaining());
-      channel.write(bufferToSend);
+      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
+          correlationId + " Buffer remaining before send " + bufferToSend.remaining());
+      int sent = channel.write(bufferToSend);
+      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
+          correlationId + " Buffer remaining after send " + bufferToSend.remaining() + " sent " + sent);
     }
   }
 
