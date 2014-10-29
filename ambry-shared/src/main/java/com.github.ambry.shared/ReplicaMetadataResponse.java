@@ -25,31 +25,23 @@ public class ReplicaMetadataResponse extends Response {
 
   private List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList;
   private int replicaMetadataResponseInfoListSizeInBytes;
-  private FindTokenFactory findTokenFactory;
-  private ClusterMap clusterMap;
 
   private static int Replica_Metadata_Response_Info_List_Size_In_Bytes = 4;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
-      List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList,
-      FindTokenFactory findTokenFactory, ClusterMap clusterMap) {
+      List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
     super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
       this.replicaMetadataResponseInfoListSizeInBytes += replicaMetadataResponseInfo.sizeInBytes();
     }
-    this.findTokenFactory = findTokenFactory;
-    this.clusterMap = clusterMap;
   }
 
-  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
-      FindTokenFactory findTokenFactory, ClusterMap clusterMap) {
+  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
     super(RequestOrResponseType.ReplicaMetadataResponse, Request_Response_Version, correlationId, clientId, error);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
-    this.findTokenFactory = findTokenFactory;
-    this.clusterMap = clusterMap;
   }
 
   public List<ReplicaMetadataResponseInfo> getReplicaMetadataResponseInfoList() {
@@ -59,22 +51,15 @@ public class ReplicaMetadataResponse extends Response {
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
       ClusterMap clusterMap)
       throws IOException {
-    Logger logger = LoggerFactory.getLogger(ReplicaMetadataResponse.class);
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-    logger.info("RequestOrResponseType " + type);
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
     }
     Short versionId = stream.readShort();
-    logger.info("versionId " + versionId);
     int correlationId = stream.readInt();
-    logger.info("correlationId " + correlationId);
     String clientId = Utils.readIntString(stream);
-    logger.info("clientId " + clientId);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    logger.info("error " + error);
     int replicaMetadataResponseInfoListCount = stream.readInt();
-    logger.info("replicaMetadataResponseInfoListCount " + replicaMetadataResponseInfoListCount);
     ArrayList<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
     for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
@@ -83,11 +68,11 @@ public class ReplicaMetadataResponse extends Response {
       replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
     }
     if (error != ServerErrorCode.No_Error) {
-      return new ReplicaMetadataResponse(correlationId, clientId, error, factory, clusterMap);
+      return new ReplicaMetadataResponse(correlationId, clientId, error);
     } else {
       // ignore version for now
       return new ReplicaMetadataResponse(correlationId, clientId, error,
-          replicaMetadataResponseInfoList, factory, clusterMap);
+          replicaMetadataResponseInfoList);
     }
   }
 
@@ -96,30 +81,15 @@ public class ReplicaMetadataResponse extends Response {
       throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
-          correlationId + " ByteBuffer allocated " + bufferToSend.capacity());
       writeHeader();
       bufferToSend.putInt(replicaMetadataResponseInfoList.size());
       for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
         replicaMetadataResponseInfo.writeTo(bufferToSend);
       }
       bufferToSend.flip();
-      if (findTokenFactory != null && clusterMap != null) {
-        bufferToSend.getLong();
-        ReplicaMetadataResponse responseBeforeSend =
-            ReplicaMetadataResponse.readFrom(new DataInputStream(new ByteBufferInputStream(bufferToSend)),
-                findTokenFactory, clusterMap);
-        logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
-            correlationId + " Response before send " + responseBeforeSend);
-        bufferToSend.flip();
-      }
     }
     if (bufferToSend.remaining() > 0) {
-      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
-          correlationId + " Buffer remaining before send " + bufferToSend.remaining());
-      int sent = channel.write(bufferToSend);
-      logger.info("ReplicaMetadataResponse host " + clientId + " correlationId " +
-          correlationId + " Buffer remaining after send " + bufferToSend.remaining() + " sent " + sent);
+      channel.write(bufferToSend);
     }
   }
 
