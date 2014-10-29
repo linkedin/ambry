@@ -413,7 +413,7 @@ public class ReplicationTest {
           replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
         }
         response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error,
-            replicaMetadataResponseInfoList, null, null);
+            replicaMetadataResponseInfoList);
         metadataRequest = null;
       } else {
         List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();

@@ -319,7 +319,7 @@ class ReplicaThread implements Runnable {
     ChannelOutput channelOutput = connectedChannel.receive();
     ByteBufferInputStream byteBufferInputStream =
         new ByteBufferInputStream(channelOutput.getInputStream(), (int)channelOutput.getStreamSize());
-    logger.info("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
+    logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
         remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
     ReplicaMetadataResponse response =
         ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactory, clusterMap);
