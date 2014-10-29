@@ -226,7 +226,7 @@ public class ServerWritePerformance {
                     partitionId.getReplicaIds().get(0).getDataNodeId().getPort(), 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
-            PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive()));
+            PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
             if (putResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + putResponse.getError());
             }
@@ -261,7 +261,8 @@ public class ServerWritePerformance {
             // delete the blob
             DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);
             channel.send(deleteRequest);
-            DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(channel.receive()));
+            DeleteResponse deleteResponse =
+                DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
             if (deleteResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + deleteResponse.getError());
             }

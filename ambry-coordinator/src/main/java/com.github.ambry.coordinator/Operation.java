@@ -257,7 +257,7 @@ abstract class OperationRequest implements Runnable {
       logger.debug("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
       logger.debug("{} {} receiving response", context, replicaId);
-      InputStream responseStream = connectedChannel.receive();
+      InputStream responseStream = connectedChannel.receive().getInputStream();
       logger.debug("{} {} processing response", context, replicaId);
       Response response = getResponse(new DataInputStream(responseStream));
 

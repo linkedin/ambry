@@ -97,7 +97,7 @@ public class SocketServerTest {
     // send response back and ensure response is received
     PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);
     requestResponseChannel.sendResponse(response, request, null);
-    InputStream streamResponse = channel.receive();
+    InputStream streamResponse = channel.receive().getInputStream();
     PutResponse responseReplay = PutResponse.readFrom(new DataInputStream(streamResponse));
     Assert.assertEquals(responseReplay.getCorrelationId(), 1);
     Assert.assertEquals(responseReplay.getVersionId(), 1);
