@@ -420,12 +420,12 @@ public class AmbryRequests implements RequestAPI {
       }
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, replicaMetadataResponseList);
+              ServerErrorCode.No_Error, replicaMetadataResponseList, findTokenFactory, clusterMap);
     } catch (Exception e) {
       logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+              ServerErrorCode.Unknown_Error, findTokenFactory, clusterMap);
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       startTime += processingTime;

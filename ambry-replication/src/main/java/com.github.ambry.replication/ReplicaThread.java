@@ -12,6 +12,7 @@ import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ChannelOutput;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.GetRequest;
@@ -28,6 +29,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -314,9 +316,14 @@ class ReplicaThread implements Runnable {
         replicationConfig.replicationFetchSizeInBytes);
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     connectedChannel.send(request);
-    InputStream stream = connectedChannel.receive();
+    ChannelOutput channelOutput = connectedChannel.receive();
+    ByteBufferInputStream byteBufferInputStream =
+        new ByteBufferInputStream(channelOutput.getInputStream(), (int)channelOutput.getStreamSize());
+    logger.info("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
+        remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
     ReplicaMetadataResponse response =
-        ReplicaMetadataResponse.readFrom(new DataInputStream(stream), findTokenFactory, clusterMap);
+        ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactory, clusterMap);
+
     if (remoteColo) {
       replicationMetrics.interColoReplicationMetadataRequestTime
           .update(SystemTime.getInstance().milliseconds() - replicaMetadataRequestStartTime);
@@ -508,8 +515,8 @@ class ReplicaThread implements Runnable {
             MessageFormatFlags.All, partitionRequestInfoList);
     long startTime = SystemTime.getInstance().milliseconds();
     connectedChannel.send(getRequest);
-    InputStream getStream = connectedChannel.receive();
-    GetResponse getResponse = GetResponse.readFrom(new DataInputStream(getStream), clusterMap);
+    ChannelOutput channelOutput = connectedChannel.receive();
+    GetResponse getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
     if (remoteColo) {
       replicationMetrics.interColoGetRequestTime.update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
