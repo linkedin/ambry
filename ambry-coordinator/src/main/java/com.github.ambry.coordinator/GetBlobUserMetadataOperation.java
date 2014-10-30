@@ -54,8 +54,6 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
   public synchronized void setUserMetadata(ByteBuffer userMetadata) {
     if (this.userMetadata == null) {
       this.userMetadata = userMetadata;
-    } else {
-      logger.warn("{} BlobUserMetadata attempted to be set after being set.", context);
     }
   }
 }
