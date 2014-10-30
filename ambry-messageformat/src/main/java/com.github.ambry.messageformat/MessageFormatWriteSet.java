@@ -25,18 +25,18 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private List<MessageInfo> streamInfo;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, long maxWriteTimeInMs,
-      boolean materializeStream)
+  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo,
+      long maxWriteTimeInMs, boolean materializeStream)
       throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
       sizeToWrite += info.getSize();
     }
-    this.streamInfo = streamInfo;
     this.maxWriteTimeInMs = maxWriteTimeInMs;
+    this.streamInfo = streamInfo;
     if (materializeStream) {
       ByteBufferInputStream byteBufferInputStream =
-          new ByteBufferInputStream(stream, (int) sizeToWrite, maxWriteTimeInMs);
+          new ByteBufferInputStream(stream, (int) sizeToWrite);
       streamToWrite = byteBufferInputStream;
     } else {
       streamToWrite = stream;
@@ -54,7 +54,8 @@ public class MessageFormatWriteSet implements MessageWriteSet {
       logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
           readableByteChannel.isOpen());
       if (sizeWritten < sizeToWrite && (System.currentTimeMillis() - writeStartTimeInMs) > maxWriteTimeInMs) {
-        throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs);
+        throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs +
+            " sizeWritten " + sizeWritten + " sizeToWrite " + sizeToWrite);
       }
     }
     return sizeWritten;
