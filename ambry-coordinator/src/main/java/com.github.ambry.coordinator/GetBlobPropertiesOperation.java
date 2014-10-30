@@ -54,8 +54,6 @@ final public class GetBlobPropertiesOperation extends GetOperation {
   public synchronized void setBlobProperties(BlobProperties blobProperties) {
     if (this.blobProperties == null) {
       this.blobProperties = blobProperties;
-    } else {
-      logger.warn("{} BlobProperties attempted to be set after being set.", context);
     }
   }
 }
