@@ -27,6 +27,7 @@ import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -223,7 +224,7 @@ class ReplicaThread implements Runnable {
           }
         } else {
           replicationMetrics.updateMetadataRequestError(remoteReplicaInfo);
-          logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: ", remoteNode, threadName,
+          logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
               remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
           ExchangeMetadataResponse exchangeMetadataResponse =
               new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
@@ -588,9 +589,11 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {
-              replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
-              logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
-                  " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
+              if (e.getErrorCode() != StoreErrorCodes.Already_Exist) {
+                replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
+                logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
+                    " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
+              }
             }
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo);
