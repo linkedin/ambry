@@ -487,6 +487,9 @@ public class PersistentIndex {
       }
     } catch (IOException e) {
       throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown error when finding entries for index " + dataDir,
+          e, StoreErrorCodes.Unknown_Error);
     }
   }
 

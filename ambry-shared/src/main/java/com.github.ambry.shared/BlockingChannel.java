@@ -111,7 +111,11 @@ public class BlockingChannel implements ConnectedChannel {
     // consume the size header and return the remaining response.
     ByteBuffer streamSizeBuffer = ByteBuffer.allocate(8);
     while (streamSizeBuffer.position() < streamSizeBuffer.capacity()) {
-      streamSizeBuffer.put((byte)readChannel.read());
+      int read = readChannel.read();
+      if (read == -1) {
+        throw new IOException("Could not read complete size from readChannel ");
+      }
+      streamSizeBuffer.put((byte)read);
     }
     streamSizeBuffer.flip();
     return new ChannelOutput(readChannel, streamSizeBuffer.getLong() - 8);
