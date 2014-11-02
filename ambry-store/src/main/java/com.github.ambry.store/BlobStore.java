@@ -98,10 +98,10 @@ public class BlobStore implements Store {
   @Override
   public StoreInfo get(List<? extends StoreKey> ids)
       throws StoreException {
+    checkStarted();
     // allows concurrent gets
     final Timer.Context context = metrics.getResponse.time();
     try {
-      checkStarted();
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
       Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(ids.size());
       for (StoreKey key : ids) {
@@ -118,8 +118,13 @@ public class BlobStore implements Store {
         messageInfoList.add(indexMessages.get(readSet.getKeyAt(i)));
       }
       return new StoreInfo(readSet, messageInfoList);
+    } catch (StoreException e) {
+      throw e;
     } catch (IOException e) {
-      throw new StoreException("IO error while trying to fetch blobs : ", e, StoreErrorCodes.IOError);
+      throw new StoreException("IO error while trying to fetch blobs from store " + dataDir, e, StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir,
+          e, StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
     }
@@ -128,8 +133,8 @@ public class BlobStore implements Store {
   @Override
   public void put(MessageWriteSet messageSetToWrite)
       throws StoreException {
-    final Timer.Context context = metrics.putResponse.time();
     checkStarted();
+    final Timer.Context context = metrics.putResponse.time();
     try {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
@@ -156,8 +161,13 @@ public class BlobStore implements Store {
         index.addToIndex(indexEntries, fileSpan);
         logger.trace("Store : {} message set written to index ", dataDir);
       }
+    } catch (StoreException e) {
+      throw e;
     } catch (IOException e) {
-      throw new StoreException("IO error while trying to put blobs : ", e, StoreErrorCodes.IOError);
+      throw new StoreException("IO error while trying to put blobs to store " + dataDir, e, StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to put blobs to store " + dataDir,
+          e, StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
     }
@@ -166,22 +176,22 @@ public class BlobStore implements Store {
   @Override
   public void delete(MessageWriteSet messageSetToDelete)
       throws StoreException {
-    final Timer.Context context = metrics.deleteResponse.time();
     checkStarted();
-    List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
-    for (MessageInfo info : infoList) {
-      IndexValue value = index.findKey(info.getStoreKey());
-      if (value == null) {
-        throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
-            StoreErrorCodes.ID_Not_Found);
-      } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        throw new StoreException(
-            "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
-            StoreErrorCodes.ID_Deleted);
+    final Timer.Context context = metrics.deleteResponse.time();
+    try {
+      List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
+      for (MessageInfo info : infoList) {
+        IndexValue value = index.findKey(info.getStoreKey());
+        if (value == null) {
+          throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+              StoreErrorCodes.ID_Not_Found);
+        } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          throw new StoreException(
+              "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+              StoreErrorCodes.ID_Deleted);
+        }
       }
-    }
-    synchronized (lock) {
-      try {
+      synchronized (lock) {
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
@@ -189,19 +199,25 @@ public class BlobStore implements Store {
           index.markAsDeleted(info.getStoreKey(), fileSpan);
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
-      } catch (IOException e) {
-        throw new StoreException("IO error while trying to delete blobs", e, StoreErrorCodes.IOError);
-      } finally {
-        context.stop();
       }
+    } catch (StoreException e) {
+      throw e;
+    }  catch (IOException e) {
+      throw new StoreException("IO error while trying to delete blobs from store " + dataDir,
+          e, StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir,
+          e, StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
     }
   }
 
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
-    final Timer.Context context = metrics.findEntriesSinceResponse.time();
     checkStarted();
+    final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
       return index.findEntriesSince(token, maxTotalSizeOfEntries);
     } finally {
@@ -212,8 +228,8 @@ public class BlobStore implements Store {
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
       throws StoreException {
-    final Timer.Context context = metrics.findMissingKeysResponse.time();
     checkStarted();
+    final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
       return index.findMissingKeys(keys);
     } finally {
@@ -224,8 +240,8 @@ public class BlobStore implements Store {
   @Override
   public boolean isKeyDeleted(StoreKey key)
       throws StoreException {
-    final Timer.Context context = metrics.isKeyDeletedResponse.time();
     checkStarted();
+    final Timer.Context context = metrics.isKeyDeletedResponse.time();
     try {
       IndexValue value = index.findKey(key);
       if (value == null) {

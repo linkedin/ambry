@@ -82,9 +82,13 @@ public class ReplicaMetadataResponse extends Response {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putInt(replicaMetadataResponseInfoList.size());
-      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
-        replicaMetadataResponseInfo.writeTo(bufferToSend);
+      if (replicaMetadataResponseInfoList != null) {
+        bufferToSend.putInt(replicaMetadataResponseInfoList.size());
+        for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+          replicaMetadataResponseInfo.writeTo(bufferToSend);
+        }
+      } else {
+        bufferToSend.putInt(0);
       }
       bufferToSend.flip();
     }

@@ -119,7 +119,6 @@ public class DumpData {
             // read blob id
             BlobId id = new BlobId(stream, map);
             System.out.println("Id - " + id.toString());
-
             if (header.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
               BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
@@ -133,7 +132,7 @@ public class DumpData {
               boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
               System.out.println("delete change " + deleteFlag);
             }
-            currentOffset += header.getMessageSize();
+            currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
           }
         }
       } else if (typeOfFile.compareTo("replicatoken") == 0) {

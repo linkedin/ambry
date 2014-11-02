@@ -151,7 +151,8 @@ class ReplicaThread implements Runnable {
             logger.error("Remote node: " + remoteNode +
                 " Thread name: " + threadName +
                 " Remote replicas: " + replicasToReplicatePerNode +
-                " Error while replicating with remote replica ", e);
+                " Throwable exception while replicating with remote replica ", e);
+            replicationMetrics.replicationErrors.inc();
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
               connectedChannel = null;
@@ -212,14 +213,7 @@ class ReplicaThread implements Runnable {
             ExchangeMetadataResponse exchangeMetadataResponse =
                 new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
             exchangeMetadataResponseList.add(exchangeMetadataResponse);
-          } catch (StoreException e) {
-            replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
-            logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
-                " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
-            ExchangeMetadataResponse exchangeMetadataResponse =
-                new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
-            exchangeMetadataResponseList.add(exchangeMetadataResponse);
-          } catch (MessageFormatException e) {
+          } catch (Exception e) {
             replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
             logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
                 " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
@@ -398,6 +392,11 @@ class ReplicaThread implements Runnable {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     for (MessageInfo messageInfo : messageInfoList) {
+      BlobId blobId = (BlobId)messageInfo.getStoreKey();
+      if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
+        throw new IllegalStateException("Blob id is not in the expected partition Actual partition " +
+            blobId.getPartition() + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
+      }
       if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store
         if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(messageInfo.getStoreKey())) {
