@@ -487,7 +487,7 @@ public final class ReplicationManager {
                   info.setToken(token);
                   info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   logger
-                      .trace("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
+                      .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
                   updatedToken = true;
                 }
