@@ -95,12 +95,14 @@ public abstract class Operation {
         OperationResponse operationResponse =
             responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
         logger.trace("{} operation processing a response", context);
+        logger.trace("Requests in flight {} " + requestsInFlight);
         if (operationResponse == null) {
           logger.error("{} Operation timed out", context);
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
         }
 
         ReplicaId replicaId = operationResponse.getReplicaId();
+        logger.trace("Obtained Response from " + replicaId);
         if (!requestsInFlight.remove(replicaId)) {
           CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
               CoordinatorError.UnexpectedInternalError);
@@ -110,21 +112,27 @@ public abstract class Operation {
 
         if (operationResponse.getError() == RequestResponseError.SUCCESS) {
           ServerErrorCode errorCode = processResponseError(replicaId, operationResponse.getResponse());
+          logger.trace("Error code " + errorCode);
           if (errorCode == ServerErrorCode.No_Error) {
             operationPolicy.onSuccessfulResponse(replicaId);
+            logger.trace("Success response from this replica. Operation Success ");
           } else {
+            logger.trace("Failure response from this replica ");
             if (errorCode == ServerErrorCode.Data_Corrupt) {
               operationPolicy.onCorruptResponse(replicaId);
             } else {
               operationPolicy.onFailedResponse(replicaId);
             }
             resolveCoordinatorError(currentError);
+            logger.trace("Resolved error " + currentError);
           }
         } else {
           if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
             operationPolicy.onCorruptResponse(replicaId);
+            logger.trace("Corrupt response ");
           } else {
             operationPolicy.onFailedResponse(replicaId);
+            logger.trace("Failed response ");
           }
         }
 
@@ -143,6 +151,7 @@ public abstract class Operation {
           throw new CoordinatorException(message, getResolvedError());
         }
         sendRequests();
+        logger.trace("Requests in flight after processing an operation response " + requestsInFlight);
       } catch (CoordinatorException e) {
         operationComplete.set(true);
         if (logger.isTraceEnabled()) {
