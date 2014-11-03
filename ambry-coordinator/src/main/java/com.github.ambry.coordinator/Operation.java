@@ -96,12 +96,12 @@ public abstract class Operation {
         OperationResponse operationResponse =
             responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
         logger.debug("{} operation processing a response", context);
+        logger.trace("Requests in flight {} " + requestsInFlight);
         if (operationResponse == null) {
           logger.error("{} Operation timed out", context);
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
         }
 
-        logger.trace("Requests in flight {} " + requestsInFlight);
         ReplicaId replicaId = operationResponse.getReplicaId();
         logger.trace("Obtained Response from " + replicaId);
         if (!requestsInFlight.remove(replicaId)) {
