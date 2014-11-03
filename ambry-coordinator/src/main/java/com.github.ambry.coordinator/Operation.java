@@ -14,7 +14,6 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -175,7 +174,7 @@ public abstract class Operation {
   abstract Integer getPrecedenceLevel(CoordinatorError coordinatorError);
 
   public String getErrorMessage() {
-    String message = null;
+    String message = "";
     switch (resolvedError) {
       case AmbryUnavailable:
         message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy +
