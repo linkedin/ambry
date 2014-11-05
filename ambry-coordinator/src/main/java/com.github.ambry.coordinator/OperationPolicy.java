@@ -23,7 +23,8 @@ public interface OperationPolicy {
   /**
    * Determines if more requests should be sent.
    *
-   * @param requestsInFlight replica IDs to which a request is currently in flight.
+   * @param requestsInFlight replica ID to RequestTime mapping for replicas to which a request is currently in
+   * flight.
    * @return true iff one or more additional requests should be in flight
    */
   public boolean sendMoreRequests(Map<ReplicaId, Long> requestsInFlight);
