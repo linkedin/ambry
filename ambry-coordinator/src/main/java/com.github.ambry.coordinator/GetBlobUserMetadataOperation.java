@@ -23,7 +23,6 @@ import java.util.concurrent.ExecutorService;
  */
 final public class GetBlobUserMetadataOperation extends GetOperation {
   private ByteBuffer userMetadata;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobUserMetadataOperation(String datacenterName, ConnectionPool connectionPool,

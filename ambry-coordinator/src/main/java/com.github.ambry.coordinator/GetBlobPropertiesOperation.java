@@ -23,8 +23,7 @@ import java.util.concurrent.ExecutorService;
  */
 final public class GetBlobPropertiesOperation extends GetOperation {
   private BlobProperties blobProperties;
-
-  protected Logger logger = LoggerFactory.getLogger(getClass());
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
