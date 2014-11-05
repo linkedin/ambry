@@ -28,7 +28,7 @@ public class CoordinatorConfig {
    * Timeout for operations that the coordinator issues.
    */
   @Config("coordinator.operation.timeout.ms")
-  @Default("10000")
+  @Default("30000")
   public final int operationTimeoutMs;
 
   /**
