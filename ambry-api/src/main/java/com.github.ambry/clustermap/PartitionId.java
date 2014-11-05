@@ -36,7 +36,7 @@ public abstract class PartitionId implements Comparable<PartitionId> {
   public abstract boolean isEqual(String partitionId);
 
   /**
-   * Performs the required action when the associated Partition becomes ReadOnly.
+   * Performs the required action when an operation on the associated Partition receives a Partition_ReadOnly error.
    */
   public abstract void onPartitionReadOnly();
 }

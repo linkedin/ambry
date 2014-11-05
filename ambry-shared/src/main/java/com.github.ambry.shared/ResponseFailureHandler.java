@@ -4,6 +4,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaFailureType;
 import com.github.ambry.clustermap.ReplicaId;
 
+/**
+ * ResponseFailureHandler can be used by components to alter cluster map soft states when there is a failure.
+ */
+
 public class ResponseFailureHandler {
 
     private ClusterMap clusterMap;
@@ -39,4 +43,3 @@ public class ResponseFailureHandler {
       }
     }
 }
-
