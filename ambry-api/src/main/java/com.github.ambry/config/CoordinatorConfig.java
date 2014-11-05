@@ -58,7 +58,7 @@ public class CoordinatorConfig {
     this.requesterPoolSize =
         verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 10000, 1, Integer.MAX_VALUE);
     this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
         "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
