@@ -246,7 +246,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
           new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-          getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
       gbpo.execute();
 
       coordinatorMetrics.getBlobPropertiesOperationRate.mark();
@@ -270,7 +270,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
           new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-            getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
       gumo.execute();
 
       coordinatorMetrics.getBlobUserMetadataOperationRate.mark();

@@ -31,7 +31,7 @@ final public class GetBlobOperation extends GetOperation {
       long nodeTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
-      nodeTimeoutMs, clusterMap, MessageFormatFlags.Blob);
+        nodeTimeoutMs, clusterMap, MessageFormatFlags.Blob);
     this.blobOutput = null;
   }
 

@@ -397,5 +397,3 @@ class OperationResponse {
   }
 }
 
-
-

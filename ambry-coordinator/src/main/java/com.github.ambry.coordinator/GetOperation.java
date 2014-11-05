@@ -197,4 +197,3 @@ abstract class GetOperationRequest extends OperationRequest {
       throws IOException, MessageFormatException;
 }
 
-

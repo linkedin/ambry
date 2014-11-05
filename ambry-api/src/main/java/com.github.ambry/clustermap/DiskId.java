@@ -32,3 +32,4 @@ public interface DiskId {
    */
   public void onDiskError();
 }
+

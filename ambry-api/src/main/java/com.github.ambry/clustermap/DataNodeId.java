@@ -38,3 +38,4 @@ public abstract class DataNodeId implements Comparable<DataNodeId> {
    */
   public abstract void onNodeTimeout();
 }
+

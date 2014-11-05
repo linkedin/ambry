@@ -4,4 +4,5 @@ public enum ReplicaFailureType{
     Node_Timeout,
     Disk_Error,
     Partition_ReadOnly
-};
+}
+

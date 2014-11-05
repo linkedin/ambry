@@ -7,3 +7,4 @@ public enum RequestResponseError {
     MESSAGE_FORMAT_ERROR,
     TIMEOUT_ERROR
 }
+

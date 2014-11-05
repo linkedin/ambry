@@ -31,7 +31,7 @@ final public class GetBlobPropertiesOperation extends GetOperation {
       long nodeTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
-       nodeTimeoutMs, clusterMap, MessageFormatFlags.BlobProperties);
+        nodeTimeoutMs, clusterMap, MessageFormatFlags.BlobProperties);
     this.blobProperties = null;
   }
 

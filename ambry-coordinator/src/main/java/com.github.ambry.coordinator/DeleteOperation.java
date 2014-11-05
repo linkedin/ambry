@@ -138,4 +138,3 @@ final class DeleteOperationRequest extends OperationRequest {
   }
 }
 
-

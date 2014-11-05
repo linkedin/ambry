@@ -79,3 +79,4 @@ public interface ClusterMap {
    */
   public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error);
 }
+

@@ -31,7 +31,7 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
       long operationTimeoutMs, long nodeTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
-      nodeTimeoutMs, clusterMap, MessageFormatFlags.BlobUserMetadata);
+        nodeTimeoutMs, clusterMap, MessageFormatFlags.BlobUserMetadata);
     this.userMetadata = null;
   }
 
