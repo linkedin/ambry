@@ -13,6 +13,8 @@ import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ResponseFailureHandler;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -51,9 +53,10 @@ public abstract class GetOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
+      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs, nodeTimeoutMs,
         new GetPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.clusterMap = clusterMap;
     this.flags = flags;

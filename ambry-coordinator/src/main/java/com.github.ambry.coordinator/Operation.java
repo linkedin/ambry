@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaFailureType;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.shared.BlobId;
@@ -10,12 +11,14 @@ import com.github.ambry.shared.ConnectionPoolTimeoutException;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ResponseFailureHandler;
+import com.github.ambry.shared.RequestResponseError;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -39,28 +42,33 @@ public abstract class Operation {
   // Operation state
   private OperationPolicy operationPolicy;
   private long operationExpirationMs;
+  private long nodeTimeoutMs;
   private final AtomicBoolean operationComplete;
 
+  private ResponseFailureHandler responseFailureHandler;
   BlockingQueue<OperationResponse> responseQueue;
-  private Set<ReplicaId> requestsInFlight;
+  private Map<ReplicaId, Long> requestsInFlight;
   private Logger logger = LoggerFactory.getLogger(getClass());
   protected CoordinatorError currentError;
   protected CoordinatorError resolvedError;
 
   public Operation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
+      ResponseFailureHandler responseFailureHandler, OperationContext context, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs, OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
+    this.responseFailureHandler = responseFailureHandler;
     this.context = context;
     this.blobId = blobId;
 
     this.operationPolicy = operationPolicy;
     this.operationExpirationMs = SystemTime.getInstance().milliseconds() + operationTimeoutMs;
+    this.nodeTimeoutMs = nodeTimeoutMs;
     this.operationComplete = new AtomicBoolean(false);
 
     this.responseQueue = new ArrayBlockingQueue<OperationResponse>(operationPolicy.getReplicaIdCount());
-    this.requestsInFlight = new HashSet<ReplicaId>();
+    this.requestsInFlight = new HashMap<ReplicaId, Long>();
   }
 
   protected abstract OperationRequest makeOperationRequest(ReplicaId replicaId);
@@ -81,7 +89,7 @@ public abstract class Operation {
     while (operationPolicy.sendMoreRequests(requestsInFlight)) {
       ReplicaId replicaIdToSendTo = operationPolicy.getNextReplicaIdForSend();
       logger.trace("{} sendRequests sending request to {}", context, replicaIdToSendTo);
-      requestsInFlight.add(replicaIdToSendTo);
+      requestsInFlight.put(replicaIdToSendTo, SystemTime.getInstance().milliseconds());
       requesterPool.submit(makeOperationRequest(replicaIdToSendTo));
     }
   }
@@ -98,12 +106,16 @@ public abstract class Operation {
         logger.trace("Requests in flight {} " + requestsInFlight);
         if (operationResponse == null) {
           logger.error("{} Operation timed out", context);
+          for (Map.Entry<ReplicaId, Long> entry: requestsInFlight.entrySet()) {
+            if (SystemTime.getInstance().milliseconds() - entry.getValue() >= nodeTimeoutMs)
+              responseFailureHandler.onOperationTimeout(entry.getKey());
+          }
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
         }
 
         ReplicaId replicaId = operationResponse.getReplicaId();
         logger.trace("Obtained Response from " + replicaId);
-        if (!requestsInFlight.remove(replicaId)) {
+        if (requestsInFlight.remove(replicaId) == null) {
           CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
               CoordinatorError.UnexpectedInternalError);
           logger.error("Response received from replica (" + replicaId + ") to which no request is in flight: ", e);
@@ -122,6 +134,7 @@ public abstract class Operation {
               operationPolicy.onCorruptResponse(replicaId);
             } else {
               operationPolicy.onFailedResponse(replicaId);
+              responseFailureHandler.onServerError(replicaId, errorCode);
             }
             resolveCoordinatorError(currentError);
             logger.trace("Resolved error " + currentError);
@@ -133,6 +146,7 @@ public abstract class Operation {
           } else {
             operationPolicy.onFailedResponse(replicaId);
             logger.trace("Failed response ");
+            responseFailureHandler.onRequestResponseError(replicaId, operationResponse.getError());
           }
         }
 
@@ -335,14 +349,6 @@ abstract class OperationRequest implements Runnable {
           " responseQueue incorrectly sized since offer() returned false.  BlobId ", blobId);
     }
   }
-}
-
-enum RequestResponseError {
-  SUCCESS,
-  UNEXPECTED_ERROR,
-  IO_ERROR,
-  MESSAGE_FORMAT_ERROR,
-  TIMEOUT_ERROR
 }
 
 /**

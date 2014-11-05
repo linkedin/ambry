@@ -93,4 +93,9 @@ public class MockPartitionId extends PartitionId {
       ((MockReplicaId) replicaId).cleanup();
     }
   }
+
+  @Override
+  public void onPartitionReadOnly() {
+    /* noop for now */
+  }
 }

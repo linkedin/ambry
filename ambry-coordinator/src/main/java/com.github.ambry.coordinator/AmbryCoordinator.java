@@ -14,11 +14,11 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolFactory;
 import com.github.ambry.shared.LoggingNotificationSystem;
+import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -39,9 +39,11 @@ public class AmbryCoordinator implements Coordinator {
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
+  private final ResponseFailureHandler responseFailureHandler;
   private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
+  private int nodeTimeoutMs;
   private int connectionPoolCheckoutTimeout;
 
   private JmxReporter reporter = null;
@@ -62,6 +64,7 @@ public class AmbryCoordinator implements Coordinator {
       NotificationSystem notificationSystem) {
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
+    this.responseFailureHandler = new ResponseFailureHandler(clusterMap);
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
     this.randomForPartitionSelection = new Random();
@@ -86,6 +89,7 @@ public class AmbryCoordinator implements Coordinator {
             "Coordinator cannot start.");
       }
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
+      this.nodeTimeoutMs = coordinatorConfig.nodeTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
@@ -193,8 +197,8 @@ public class AmbryCoordinator implements Coordinator {
       PartitionId partitionId = getPartitionForPut();
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
-          new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, blobProperties, userMetadata, blobStream);
+          new PutOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler, getOperationContext(),
+              blobId, operationTimeoutMs, nodeTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata.array());
@@ -218,8 +222,9 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
-          new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs);
+          new DeleteOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
+          getOperationContext(), blobId,
+          operationTimeoutMs, nodeTimeoutMs);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
       coordinatorMetrics.deleteBlobOperationRate.mark();
@@ -240,8 +245,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
-          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
+          getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
       gbpo.execute();
 
       coordinatorMetrics.getBlobPropertiesOperationRate.mark();
@@ -264,8 +269,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
-          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
+            getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
       gumo.execute();
 
       coordinatorMetrics.getBlobUserMetadataOperationRate.mark();
@@ -288,8 +293,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
-          new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+          new GetBlobOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
+              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
       gbdo.execute();
 
       coordinatorMetrics.getBlobOperationRate.mark();
