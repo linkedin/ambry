@@ -62,12 +62,14 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
 
 final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   private GetBlobUserMetadataOperation getBlobUserMetadataOperation;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetBlobUserMetadataOperationRequest(ConnectionPool connectionPool,
       BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
       RequestOrResponse request, ClusterMap clusterMap, GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobUserMetadataOperation = getBlobUserMetadataOperation;
+    this.logger.trace("Created GetBlobUserMetadataOperationRequest for " + replicaId);
   }
 
   @Override

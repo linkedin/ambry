@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 final public class GetBlobPropertiesOperation extends GetOperation {
   private BlobProperties blobProperties;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
@@ -62,12 +62,14 @@ final public class GetBlobPropertiesOperation extends GetOperation {
 
 final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   private GetBlobPropertiesOperation getBlobPropertiesOperation;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetBlobPropertiesOperationRequest(ConnectionPool connectionPool,
       BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
       RequestOrResponse request, ClusterMap clusterMap, GetBlobPropertiesOperation getBlobPropertiesOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobPropertiesOperation = getBlobPropertiesOperation;
+    logger.trace("Created GetBlobPropertiesOperationRequest for " + replicaId);
   }
 
   @Override
