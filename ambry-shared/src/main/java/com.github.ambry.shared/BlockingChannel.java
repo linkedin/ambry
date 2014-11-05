@@ -1,6 +1,7 @@
 package com.github.ambry.shared;
 
 import com.github.ambry.network.Send;
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.*;
@@ -101,20 +102,23 @@ public class BlockingChannel implements ConnectedChannel {
   }
 
   @Override
-  public InputStream receive()
+  public ChannelOutput receive()
       throws IOException {
     if (!connected) {
       throw new ClosedChannelException();
     }
 
-    // consume the size header and return the remaining response. Need to be done by network receive?
-    long toRead = 8;
-    long read = 0;
-    while (read < toRead) {
-      readChannel.read();
-      read++;
+    // consume the size header and return the remaining response.
+    ByteBuffer streamSizeBuffer = ByteBuffer.allocate(8);
+    while (streamSizeBuffer.position() < streamSizeBuffer.capacity()) {
+      int read = readChannel.read();
+      if (read == -1) {
+        throw new IOException("Could not read complete size from readChannel ");
+      }
+      streamSizeBuffer.put((byte)read);
     }
-    return readChannel;
+    streamSizeBuffer.flip();
+    return new ChannelOutput(readChannel, streamSizeBuffer.getLong() - 8);
   }
 
   @Override

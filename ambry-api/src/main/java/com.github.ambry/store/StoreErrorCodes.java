@@ -14,5 +14,6 @@ public enum StoreErrorCodes {
   Store_Already_Started,
   Illegal_Index_Operation,
   Index_Creation_Failure,
-  Index_Version_Error
+  Index_Version_Error,
+  Unknown_Error
 }

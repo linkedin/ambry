@@ -3,6 +3,7 @@ package com.github.ambry.shared;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.FindToken;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.store.MessageInfo;
 
@@ -12,6 +13,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -68,7 +71,8 @@ public class ReplicaMetadataResponse extends Response {
       return new ReplicaMetadataResponse(correlationId, clientId, error);
     } else {
       // ignore version for now
-      return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList);
+      return new ReplicaMetadataResponse(correlationId, clientId, error,
+          replicaMetadataResponseInfoList);
     }
   }
 
@@ -78,9 +82,13 @@ public class ReplicaMetadataResponse extends Response {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
-      bufferToSend.putInt(replicaMetadataResponseInfoList.size());
-      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
-        replicaMetadataResponseInfo.writeTo(bufferToSend);
+      if (replicaMetadataResponseInfoList != null) {
+        bufferToSend.putInt(replicaMetadataResponseInfoList.size());
+        for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+          replicaMetadataResponseInfo.writeTo(bufferToSend);
+        }
+      } else {
+        bufferToSend.putInt(0);
       }
       bufferToSend.flip();
     }
@@ -105,9 +113,11 @@ public class ReplicaMetadataResponse extends Response {
     StringBuilder sb = new StringBuilder();
     sb.append("ReplicaMetadataResponse[");
     sb.append("ServerErrorCode=").append(getError());
-    sb.append(" ReplicaMetadataResponseInfo ");
-    for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
-      sb.append(replicaMetadataResponseInfo.toString());
+    if (replicaMetadataResponseInfoList != null) {
+      sb.append(" ReplicaMetadataResponseInfo ");
+      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
+        sb.append(replicaMetadataResponseInfo.toString());
+      }
     }
     sb.append("]");
     return sb.toString();

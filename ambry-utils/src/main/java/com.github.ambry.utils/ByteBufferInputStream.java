@@ -19,39 +19,23 @@ public class ByteBufferInputStream extends InputStream {
   }
 
   /**
-   * Reads 'size' amount of bytes from the stream into the buffer
-   * @param stream The stream from which bytes needs to be read
+   * Reads 'size' amount of bytes from the stream into the buffer.
+   * @param stream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
+   *               to be blocking
    * @param size The size that needs to be read from the stream
    * @throws IOException
    */
   public ByteBufferInputStream(InputStream stream, int size)
       throws IOException {
-    this(stream, size, -1);
-  }
-
-  /**
-   * Reads 'size' amount of bytes from the stream into the buffer. It spends 'readTimeoutMs' amount of time
-   * reading from the stream. If the timeout exceeds, IOException is thrown.
-   * @param stream The stream from which bytes need to be read
-   * @param size The size that needs to be read from the stream
-   * @param readTimeoutMs The max amount of time spent on reading from the input stream
-   * @throws IOException
-   */
-  public ByteBufferInputStream(InputStream stream, int size, long readTimeoutMs)
-      throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
     int read = 0;
-    long elapsedTimeMs = 0;
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
     while (read < size) {
-      long readStartTimeMs = SystemTime.getInstance().milliseconds();
-      read += readableByteChannel.read(byteBuffer);
-      long readTime = SystemTime.getInstance().milliseconds() - readStartTimeMs;
-      elapsedTimeMs += readTime;
-      if (read < size && readTimeoutMs != -1 && elapsedTimeMs > readTimeoutMs) {
-        throw new IOException(
-            "Time taken to read from stream to buffer is greater than readTimeoutMs " + readTimeoutMs);
+      int sizeRead = readableByteChannel.read(byteBuffer);
+      if (sizeRead == 0 || sizeRead == -1) {
+        throw new IOException("Total size read " + read + " is less than the size to be read " + size);
       }
+      read += sizeRead;
     }
     byteBuffer.flip();
     this.mark = -1;

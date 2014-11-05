@@ -5,6 +5,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+
 
 /**
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
@@ -91,6 +93,10 @@ public class Disk implements DiskId {
     }
     if (mountPath.length() == 0) {
       throw new IllegalStateException("Mount path cannot be zero-length string.");
+    }
+    File mountPathFile = new File(mountPath);
+    if (!mountPathFile.isAbsolute()) {
+      throw new IllegalStateException("Mount path has to be an absolute path.");
     }
   }
 

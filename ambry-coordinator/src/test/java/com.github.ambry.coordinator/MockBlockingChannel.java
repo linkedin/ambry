@@ -6,6 +6,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Send;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannel;
+import com.github.ambry.shared.ChannelOutput;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.GetRequest;
@@ -212,7 +213,7 @@ class MockBlockingChannel extends BlockingChannel {
   }
 
   @Override
-  public InputStream receive()
+  public ChannelOutput receive()
       throws ClosedChannelException, IOException {
     if (!connected.get()) {
       throw new ClosedChannelException();
@@ -224,13 +225,12 @@ class MockBlockingChannel extends BlockingChannel {
       }
     }
 
-    // get the size and return the remaining response. Need to be done by network receive?
-    long toRead = 8;
-    long read = 0;
-    while (read < toRead) {
-      responseStream.read();
-      read++;
+    // consume the size header and return the remaining response.
+    ByteBuffer streamSizeBuffer = ByteBuffer.allocate(8);
+    while (streamSizeBuffer.position() < streamSizeBuffer.capacity()) {
+      streamSizeBuffer.put((byte)responseStream.read());
     }
-    return responseStream;
+    streamSizeBuffer.flip();
+    return new ChannelOutput(responseStream, streamSizeBuffer.getLong() - 8);
   }
 }

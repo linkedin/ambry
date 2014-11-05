@@ -149,7 +149,7 @@ public class ServerReadPerformance {
                     10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
-            InputStream receiveStream = channel.receive();
+            InputStream receiveStream = channel.receive().getInputStream();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
             output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
             long sizeRead = 0;
@@ -185,7 +185,7 @@ public class ServerReadPerformance {
                 new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
-            InputStream receivePropertyStream = channel.receive();
+            InputStream receivePropertyStream = channel.receive().getInputStream();
             GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
             BlobProperties blobProperties =
                 MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
@@ -199,7 +199,7 @@ public class ServerReadPerformance {
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);
-            InputStream receiveUserMetadataStream = channel.receive();
+            InputStream receiveUserMetadataStream = channel.receive().getInputStream();
             GetResponse getResponseUserMetadata =
                 GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
             ByteBuffer userMetadata =

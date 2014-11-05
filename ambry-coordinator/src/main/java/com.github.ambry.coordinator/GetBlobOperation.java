@@ -53,8 +53,6 @@ final public class GetBlobOperation extends GetOperation {
   public synchronized void setBlobOutput(BlobOutput blobOutput) {
     if (this.blobOutput == null) {
       this.blobOutput = blobOutput;
-    } else {
-      logger.warn("{} BlobOutput attempted to be set after being set.", context);
     }
   }
 }

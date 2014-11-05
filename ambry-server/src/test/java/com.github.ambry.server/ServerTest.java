@@ -103,7 +103,7 @@ public class ServerTest {
       BlockingChannel channel = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
       channel.connect();
       channel.send(putRequest);
-      InputStream putResponseStream = channel.receive();
+      InputStream putResponseStream = channel.receive().getInputStream();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
 
@@ -111,7 +111,7 @@ public class ServerTest {
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel.send(putRequest2);
-      putResponseStream = channel.receive();
+      putResponseStream = channel.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
@@ -119,7 +119,7 @@ public class ServerTest {
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel.send(putRequest3);
-      putResponseStream = channel.receive();
+      putResponseStream = channel.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
@@ -133,7 +133,7 @@ public class ServerTest {
       GetRequest getRequest1 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel.send(getRequest1);
-      InputStream stream = channel.receive();
+      InputStream stream = channel.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
@@ -147,7 +147,7 @@ public class ServerTest {
       GetRequest getRequest2 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
       channel.send(getRequest2);
-      stream = channel.receive();
+      stream = channel.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
@@ -182,7 +182,7 @@ public class ServerTest {
       GetRequest getRequest4 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel.send(getRequest4);
-      stream = channel.receive();
+      stream = channel.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
       channel.disconnect();
@@ -225,21 +225,21 @@ public class ServerTest {
       channel2.connect();
       channel3.connect();
       channel1.send(putRequest);
-      InputStream putResponseStream = channel1.receive();
+      InputStream putResponseStream = channel1.receive().getInputStream();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel2.send(putRequest2);
-      putResponseStream = channel2.receive();
+      putResponseStream = channel2.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel3.send(putRequest3);
-      putResponseStream = channel3.receive();
+      putResponseStream = channel3.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
@@ -247,7 +247,7 @@ public class ServerTest {
       putRequest = new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel1.send(putRequest);
-      putResponseStream = channel1.receive();
+      putResponseStream = channel1.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
 
@@ -255,7 +255,7 @@ public class ServerTest {
       putRequest2 = new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel2.send(putRequest2);
-      putResponseStream = channel2.receive();
+      putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
@@ -263,7 +263,7 @@ public class ServerTest {
       putRequest3 = new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel3.send(putRequest3);
-      putResponseStream = channel3.receive();
+      putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
       // wait till replication can complete
@@ -284,7 +284,7 @@ public class ServerTest {
       GetRequest getRequest1 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel2.send(getRequest1);
-      InputStream stream = channel2.receive();
+      InputStream stream = channel2.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp1.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
@@ -301,7 +301,7 @@ public class ServerTest {
       GetRequest getRequest2 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
       channel1.send(getRequest2);
-      stream = channel1.receive();
+      stream = channel1.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp2.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp2.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
@@ -317,7 +317,7 @@ public class ServerTest {
       ids.add(blobId1);
       GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
       channel3.send(getRequest3);
-      stream = channel3.receive();
+      stream = channel3.receive().getInputStream();
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
@@ -360,7 +360,7 @@ public class ServerTest {
       GetRequest getRequest4 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
       channel3.send(getRequest4);
-      stream = channel3.receive();
+      stream = channel3.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp4.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
@@ -368,7 +368,7 @@ public class ServerTest {
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
       channel1.send(deleteRequest);
-      InputStream deleteResponseStream = channel1.receive();
+      InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
@@ -380,7 +380,7 @@ public class ServerTest {
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest5 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
       channel3.send(getRequest5);
-      stream = channel3.receive();
+      stream = channel3.receive().getInputStream();
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       Assert.assertEquals(resp5.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp5.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
@@ -452,7 +452,7 @@ public class ServerTest {
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel2.send(putRequest2);
-      putResponseStream = channel2.receive();
+      putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
@@ -460,7 +460,7 @@ public class ServerTest {
       putRequest3 = new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel3.send(putRequest3);
-      putResponseStream = channel3.receive();
+      putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
@@ -468,7 +468,7 @@ public class ServerTest {
       putRequest2 = new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel2.send(putRequest2);
-      putResponseStream = channel2.receive();
+      putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
@@ -476,7 +476,7 @@ public class ServerTest {
       putRequest3 = new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel3.send(putRequest3);
-      putResponseStream = channel3.receive();
+      putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
 
@@ -484,7 +484,7 @@ public class ServerTest {
       putRequest2 = new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       channel2.send(putRequest2);
-      putResponseStream = channel2.receive();
+      putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
 
@@ -609,7 +609,7 @@ public class ServerTest {
                   new ByteBufferInputStream(ByteBuffer.wrap(data)));
 
           channel.send(putRequest);
-          InputStream putResponseStream = channel.receive();
+          InputStream putResponseStream = channel.receive().getInputStream();
           PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
           Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
         }
@@ -698,7 +698,7 @@ public class ServerTest {
           GetRequest getRequest =
               new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
           channel.send(getRequest);
-          InputStream stream = channel.receive();
+          InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
@@ -716,7 +716,7 @@ public class ServerTest {
           partitionRequestInfoList.add(partitionRequestInfo);
           getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
           channel.send(getRequest);
-          stream = channel.receive();
+          stream = channel.receive().getInputStream();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
             ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
@@ -734,7 +734,7 @@ public class ServerTest {
           partitionRequestInfoList.add(partitionRequestInfo);
           getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
           channel.send(getRequest);
-          stream = channel.receive();
+          stream = channel.receive().getInputStream();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           //System.out.println("response from get " + resp.getError());
           try {
@@ -769,7 +769,7 @@ public class ServerTest {
           }
           DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i));
           channel.send(deleteRequest);
-          InputStream deleteResponseStream = channel.receive();
+          InputStream deleteResponseStream = channel.receive().getInputStream();
           DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
           Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
           blobsDeleted.add(blobIds.get(i));
@@ -797,7 +797,7 @@ public class ServerTest {
           partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
           channel.send(getRequest);
-          InputStream stream = channel.receive();
+          InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           Assert.assertEquals(resp.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
         }
@@ -847,7 +847,7 @@ public class ServerTest {
         GetRequest getRequest =
             new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
         channel1.send(getRequest);
-        InputStream stream = channel1.receive();
+        InputStream stream = channel1.receive().getInputStream();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
             || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
@@ -870,7 +870,7 @@ public class ServerTest {
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
-        stream = channel1.receive();
+        stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
             || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
@@ -892,7 +892,7 @@ public class ServerTest {
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
         channel1.send(getRequest);
-        stream = channel1.receive();
+        stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         //System.out.println("response from get " + resp.getError());
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
@@ -955,7 +955,7 @@ public class ServerTest {
         GetRequest getRequest =
             new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
         channel1.send(getRequest);
-        InputStream stream = channel1.receive();
+        InputStream stream = channel1.receive().getInputStream();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
             || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
@@ -978,7 +978,7 @@ public class ServerTest {
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
         channel1.send(getRequest);
-        stream = channel1.receive();
+        stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
             || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
@@ -1000,7 +1000,7 @@ public class ServerTest {
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
         channel1.send(getRequest);
-        stream = channel1.receive();
+        stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         //System.out.println("response from get " + resp.getError());
         if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
@@ -1121,7 +1121,7 @@ public class ServerTest {
               GetRequest getRequest =
                   new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
               channel1.send(getRequest);
-              InputStream stream = channel1.receive();
+              InputStream stream = channel1.receive().getInputStream();
               GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
@@ -1154,7 +1154,7 @@ public class ServerTest {
               getRequest =
                   new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
               channel1.send(getRequest);
-              stream = channel1.receive();
+              stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println("Error after get user metadata " + resp.getError());
@@ -1179,7 +1179,7 @@ public class ServerTest {
               partitionRequestInfoList.add(partitionRequestInfo);
               getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
               channel1.send(getRequest);
-              stream = channel1.receive();
+              stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
               //System.out.println("response from get " + resp.getError());
               if (resp.getError() != ServerErrorCode.No_Error) {
@@ -1278,7 +1278,7 @@ public class ServerTest {
     partitionRequestInfoList.add(partitionRequestInfo);
     GetRequest getRequest3 = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList);
     channel.send(getRequest3);
-    InputStream stream = channel.receive();
+    InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), cluster.getClusterMap());
     Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
     BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());

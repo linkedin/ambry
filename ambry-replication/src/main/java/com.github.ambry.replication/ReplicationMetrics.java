@@ -52,11 +52,13 @@ public class ReplicationMetrics {
   private MetricRegistry registry;
   private Map<String, Counter> metadataRequestErrorMap;
   private Map<String, Counter> getRequestErrorMap;
+  private Map<String, Counter> localStoreErrorMap;
 
   public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
       final List<ReplicaThread> replicaInterDCThreads) {
     metadataRequestErrorMap = new HashMap<String, Counter>();
     getRequestErrorMap = new HashMap<String, Counter>();
+    localStoreErrorMap = new HashMap<String, Counter>();
     interColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
@@ -105,8 +107,10 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoProcessMetadataResponseTime"));
     intraColoProcessMetadataResponseTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoProcessMetadataResponseTime"));
-    interColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
-    intraColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
+    interColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
+    intraColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
     interColoBatchStoreWriteTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoBatchStoreWriteTime"));
     intraColoBatchStoreWriteTime =
@@ -167,9 +171,13 @@ public class ReplicationMetrics {
     String getRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
         remoteReplicaInfo.getReplicaId().getReplicaPath() + "-getRequestError";
-    Counter getRequestError =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
+    Counter getRequestError = registry.counter(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
     getRequestErrorMap.put(getRequestErrorMetricName, getRequestError);
+    String localStoreErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-localStoreError";
+    Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
+    localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
   }
 
   public void updateMetadataRequestError(RemoteReplicaInfo remoteReplicaInfo) {
@@ -184,5 +192,12 @@ public class ReplicationMetrics {
         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
         remoteReplicaInfo.getReplicaId().getReplicaPath() + "-getRequestError";
     getRequestErrorMap.get(getRequestErrorMetricName).inc();
+  }
+
+  public void updateLocalStoreError(RemoteReplicaInfo remoteReplicaInfo) {
+    String localStoreErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
+        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-localStoreError";
+    localStoreErrorMap.get(localStoreErrorMetricName).inc();
   }
 }
