@@ -32,4 +32,10 @@ public abstract class DataNodeId implements Comparable<DataNodeId> {
    * @return name of the Datacenter
    */
   public abstract String getDatacenterName();
+
+  /**
+   * Performs the required action when the associated DataNode becomes unreachable.
+   */
+  public abstract void onNodeTimeout();
 }
+

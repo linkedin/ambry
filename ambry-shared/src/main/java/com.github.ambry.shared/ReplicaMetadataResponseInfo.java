@@ -9,6 +9,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -99,7 +101,7 @@ public class ReplicaMetadataResponseInfo {
 
   public long sizeInBytes() {
     return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize)) +
-        +partitionId.getBytes().length + Error_Size_InBytes;
+        + partitionId.getBytes().length + Error_Size_InBytes;
   }
 
   @Override

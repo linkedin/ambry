@@ -114,12 +114,13 @@ class BlockingChannelInfo {
         // if the number of connections created for this host and port is less than the max allowed
         // connections, we create a new one and add it to the available queue
         if (numberOfConnections.get() < config.connectionPoolMaxConnectionsPerHost) {
+          logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
           BlockingChannel channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
               config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs);
           channel.connect();
           blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
-          logger.trace("Creating a new connection for host {} and port {}. Number of connections {}", host, port,
+          logger.trace("Created a new connection for host {} and port {}. Number of connections {}", host, port,
               numberOfConnections.get());
         }
       }
@@ -290,7 +291,13 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
             blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
             connections.put(host + port, blockingChannelInfo);
           }
+          else {
+            logger.trace("Using already existing BlockingChannelInfo for " + host+":"+port +" in synchronized block");
+          }
         }
+      }
+      else {
+        logger.trace("Using already existing BlockingChannelInfo for " + host+":"+port);
       }
       return blockingChannelInfo.getBlockingChannel(timeoutInMs);
     } finally {

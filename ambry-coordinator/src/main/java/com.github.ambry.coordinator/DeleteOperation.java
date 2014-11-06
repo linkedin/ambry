@@ -8,6 +8,8 @@ import com.github.ambry.shared.DeleteResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.shared.ResponseFailureHandler;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -29,9 +31,10 @@ final public class DeleteOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs)
+      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs, nodeTimeoutMs,
         new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
@@ -134,5 +137,4 @@ final class DeleteOperationRequest extends OperationRequest {
     return DeleteResponse.readFrom(dataInputStream);
   }
 }
-
 

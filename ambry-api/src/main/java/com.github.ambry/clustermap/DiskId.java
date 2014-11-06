@@ -26,4 +26,10 @@ public interface DiskId {
    * @return the raw capacity in bytes
    */
   public long getRawCapacityInBytes();
+
+  /**
+   * Performs the required action when the associated Disk encounters an error.
+   */
+  public void onDiskError();
 }
+

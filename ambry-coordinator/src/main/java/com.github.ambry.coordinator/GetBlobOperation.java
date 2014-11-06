@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.RequestOrResponse;
+import com.github.ambry.shared.ResponseFailureHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,14 +24,14 @@ import java.util.concurrent.ExecutorService;
  */
 final public class GetBlobOperation extends GetOperation {
   private BlobOutput blobOutput;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
+      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.Blob);
+    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
+        nodeTimeoutMs, clusterMap, MessageFormatFlags.Blob);
     this.blobOutput = null;
   }
 
@@ -54,20 +55,20 @@ final public class GetBlobOperation extends GetOperation {
   public synchronized void setBlobOutput(BlobOutput blobOutput) {
     if (this.blobOutput == null) {
       this.blobOutput = blobOutput;
-    } else {
-      logger.warn("{} BlobOutput attempted to be set after being set.", context);
     }
   }
 }
 
 final class GetBlobOperationRequest extends GetOperationRequest {
   private GetBlobOperation getBlobOperation;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetBlobOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap,
       GetBlobOperation getBlobOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobOperation = getBlobOperation;
+    logger.trace("Created GetBlobOperationRequest for " + replicaId );
   }
 
   @Override

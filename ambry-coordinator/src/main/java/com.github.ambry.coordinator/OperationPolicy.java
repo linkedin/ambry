@@ -7,8 +7,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import java.util.List;
 import java.util.Queue;
 
@@ -23,10 +23,11 @@ public interface OperationPolicy {
   /**
    * Determines if more requests should be sent.
    *
-   * @param requestsInFlight replica IDs to which a request is currently in flight.
+   * @param requestsInFlight replica ID to RequestTime mapping for replicas to which a request is currently in
+   * flight.
    * @return true iff one or more additional requests should be in flight
    */
-  public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight);
+  public boolean sendMoreRequests(Map<ReplicaId, Long> requestsInFlight);
 
   /**
    * Determines if an operation is now successfully complete.
@@ -143,7 +144,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   }
 
   @Override
-  public abstract boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight);
+  public abstract boolean sendMoreRequests(Map<ReplicaId, Long> requestsInFlight);
 
   @Override
   public abstract boolean isComplete();
@@ -217,7 +218,7 @@ class SerialOperationPolicy extends ProbeLocalFirstOperationPolicy {
   }
 
   @Override
-  public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
+  public boolean sendMoreRequests(Map<ReplicaId, Long> requestsInFlight) {
     return !orderedReplicaIds.isEmpty() && requestsInFlight.size() < 1;
   }
 
@@ -249,7 +250,7 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   }
 
   @Override
-  public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
+  public boolean sendMoreRequests(Map<ReplicaId, Long> requestsInFlight) {
     if (orderedReplicaIds.isEmpty()) {
       return false;
     }
@@ -340,3 +341,4 @@ class AllInParallelOperationPolicy extends ParallelOperationPolicy {
     }
   }
 }
+

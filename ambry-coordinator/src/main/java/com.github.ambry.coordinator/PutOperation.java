@@ -8,6 +8,7 @@ import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
+import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.util.HashMap;
@@ -38,11 +39,11 @@ final public class PutOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream)
+      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs, BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
+        nodeTimeoutMs, new PutPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
@@ -120,9 +121,11 @@ final public class PutOperation extends Operation {
 }
 
 final class PutOperationRequest extends OperationRequest {
+  private Logger logger = LoggerFactory.getLogger(getClass());
   protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
+    logger.trace("Created PutOperationRequest for " + replicaId);
   }
 
   @Override
@@ -144,5 +147,4 @@ final class PutOperationRequest extends OperationRequest {
     return PutResponse.readFrom(dataInputStream);
   }
 }
-
 

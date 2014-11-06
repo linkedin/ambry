@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.RequestOrResponse;
+import com.github.ambry.shared.ResponseFailureHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,14 +24,14 @@ import java.util.concurrent.ExecutorService;
  */
 final public class GetBlobPropertiesOperation extends GetOperation {
   private BlobProperties blobProperties;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
+      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      long nodeTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobProperties);
+    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
+        nodeTimeoutMs, clusterMap, MessageFormatFlags.BlobProperties);
     this.blobProperties = null;
   }
 
@@ -54,20 +55,20 @@ final public class GetBlobPropertiesOperation extends GetOperation {
   public synchronized void setBlobProperties(BlobProperties blobProperties) {
     if (this.blobProperties == null) {
       this.blobProperties = blobProperties;
-    } else {
-      logger.warn("{} BlobProperties attempted to be set after being set.", context);
     }
   }
 }
 
 final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   private GetBlobPropertiesOperation getBlobPropertiesOperation;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetBlobPropertiesOperationRequest(ConnectionPool connectionPool,
       BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
       RequestOrResponse request, ClusterMap clusterMap, GetBlobPropertiesOperation getBlobPropertiesOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobPropertiesOperation = getBlobPropertiesOperation;
+    logger.trace("Created GetBlobPropertiesOperationRequest for " + replicaId);
   }
 
   @Override

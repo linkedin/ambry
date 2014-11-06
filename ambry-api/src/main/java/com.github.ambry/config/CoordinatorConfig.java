@@ -32,6 +32,14 @@ public class CoordinatorConfig {
   public final int operationTimeoutMs;
 
   /**
+  * Duration for which a data node should be unresponsive in order to be considered as soft failed when the operation
+  * times out.
+  */
+  @Config("coordinator.node.timeout.ms")
+  @Default("5000")
+  public final int nodeTimeoutMs;
+
+  /**
    * The factory class the coordinator uses to create a connection pool.
    */
   @Config("coordinator.connection.pool.factory")
@@ -58,7 +66,9 @@ public class CoordinatorConfig {
     this.requesterPoolSize =
         verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 30000, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 10000, 1, Integer.MAX_VALUE);
+      this.nodeTimeoutMs =
+        verifiableProperties.getIntInRange("coordinator.node.timeout.ms", 5000, 1, Integer.MAX_VALUE);
     this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
         "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
@@ -66,3 +76,4 @@ public class CoordinatorConfig {
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
   }
 }
+

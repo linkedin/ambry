@@ -11,6 +11,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Send;
 import com.github.ambry.shared.BlobId;
+import com.github.ambry.shared.ChannelOutput;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolTimeoutException;
@@ -388,7 +389,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public InputStream receive()
+    public ChannelOutput receive()
         throws IOException {
       Response response = null;
       if (metadataRequest != null) {
@@ -433,7 +434,7 @@ public class ReplicationTest {
       }
       buffer.flip();
       buffer.getLong();
-      return new ByteBufferInputStream(buffer);
+      return new ChannelOutput(new ByteBufferInputStream(buffer), buffer.remaining());
     }
 
     @Override

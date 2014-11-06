@@ -26,7 +26,7 @@ public interface ConnectedChannel {
    * @return The input stream that can be used to consume data from the remote host
    * @throws IOException
    */
-  InputStream receive()
+  ChannelOutput receive()
       throws IOException;
 
   /**

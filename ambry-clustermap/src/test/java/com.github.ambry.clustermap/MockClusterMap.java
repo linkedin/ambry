@@ -172,6 +172,18 @@ public class MockClusterMap implements ClusterMap {
       }
     }
   }
+
+  @Override
+  public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
+    switch (error) {
+      case Disk_Error:
+        replicaId.getDiskId().onDiskError();
+      case Node_Timeout:
+        replicaId.getDataNodeId().onNodeTimeout();
+      case Partition_ReadOnly:
+        replicaId.getPartitionId().onPartitionReadOnly();
+    }
+  }
 }
 
 class MockReplicaId implements ReplicaId {
@@ -249,6 +261,10 @@ class MockReplicaId implements ReplicaId {
       public long getRawCapacityInBytes() {
         return 100000;
       }
+
+      @Override
+      public void onDiskError() {
+      }
     };
   }
 
@@ -265,3 +281,4 @@ class MockReplicaId implements ReplicaId {
     replicaDir.delete();
   }
 }
+
