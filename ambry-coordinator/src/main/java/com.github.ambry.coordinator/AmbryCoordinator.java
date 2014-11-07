@@ -43,7 +43,6 @@ public class AmbryCoordinator implements Coordinator {
   private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
-  private int nodeTimeoutMs;
   private int connectionPoolCheckoutTimeout;
 
   private JmxReporter reporter = null;
@@ -89,7 +88,6 @@ public class AmbryCoordinator implements Coordinator {
             "Coordinator cannot start.");
       }
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
-      this.nodeTimeoutMs = coordinatorConfig.nodeTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
@@ -142,7 +140,8 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics,
+                   responseFailureHandler);
   }
 
   private PartitionId getPartitionForPut()
@@ -197,8 +196,8 @@ public class AmbryCoordinator implements Coordinator {
       PartitionId partitionId = getPartitionForPut();
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
-          new PutOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler, getOperationContext(),
-              blobId, operationTimeoutMs, nodeTimeoutMs, blobProperties, userMetadata, blobStream);
+          new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata.array());
@@ -222,9 +221,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
-          new DeleteOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-          getOperationContext(), blobId,
-          operationTimeoutMs, nodeTimeoutMs);
+          new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
       coordinatorMetrics.deleteBlobOperationRate.mark();
@@ -245,8 +243,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
-          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gbpo.execute();
 
       coordinatorMetrics.getBlobPropertiesOperationRate.mark();
@@ -269,8 +267,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
-          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gumo.execute();
 
       coordinatorMetrics.getBlobUserMetadataOperationRate.mark();
@@ -293,8 +291,8 @@ public class AmbryCoordinator implements Coordinator {
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
-          new GetBlobOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gbdo.execute();
 
       coordinatorMetrics.getBlobOperationRate.mark();

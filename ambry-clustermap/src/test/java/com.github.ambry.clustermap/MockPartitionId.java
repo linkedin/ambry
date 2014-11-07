@@ -94,7 +94,6 @@ public class MockPartitionId extends PartitionId {
     }
   }
 
-  @Override
   public void onPartitionReadOnly() {
     /* noop for now */
   }

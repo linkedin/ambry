@@ -4,6 +4,9 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaFailureType;
 import com.github.ambry.clustermap.ReplicaId;
 
+import java.io.IOException;
+import java.net.SocketException;
+
 /**
  * ResponseFailureHandler can be used by components to alter cluster map soft states when there is a failure.
  */
@@ -16,30 +19,23 @@ public class ResponseFailureHandler {
         this.clusterMap = clusterMap;
     }
 
-    public void onOperationTimeout(ReplicaId replicaId) {
-      clusterMap.onReplicaError(replicaId, ReplicaFailureType.Node_Timeout);
-    }
-
-    public void onOperationError(ReplicaId replicaId, ReplicaFailureType error) {
-      clusterMap.onReplicaError(replicaId, error);
-    }
-
-    public void onServerError(ReplicaId replicaId, ServerErrorCode errorCode) {
-      if (errorCode == ServerErrorCode.IO_Error || errorCode == ServerErrorCode.Disk_Unavailable) {
-        onOperationError(replicaId, ReplicaFailureType.Disk_Error);
-      }
-
-      if (errorCode == ServerErrorCode.Partition_ReadOnly) {
-        onOperationError(replicaId, ReplicaFailureType.Partition_ReadOnly);
+    public void onRequestResponseError(ReplicaId replicaId, ServerErrorCode errorCode) {
+      switch (errorCode) {
+          case IO_Error:
+          case Disk_Unavailable:
+              clusterMap.onReplicaError(replicaId, ReplicaFailureType.Disk_Error);
+            break;
+          case Partition_ReadOnly:
+              clusterMap.onReplicaError(replicaId, ReplicaFailureType.Partition_ReadOnly);
+            break;
       }
     }
 
-    public void onRequestResponseError(ReplicaId replicaId, RequestResponseError errorCode) {
-      if (errorCode == RequestResponseError.IO_ERROR) {
-        onOperationError(replicaId, ReplicaFailureType.Disk_Error);
-      }
-      if (errorCode == RequestResponseError.TIMEOUT_ERROR) {
-        onOperationTimeout(replicaId);
+    public void onRequestResponseException(ReplicaId replicaId, Exception e) {
+      if (e instanceof SocketException ||
+          e instanceof IOException ||
+          e instanceof ConnectionPoolTimeoutException) {
+          clusterMap.onReplicaError(replicaId, ReplicaFailureType.Node_Timeout);
       }
     }
 }

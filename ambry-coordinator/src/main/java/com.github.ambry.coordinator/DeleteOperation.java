@@ -31,10 +31,9 @@ final public class DeleteOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
-      long nodeTimeoutMs)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs, nodeTimeoutMs,
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
         new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();

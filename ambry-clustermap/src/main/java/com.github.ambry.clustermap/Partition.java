@@ -207,7 +207,6 @@ public class Partition extends PartitionId {
     return id.compareTo(other.id);
   }
 
-  @Override
   public void onPartitionReadOnly() {
     // @todo: Maintain state and handle partition errors. Also note that this method could be accessed concurrently,
     // and needs to be thread-safe.

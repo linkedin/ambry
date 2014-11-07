@@ -27,11 +27,11 @@ final public class GetBlobOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
-      long nodeTimeoutMs, ClusterMap clusterMap)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs,
+      ClusterMap clusterMap)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs,
-        nodeTimeoutMs, clusterMap, MessageFormatFlags.Blob);
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+        clusterMap, MessageFormatFlags.Blob);
     this.blobOutput = null;
   }
 
