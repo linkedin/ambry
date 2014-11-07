@@ -66,4 +66,3 @@ public class CoordinatorConfig {
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
   }
 }
-

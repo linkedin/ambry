@@ -8,7 +8,6 @@ import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.util.HashMap;
@@ -40,9 +39,9 @@ final public class PutOperation extends Operation {
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-          ByteBuffer userMetadata, InputStream blobStream)
+      ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool,oc, blobId, operationTimeoutMs,
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
         new PutPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
@@ -147,4 +146,3 @@ final class PutOperationRequest extends OperationRequest {
     return PutResponse.readFrom(dataInputStream);
   }
 }
-

@@ -7,11 +7,10 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.HashSet;
 
-import com.github.ambry.utils.SystemTime;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -941,4 +940,3 @@ public class OperationPolicyTest {
     }
   }
 }
-

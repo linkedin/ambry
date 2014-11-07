@@ -23,7 +23,7 @@ public interface OperationPolicy {
   /**
    * Determines if more requests should be sent.
    *
-   * @param requestsInFlight replica ID to which a request is currently in flight.
+   * @param requestsInFlight replica IDs to which a request is currently in flight.
    * @return true iff one or more additional requests should be in flight
    */
   public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight);
@@ -340,4 +340,3 @@ class AllInParallelOperationPolicy extends ParallelOperationPolicy {
     }
   }
 }
-

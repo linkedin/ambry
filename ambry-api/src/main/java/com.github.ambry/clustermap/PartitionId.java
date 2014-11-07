@@ -35,4 +35,3 @@ public abstract class PartitionId implements Comparable<PartitionId> {
    */
   public abstract boolean isEqual(String partitionId);
 }
-

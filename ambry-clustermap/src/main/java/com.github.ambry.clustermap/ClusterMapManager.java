@@ -359,4 +359,3 @@ public class ClusterMapManager implements ClusterMap {
     }
   }
 }
-

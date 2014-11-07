@@ -13,8 +13,6 @@ import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.ResponseFailureHandler;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -195,4 +193,3 @@ abstract class GetOperationRequest extends OperationRequest {
   protected abstract void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException;
 }
-

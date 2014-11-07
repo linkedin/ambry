@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.net.SocketException;
 
 /**
- * ResponseFailureHandler can be used by components to alter cluster map soft states when there is a failure.
+ * ResponseFailureHandler can be used by components like the Coordinator whenever an operation encounters an error or
+ * an exception to delegate the responsibility of conveying appropriate replica related errors to the cluster map.
+ * The cluster map uses this information to set soft states and dynamically handle failures.
  */
 
 public class ResponseFailureHandler {
@@ -39,4 +41,3 @@ public class ResponseFailureHandler {
       }
     }
 }
-

@@ -27,4 +27,3 @@ public interface DiskId {
    */
   public long getRawCapacityInBytes();
 }
-

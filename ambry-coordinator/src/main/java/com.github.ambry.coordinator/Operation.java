@@ -9,14 +9,14 @@ import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolTimeoutException;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.shared.ResponseFailureHandler;
+import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Set;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -25,13 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-enum RequestResponseError {
-    SUCCESS,
-    UNEXPECTED_ERROR,
-    IO_ERROR,
-    MESSAGE_FORMAT_ERROR,
-    TIMEOUT_ERROR
-}
 
 /**
  * Performs an operation
@@ -350,6 +343,14 @@ abstract class OperationRequest implements Runnable {
           " responseQueue incorrectly sized since offer() returned false.  BlobId ", blobId);
     }
   }
+}
+
+enum RequestResponseError {
+  SUCCESS,
+  UNEXPECTED_ERROR,
+  IO_ERROR,
+  MESSAGE_FORMAT_ERROR,
+  TIMEOUT_ERROR
 }
 
 /**
