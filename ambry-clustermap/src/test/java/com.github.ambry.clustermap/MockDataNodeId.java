@@ -79,4 +79,8 @@ public class MockDataNodeId extends DataNodeId {
     }
     return compare;
   }
+
+  public void onNodeTimeout() {
+    /* no-op for now */
+  }
 }

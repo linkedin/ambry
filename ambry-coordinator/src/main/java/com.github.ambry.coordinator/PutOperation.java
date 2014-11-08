@@ -146,5 +146,3 @@ final class PutOperationRequest extends OperationRequest {
     return PutResponse.readFrom(dataInputStream);
   }
 }
-
-

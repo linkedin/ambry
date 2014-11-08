@@ -14,11 +14,11 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolFactory;
 import com.github.ambry.shared.LoggingNotificationSystem;
+import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -39,6 +39,7 @@ public class AmbryCoordinator implements Coordinator {
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
+  private final ResponseFailureHandler responseFailureHandler;
   private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
@@ -62,6 +63,7 @@ public class AmbryCoordinator implements Coordinator {
       NotificationSystem notificationSystem) {
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
+    this.responseFailureHandler = new ResponseFailureHandler(clusterMap);
     this.coordinatorMetrics = new CoordinatorMetrics(clusterMap);
     this.notificationSystem = notificationSystem;
     this.randomForPartitionSelection = new Random();
@@ -138,7 +140,8 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics,
+        responseFailureHandler);
   }
 
   private PartitionId getPartitionForPut()
