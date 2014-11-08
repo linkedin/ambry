@@ -1,7 +1,6 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.shared.ResponseFailureHandler;
-
 import java.util.concurrent.atomic.AtomicInteger;
 
 
