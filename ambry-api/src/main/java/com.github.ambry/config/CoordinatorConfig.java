@@ -28,7 +28,7 @@ public class CoordinatorConfig {
    * Timeout for operations that the coordinator issues.
    */
   @Config("coordinator.operation.timeout.ms")
-  @Default("10000")
+  @Default("2000")
   public final int operationTimeoutMs;
 
   /**
@@ -42,7 +42,7 @@ public class CoordinatorConfig {
    * Timeout for checking out a connection from the connection pool
    */
   @Config("coordinator.connection.pool.checkout.timeout.ms")
-  @Default("2000")
+  @Default("1000")
   public final int connectionPoolCheckoutTimeoutMs;
 
   /**
@@ -58,11 +58,11 @@ public class CoordinatorConfig {
     this.requesterPoolSize =
         verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 10000, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 2000, 1, Integer.MAX_VALUE);
     this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
         "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
+        verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
   }
 }
