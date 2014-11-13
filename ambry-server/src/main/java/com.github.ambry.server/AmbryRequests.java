@@ -296,6 +296,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
+        metrics.getBlobAllProcessingTimeInMs.update(processingTime);
       }
     }
     sendGetResponse(requestResponseChannel, response, request, responseQueueTimeMeasurement,
