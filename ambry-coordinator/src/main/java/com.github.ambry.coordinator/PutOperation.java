@@ -120,9 +120,11 @@ final public class PutOperation extends Operation {
 }
 
 final class PutOperationRequest extends OperationRequest {
+  private Logger logger = LoggerFactory.getLogger(getClass());
   protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request);
+    logger.trace("Created PutOperationRequest for " + replicaId);
   }
 
   @Override
@@ -144,5 +146,3 @@ final class PutOperationRequest extends OperationRequest {
     return PutResponse.readFrom(dataInputStream);
   }
 }
-
-

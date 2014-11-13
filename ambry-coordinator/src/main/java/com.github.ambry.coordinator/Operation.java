@@ -9,12 +9,12 @@ import com.github.ambry.shared.ConnectionPool;
 import com.github.ambry.shared.ConnectionPoolTimeoutException;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
+import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -78,10 +78,10 @@ public abstract class Operation {
       throws CoordinatorException;
 
   private void sendRequests() {
-    logger.debug("{} sendRequests determining whether to send more requests", context);
+    logger.trace("{} sendRequests determining whether to send more requests", context);
     while (operationPolicy.sendMoreRequests(requestsInFlight)) {
       ReplicaId replicaIdToSendTo = operationPolicy.getNextReplicaIdForSend();
-      logger.debug("{} sendRequests sending request to {}", context, replicaIdToSendTo);
+      logger.trace("{} sendRequests sending request to {}", context, replicaIdToSendTo);
       requestsInFlight.add(replicaIdToSendTo);
       requesterPool.submit(makeOperationRequest(replicaIdToSendTo));
     }
@@ -89,19 +89,21 @@ public abstract class Operation {
 
   public void execute()
       throws CoordinatorException {
-    logger.debug("{} operation beginning execute", context);
+    logger.trace("{} operation beginning execute", context);
     sendRequests();
     while (true) {
       try {
         OperationResponse operationResponse =
             responseQueue.poll(operationExpirationMs - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
-        logger.debug("{} operation processing a response", context);
+        logger.trace("{} operation processing a response", context);
+        logger.trace("Requests in flight {} " + requestsInFlight);
         if (operationResponse == null) {
           logger.error("{} Operation timed out", context);
           throw new CoordinatorException("Operation timed out.", CoordinatorError.OperationTimedOut);
         }
 
         ReplicaId replicaId = operationResponse.getReplicaId();
+        logger.trace("Obtained Response from " + replicaId);
         if (!requestsInFlight.remove(replicaId)) {
           CoordinatorException e = new CoordinatorException("Coordinator received unexpected response",
               CoordinatorError.UnexpectedInternalError);
@@ -111,27 +113,33 @@ public abstract class Operation {
 
         if (operationResponse.getError() == RequestResponseError.SUCCESS) {
           ServerErrorCode errorCode = processResponseError(replicaId, operationResponse.getResponse());
+          logger.trace("Error code " + errorCode);
           if (errorCode == ServerErrorCode.No_Error) {
             operationPolicy.onSuccessfulResponse(replicaId);
+            logger.trace("Success response from this replica. Operation Success ");
           } else {
+            logger.trace("Failure response from this replica ");
             if (errorCode == ServerErrorCode.Data_Corrupt) {
               operationPolicy.onCorruptResponse(replicaId);
             } else {
               operationPolicy.onFailedResponse(replicaId);
             }
             resolveCoordinatorError(currentError);
+            logger.trace("Resolved error " + currentError);
           }
         } else {
           if (operationResponse.getError() == RequestResponseError.MESSAGE_FORMAT_ERROR) {
             operationPolicy.onCorruptResponse(replicaId);
+            logger.trace("Corrupt response ");
           } else {
             operationPolicy.onFailedResponse(replicaId);
+            logger.trace("Failed response ");
           }
         }
 
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
-          logger.debug("{} operation successfully completing execute", context);
+          logger.trace("{} operation successfully completing execute", context);
           return;
         }
         if (!operationPolicy.mayComplete()) {
@@ -140,13 +148,18 @@ public abstract class Operation {
             context.getCoordinatorMetrics().corruptionError.inc();
           }
           String message = getErrorMessage();
-          logger.error("{} {}", context, message);
+          logger.trace("{} {}", context, message);
           throw new CoordinatorException(message, getResolvedError());
         }
         sendRequests();
+        logger.trace("Requests in flight after processing an operation response " + requestsInFlight);
       } catch (CoordinatorException e) {
         operationComplete.set(true);
-        logger.error(context + " operation threw CoordinatorException during execute: " + e);
+        if (logger.isTraceEnabled()) {
+          logger.trace(context + " operation threw CoordinatorException during execute.", e);
+        } else {
+          logger.error(context + " operation threw CoordinatorException during execute: " + e);
+        }
         throw e;
       } catch (InterruptedException e) {
         operationComplete.set(true);
@@ -175,7 +188,7 @@ public abstract class Operation {
   abstract Integer getPrecedenceLevel(CoordinatorError coordinatorError);
 
   public String getErrorMessage() {
-    String message = null;
+    String message = "";
     switch (resolvedError) {
       case AmbryUnavailable:
         message += "Insufficient DataNodes replied to complete operation " + context + ":" + operationPolicy +
@@ -217,6 +230,7 @@ abstract class OperationRequest implements Runnable {
   private final BlobId blobId;
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
+  private ResponseFailureHandler responseFailureHandler;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -228,6 +242,7 @@ abstract class OperationRequest implements Runnable {
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
+    this.responseFailureHandler = context.getResponseFailureHandler();
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)
@@ -250,15 +265,15 @@ abstract class OperationRequest implements Runnable {
     long startTimeInMs = System.currentTimeMillis();
 
     try {
-      logger.debug("{} {} checking out connection", context, replicaId);
+      logger.trace("{} {} checking out connection", context, replicaId);
       connectedChannel = connectionPool
           .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
               context.getConnectionPoolCheckoutTimeout());
-      logger.debug("{} {} sending request", context, replicaId);
+      logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
-      logger.debug("{} {} receiving response", context, replicaId);
+      logger.trace("{} {} receiving response", context, replicaId);
       InputStream responseStream = connectedChannel.receive().getInputStream();
-      logger.debug("{} {} processing response", context, replicaId);
+      logger.trace("{} {} processing response", context, replicaId);
       Response response = getResponse(new DataInputStream(responseStream));
 
       if (response == null) {
@@ -267,35 +282,40 @@ abstract class OperationRequest implements Runnable {
         return;
       }
 
-      logger.debug("{} {} deserializing response payload", context, replicaId);
+      logger.trace("{} {} deserializing response payload", context, replicaId);
       deserializeResponsePayload(response);
 
-      logger.debug("{} {} checking in connection", context, replicaId);
+      logger.trace("{} {} checking in connection", context, replicaId);
       connectionPool.checkInConnection(connectedChannel);
       connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
       markRequest();
       updateRequest(System.currentTimeMillis() - startTimeInMs);
+      responseFailureHandler.onRequestResponseError(replicaId, response.getError());
     } catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
       countError(RequestResponseError.IO_ERROR);
+      responseFailureHandler.onRequestResponseException(replicaId, e);
     } catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
       countError(e.getErrorCode());
+      responseFailureHandler.onRequestResponseException(replicaId, e);
     } catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
       countError(RequestResponseError.TIMEOUT_ERROR);
+      responseFailureHandler.onRequestResponseException(replicaId, e);
     } catch (Exception e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
       countError(RequestResponseError.UNEXPECTED_ERROR);
+      responseFailureHandler.onRequestResponseException(replicaId, e);
     } finally {
       if (connectedChannel != null) {
-        logger.debug("{} {} destroying connection", context, replicaId);
+        logger.trace("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
     }
@@ -378,6 +398,4 @@ class OperationResponse {
     return error;
   }
 }
-
-
 

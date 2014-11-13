@@ -23,7 +23,6 @@ import java.util.concurrent.ExecutorService;
  */
 final public class GetBlobOperation extends GetOperation {
   private BlobOutput blobOutput;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
@@ -60,12 +59,14 @@ final public class GetBlobOperation extends GetOperation {
 
 final class GetBlobOperationRequest extends GetOperationRequest {
   private GetBlobOperation getBlobOperation;
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetBlobOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap,
       GetBlobOperation getBlobOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobOperation = getBlobOperation;
+    logger.trace("Created GetBlobOperationRequest for " + replicaId );
   }
 
   @Override

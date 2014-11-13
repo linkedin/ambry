@@ -152,4 +152,8 @@ public class Disk implements DiskId {
     result = 31 * result + mountPath.hashCode();
     return result;
   }
+
+  public void onDiskError() {
+    // @todo: Maintain state and handle disk errors. Also note that this method could be accessed concurrently.
+  }
 }

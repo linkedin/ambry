@@ -193,5 +193,3 @@ abstract class GetOperationRequest extends OperationRequest {
   protected abstract void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException;
 }
-
-
