@@ -252,13 +252,13 @@ public class AmbryRequests implements RequestAPI {
                   "for partition " + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                  " for partition " + partitionRequestInfo.getPartition(), e);
               if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
                 metrics.ttlExpiredError.inc();
               } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
                 metrics.idDeletedError.inc();
               } else {
+                logger.error("Store exception on a get with error code " + e.getErrorCode() +
+                    " for partition " + partitionRequestInfo.getPartition(), e);
                 metrics.unExpectedStoreGetError.inc();
               }
             }
