@@ -71,4 +71,15 @@ public class PartitionResponseInfo {
   public long sizeInBytes() {
     return partitionId.getBytes().length + messageInfoListSize + Error_Size_InBytes;
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("PartitionResponseInfo[");
+    sb.append("PartitionId=").append(partitionId);
+    sb.append(" ServerErrorCode=").append(errorCode);
+    sb.append(" MessageInfoListSize=").append(messageInfoListSize);
+    sb.append("]");
+    return sb.toString();
+  }
 }

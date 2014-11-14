@@ -131,6 +131,9 @@ public class GetResponse extends Response {
       sb.append("SizeToSend=").append(toSend.sizeInBytes());
     }
     sb.append(" ServerErrorCode=").append(getError());
+    if (partitionResponseInfoList != null) {
+      sb.append(" PartitionResponseInfoList=").append(partitionResponseInfoList);
+    }
     sb.append("]");
     return sb.toString();
   }
