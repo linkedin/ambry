@@ -39,10 +39,9 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.dataNodeStatePolicy =
-        new DataNodeStatePolicy(HardwareState.valueOf(jsonObject.getString("hardwareState")),
-            clusterMapConfig.clusterMapDatanodeWindowMs, clusterMapConfig.clusterMapDatanodeErrorThreshold,
-            clusterMapConfig.clusterMapDataNodeRetryBackoffMs);
+    this.dataNodeStatePolicy = new DataNodeStatePolicy(HardwareState.valueOf(jsonObject.getString("hardwareState")),
+        clusterMapConfig.clusterMapDatanodeWindowMs, clusterMapConfig.clusterMapDatanodeErrorThreshold,
+        clusterMapConfig.clusterMapDataNodeRetryBackoffMs);
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
     for (int i = 0; i < diskJSONArray.length(); ++i) {
@@ -90,7 +89,16 @@ public class DataNode extends DataNodeId {
   }
 
   public void onNodeTimeout() {
-    dataNodeStatePolicy.onError();
+    String dataNodeStr;
+    try {
+      dataNodeStr = toJSONObject().toString();
+    } catch (JSONException e) {
+      dataNodeStr = null;
+    }
+    logger.info("Node [" + dataNodeStr + "] timed out, informing resource state");
+    if (dataNodeStatePolicy.onError()) {
+      logger.info("Node [" + dataNodeStr + "] was determined to be down");
+    }
   }
 
   public boolean isSoftDown() {

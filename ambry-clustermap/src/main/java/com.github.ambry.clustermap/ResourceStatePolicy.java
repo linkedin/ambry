@@ -2,7 +2,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayDeque;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -26,8 +25,10 @@ public interface ResourceStatePolicy {
 
   /**
    * Should be called by the caller every time an error is encountered for the corresponding resource.
+   *
+   * @return true if we mark the resource as unavailable in this call.
    */
-  public void onError();
+  public boolean onError();
 }
 
 abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
@@ -67,7 +68,7 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    *  If so, make this resource down until now + retryBackoffMs. The size of the queue is the threshold.
    */
   @Override
-  public void onError() {
+  public boolean onError() {
     synchronized (this) {
       while (failureQueue.size() > 0
           && failureQueue.getFirst() < SystemTime.getInstance().milliseconds() - failureWindowSizeMs) {
@@ -78,8 +79,10 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
       } else {
         failureQueue.clear();
         downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
+        return true;
       }
     }
+    return false;
   }
 
   @Override

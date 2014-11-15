@@ -145,6 +145,15 @@ public class Disk implements DiskId {
   }
 
   public void onDiskError() {
-    diskStatePolicy.onError();
+    String diskStr;
+    try {
+      diskStr = toJSONObject().toString();
+    } catch (JSONException e) {
+      diskStr = null;
+    }
+    logger.info("Disk error, informing resource state for disk [" + diskStr + "]");
+    if (diskStatePolicy.onError()) {
+      logger.info("Disk [" + diskStr + "] has been determined as down: ");
+    }
   }
 }
