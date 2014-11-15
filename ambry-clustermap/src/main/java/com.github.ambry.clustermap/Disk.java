@@ -111,8 +111,7 @@ public class Disk implements DiskId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    return new JSONObject().put("mountPath", mountPath)
-        .put("hardwareState", diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
+    return new JSONObject().put("mountPath", mountPath).put("hardwareState", getHardState())
         .put("capacityInBytes", capacityInBytes);
   }
 

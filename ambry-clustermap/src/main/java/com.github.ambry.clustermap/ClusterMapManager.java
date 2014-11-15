@@ -2,10 +2,8 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.VerifiableProperties;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;

@@ -597,7 +597,7 @@ class ReplicaThread implements Runnable {
             }
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo);
-            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: ", remoteNode, threadName,
+            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           }
         } else {

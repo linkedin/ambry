@@ -215,13 +215,13 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerSer = TestUtils.getTestClusterMap();
     clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
-    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer,
-        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+
+    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer, clusterMapConfig);
     assertEquals(clusterMapManagerSer, clusterMapManagerDe);
 
     clusterMapManagerDe.persist(hardwareLayoutDe, partitionLayoutDe);
-    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe,
-        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe, clusterMapConfig);
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 

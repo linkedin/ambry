@@ -137,8 +137,11 @@ public class DataNodeTest {
       assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
       dataNode.onNodeTimeout();
     }
+    // After threshold number of continuous errors, the resource should be unavailable (assuming the window is
+    // large enough to hold all the above errors in the queue)
     assertEquals(dataNode.getState(), HardwareState.UNAVAILABLE);
     Thread.sleep(retryBackoffMs + 1);
+    // If retryBackoffMs has passed, the resource should be available.
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
 
     if (threshold > 1) {
@@ -148,6 +151,8 @@ public class DataNodeTest {
         Thread.sleep(windowMs);
       }
     }
+    // Even if we had more than threshold number of errors, if they did not fit in the
+    // same window, the resource should be available.
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
   }
 }

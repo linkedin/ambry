@@ -3,6 +3,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /** ResourceStatePolicy is used to determine if the state of a resource is "up" or "down". For resources like data nodes
@@ -34,8 +35,7 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final int failureCountThreshold;
   private final long failureWindowSizeMs;
   private final long retryBackoffMs;
-  private AtomicBoolean up;
-  private long downUntil;
+  private AtomicLong downUntil;
   private ArrayDeque<Long> failureQueue;
 
   public FixedBackoffResourceStatePolicy(boolean hardDown, long failureWindowSizeMs, int failureCountThreshold,
@@ -44,17 +44,17 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     this.failureWindowSizeMs = failureWindowSizeMs;
     this.failureCountThreshold = failureCountThreshold;
     this.retryBackoffMs = retryBackoffMs;
-    this.up = new AtomicBoolean(true);
-    this.downUntil = 0;
+    this.downUntil = new AtomicLong(0);
     failureQueue = new ArrayDeque<Long>();
   }
 
+  /* If down (which is checked locklessly), check to see if it is time to be up.
+   */
   private boolean isUp() {
-    if (!up.get()) {
+    if (downUntil.get() != 0) {
       synchronized (this) {
-        if (SystemTime.getInstance().milliseconds() > downUntil) {
-          up.set(true);
-          downUntil = 0;
+        if (SystemTime.getInstance().milliseconds() > downUntil.get()) {
+          downUntil.set(0);
         } else {
           return false;
         }
@@ -63,6 +63,9 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     return true;
   }
 
+  /** On error, check if there have been threshold number of errors in the last failure window milliseconds.
+   *  If so, make this resource down until now + retryBackoffMs. The size of the queue is the threshold.
+   */
   @Override
   public void onError() {
     synchronized (this) {
@@ -73,9 +76,8 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
       if (failureQueue.size() < failureCountThreshold) {
         failureQueue.add(SystemTime.getInstance().milliseconds());
       } else {
-        up.set(false);
         failureQueue.clear();
-        downUntil = SystemTime.getInstance().milliseconds() + retryBackoffMs;
+        downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
       }
     }
   }

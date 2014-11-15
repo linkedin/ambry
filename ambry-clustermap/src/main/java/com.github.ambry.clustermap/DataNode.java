@@ -39,7 +39,7 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.dataNodeStatePolicy = //@todo
+    this.dataNodeStatePolicy =
         new DataNodeStatePolicy(HardwareState.valueOf(jsonObject.getString("hardwareState")),
             clusterMapConfig.clusterMapDatanodeWindowMs, clusterMapConfig.clusterMapDatanodeErrorThreshold,
             clusterMapConfig.clusterMapDataNodeRetryBackoffMs);
