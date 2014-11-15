@@ -4,6 +4,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.HardwareLayout;
 import com.github.ambry.clustermap.PartitionLayout;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -152,7 +153,7 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL));
+    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -236,7 +237,7 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL));
+    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -354,7 +355,7 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL));
+    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -633,7 +634,7 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL));
+    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }

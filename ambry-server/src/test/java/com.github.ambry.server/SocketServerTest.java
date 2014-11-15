@@ -3,6 +3,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -15,6 +16,7 @@ import com.github.ambry.shared.PutRequest;
 import com.github.ambry.shared.PutResponse;
 import com.github.ambry.shared.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.List;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -60,8 +62,9 @@ public class SocketServerTest {
     byte[] bufmetadata = new byte[5];
     new Random().nextBytes(bufmetadata);
 
+    List<? extends PartitionId> partitionIds = map.getWritablePartitionIds();
     PutRequest emptyRequest =
-        new PutRequest(correlationId, "test", new BlobId(map.getWritablePartitionIdAt(0)), new BlobProperties(10, "id"),
+        new PutRequest(correlationId, "test", new BlobId(partitionIds.get(0)), new BlobProperties(10, "id"),
             ByteBuffer.wrap(bufmetadata), stream);
 
     BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);

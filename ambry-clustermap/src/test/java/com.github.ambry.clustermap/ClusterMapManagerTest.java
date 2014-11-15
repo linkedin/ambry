@@ -1,6 +1,9 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.Properties;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
@@ -61,9 +64,10 @@ public class ClusterMapManagerTest {
       System.out.println(metricName);
     }
 
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), testPartitionLayout.getPartitionCount());
-    for (int i = 0; i < clusterMapManager.getWritablePartitionIdsCount(); i++) {
-      PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(i);
+    List<? extends PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
+    assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
       assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getReplicaCount());
 
       DataInputStream partitionStream =
@@ -110,10 +114,12 @@ public class ClusterMapManagerTest {
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
 
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 0);
+    List<? extends PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
+    assertEquals(partitionIds.size(), 0);
     clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
-    PartitionId partitionId = clusterMapManager.getWritablePartitionIdAt(0);
+    partitionIds = clusterMapManager.getWritablePartitionIds();
+    assertEquals(partitionIds.size(), 1);
+    PartitionId partitionId = partitionIds.get(0);
     assertEquals(partitionId.getReplicaIds().size(), 6);
   }
 
@@ -209,11 +215,13 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerSer = TestUtils.getTestClusterMap();
     clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
-    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
+    ClusterMapManager clusterMapManagerDe = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer,
+        new ClusterMapConfig(new VerifiableProperties(new Properties())));
     assertEquals(clusterMapManagerSer, clusterMapManagerDe);
 
     clusterMapManagerDe.persist(hardwareLayoutDe, partitionLayoutDe);
-    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe);
+    ClusterMapManager clusterMapManagerDeDe = new ClusterMapManager(hardwareLayoutDe, partitionLayoutDe,
+        new ClusterMapConfig(new VerifiableProperties(new Properties())));
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
@@ -229,8 +237,9 @@ public class ClusterMapManagerTest {
     configDir += "/config";
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
-    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer);
-    assertEquals(clusterMapManager.getWritablePartitionIdsCount(), 1);
+    ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer,
+        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    assertEquals(clusterMapManager.getWritablePartitionIds().size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }

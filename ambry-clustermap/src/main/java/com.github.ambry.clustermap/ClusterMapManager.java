@@ -1,8 +1,11 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -32,6 +35,9 @@ public class ClusterMapManager implements ClusterMap {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
+    //@todo: We should clean up the interface for this constructor so that hardwareLayout and partitionLayout are only
+    //created within the ClusterMapManager. For this constructor, ideally we should just take a json object that is to
+    //be used to create the hardwareLayout, which in turn is used to create the partitionLayout.
     if (logger.isTraceEnabled()) {
       logger.trace("ClusterMapManager " + partitionLayout);
     }
@@ -41,10 +47,10 @@ public class ClusterMapManager implements ClusterMap {
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath)
+  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath, ClusterMapConfig clusterMapConfig)
       throws IOException, JSONException {
     logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
-    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
+    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)), clusterMapConfig);
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
     this.metricRegistry = new MetricRegistry();
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
@@ -64,24 +70,29 @@ public class ClusterMapManager implements ClusterMap {
   // Implementation of ClusterMap interface
   // --------------------------------------
 
+  @Override
   public List<? extends PartitionId> getWritablePartitionIds() {
-    return partitionLayout.getWritablePartitions();
+    List<Partition> partitions = partitionLayout.getWritablePartitions();
+    List<Partition> healthyPartitions = new ArrayList<Partition>();
+    for (Partition partition : partitions) {
+      boolean up = true;
+      for (Replica replica : partition.getReplicas()) {
+        if (!replica.isUp()) {
+          up = false;
+          break;
+        }
+      }
+      if (up) {
+        healthyPartitions.add(partition);
+      }
+    }
+    return healthyPartitions.isEmpty() ? partitions : healthyPartitions;
   }
 
   @Override
   public PartitionId getPartitionIdFromStream(DataInputStream stream)
       throws IOException {
     return partitionLayout.getPartition(stream);
-  }
-
-  @Override
-  public long getWritablePartitionIdsCount() {
-    return getWritablePartitionIds().size();
-  }
-
-  @Override
-  public PartitionId getWritablePartitionIdAt(long index) {
-    return partitionLayout.getWritablePartitions().get((int) index);
   }
 
   @Override
@@ -351,11 +362,11 @@ public class ClusterMapManager implements ClusterMap {
   public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
     switch (error) {
       case Disk_Error:
-          ((Disk) replicaId.getDiskId()).onDiskError();
+        ((Disk) replicaId.getDiskId()).onDiskError();
       case Node_Timeout:
-          ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
+        ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
       case Partition_ReadOnly:
-          ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
+        ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
     }
   }
 }

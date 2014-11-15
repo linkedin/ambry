@@ -56,4 +56,9 @@ public interface ReplicaId {
    * @return DiskId that stores this ReplicaId
    */
   public DiskId getDiskId();
+
+  /**
+   * Returns true if the replica is available
+   */
+  public boolean isUp();
 }

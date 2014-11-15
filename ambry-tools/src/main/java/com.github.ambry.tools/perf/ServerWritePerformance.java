@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
@@ -23,6 +24,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -113,7 +115,8 @@ public class ServerWritePerformance {
       final AtomicLong totalWrites = new AtomicLong(0);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
@@ -216,8 +219,9 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            long index = getRandomLong(rand, clusterMap.getWritablePartitionIdsCount());
-            PartitionId partitionId = clusterMap.getWritablePartitionIdAt(index);
+            List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+            int index = (int) getRandomLong(rand, partitionIds.size());
+            PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
                 new ByteBufferInputStream(ByteBuffer.wrap(blob)));

@@ -866,6 +866,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public boolean isUp() {
+      return true;
+    }
+
+    @Override
     public String toString() {
       return datacenter + "-" + index;
     }

@@ -21,19 +21,9 @@ public interface ClusterMap {
       throws IOException;
 
   /**
-   * Determines count of writable PartitionIds so that an "index" can be used to retrieve a specific such PartitionId.
-   *
-   * @return count of writable PartitionIds.
+   * Gets a list of partitions that are available for writes.
    */
-  public long getWritablePartitionIdsCount();
-
-  /**
-   * Gets a specific writable PartitionId by its index.
-   *
-   * @param index of desired writable PartitionId.
-   * @return specified writable PartitionId.
-   */
-  public PartitionId getWritablePartitionIdAt(long index);
+  public List<? extends PartitionId> getWritablePartitionIds();
 
   /**
    * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.

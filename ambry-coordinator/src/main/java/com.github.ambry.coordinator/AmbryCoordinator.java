@@ -16,6 +16,7 @@ import com.github.ambry.shared.ConnectionPoolFactory;
 import com.github.ambry.shared.LoggingNotificationSystem;
 import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,11 +147,11 @@ public class AmbryCoordinator implements Coordinator {
 
   private PartitionId getPartitionForPut()
       throws CoordinatorException {
-    if (clusterMap.getWritablePartitionIdsCount() < 1) {
+    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
+    if (partitions.isEmpty()) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }
-    long index = getRandomLong(randomForPartitionSelection, clusterMap.getWritablePartitionIdsCount());
-    return clusterMap.getWritablePartitionIdAt(index);
+    return partitions.get((int) getRandomLong(randomForPartitionSelection, partitions.size()));
   }
 
   private BlobId getBlobIdFromString(String blobIdString)

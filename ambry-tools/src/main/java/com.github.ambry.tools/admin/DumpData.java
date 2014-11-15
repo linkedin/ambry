@@ -3,6 +3,8 @@ package com.github.ambry.tools.admin;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -13,6 +15,7 @@ import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
+import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -65,7 +68,8 @@ public class DumpData {
 
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
       String fileToRead = options.valueOf(fileToReadOpt);
       String typeOfFile = options.valueOf(typeOfFileOpt);
 

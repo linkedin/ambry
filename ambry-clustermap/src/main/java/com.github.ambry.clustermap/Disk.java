@@ -1,5 +1,6 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -19,23 +20,22 @@ public class Disk implements DiskId {
 
   private final DataNode dataNode;
   private final String mountPath;
-  private final HardwareState hardState;
-  private HardwareState softState;
+  private final DiskStatePolicy diskStatePolicy;
   private long capacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Disk(DataNode dataNode, JSONObject jsonObject)
+  public Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Disk " + jsonObject.toString());
     }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
-    this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
-    this.softState = hardState;
+    this.diskStatePolicy = new DiskStatePolicy(HardwareState.valueOf(jsonObject.getString("hardwareState")),
+        clusterMapConfig.clusterMapDiskWindowMs, clusterMapConfig.clusterMapDiskErrorThreshold,
+        clusterMapConfig.clusterMapDiskRetryBackoffMs);
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
-
     validate();
   }
 
@@ -47,25 +47,16 @@ public class Disk implements DiskId {
   @Override
   public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
-    if (dataNode.getState() == HardwareState.UNAVAILABLE) {
-      return HardwareState.UNAVAILABLE;
-    }
-    if (hardState == HardwareState.UNAVAILABLE) {
-      return HardwareState.UNAVAILABLE;
-    }
-    return softState;
+    return dataNode.getState() == HardwareState.AVAILABLE && diskStatePolicy.getState() == HardwareState.AVAILABLE
+        ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
   }
 
   public boolean isSoftDown() {
-    return (hardState == HardwareState.AVAILABLE && softState == HardwareState.UNAVAILABLE);
+    return diskStatePolicy.isSoftDown();
   }
 
-  public void setSoftState(HardwareState hardwareState) {
-    if (hardState == HardwareState.AVAILABLE) {
-      softState = hardwareState;
-    } else {
-      logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
-    }
+  public boolean isHardDown() {
+    return diskStatePolicy.isHardDown();
   }
 
   @Override
@@ -78,7 +69,7 @@ public class Disk implements DiskId {
   }
 
   public HardwareState getHardState() {
-    return hardState;
+    return diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
   protected void validateDataNode() {
@@ -120,7 +111,8 @@ public class Disk implements DiskId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    return new JSONObject().put("mountPath", mountPath).put("hardwareState", hardState)
+    return new JSONObject().put("mountPath", mountPath)
+        .put("hardwareState", diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("capacityInBytes", capacityInBytes);
   }
 
@@ -154,6 +146,6 @@ public class Disk implements DiskId {
   }
 
   public void onDiskError() {
-    // @todo: Maintain state and handle disk errors. Also note that this method could be accessed concurrently.
+    diskStatePolicy.onError();
   }
 }
