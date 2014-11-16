@@ -128,9 +128,9 @@ public class DataNodeTest {
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
-    long windowMs = clusterMapConfig.clusterMapDatanodeWindowMs;
-    int threshold = clusterMapConfig.clusterMapDatanodeErrorThreshold;
-    long retryBackoffMs = clusterMapConfig.clusterMapDataNodeRetryBackoffMs;
+    long windowMs = clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs;
+    int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
+    long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;
 
     DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
     for (int i = 0; i <= threshold; i++) {

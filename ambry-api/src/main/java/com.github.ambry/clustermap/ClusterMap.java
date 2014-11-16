@@ -23,7 +23,7 @@ public interface ClusterMap {
   /**
    * Gets a list of partitions that are available for writes.
    */
-  public List<? extends PartitionId> getWritablePartitionIds();
+  public List<PartitionId> getWritablePartitionIds();
 
   /**
    * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.

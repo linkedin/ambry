@@ -33,9 +33,6 @@ public class ClusterMapManager implements ClusterMap {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
-    //@todo: We should clean up the interface for this constructor so that hardwareLayout and partitionLayout are only
-    //created within the ClusterMapManager. For this constructor, ideally we should just take a json object that is to
-    //be used to create the hardwareLayout, which in turn is used to create the partitionLayout.
     if (logger.isTraceEnabled()) {
       logger.trace("ClusterMapManager " + partitionLayout);
     }
@@ -69,22 +66,8 @@ public class ClusterMapManager implements ClusterMap {
   // --------------------------------------
 
   @Override
-  public List<? extends PartitionId> getWritablePartitionIds() {
-    List<Partition> partitions = partitionLayout.getWritablePartitions();
-    List<Partition> healthyPartitions = new ArrayList<Partition>();
-    for (Partition partition : partitions) {
-      boolean up = true;
-      for (Replica replica : partition.getReplicas()) {
-        if (!replica.isUp()) {
-          up = false;
-          break;
-        }
-      }
-      if (up) {
-        healthyPartitions.add(partition);
-      }
-    }
-    return healthyPartitions.isEmpty() ? partitions : healthyPartitions;
+  public List<PartitionId> getWritablePartitionIds() {
+    return partitionLayout.getWritablePartitions();
   }
 
   @Override

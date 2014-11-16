@@ -2,7 +2,9 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayDeque;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /** ResourceStatePolicy is used to determine if the state of a resource is "up" or "down". For resources like data nodes
@@ -12,109 +14,118 @@ public interface ResourceStatePolicy {
   /**
    * Checks to see if the state is permanently down.
    *
-   * @return true if the state is down, false otherwise.
+   * @return true if the state is permanently down, false otherwise.
    */
   public boolean isHardDown();
 
   /**
-   * Checks to see if the state is temporarily down (soft failed).
+   * Checks to see if the state is down (soft or hard).
    *
    * @return true if the state is down, false otherwise.
    */
-  public boolean isSoftDown();
+  public boolean isDown();
 
   /**
    * Should be called by the caller every time an error is encountered for the corresponding resource.
    *
    * @return true if we mark the resource as unavailable in this call.
    */
-  public boolean onError();
+  public void onError();
 }
 
 abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
+  private final Object resource;
   private final boolean hardDown;
   private final int failureCountThreshold;
   private final long failureWindowSizeMs;
   private final long retryBackoffMs;
-  private AtomicLong downUntil;
+  private long downUntil;
+  private AtomicBoolean down;
   private ArrayDeque<Long> failureQueue;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FixedBackoffResourceStatePolicy(boolean hardDown, long failureWindowSizeMs, int failureCountThreshold,
-      long retryBackoffMs) {
+  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, long failureWindowSizeMs,
+      int failureCountThreshold, long retryBackoffMs) {
+    this.resource = resource;
     this.hardDown = hardDown;
     this.failureWindowSizeMs = failureWindowSizeMs;
     this.failureCountThreshold = failureCountThreshold;
     this.retryBackoffMs = retryBackoffMs;
-    this.downUntil = new AtomicLong(0);
+    this.downUntil = 0;
+    this.down = new AtomicBoolean(false);
     failureQueue = new ArrayDeque<Long>();
+  }
+
+  /** On error, check if there have been threshold number of errors in the last failure window milliseconds.
+   *  If so, make this resource down until now + retryBackoffMs. The size of the queue is bounded by the threshold.
+   */
+  @Override
+  public void onError() {
+    synchronized (this) {
+      // Ignore errors if it has already been determined that the node is down.
+      if (!down.get()) {
+        while (failureQueue.size() > 0
+            && failureQueue.getFirst() < SystemTime.getInstance().milliseconds() - failureWindowSizeMs) {
+          failureQueue.remove();
+        }
+        if (failureQueue.size() < failureCountThreshold) {
+          failureQueue.add(SystemTime.getInstance().milliseconds());
+        } else {
+          failureQueue.clear();
+          down.set(true);
+          downUntil = SystemTime.getInstance().milliseconds() + retryBackoffMs;
+          logger.error("Resource " + resource + " has gone down");
+        }
+      }
+    }
   }
 
   /* If down (which is checked locklessly), check to see if it is time to be up.
    */
-  private boolean isUp() {
-    if (downUntil.get() != 0) {
+  @Override
+  public boolean isDown() {
+    boolean ret = false;
+    if (hardDown) {
+      ret = true;
+    } else if (down.get()) {
       synchronized (this) {
-        if (SystemTime.getInstance().milliseconds() > downUntil.get()) {
-          downUntil.set(0);
+        if (SystemTime.getInstance().milliseconds() > downUntil) {
+          down.set(false);
         } else {
-          return false;
+          ret = true;
         }
       }
     }
-    return true;
-  }
-
-  /** On error, check if there have been threshold number of errors in the last failure window milliseconds.
-   *  If so, make this resource down until now + retryBackoffMs. The size of the queue is the threshold.
-   */
-  @Override
-  public boolean onError() {
-    synchronized (this) {
-      while (failureQueue.size() > 0
-          && failureQueue.getFirst() < SystemTime.getInstance().milliseconds() - failureWindowSizeMs) {
-        failureQueue.remove();
-      }
-      if (failureQueue.size() < failureCountThreshold) {
-        failureQueue.add(SystemTime.getInstance().milliseconds());
-      } else {
-        failureQueue.clear();
-        downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
-        return true;
-      }
-    }
-    return false;
+    return ret;
   }
 
   @Override
   public boolean isHardDown() {
     return hardDown;
   }
-
-  @Override
-  public boolean isSoftDown() {
-    return !hardDown && !isUp();
-  }
 }
 
 class DataNodeStatePolicy extends FixedBackoffResourceStatePolicy {
-  public DataNodeStatePolicy(HardwareState initialState, long failureWindowInitialSizeMs, int failureCountThreshold,
-      long retryBackoffMs) {
-    super(initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold, retryBackoffMs);
+  public DataNodeStatePolicy(DataNode node, HardwareState initialState, long failureWindowInitialSizeMs,
+      int failureCountThreshold, long retryBackoffMs) {
+    super(node, initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold,
+        retryBackoffMs);
   }
 
   public HardwareState getState() {
-    return isHardDown() || isSoftDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
+    return isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 }
 
 class DiskStatePolicy extends FixedBackoffResourceStatePolicy {
 
-  public DiskStatePolicy(HardwareState initialState, long failureWindowInitialSizeMs, int failureCountThreshold,
-      long retryBackoffMs) {
-    super(initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold, retryBackoffMs);
+  public DiskStatePolicy(Disk disk, HardwareState initialState, long failureWindowInitialSizeMs,
+      int failureCountThreshold, long retryBackoffMs) {
+    super(disk, initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold,
+        retryBackoffMs);
   }
 
   public HardwareState getState() {
-    return isHardDown() || isSoftDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
+    return isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 }

@@ -76,8 +76,9 @@ public class Replica implements ReplicaId {
   }
 
   @Override
-  public boolean isUp() {
-    return getDataNodeId().getState() == HardwareState.AVAILABLE && getDiskId().getState() == HardwareState.AVAILABLE;
+  public boolean isDown() {
+    return getDataNodeId().getState() == HardwareState.UNAVAILABLE
+        || getDiskId().getState() == HardwareState.UNAVAILABLE;
   }
 
   public Partition getPartition() {

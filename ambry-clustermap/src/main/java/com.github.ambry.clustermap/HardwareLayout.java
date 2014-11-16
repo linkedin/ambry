@@ -123,11 +123,11 @@ public class HardwareLayout {
     return dataNodeInStateCount;
   }
 
-  public long calculateSoftDownDataNodeCount() {
+  public long calculateDownDataNodeCount() {
     long count = 0;
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        if (dataNode.isSoftDown()) {
+        if (dataNode.isDown()) {
           count++;
         }
       }
@@ -154,12 +154,12 @@ public class HardwareLayout {
     return diskInStateCount;
   }
 
-  public long calculateSoftDownDiskCount() {
+  public long calculateDownDiskCount() {
     long count = 0;
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-          if (disk.isSoftDown()) {
+          if (disk.isDown()) {
             count++;
           }
         }

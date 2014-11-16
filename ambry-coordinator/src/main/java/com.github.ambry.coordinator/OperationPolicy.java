@@ -128,7 +128,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     List<ReplicaId> remoteReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     List<ReplicaId> downReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     for (ReplicaId replicaId : replicaIds) {
-      if (!replicaId.isUp()) {
+      if (replicaId.isDown()) {
         downReplicaIds.add(replicaId);
       } else if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
         localReplicaIds.add(replicaId);

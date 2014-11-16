@@ -32,9 +32,9 @@ public class Disk implements DiskId {
     }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
-    this.diskStatePolicy = new DiskStatePolicy(HardwareState.valueOf(jsonObject.getString("hardwareState")),
-        clusterMapConfig.clusterMapDiskWindowMs, clusterMapConfig.clusterMapDiskErrorThreshold,
-        clusterMapConfig.clusterMapDiskRetryBackoffMs);
+    this.diskStatePolicy = new DiskStatePolicy(this, HardwareState.valueOf(jsonObject.getString("hardwareState")),
+        clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs, clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold,
+        clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs);
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     validate();
   }
@@ -51,8 +51,8 @@ public class Disk implements DiskId {
         ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
   }
 
-  public boolean isSoftDown() {
-    return diskStatePolicy.isSoftDown();
+  public boolean isDown() {
+    return diskStatePolicy.isDown();
   }
 
   public boolean isHardDown() {
@@ -117,7 +117,8 @@ public class Disk implements DiskId {
 
   @Override
   public String toString() {
-    return "Disk[" + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath() + "]";
+    String dataNodeStr = dataNode == null ? "" : dataNode.getHostname() + ":" + dataNode.getPort() + ":";
+    return "Disk[" + dataNodeStr + getMountPath() + "]";
   }
 
   @Override
@@ -145,15 +146,6 @@ public class Disk implements DiskId {
   }
 
   public void onDiskError() {
-    String diskStr;
-    try {
-      diskStr = toJSONObject().toString();
-    } catch (JSONException e) {
-      diskStr = null;
-    }
-    logger.info("Disk error, informing resource state for disk [" + diskStr + "]");
-    if (diskStatePolicy.onError()) {
-      logger.info("Disk [" + diskStr + "] has been determined as down: ");
-    }
+    diskStatePolicy.onError();
   }
 }

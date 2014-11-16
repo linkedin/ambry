@@ -19,10 +19,10 @@ public class ClusterMapMetrics {
   public final Gauge<Long> diskCount;
   public final Gauge<Long> dataNodesHardUpCount;
   public final Gauge<Long> dataNodesHardDownCount;
-  public final Gauge<Long> dataNodesSoftDownCount;
+  public final Gauge<Long> dataNodesDownCount;
   public final Gauge<Long> disksHardUpCount;
   public final Gauge<Long> disksHardDownCount;
-  public final Gauge<Long> disksSoftDownCount;
+  public final Gauge<Long> disksDownCount;
 
   public final Gauge<Long> partitionCount;
   public final Gauge<Long> partitionsReadWrite;
@@ -87,10 +87,10 @@ public class ClusterMapMetrics {
         return countDataNodesInHardState(HardwareState.UNAVAILABLE);
       }
     };
-    this.dataNodesSoftDownCount = new Gauge<Long>() {
+    this.dataNodesDownCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countSoftDownDataNodes();
+        return countDownDataNodes();
       }
     };
     this.disksHardUpCount = new Gauge<Long>() {
@@ -105,18 +105,18 @@ public class ClusterMapMetrics {
         return countDisksInHardState(HardwareState.UNAVAILABLE);
       }
     };
-    this.disksSoftDownCount = new Gauge<Long>() {
+    this.disksDownCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countSoftDownDisks();
+        return countDownDisks();
       }
     };
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardUpCount"), dataNodesHardUpCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardDownCount"), dataNodesHardDownCount);
-    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesSoftDownCount"), dataNodesSoftDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesDownCount"), dataNodesDownCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "disksHardUpCount"), disksHardUpCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "disksHardDownCount"), disksHardDownCount);
-    registry.register(MetricRegistry.name(ClusterMap.class, "disksSoftDownCount"), disksSoftDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "disksDownCount"), disksDownCount);
 
     // Metrics based on PartitionLayout
 
@@ -191,16 +191,16 @@ public class ClusterMapMetrics {
     return hardwareLayout.getDataNodeInHardStateCount(hardwareState);
   }
 
-  private long countSoftDownDataNodes() {
-    return hardwareLayout.calculateSoftDownDataNodeCount();
+  private long countDownDataNodes() {
+    return hardwareLayout.calculateDownDataNodeCount();
   }
 
   private long countDisksInHardState(HardwareState hardwareState) {
     return hardwareLayout.getDiskInHardStateCount(hardwareState);
   }
 
-  private long countSoftDownDisks() {
-    return hardwareLayout.calculateSoftDownDiskCount();
+  private long countDownDisks() {
+    return hardwareLayout.calculateDownDiskCount();
   }
 
   private long countPartitions() {

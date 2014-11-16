@@ -98,7 +98,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public List<? extends PartitionId> getWritablePartitionIds() {
+  public List<PartitionId> getWritablePartitionIds() {
     List<PartitionId> partitionIdList = new ArrayList<PartitionId>();
     for (PartitionId partitionId : partitions.values()) {
       partitionIdList.add(partitionId);
@@ -260,8 +260,9 @@ class MockReplicaId implements ReplicaId {
   }
 
   @Override
-  public boolean isUp() {
-    return getDataNodeId().getState() == HardwareState.AVAILABLE && getDiskId().getState() == HardwareState.AVAILABLE;
+  public boolean isDown() {
+    return getDataNodeId().getState() == HardwareState.UNAVAILABLE
+        || getDiskId().getState() == HardwareState.UNAVAILABLE;
   }
 
   @Override

@@ -866,8 +866,8 @@ public class OperationPolicyTest {
     }
 
     @Override
-    public boolean isUp() {
-      return true;
+    public boolean isDown() {
+      return false;
     }
 
     @Override

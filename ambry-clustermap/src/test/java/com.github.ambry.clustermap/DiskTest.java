@@ -45,7 +45,7 @@ class TestDisk extends Disk {
 
   @Override
   public HardwareState getState() {
-    return (isHardDown() || isSoftDown()) ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
+    return isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 }
 
@@ -112,9 +112,9 @@ public class DiskTest {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
-    long windowMs = clusterMapConfig.clusterMapDiskWindowMs;
-    int threshold = clusterMapConfig.clusterMapDiskErrorThreshold;
-    long retryBackoffMs = clusterMapConfig.clusterMapDiskRetryBackoffMs;
+    long windowMs = clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs;
+    int threshold = clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold;
+    long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs;
 
     Disk testDisk = new TestDisk(jsonObject, clusterMapConfig);
     for (int i = 0; i <= threshold; i++) {

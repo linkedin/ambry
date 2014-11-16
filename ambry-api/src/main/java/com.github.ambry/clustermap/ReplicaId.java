@@ -58,7 +58,7 @@ public interface ReplicaId {
   public DiskId getDiskId();
 
   /**
-   * Returns true if the replica is available
+   * Returns true if the replica is down
    */
-  public boolean isUp();
+  public boolean isDown();
 }
