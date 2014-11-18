@@ -47,7 +47,7 @@ public class DataNode extends DataNodeId {
       this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
       logger.error("Error during start {}", e);
-      throw new InstantiationError("Error during start " + e);
+      throw new IllegalStateException("Error during start ", e);
     }
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());

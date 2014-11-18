@@ -94,7 +94,7 @@ public class ServerTest {
       BlobProperties properties = new BlobProperties(31870, "serviceid1");
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
-      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       BlobId blobId1 = new BlobId(partitionIds.get(0));
       BlobId blobId2 = new BlobId(partitionIds.get(0));
       BlobId blobId3 = new BlobId(partitionIds.get(0));
@@ -591,7 +591,7 @@ public class ServerTest {
       MockClusterMap clusterMap = cluster.getClusterMap();
       this.channel = channel;
       blobIds = new ArrayList<BlobId>(totalBlobsToPut);
-      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       for (int i = 0; i < totalBlobsToPut; i++) {
         int partitionIndex = new Random().nextInt(partitionIds.size());
         BlobId blobId = new BlobId(partitionIds.get(partitionIndex));

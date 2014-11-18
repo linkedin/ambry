@@ -62,7 +62,7 @@ public class SocketServerTest {
     byte[] bufmetadata = new byte[5];
     new Random().nextBytes(bufmetadata);
 
-    List<? extends PartitionId> partitionIds = map.getWritablePartitionIds();
+    List<PartitionId> partitionIds = map.getWritablePartitionIds();
     PutRequest emptyRequest =
         new PutRequest(correlationId, "test", new BlobId(partitionIds.get(0)), new BlobProperties(10, "id"),
             ByteBuffer.wrap(bufmetadata), stream);

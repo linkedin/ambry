@@ -40,7 +40,7 @@ public class Disk implements DiskId {
       this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
       logger.error("Error during start {}", e);
-      throw new InstantiationError("Error during start " + e);
+      throw new IllegalStateException("Error during start ", e);
     }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     validate();

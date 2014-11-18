@@ -216,7 +216,7 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+            List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);

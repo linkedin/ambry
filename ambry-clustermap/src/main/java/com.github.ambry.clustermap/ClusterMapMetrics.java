@@ -20,10 +20,12 @@ class ClusterMapMetrics {
   public final Gauge<Long> datacenterCount;
   public final Gauge<Long> dataNodeCount;
   public final Gauge<Long> diskCount;
+
   public final Gauge<Long> dataNodesHardUpCount;
   public final Gauge<Long> dataNodesHardDownCount;
   public final Gauge<Long> dataNodesUnavailableCount;
   public List<Gauge<Long>> dataNodeStateList;
+
   public final Gauge<Long> disksHardUpCount;
   public final Gauge<Long> disksHardDownCount;
   public final Gauge<Long> disksUnavailableCount;
@@ -186,7 +188,7 @@ class ClusterMapMetrics {
   }
 
   private void addDataNodeToStateMetrics(final DataNode dataNode) {
-    final String metricName = dataNode.toString()+ "-State";
+    final String metricName = dataNode + "-ResourceState";
     Gauge<Long> dataNodeState = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -198,7 +200,7 @@ class ClusterMapMetrics {
   }
 
   private void addDiskToStateMetrics(final Disk disk) {
-    final String metricName = disk.toString()+ "-State";
+    final String metricName = disk + "-ResourceState";
     Gauge<Long> diskState = new Gauge<Long>() {
       @Override
       public Long getValue() {

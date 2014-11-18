@@ -147,7 +147,7 @@ public class AmbryCoordinator implements Coordinator {
 
   private PartitionId getPartitionForPut()
       throws CoordinatorException {
-    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
+    List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
     if (partitions.isEmpty()) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }

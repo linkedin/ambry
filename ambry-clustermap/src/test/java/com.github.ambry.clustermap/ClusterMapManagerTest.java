@@ -64,7 +64,7 @@ public class ClusterMapManagerTest {
       System.out.println(metricName);
     }
 
-    List<? extends PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
+    List<PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
     assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
@@ -114,7 +114,7 @@ public class ClusterMapManagerTest {
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
 
-    List<? extends PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
+    List<PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
     assertEquals(partitionIds.size(), 0);
     clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
     partitionIds = clusterMapManager.getWritablePartitionIds();

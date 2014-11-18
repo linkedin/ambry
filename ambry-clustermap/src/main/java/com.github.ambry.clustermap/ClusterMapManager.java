@@ -58,7 +58,7 @@ public class ClusterMapManager implements ClusterMap {
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
-  public List<? extends PartitionId> getAllPartitions() {
+  public List<PartitionId> getAllPartitions() {
     return partitionLayout.getPartitions();
   }
 
@@ -94,8 +94,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public List<Replica> getReplicas(DataNodeId dataNodeId) {
     List<Replica> replicas = new ArrayList<Replica>();
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         if (replica.getDataNodeId().equals(dataNodeId)) {
           replicas.add(replica);
         }
@@ -135,8 +135,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -148,8 +148,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -161,8 +161,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(Disk disk) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk currentDisk = (Disk) replica.getDiskId();
         if (currentDisk.equals(disk)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();

@@ -93,13 +93,13 @@ public class PartitionLayout {
     return count;
   }
 
-  public List<Partition> getPartitions() {
-    return new ArrayList<Partition>(partitionMap.values());
+  public List<PartitionId> getPartitions() {
+    return new ArrayList<PartitionId>(partitionMap.values());
   }
 
-  public List getWritablePartitions() {
-    List writablePartitions = new ArrayList();
-    List healthyWritablePartitions = new ArrayList();
+  public List<PartitionId> getWritablePartitions() {
+    List<PartitionId> writablePartitions = new ArrayList();
+    List<PartitionId> healthyWritablePartitions = new ArrayList();
     for (Partition partition : partitionMap.values()) {
       if (partition.getPartitionState() == PartitionState.READ_WRITE) {
         writablePartitions.add(partition);

@@ -499,7 +499,7 @@ public class ReplicationTest {
       Map<String, Map<PartitionId, List<ByteBuffer>>> replicaBuffers =
           new HashMap<String, Map<PartitionId, List<ByteBuffer>>>();
 
-      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       Map<PartitionId, List<MessageInfo>> messageInfoNode1 = new HashMap<PartitionId, List<MessageInfo>>();
       Map<PartitionId, List<MessageInfo>> messageInfoNode2 = new HashMap<PartitionId, List<MessageInfo>>();
       Map<PartitionId, List<ByteBuffer>> bufferListNode1 = new HashMap<PartitionId, List<ByteBuffer>>();
