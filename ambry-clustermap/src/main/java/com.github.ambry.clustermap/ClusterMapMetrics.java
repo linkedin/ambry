@@ -2,12 +2,15 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
  * Metrics for ClusterMap (HardwareLayout & PartitionLayout)
  */
-public class ClusterMapMetrics {
+class ClusterMapMetrics {
+  private MetricRegistry registry;
   private final HardwareLayout hardwareLayout;
   private final PartitionLayout partitionLayout;
 
@@ -20,9 +23,11 @@ public class ClusterMapMetrics {
   public final Gauge<Long> dataNodesHardUpCount;
   public final Gauge<Long> dataNodesHardDownCount;
   public final Gauge<Long> dataNodesUnavailableCount;
+  public List<Gauge<Long>> dataNodeStateList;
   public final Gauge<Long> disksHardUpCount;
   public final Gauge<Long> disksHardDownCount;
   public final Gauge<Long> disksUnavailableCount;
+  public List<Gauge<Long>> diskStateList;
 
   public final Gauge<Long> partitionCount;
   public final Gauge<Long> partitionsReadWrite;
@@ -33,6 +38,7 @@ public class ClusterMapMetrics {
   public final Gauge<Long> allocatedUsableCapacityInBytes;
 
   public ClusterMapMetrics(HardwareLayout hardwareLayout, PartitionLayout partitionLayout, MetricRegistry registry) {
+    this.registry = registry;
     this.hardwareLayout = hardwareLayout;
     this.partitionLayout = partitionLayout;
 
@@ -165,6 +171,42 @@ public class ClusterMapMetrics {
         .register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
     registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"),
         allocatedUsableCapacityInBytes);
+
+    dataNodeStateList = new ArrayList<Gauge<Long>>();
+    diskStateList = new ArrayList<Gauge<Long>>();
+
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        addDataNodeToStateMetrics(dataNode);
+        for (Disk disk : dataNode.getDisks()) {
+          addDiskToStateMetrics(disk);
+        }
+      }
+    }
+  }
+
+  private void addDataNodeToStateMetrics(final DataNode dataNode) {
+    final String metricName = dataNode.toString()+ "-State";
+    Gauge<Long> dataNodeState = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return dataNode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, metricName), dataNodeState);
+    dataNodeStateList.add(dataNodeState);
+  }
+
+  private void addDiskToStateMetrics(final Disk disk) {
+    final String metricName = disk.toString()+ "-State";
+    Gauge<Long> diskState = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, metricName), diskState);
+    dataNodeStateList.add(diskState);
   }
 
   private long getHardwareLayoutVersion() {
