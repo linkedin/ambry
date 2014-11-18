@@ -40,7 +40,8 @@ public class Disk implements DiskId {
       this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
       logger.error("Error creating resource state policy when instantiating a disk " + e);
-      throw new IllegalStateException("Error creating resource state policy when instantiating a disk: " + mountPath, e);
+      throw new IllegalStateException("Error creating resource state policy when instantiating a disk: " + mountPath,
+          e);
     }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     validate();

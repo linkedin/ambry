@@ -47,7 +47,8 @@ public class DataNode extends DataNodeId {
       this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
       logger.error("Error creating resource state policy when instantiating a datanode " + e);
-      throw new IllegalStateException("Error creating resource state policy when instantiating a datanode: " + hostname + " " + port, e);
+      throw new IllegalStateException(
+          "Error creating resource state policy when instantiating a datanode: " + hostname + " " + port, e);
     }
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
