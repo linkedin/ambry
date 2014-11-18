@@ -54,7 +54,7 @@ public abstract class GetOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new GetPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+        new SerialOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.clusterMap = clusterMap;
     this.flags = flags;
 

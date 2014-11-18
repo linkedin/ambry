@@ -25,6 +25,10 @@ public class OperationPolicyTest {
   final String datacenterAlpha = "alpha";
   final String datacenterBeta = "beta";
 
+  /**
+   * SerialOperationPolicy is used as the Policy for GetOperation
+   * @throws CoordinatorException
+   */
   @Test
   public void testSerialOperationPolicy()
       throws CoordinatorException {
@@ -170,11 +174,11 @@ public class OperationPolicyTest {
   }
 
   @Test
-  public void testGetPolicy()
+  public void testGet2ParallelOperationPolicy()
       throws CoordinatorException {
     // Simple success test
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -191,7 +195,7 @@ public class OperationPolicyTest {
 
     // One failure but still succeeds
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
@@ -225,7 +229,7 @@ public class OperationPolicyTest {
 
     // Many failures but still succeeds
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -250,7 +254,7 @@ public class OperationPolicyTest {
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
     // plus 1 for good luck in flight)
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -332,7 +336,7 @@ public class OperationPolicyTest {
 
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -381,7 +385,7 @@ public class OperationPolicyTest {
 
     // Corruption test
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new Get2ParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
