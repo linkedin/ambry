@@ -1,6 +1,8 @@
 package com.github.ambry.clustermap;
 
-/* A resource represents a disk, node or a partition */
+/**
+ * A Resource represents a {@link DiskId}, {@link DataNodeId} or a {@link PartitionId}
+ */
 
 public interface Resource {
 }

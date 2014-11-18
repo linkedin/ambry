@@ -6,6 +6,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
+/**
+ * FixedBackoffResourceStatePolicy marks a resource as unavailable for retryBackoff milliseconds if the number of errors
+ * the resource encountered in the most recent window of failureWindowSize milliseconds is greater than
+ * failureCountThreshold.
+ */
 class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final Object resource;
   private final boolean hardDown;

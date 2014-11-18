@@ -39,8 +39,8 @@ public class Disk implements DiskId {
               HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
       this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
-      logger.error("Error during start {}", e);
-      throw new IllegalStateException("Error during start ", e);
+      logger.error("Error creating resource state policy when instantiating a disk " + e);
+      throw new IllegalStateException("Error creating resource state policy when instantiating a disk: " + mountPath, e);
     }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     validate();
