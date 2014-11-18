@@ -296,7 +296,7 @@ class GetTwoInParallelOperationPolicy extends ParallelOperationPolicy {
  * Sends requests in parallel --- threshold number for durability plus one for good luck. Durability threshold is 2 so
  * long as there are more than 2 replicas in the partition.
  */
-class PutPolicy extends ParallelOperationPolicy {
+class PutParallelOperationPolicy extends ParallelOperationPolicy {
   /*
    There are many possibilities for extending the put policy. Some ideas that have been discussed include the following:
 
@@ -305,7 +305,7 @@ class PutPolicy extends ParallelOperationPolicy {
 
    (2) sending additional put requests (increasing the requestParallelism) after a short timeout.
   */
-  public PutPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
     super(datacenterName, partitionId, crossDCProxyCallEnabled);
     if (replicaIdCount == 1) {
