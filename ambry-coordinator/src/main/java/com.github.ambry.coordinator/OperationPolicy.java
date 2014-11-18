@@ -277,8 +277,9 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
 /**
  * Sends get requests in parallel. Has up to two in flight to mask single server latency events.
  */
-class Get2ParallelOperationPolicy extends ParallelOperationPolicy {
-  public Get2ParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+class GetTwoInParallelOperationPolicy extends ParallelOperationPolicy {
+  public GetTwoInParallelOperationPolicy(String datacenterName, PartitionId partitionId,
+      boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
     super(datacenterName, partitionId, crossDCProxyCallEnabled);
     if (replicaIdCount == 1) {
