@@ -225,6 +225,22 @@ public class Utils {
   }
 
   /**
+   * Instantiate a class instance from a given className with three args
+   */
+  public static <T> T getObj(String className, Object arg1, Object arg2, Object arg3)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
+             InvocationTargetException {
+    for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
+      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
+          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass()) && ctor.getParameterTypes()[2]
+          .isAssignableFrom(arg3.getClass())) {
+        return (T) ctor.newInstance(arg1, arg2, arg3);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Compute the hash code for the given items
    */
   public static int hashcode(Object[] items) {

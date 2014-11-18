@@ -6,34 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-/** ResourceStatePolicy is used to determine if the state of a resource is "up" or "down". For resources like data nodes
- *  and disks, up and down mean available and unavailable, respectively.
- */
-public interface ResourceStatePolicy {
-  /**
-   * Checks to see if the state is permanently down.
-   *
-   * @return true if the state is permanently down, false otherwise.
-   */
-  public boolean isHardDown();
-
-  /**
-   * Checks to see if the state is down (soft or hard).
-   *
-   * @return true if the state is down, false otherwise.
-   */
-  public boolean isDown();
-
-  /**
-   * Should be called by the caller every time an error is encountered for the corresponding resource.
-   *
-   * @return true if we mark the resource as unavailable in this call.
-   */
-  public void onError();
-}
-
-abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
+class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final Object resource;
   private final boolean hardDown;
   private final int failureCountThreshold;
@@ -102,30 +75,5 @@ abstract class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   @Override
   public boolean isHardDown() {
     return hardDown;
-  }
-}
-
-class DataNodeStatePolicy extends FixedBackoffResourceStatePolicy {
-  public DataNodeStatePolicy(DataNode node, HardwareState initialState, long failureWindowInitialSizeMs,
-      int failureCountThreshold, long retryBackoffMs) {
-    super(node, initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold,
-        retryBackoffMs);
-  }
-
-  public HardwareState getState() {
-    return isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
-  }
-}
-
-class DiskStatePolicy extends FixedBackoffResourceStatePolicy {
-
-  public DiskStatePolicy(Disk disk, HardwareState initialState, long failureWindowInitialSizeMs,
-      int failureCountThreshold, long retryBackoffMs) {
-    super(disk, initialState == HardwareState.UNAVAILABLE, failureWindowInitialSizeMs, failureCountThreshold,
-        retryBackoffMs);
-  }
-
-  public HardwareState getState() {
-    return isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 }

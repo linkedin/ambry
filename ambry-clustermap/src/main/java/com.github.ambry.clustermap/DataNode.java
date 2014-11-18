@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -26,7 +27,7 @@ public class DataNode extends DataNodeId {
   private final int port;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
-  private final DataNodeStatePolicy dataNodeStatePolicy;
+  private final ResourceStatePolicy dataNodeStatePolicy;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -39,10 +40,15 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.dataNodeStatePolicy =
-        new DataNodeStatePolicy(this, HardwareState.valueOf(jsonObject.getString("hardwareState")),
-            clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs, clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold,
-            clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs);
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
+          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+              HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
+      this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error during start {}", e);
+      throw new InstantiationError("Error during start " + e);
+    }
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
     for (int i = 0; i < diskJSONArray.length(); ++i) {
@@ -86,7 +92,7 @@ public class DataNode extends DataNodeId {
 
   @Override
   public HardwareState getState() {
-    return dataNodeStatePolicy.getState();
+    return dataNodeStatePolicy.isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
   public void onNodeTimeout() {

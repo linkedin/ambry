@@ -126,11 +126,11 @@ public class HardwareLayoutTest {
 
     assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.AVAILABLE), datacenterCount * dataNodeCount);
     assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.UNAVAILABLE), 0);
-    assertEquals(hardwareLayout.calculateDownDataNodeCount(), 0);
+    assertEquals(hardwareLayout.calculateUnavailableDataNodeCount(), 0);
     assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.AVAILABLE),
         datacenterCount * dataNodeCount * diskCount);
     assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.UNAVAILABLE), 0);
-    assertEquals(hardwareLayout.calculateDownDiskCount(), 0);
+    assertEquals(hardwareLayout.calculateUnavailableDiskCount(), 0);
   }
 
   public void failValidation(JSONObject jsonObject)

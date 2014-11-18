@@ -6,6 +6,13 @@ package com.github.ambry.config;
 public class ClusterMapConfig {
 
   /**
+   * The factory class used to get the resource state policies.
+   */
+  @Config("clustermap.resourcestatepolicy.factory")
+  @Default("com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory")
+  public final String clusterMapResourceStatePolicyFactory;
+
+  /**
    * The fixed timeout based resource state handling checks if we have had a 'threshold' number of errors in the last
    * time window of size 'window' milliseconds, and if so, considers the resource as down for 'retry backoff'
    * milliseconds.
@@ -54,6 +61,8 @@ public class ClusterMapConfig {
   public final int clusterMapFixedTimeoutDiskRetryBackoffMs;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
+    clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
+        "com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory");
     clusterMapFixedTimeoutDatanodeWindowMs =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.window.ms", 2000, 1, 100000);
     clusterMapFixedTimeoutDatanodeErrorThreshold =

@@ -123,7 +123,7 @@ public class HardwareLayout {
     return dataNodeInStateCount;
   }
 
-  public long calculateDownDataNodeCount() {
+  public long calculateUnavailableDataNodeCount() {
     long count = 0;
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
@@ -154,7 +154,7 @@ public class HardwareLayout {
     return diskInStateCount;
   }
 
-  public long calculateDownDiskCount() {
+  public long calculateUnavailableDiskCount() {
     long count = 0;
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {

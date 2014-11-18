@@ -135,18 +135,30 @@ public class DataNodeTest {
     DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
     for (int i = 0; i <= threshold; i++) {
       assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+      for (DiskId disk : dataNode.getDisks()) {
+        assertEquals(disk.getState(), HardwareState.AVAILABLE);
+      }
       dataNode.onNodeTimeout();
     }
     // After threshold number of continuous errors, the resource should be unavailable (assuming the window is
     // large enough to hold all the above errors in the queue)
     assertEquals(dataNode.getState(), HardwareState.UNAVAILABLE);
+    for (DiskId disk : dataNode.getDisks()) {
+      assertEquals(disk.getState(), HardwareState.UNAVAILABLE);
+    }
     Thread.sleep(retryBackoffMs + 1);
     // If retryBackoffMs has passed, the resource should be available.
     assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+    for (DiskId disk : dataNode.getDisks()) {
+      assertEquals(disk.getState(), HardwareState.AVAILABLE);
+    }
 
     if (threshold > 1) {
       for (int i = 1; i <= threshold; i++) {
         assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+        for (DiskId disk : dataNode.getDisks()) {
+          assertEquals(disk.getState(), HardwareState.AVAILABLE);
+        }
         dataNode.onNodeTimeout();
         Thread.sleep(windowMs);
       }

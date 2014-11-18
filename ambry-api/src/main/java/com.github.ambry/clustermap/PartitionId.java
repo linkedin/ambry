@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * A PartitionId consists of one or more {@link ReplicaId}s. A PartitionId is uniquely identified by an ID.
  */
-public abstract class PartitionId implements Comparable<PartitionId> {
+public abstract class PartitionId implements Resource, Comparable<PartitionId> {
   /**
    * Serializes the ID of this PartitionId to bytes.
    *

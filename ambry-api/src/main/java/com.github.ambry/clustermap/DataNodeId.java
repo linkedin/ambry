@@ -3,7 +3,7 @@ package com.github.ambry.clustermap;
 /**
  * A DataNodeId has many devices. A DataNodeId stores one or more {@link ReplicaId}s upon each device.
  */
-public abstract class DataNodeId implements Comparable<DataNodeId> {
+public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
 
   /**
    * Gets the hostname of this DataNodeId.

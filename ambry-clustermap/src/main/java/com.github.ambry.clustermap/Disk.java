@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -20,7 +21,7 @@ public class Disk implements DiskId {
 
   private final DataNode dataNode;
   private final String mountPath;
-  private final DiskStatePolicy diskStatePolicy;
+  private final ResourceStatePolicy diskStatePolicy;
   private long capacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -32,9 +33,15 @@ public class Disk implements DiskId {
     }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
-    this.diskStatePolicy = new DiskStatePolicy(this, HardwareState.valueOf(jsonObject.getString("hardwareState")),
-        clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs, clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold,
-        clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs);
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
+          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+              HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
+      this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error during start {}", e);
+      throw new InstantiationError("Error during start " + e);
+    }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     validate();
   }
@@ -47,8 +54,8 @@ public class Disk implements DiskId {
   @Override
   public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
-    return dataNode.getState() == HardwareState.AVAILABLE && diskStatePolicy.getState() == HardwareState.AVAILABLE
-        ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
+    return dataNode.getState() == HardwareState.AVAILABLE && !diskStatePolicy.isDown() ? HardwareState.AVAILABLE
+        : HardwareState.UNAVAILABLE;
   }
 
   public boolean isDown() {
