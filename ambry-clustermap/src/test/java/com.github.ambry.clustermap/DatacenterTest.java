@@ -1,5 +1,8 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -11,9 +14,9 @@ import static org.junit.Assert.fail;
 
 // TestDatacenter permits Datacenter to be constructed with a null HardwareLayout.
 class TestDatacenter extends Datacenter {
-  public TestDatacenter(JSONObject jsonObject)
+  public TestDatacenter(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
-    super(null, jsonObject);
+    super(null, jsonObject, clusterMapConfig);
   }
 
   @Override
@@ -63,20 +66,21 @@ public class DatacenterTest {
   public void basics()
       throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
-    Datacenter datacenter = new TestDatacenter(jsonObject);
+    Datacenter datacenter = new TestDatacenter(jsonObject, clusterMapConfig);
 
     assertEquals(datacenter.getName(), "XYZ1");
     assertEquals(datacenter.getDataNodes().size(), dataNodeCount);
     assertEquals(datacenter.getRawCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
-    assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject()));
+    assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject(), clusterMapConfig));
   }
 
-  public void failValidation(JSONObject jsonObject)
+  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     try {
-      new TestDatacenter(jsonObject);
+      new TestDatacenter(jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
@@ -87,11 +91,12 @@ public class DatacenterTest {
   public void validation()
       throws JSONException {
     JSONObject jsonObject;
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
     try {
       // Null HardwareLayout
       jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
-      new Datacenter(null, jsonObject);
+      new Datacenter(null, jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
@@ -99,6 +104,6 @@ public class DatacenterTest {
 
     // Bad datacenter name
     jsonObject = TestUtils.getJsonDatacenter("", getDataNodes());
-    failValidation(jsonObject);
+    failValidation(jsonObject, clusterMapConfig);
   }
 }

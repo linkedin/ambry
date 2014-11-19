@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -90,7 +91,8 @@ public class IndexWritePerformance {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
 
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
       StoreKeyFactory factory = new BlobIdFactory(map);
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
@@ -190,7 +192,7 @@ public class IndexWritePerformance {
           // choose a random index
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
           // Does not matter what partition we use
-          PartitionId partition = map.getWritablePartitionIdAt(0);
+          PartitionId partition = map.getWritablePartitionIds().get(0);
           indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobId(partition));
           throttler.maybeThrottle(1);
         }

@@ -2,6 +2,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.Properties;
@@ -22,7 +23,7 @@ public class AmbryMain {
       Properties props = Utils.loadProps(args[0]);
       VerifiableProperties vprops = new VerifiableProperties(props);
 
-      ClusterMap clusterMap = new ClusterMapManager(args[1], args[2]);
+      ClusterMap clusterMap = new ClusterMapManager(args[1], args[2], new ClusterMapConfig(vprops));
 
       final AmbryServer server = new AmbryServer(vprops, clusterMap);
 

@@ -1,5 +1,8 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -111,7 +114,8 @@ public class HardwareLayoutTest {
       throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonHardwareLayout("Alpha", getDatacenters());
 
-    HardwareLayout hardwareLayout = new HardwareLayout(jsonObject);
+    HardwareLayout hardwareLayout =
+        new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
     assertEquals(hardwareLayout.getVersion(), TestUtils.defaultHardwareLayoutVersion);
     assertEquals(hardwareLayout.getClusterName(), "Alpha");
@@ -122,17 +126,17 @@ public class HardwareLayoutTest {
 
     assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.AVAILABLE), datacenterCount * dataNodeCount);
     assertEquals(hardwareLayout.getDataNodeInHardStateCount(HardwareState.UNAVAILABLE), 0);
-    assertEquals(hardwareLayout.calculateSoftDownDataNodeCount(), 0);
+    assertEquals(hardwareLayout.calculateUnavailableDataNodeCount(), 0);
     assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.AVAILABLE),
         datacenterCount * dataNodeCount * diskCount);
     assertEquals(hardwareLayout.getDiskInHardStateCount(HardwareState.UNAVAILABLE), 0);
-    assertEquals(hardwareLayout.calculateSoftDownDiskCount(), 0);
+    assertEquals(hardwareLayout.calculateUnavailableDiskCount(), 0);
   }
 
   public void failValidation(JSONObject jsonObject)
       throws JSONException {
     try {
-      new HardwareLayout(jsonObject);
+      new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(new Properties())));
       fail("Should have failed validation: " + jsonObject.toString(2));
     } catch (IllegalStateException e) {
       // Expected.

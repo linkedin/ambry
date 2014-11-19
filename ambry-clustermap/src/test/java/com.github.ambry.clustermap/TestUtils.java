@@ -1,5 +1,8 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -269,7 +272,8 @@ public class TestUtils {
       this.datacenterCount = datacenterCount;
       this.basePort = basePort;
 
-      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()));
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()),
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
     }
 
     public TestHardwareLayout(String clusterName)

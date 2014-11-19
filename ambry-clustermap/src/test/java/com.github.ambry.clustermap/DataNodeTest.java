@@ -1,5 +1,8 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
+import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -11,9 +14,9 @@ import static org.junit.Assert.fail;
 
 // TestDataNode permits DataNode to be constructed with a null Datacenter.
 class TestDataNode extends DataNode {
-  public TestDataNode(JSONObject jsonObject)
+  public TestDataNode(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
-    super(null, jsonObject);
+    super(null, jsonObject, clusterMapConfig);
   }
 
   @Override
@@ -62,8 +65,9 @@ public class DataNodeTest {
       throws JSONException {
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
-    DataNode dataNode = new TestDataNode(jsonObject);
+    DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
 
     assertEquals(dataNode.getHostname(), TestUtils.getLocalHost());
     assertEquals(dataNode.getPort(), 6666);
@@ -73,13 +77,13 @@ public class DataNodeTest {
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
-    assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject()));
+    assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
   }
 
-  public void failValidation(JSONObject jsonObject)
+  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     try {
-      new TestDataNode(jsonObject);
+      new TestDataNode(jsonObject, clusterMapConfig);
       fail("Construction of TestDataNode should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
@@ -90,11 +94,12 @@ public class DataNodeTest {
   public void validation()
       throws JSONException {
     JSONObject jsonObject;
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
     try {
       // Null DataNode
       jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
-      new DataNode(null, jsonObject);
+      new DataNode(null, jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
@@ -102,18 +107,64 @@ public class DataNodeTest {
 
     // Bad hostname
     jsonObject = TestUtils.getJsonDataNode("", 6666, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject);
+    failValidation(jsonObject, clusterMapConfig);
 
     // Bad hostname (http://tools.ietf.org/html/rfc6761 defines 'invalid' top level domain)
     jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject);
+    failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too small)
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject);
+    failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too big)
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject);
+    failValidation(jsonObject, clusterMapConfig);
+  }
+
+  @Test
+  public void testSoftState()
+      throws JSONException, InterruptedException {
+    JSONObject jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    long windowMs = clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs;
+    int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
+    long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;
+
+    DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
+    for (int i = 0; i <= threshold; i++) {
+      assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+      for (DiskId disk : dataNode.getDisks()) {
+        assertEquals(disk.getState(), HardwareState.AVAILABLE);
+      }
+      dataNode.onNodeTimeout();
+    }
+    // After threshold number of continuous errors, the resource should be unavailable (assuming the window is
+    // large enough to hold all the above errors in the queue)
+    assertEquals(dataNode.getState(), HardwareState.UNAVAILABLE);
+    for (DiskId disk : dataNode.getDisks()) {
+      assertEquals(disk.getState(), HardwareState.UNAVAILABLE);
+    }
+    Thread.sleep(retryBackoffMs + 1);
+    // If retryBackoffMs has passed, the resource should be available.
+    assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+    for (DiskId disk : dataNode.getDisks()) {
+      assertEquals(disk.getState(), HardwareState.AVAILABLE);
+    }
+
+    if (threshold > 1) {
+      for (int i = 1; i <= threshold; i++) {
+        assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
+        for (DiskId disk : dataNode.getDisks()) {
+          assertEquals(disk.getState(), HardwareState.AVAILABLE);
+        }
+        dataNode.onNodeTimeout();
+        Thread.sleep(windowMs);
+      }
+    }
+    // Even if we had more than threshold number of errors, if they did not fit in the
+    // same window, the resource should be available.
+    assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
   }
 }

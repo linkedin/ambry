@@ -94,9 +94,10 @@ public class ServerTest {
       BlobProperties properties = new BlobProperties(31870, "serviceid1");
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
-      BlobId blobId1 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId2 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId3 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      BlobId blobId1 = new BlobId(partitionIds.get(0));
+      BlobId blobId2 = new BlobId(partitionIds.get(0));
+      BlobId blobId3 = new BlobId(partitionIds.get(0));
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
@@ -125,7 +126,7 @@ public class ServerTest {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
+      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(blobId1);
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -174,7 +175,7 @@ public class ServerTest {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(new BlobId(partition));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -202,17 +203,18 @@ public class ServerTest {
       BlobProperties properties = new BlobProperties(1000, "serviceid1");
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
-      BlobId blobId1 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId2 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId3 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId4 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId5 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId6 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId7 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId8 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId9 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId10 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
-      BlobId blobId11 = new BlobId(clusterMap.getWritablePartitionIdAt(0));
+      PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
+      BlobId blobId1 = new BlobId(partition);
+      BlobId blobId2 = new BlobId(partition);
+      BlobId blobId3 = new BlobId(partition);
+      BlobId blobId4 = new BlobId(partition);
+      BlobId blobId5 = new BlobId(partition);
+      BlobId blobId6 = new BlobId(partition);
+      BlobId blobId7 = new BlobId(partition);
+      BlobId blobId8 = new BlobId(partition);
+      BlobId blobId9 = new BlobId(partition);
+      BlobId blobId10 = new BlobId(partition);
+      BlobId blobId11 = new BlobId(partition);
 
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
@@ -276,10 +278,10 @@ public class ServerTest {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
+      MockPartitionId mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(blobId3);
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-      PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest1 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
@@ -352,10 +354,10 @@ public class ServerTest {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIdAt(0);
-      ids.add(new BlobId(partition));
+      mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      ids.add(new BlobId(mockPartitionId));
       partitionRequestInfoList.clear();
-      partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest4 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
@@ -589,9 +591,10 @@ public class ServerTest {
       MockClusterMap clusterMap = cluster.getClusterMap();
       this.channel = channel;
       blobIds = new ArrayList<BlobId>(totalBlobsToPut);
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       for (int i = 0; i < totalBlobsToPut; i++) {
-        int partitionId = new Random().nextInt((int) clusterMap.getWritablePartitionIdsCount());
-        BlobId blobId = new BlobId(clusterMap.getWritablePartitionIdAt(partitionId));
+        int partitionIndex = new Random().nextInt(partitionIds.size());
+        BlobId blobId = new BlobId(partitionIds.get(partitionIndex));
         blobIds.add(blobId);
       }
       this.data = data;
