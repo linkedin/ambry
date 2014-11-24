@@ -1,5 +1,7 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -19,23 +21,29 @@ public class Disk implements DiskId {
 
   private final DataNode dataNode;
   private final String mountPath;
-  private final HardwareState hardState;
-  private HardwareState softState;
+  private final ResourceStatePolicy diskStatePolicy;
   private long capacityInBytes;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Disk(DataNode dataNode, JSONObject jsonObject)
+  public Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Disk " + jsonObject.toString());
     }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
-    this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
-    this.softState = hardState;
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
+          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+              HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
+      this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error creating resource state policy when instantiating a disk " + e);
+      throw new IllegalStateException("Error creating resource state policy when instantiating a disk: " + mountPath,
+          e);
+    }
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
-
     validate();
   }
 
@@ -47,25 +55,16 @@ public class Disk implements DiskId {
   @Override
   public HardwareState getState() {
     // A Disk is unavailable if its DataNode is unavailable.
-    if (dataNode.getState() == HardwareState.UNAVAILABLE) {
-      return HardwareState.UNAVAILABLE;
-    }
-    if (hardState == HardwareState.UNAVAILABLE) {
-      return HardwareState.UNAVAILABLE;
-    }
-    return softState;
+    return dataNode.getState() == HardwareState.AVAILABLE && !diskStatePolicy.isDown() ? HardwareState.AVAILABLE
+        : HardwareState.UNAVAILABLE;
   }
 
-  public boolean isSoftDown() {
-    return (hardState == HardwareState.AVAILABLE && softState == HardwareState.UNAVAILABLE);
+  public boolean isDown() {
+    return diskStatePolicy.isDown();
   }
 
-  public void setSoftState(HardwareState hardwareState) {
-    if (hardState == HardwareState.AVAILABLE) {
-      softState = hardwareState;
-    } else {
-      logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
-    }
+  public boolean isHardDown() {
+    return diskStatePolicy.isHardDown();
   }
 
   @Override
@@ -78,7 +77,7 @@ public class Disk implements DiskId {
   }
 
   public HardwareState getHardState() {
-    return hardState;
+    return diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
   protected void validateDataNode() {
@@ -120,13 +119,14 @@ public class Disk implements DiskId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    return new JSONObject().put("mountPath", mountPath).put("hardwareState", hardState)
+    return new JSONObject().put("mountPath", mountPath).put("hardwareState", getHardState())
         .put("capacityInBytes", capacityInBytes);
   }
 
   @Override
   public String toString() {
-    return "Disk[" + dataNode.getHostname() + ":" + dataNode.getPort() + ":" + getMountPath() + "]";
+    String dataNodeStr = dataNode == null ? "" : dataNode.getHostname() + ":" + dataNode.getPort() + ":";
+    return "Disk[" + dataNodeStr + getMountPath() + "]";
   }
 
   @Override
@@ -154,6 +154,6 @@ public class Disk implements DiskId {
   }
 
   public void onDiskError() {
-    // @todo: Maintain state and handle disk errors. Also note that this method could be accessed concurrently.
+    diskStatePolicy.onError();
   }
 }

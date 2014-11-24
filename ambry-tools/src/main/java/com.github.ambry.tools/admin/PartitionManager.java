@@ -4,7 +4,10 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.HardwareLayout;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionLayout;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -82,11 +85,12 @@ public class PartitionManager {
         System.out.println("Partition layout path not found. Creating new file");
       }
       ClusterMapManager manager = null;
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       if (fileString == null) {
-        manager = new ClusterMapManager(
-            new PartitionLayout(new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)))));
+        manager = new ClusterMapManager(new PartitionLayout(
+            new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig)));
       } else {
-        manager = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+        manager = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
       }
       if (operationType.compareToIgnoreCase("AddPartition") == 0) {
         listOpt.add(numberOfPartitionsOpt);

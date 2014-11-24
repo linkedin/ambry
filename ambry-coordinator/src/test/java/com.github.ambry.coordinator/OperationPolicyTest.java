@@ -870,6 +870,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public boolean isDown() {
+      return false;
+    }
+
+    @Override
     public String toString() {
       return datacenter + "-" + index;
     }

@@ -75,6 +75,12 @@ public class Replica implements ReplicaId {
     return disk;
   }
 
+  @Override
+  public boolean isDown() {
+    return getDataNodeId().getState() == HardwareState.UNAVAILABLE
+        || getDiskId().getState() == HardwareState.UNAVAILABLE;
+  }
+
   public Partition getPartition() {
     return partition;
   }

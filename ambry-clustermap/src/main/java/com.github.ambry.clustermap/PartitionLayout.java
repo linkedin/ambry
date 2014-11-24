@@ -93,18 +93,29 @@ public class PartitionLayout {
     return count;
   }
 
-  public List<Partition> getPartitions() {
-    return new ArrayList<Partition>(partitionMap.values());
+  public List<PartitionId> getPartitions() {
+    return new ArrayList<PartitionId>(partitionMap.values());
   }
 
-  public List<Partition> getWritablePartitions() {
-    List<Partition> writablePartitions = new ArrayList<Partition>();
+  public List<PartitionId> getWritablePartitions() {
+    List<PartitionId> writablePartitions = new ArrayList();
+    List<PartitionId> healthyWritablePartitions = new ArrayList();
     for (Partition partition : partitionMap.values()) {
       if (partition.getPartitionState() == PartitionState.READ_WRITE) {
         writablePartitions.add(partition);
+        boolean up = true;
+        for (Replica replica : partition.getReplicas()) {
+          if (replica.isDown()) {
+            up = false;
+            break;
+          }
+        }
+        if (up) {
+          healthyWritablePartitions.add(partition);
+        }
       }
     }
-    return writablePartitions;
+    return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
   }
 
   public long getAllocatedRawCapacityInBytes() {

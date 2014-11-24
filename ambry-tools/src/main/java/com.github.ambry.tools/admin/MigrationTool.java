@@ -2,6 +2,7 @@ package com.github.ambry.tools.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
@@ -125,15 +126,16 @@ public class MigrationTool {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      Properties props = Utils.loadProps(coordinatorConfigPath);
+      VerifiableProperties vprops = new VerifiableProperties((props));
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, new ClusterMapConfig(vprops));
       File logFile = new File(System.getProperty("user.dir"), "migrationlog");
       writer = new FileWriter(logFile);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
       if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
       }
-      Properties props = Utils.loadProps(coordinatorConfigPath);
-      coordinator = new AmbryCoordinator(new VerifiableProperties(props), map);
+      coordinator = new AmbryCoordinator(vprops, map);
       while (true) {
         directoryWalk(rootDirectory, folderPrefixInRoot, false, coordinator, writer);
       }

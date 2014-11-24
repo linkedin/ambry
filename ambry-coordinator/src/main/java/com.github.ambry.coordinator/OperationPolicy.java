@@ -126,8 +126,11 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 
     List<ReplicaId> localReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     List<ReplicaId> remoteReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
+    List<ReplicaId> downReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     for (ReplicaId replicaId : replicaIds) {
-      if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
+      if (replicaId.isDown()) {
+        downReplicaIds.add(replicaId);
+      } else if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
         localReplicaIds.add(replicaId);
       } else if (crossDCProxyCallEnabled) {
         remoteReplicaIds.add(replicaId);
@@ -138,6 +141,8 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     orderedReplicaIds.addAll(localReplicaIds);
     Collections.shuffle(remoteReplicaIds);
     orderedReplicaIds.addAll(remoteReplicaIds);
+    Collections.shuffle(downReplicaIds);
+    orderedReplicaIds.addAll(downReplicaIds);
 
     return orderedReplicaIds;
   }

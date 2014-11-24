@@ -3,6 +3,7 @@ package com.github.ambry.tools.perf;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
@@ -109,7 +110,8 @@ public class IndexReadPerformance {
       }
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
       StoreKeyFactory factory = new BlobIdFactory(map);
 
       // Read the log and get the index directories and create the indexes
