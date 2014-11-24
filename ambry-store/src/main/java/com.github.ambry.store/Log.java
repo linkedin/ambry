@@ -86,7 +86,7 @@ public class Log implements Write, Read {
     return bytesWritten;
   }
 
-  @Override
+ /* @Override
   public long appendFrom(ReadableByteChannel channel, long size)
       throws IOException {
     logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {}", file.getAbsolutePath(),
@@ -97,6 +97,29 @@ public class Log implements Write, Read {
           "from channel since new data size " + size + "exceeds total log size " + capacityInBytes);
     }
     long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
+    currentWriteOffset.addAndGet(bytesWritten);
+    logger.trace("Log : {} bytes appended to the log from read channel bytesWritten: {}", file.getAbsolutePath(),
+        bytesWritten);
+    return bytesWritten;
+  }   */
+
+ @Override
+  public long appendFrom(ReadableByteChannel channel, long size)
+      throws IOException {
+    logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {}", file.getAbsolutePath(),
+        currentWriteOffset, capacityInBytes, size);
+    if (currentWriteOffset.get() + size > capacityInBytes) {
+      metrics.overflowWriteError.inc(1);
+      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to append to log " +
+          "from channel since new data size " + size + "exceeds total log size " + capacityInBytes);
+    }
+    long bytesWritten = 0;
+    while(bytesWritten < size) {
+      bytesWritten += fileChannel.transferFrom(channel, currentWriteOffset.get() + bytesWritten, size - bytesWritten);
+    }
+    if(bytesWritten != size) {
+      throw new IOException("Couldn't read entire bytes. Read only " + bytesWritten +", expected to be read " + size);
+    }
     currentWriteOffset.addAndGet(bytesWritten);
     logger.trace("Log : {} bytes appended to the log from read channel bytesWritten: {}", file.getAbsolutePath(),
         bytesWritten);

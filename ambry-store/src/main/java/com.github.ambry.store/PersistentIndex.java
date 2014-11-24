@@ -295,6 +295,30 @@ public class PersistentIndex {
     return findKey(key) != null;
   }
 
+  public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
+    final Timer.Context context = metrics.findTime.time();
+    ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentMap = new ConcurrentSkipListMap<Long, IndexSegment>() ;
+    try {
+      ConcurrentNavigableMap<Long, IndexSegment> descendMap = indexes.descendingMap();
+      for (Map.Entry<Long, IndexSegment> entry : descendMap.entrySet()) {
+           if( entry.getKey() >= fileSpan.getStartOffset() && entry.getKey() <= fileSpan.getEndOffset())
+             interestedSegmentMap.put(entry.getKey(), entry.getValue());
+      }
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentMap.entrySet()) {
+        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
+        IndexValue value = entry.getValue().find(key);
+        if (value != null) {
+          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
+              value.getTimeToLiveInMs());
+          return true;
+        }
+     }
+    }finally {
+      context.stop();
+    }
+    return false;
+  }
+
   /**
    * Finds a key in the index and returns the blob index value associated with it. If not found,
    * returns null
@@ -685,6 +709,11 @@ public class PersistentIndex {
             Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
+         /* if(currentInfo.getEndOffset() > fileEndPointerBeforeFlush) {
+            String message = "The active index cannot have a file end pointer " + currentInfo.getEndOffset() +
+                " greater than the log end offset " + fileEndPointerBeforeFlush;
+            throw new StoreException(message, StoreErrorCodes.IOError);
+          }*/
           currentInfo.writeIndexToFile(fileEndPointerBeforeFlush);
         }
       } catch (IOException e) {

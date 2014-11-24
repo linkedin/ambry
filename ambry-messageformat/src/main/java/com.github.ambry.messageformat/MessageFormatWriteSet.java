@@ -48,15 +48,10 @@ public class MessageFormatWriteSet implements MessageWriteSet {
       throws IOException {
     long sizeWritten = 0;
     ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
-    long writeStartTimeInMs = System.currentTimeMillis();
-    while (sizeWritten < sizeToWrite) {
-      sizeWritten += writeChannel.appendFrom(readableByteChannel, sizeToWrite);
-      logger.trace("MessageFormatWriteSet : SizeWritten {} SizeToWrite {} isOpen {} ", sizeWritten, sizeToWrite,
-          readableByteChannel.isOpen());
-      if (sizeWritten < sizeToWrite && (System.currentTimeMillis() - writeStartTimeInMs) > maxWriteTimeInMs) {
-        throw new IOException("Time taken to write is more than maxWriteTimeInMs " + maxWriteTimeInMs +
-            " sizeWritten " + sizeWritten + " sizeToWrite " + sizeToWrite);
-      }
+    sizeWritten = writeChannel.appendFrom(readableByteChannel, sizeToWrite);
+    if(sizeWritten != sizeToWrite) {
+      throw new IOException("Not able to write fully. Expected : " + sizeToWrite +
+          " Actual : " + sizeWritten );
     }
     return sizeWritten;
   }

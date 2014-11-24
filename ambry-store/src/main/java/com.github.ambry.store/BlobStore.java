@@ -139,13 +139,25 @@ public class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
+      long indexOldEndOffset = index.getCurrentEndOffset();
+      long logOldEndOffset = log.getLogEndOffset();
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.exists(info.getStoreKey())) {
           throw new StoreException("Key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
         }
       }
+
       synchronized (lock) {
+        long currentLogEndOffset = log.getLogEndOffset();
+        if(logOldEndOffset != currentLogEndOffset) {
+          FileSpan fileSpan = new FileSpan(logOldEndOffset, currentLogEndOffset);
+          for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+            if (index.exists(info.getStoreKey(), fileSpan)) {
+              throw new StoreException("Key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+            }
+          }
+        }
         long writeStartOffset = log.getLogEndOffset();
         messageSetToWrite.writeTo(log);
         logger.trace("Store : {} message set written to log", dataDir);
@@ -192,11 +204,13 @@ public class BlobStore implements Store {
         }
       }
       synchronized (lock) {
+        long logCurrentEndOffset = log.getLogEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(log.getLogEndOffset() - info.getSize(), log.getLogEndOffset());
+          FileSpan fileSpan = new FileSpan(logCurrentEndOffset, logCurrentEndOffset + info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
+          logCurrentEndOffset += info.getSize();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
