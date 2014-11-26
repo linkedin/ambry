@@ -406,8 +406,7 @@ class ReplicaThread implements Runnable {
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset =
-              new MessageFormatWriteSet(deleteStream, infoList, replicationConfig.replicationMaxDeleteWriteTimeMs,
-                  false);
+              new MessageFormatWriteSet(deleteStream, infoList, false);
           remoteReplicaInfo.getLocalStore().delete(writeset);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -570,7 +569,7 @@ class ReplicaThread implements Runnable {
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
               MessageFormatWriteSet writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList,
-                  replicationConfig.replicationMaxPutWriteTimeMs, true);
+                  true);
               remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {

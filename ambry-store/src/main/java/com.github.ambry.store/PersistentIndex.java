@@ -285,7 +285,7 @@ public class PersistentIndex {
   }
 
   /**
-   * Indicates if a key is present in the index
+   * Indicates if a key is present in the index. Searches through entire index
    * @param key The key to do the exist check against
    * @return True, if the key exist in the index. False, otherwise.
    * @throws StoreException
@@ -295,16 +295,23 @@ public class PersistentIndex {
     return findKey(key) != null;
   }
 
+  /**
+   * Indicates if a key is present in the index within the passed in filespan. Filespan represents
+   * the start offset and end offset
+   * @param key The key to do the exist check against
+   * @param fileSpan FileSpan which specifies the range within which search should be made
+   * @return True, if the key exist in the index within the filespan. False, otherwise.
+   * @throws StoreException
+   */
   public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
     final Timer.Context context = metrics.findTime.time();
-    ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentMap = new ConcurrentSkipListMap<Long, IndexSegment>() ;
+    logger.trace("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
+    " to " + fileSpan.getEndOffset());
+    Long startEntry = indexes.floorKey(fileSpan.getStartOffset());
+    Long endEntry = indexes.ceilingKey(fileSpan.getStartOffset());
+    ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = indexes.subMap(startEntry, endEntry);
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> descendMap = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : descendMap.entrySet()) {
-           if( entry.getKey() >= fileSpan.getStartOffset() && entry.getKey() <= fileSpan.getEndOffset())
-             interestedSegmentMap.put(entry.getKey(), entry.getValue());
-      }
-      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentMap.entrySet()) {
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -689,9 +696,7 @@ public class PersistentIndex {
           // before iterating the map, get the current file end pointer
           Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
-          long fileEndPointerBeforeFlush = log.getLogEndOffset();
-
-          // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+          long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
           log.flush();
 
           long lastOffset = lastEntry.getKey();
@@ -709,12 +714,7 @@ public class PersistentIndex {
             Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-         /* if(currentInfo.getEndOffset() > fileEndPointerBeforeFlush) {
-            String message = "The active index cannot have a file end pointer " + currentInfo.getEndOffset() +
-                " greater than the log end offset " + fileEndPointerBeforeFlush;
-            throw new StoreException(message, StoreErrorCodes.IOError);
-          }*/
-          currentInfo.writeIndexToFile(fileEndPointerBeforeFlush);
+          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush );
         }
       } catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);

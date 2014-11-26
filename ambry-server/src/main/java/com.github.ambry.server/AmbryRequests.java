@@ -149,7 +149,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset =
-            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxPutWriteTimeMs, false);
+            new MessageFormatWriteSet(stream, infoList, false);
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
@@ -325,7 +325,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset =
-            new MessageFormatWriteSet(stream, infoList, serverConfig.serverMaxDeleteWriteTimeMs, false);
+            new MessageFormatWriteSet(stream, infoList, false);
         Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
         response =

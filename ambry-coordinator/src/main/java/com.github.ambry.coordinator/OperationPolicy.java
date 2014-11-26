@@ -2,6 +2,8 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,16 +100,22 @@ public interface OperationPolicy {
  */
 abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   int replicaIdCount;
+  int dataCentreCount;
   Queue<ReplicaId> orderedReplicaIds;
 
   List<ReplicaId> corruptRequests;
   List<ReplicaId> failedRequests;
   List<ReplicaId> successfulRequests;
+  List<ReplicaId> localRequests;
+  Map<String, List<ReplicaId>> remoteReplicasPerDatacentre;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
+    this.localRequests = new ArrayList<ReplicaId>();
+    this.remoteReplicasPerDatacentre = new HashMap<String, List<ReplicaId>>();
+    this.dataCentreCount = 1;
     this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds(), crossDCProxyCallEnabled);
     this.replicaIdCount = this.orderedReplicaIds.size();
     if (replicaIdCount < 1) {
@@ -125,24 +133,31 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     Queue<ReplicaId> orderedReplicaIds = new ArrayDeque<ReplicaId>(replicaIdCount);
 
     List<ReplicaId> localReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
-    List<ReplicaId> remoteReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
-    List<ReplicaId> downReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     for (ReplicaId replicaId : replicaIds) {
-      if (replicaId.isDown()) {
-        downReplicaIds.add(replicaId);
-      } else if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
+      String dcName = replicaId.getDataNodeId().getDatacenterName();
+      if (dcName.equals(datacenterName)) {
         localReplicaIds.add(replicaId);
+        this.localRequests.add(replicaId);
       } else if (crossDCProxyCallEnabled) {
-        remoteReplicaIds.add(replicaId);
+        if(remoteReplicasPerDatacentre.containsKey(dcName)){
+          remoteReplicasPerDatacentre.get(dcName).add(replicaId);
+        }
+        else{
+          List<ReplicaId> replicaIdList = new ArrayList<ReplicaId>();
+          replicaIdList.add(replicaId);
+          remoteReplicasPerDatacentre.put(dcName, replicaIdList);
+          dataCentreCount++;
+        }
       }
     }
 
     Collections.shuffle(localReplicaIds);
     orderedReplicaIds.addAll(localReplicaIds);
-    Collections.shuffle(remoteReplicaIds);
-    orderedReplicaIds.addAll(remoteReplicaIds);
-    Collections.shuffle(downReplicaIds);
-    orderedReplicaIds.addAll(downReplicaIds);
+    for(String remoteDataCentre : remoteReplicasPerDatacentre.keySet()) {
+      List<ReplicaId> remoteReplicaList = remoteReplicasPerDatacentre.get(remoteDataCentre);
+      Collections.shuffle(remoteReplicaList);
+      orderedReplicaIds.addAll(remoteReplicaList);
+    }
 
     return orderedReplicaIds;
   }
@@ -237,6 +252,7 @@ class SerialOperationPolicy extends ProbeLocalFirstOperationPolicy {
   }
 }
 
+
 /**
  * Sends some number of requests in parallel and waits for a threshold number of successes.
  * <p/>
@@ -278,6 +294,103 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
     return (replicaIdCount - failedRequests.size()) >= successTarget;
   }
 }
+
+
+
+/**
+ * Sends get requests to all replicas in local data centre.
+ * If we fail to get a blob, send more requests to remote replicas based on the remote Parallelism defined.
+ * If we fail to get the blob even after this, we send requests to all remaining remote replicas
+ */
+class GetCustomParallelOperationPolicy extends ParallelOperationPolicy {
+  Queue<Integer> parallelism ;
+  Queue<ReplicaId> orderedReplicaIdsClone = null;
+
+
+  public GetCustomParallelOperationPolicy(String datacenterName, PartitionId partitionId,
+      boolean crossDCProxyCallEnabled) throws CoordinatorException{
+    this(datacenterName, partitionId, crossDCProxyCallEnabled, 2);
+}
+  public GetCustomParallelOperationPolicy(String datacenterName, PartitionId partitionId,
+      boolean crossDCProxyCallEnabled, int remoteParallelism)
+      throws CoordinatorException {
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
+    if (replicaIdCount == 1) {
+      super.successTarget = 1;
+      super.requestParallelism = 1;
+    } else {
+      super.successTarget = 1;
+    }
+
+    int replicaPerDataCenter = replicaIdCount/dataCentreCount;
+    parallelism = new ArrayDeque<Integer>();
+    parallelism.add(replicaPerDataCenter);
+    parallelism.add(replicaPerDataCenter+(remoteParallelism* remoteReplicasPerDatacentre.size()));
+    parallelism.add(replicaIdCount);
+    // for remote parallelism of 2 with 3 data centres( assuming 3 replicas per data centre,
+    //  parallelism will have values of {3,7,9}
+    super.requestParallelism = parallelism.peek();
+    orderedReplicaIdsClone = new ArrayDeque<ReplicaId>(replicaIdCount);
+    orderedReplicaIdsClone.addAll(localRequests);
+    for(String dataCentre: remoteReplicasPerDatacentre.keySet()) {
+      for(int i=0;i<remoteParallelism;i++) {
+        ReplicaId replicaId = remoteReplicasPerDatacentre.get(dataCentre).remove(0);
+        orderedReplicaIdsClone.add(replicaId);
+      }
+    }
+
+    for(String dataCentre: remoteReplicasPerDatacentre.keySet()) {
+      for(int i=0;i<(replicaPerDataCenter - remoteParallelism);i++) {
+        ReplicaId replicaId = remoteReplicasPerDatacentre.get(dataCentre).remove(0);
+        orderedReplicaIdsClone.add(replicaId);
+      }
+    }
+    orderedReplicaIds.clear();
+    orderedReplicaIds.addAll(orderedReplicaIdsClone);
+  }
+
+  @Override
+  public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
+    if (orderedReplicaIds.isEmpty()) {
+      return false;
+    }
+
+    int inFlightTarget;
+    if (requestParallelism >= successTarget) {
+      inFlightTarget = requestParallelism - successfulRequests.size();
+    } else {
+      inFlightTarget = min(requestParallelism, successTarget - successfulRequests.size());
+    }
+
+     int currentParallelism = parallelism.peek();
+    if(orderedReplicaIdsClone.size() > replicaIdCount - currentParallelism){
+      orderedReplicaIdsClone.poll();
+      return (requestsInFlight.size() < inFlightTarget);
+    }
+    else{
+      if(requestsInFlight.size() >= 1)
+        return false;
+      else {
+        parallelism.poll();
+        super.requestParallelism = parallelism.peek() - currentParallelism;
+        orderedReplicaIdsClone.poll();
+        return true;
+      }
+    }
+  }
+
+  @Override
+  public boolean isComplete() {
+    return successfulRequests.size() >= successTarget;
+  }
+
+  @Override
+  public boolean mayComplete() {
+    return (replicaIdCount - failedRequests.size()) >= successTarget;
+  }
+
+}
+
 
 /**
  * Sends get requests in parallel. Has up to two in flight to mask single server latency events.

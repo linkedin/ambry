@@ -123,19 +123,12 @@ public class ReplicationTest {
       }
 
       @Override
-      public long appendFrom(ReadableByteChannel channel, long size)
+      public void appendFrom(ReadableByteChannel channel, long size)
           throws IOException {
-        int tempIndex = index;
-        index++;
         int sizeRead = 0;
         while(sizeRead < size) {
-          sizeRead += channel.read(buflist.get(tempIndex));
-          tempIndex = index++;
+          sizeRead += channel.read(buflist.get(index++));
         }
-        if(sizeRead != size) {
-          throw new IOException("Not able to read entire size. Expected " + size+" Actual " + sizeRead);
-        }
-        return sizeRead;
       }
     }
 

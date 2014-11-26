@@ -430,13 +430,17 @@ class IndexSegment {
    *  key n / value n - the key and value entries contained in this index segment
    *  crc             - the crc of the index segment content
    *
-   * @param fileEndPointer
+   * @param safeEndPoint
    * @throws IOException
    * @throws StoreException
    */
-  public void writeIndexToFile(long fileEndPointer)
+  public void writeIndexToFile(long safeEndPoint)
       throws IOException, StoreException {
     if (prevNumOfEntriesWritten != index.size()) {
+      if (safeEndPoint  > getEndOffset()) {
+        throw new StoreException("SafeEndOffSet " + safeEndPoint +" is greater than current end offset for current " +
+            "index segment " + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
+      }
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
@@ -449,17 +453,17 @@ class IndexSegment {
         // write key, value size and file end pointer for this index
         writer.writeInt(this.keySize);
         writer.writeInt(this.valueSize);
-        writer.writeLong(fileEndPointer);
+        writer.writeLong(safeEndPoint);
 
         int numOfEntries = 0;
         // write the entries
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
-          if (entry.getValue().getOffset() + entry.getValue().getSize() <= fileEndPointer) {
+          if (entry.getValue().getOffset() + entry.getValue().getSize() <= safeEndPoint) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
             logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
                 getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(), entry.getValue().getSize(),
-                fileEndPointer);
+                safeEndPoint);
             numOfEntries++;
           }
         }

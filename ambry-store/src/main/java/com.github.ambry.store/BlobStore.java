@@ -139,22 +139,26 @@ public class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
-      long indexOldEndOffset = index.getCurrentEndOffset();
-      long logOldEndOffset = log.getLogEndOffset();
+      long indexOffsetBeforeCheck = index.getCurrentEndOffset();
+      long logEndOffsetBeforeCheck = log.getLogEndOffset();
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.exists(info.getStoreKey())) {
-          throw new StoreException("Key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+          throw new StoreException("Key already exist in store during unlocked check. " +
+              "Cannot be overwritten", StoreErrorCodes.Already_Exist);
         }
       }
 
       synchronized (lock) {
+        // Validate that log end offset was not changed. If changed, check once again for existing
+        // keys in store
         long currentLogEndOffset = log.getLogEndOffset();
-        if(logOldEndOffset != currentLogEndOffset) {
-          FileSpan fileSpan = new FileSpan(logOldEndOffset, currentLogEndOffset);
+        if(logEndOffsetBeforeCheck != currentLogEndOffset) {
+          FileSpan fileSpan = new FileSpan(logEndOffsetBeforeCheck, currentLogEndOffset);
           for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
             if (index.exists(info.getStoreKey(), fileSpan)) {
-              throw new StoreException("Key already exist in store. cannot be overwritten", StoreErrorCodes.Already_Exist);
+              throw new StoreException("Key already exist in store during synchronized check. " +
+                  "cannot be overwritten", StoreErrorCodes.Already_Exist);
             }
           }
         }

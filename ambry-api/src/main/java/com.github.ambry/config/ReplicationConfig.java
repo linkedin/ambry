@@ -71,20 +71,6 @@ public class ReplicationConfig {
   @Default("5242880")
   public final long replicationMaxLagForWaitTimeInBytes;
 
-  /**
-   *The max time a put write request to the store can take before timing out during replication
-   */
-  @Config("replication.max.put.write.time.ms")
-  @Default("10000")
-  public final int replicationMaxPutWriteTimeMs;
-
-  /**
-   * The max time a delete write request to the store can take before timing out during replication
-   */
-  @Config("replication.max.delete.write.time.ms")
-  @Default("5000")
-  public final int replicationMaxDeleteWriteTimeMs;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -105,9 +91,5 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
-    replicationMaxPutWriteTimeMs =
-        verifiableProperties.getIntInRange("replication.max.put.write.time.ms", 10000, 0, 100000);
-    replicationMaxDeleteWriteTimeMs =
-        verifiableProperties.getIntInRange("replication.max.delete.write.time.ms", 5000, 0, 100000);
   }
 }

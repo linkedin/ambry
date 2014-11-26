@@ -45,9 +45,7 @@ public class LogTest {
       Assert.assertEquals(written, 1000);
       Assert.assertEquals(logTest.getLogEndOffset(), 1000);
       // append to log from channel
-      long writtenFromChannel =
-          logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
-      Assert.assertEquals(writtenFromChannel, 1000);
+      logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 1000);
       Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 1000);
@@ -101,9 +99,7 @@ public class LogTest {
       Assert.assertEquals(written, 2000);
       Assert.assertEquals(logTest.getLogEndOffset(), 2000);
       // append to log from channel
-      long writtenFromChannel =
-          logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
-      Assert.assertEquals(writtenFromChannel, 2000);
+      logTest.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(testbuf))), 2000);
       Assert.assertEquals(logTest.getLogEndOffset(), 4000);
 
       // write more and verify we fail to write
