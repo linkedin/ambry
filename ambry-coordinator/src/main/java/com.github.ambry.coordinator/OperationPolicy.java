@@ -298,9 +298,9 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
 
 
 /**
- * Sends get requests to all replicas in local data centre.
- * If we fail to get a blob, send more requests to remote replicas based on the remote Parallelism defined.
- * If we fail to get the blob even after this, we send requests to all remaining remote replicas
+ * Sends get requests to all replicas in local data centre parallely
+ * On failure(for all requests in local), send more requests to remote replicas based on the remote parallelism defined.
+ * On failure again, we send requests to all remaining remote replicas
  */
 class GetCustomParallelOperationPolicy extends ParallelOperationPolicy {
   Queue<Integer> parallelism ;

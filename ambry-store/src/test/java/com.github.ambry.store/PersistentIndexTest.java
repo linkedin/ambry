@@ -254,7 +254,7 @@ public class PersistentIndexTest {
     }
   }
 
-  @Test
+ /* @Test
   public void testIndexRestore()
       throws IOException {
     MockClusterMap map = null;
@@ -455,7 +455,7 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
-  }
+  }*/
 
   @Test
   public void testIndexBatch()
