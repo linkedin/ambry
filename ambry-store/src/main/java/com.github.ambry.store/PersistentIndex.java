@@ -305,25 +305,45 @@ public class PersistentIndex {
    */
   public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
     final Timer.Context context = metrics.findTime.time();
+    System.out.println("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
+        " to " + fileSpan.getEndOffset());
     logger.trace("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
     " to " + fileSpan.getEndOffset());
-    Long startEntry = indexes.floorKey(fileSpan.getStartOffset());
-    Long endEntry = indexes.ceilingKey(fileSpan.getStartOffset());
-    ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = indexes.subMap(startEntry, endEntry);
     try {
+      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = new ConcurrentSkipListMap<Long, IndexSegment>();
+      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
+        long startOffset = entry.getValue().getStartOffset();
+        long endOffSet = entry.getValue().getEndOffset();
+        if((fileSpan.getStartOffset() >= startOffset && fileSpan.getStartOffset() <= endOffSet) ||
+            (fileSpan.getEndOffset() >= startOffset && fileSpan.getEndOffset() <= endOffSet)){
+          interestedSegmentsMap.put(entry.getKey(), entry.getValue());
+        }
+      }
+
+      System.out.println("All segments: ");
+      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
+        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
+      }
+
+      System.out.println("Interested segments: ");
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
+        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
+      }
+      boolean foundValue = false;
       for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
           logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
               value.getTimeToLiveInMs());
-          return true;
+          foundValue = true;
+          break;
         }
      }
+      return foundValue;
     }finally {
       context.stop();
     }
-    return false;
   }
 
   /**
@@ -697,6 +717,8 @@ public class PersistentIndex {
           Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
           long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
+
+          //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
           long lastOffset = lastEntry.getKey();
