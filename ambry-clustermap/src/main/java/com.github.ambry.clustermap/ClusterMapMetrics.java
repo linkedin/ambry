@@ -188,7 +188,7 @@ class ClusterMapMetrics {
   }
 
   private void addDataNodeToStateMetrics(final DataNode dataNode) {
-    final String metricName = dataNode + "-ResourceState";
+    final String metricName = dataNode.getHostname() + "-" + dataNode.getPort() + "-ResourceState";
     Gauge<Long> dataNodeState = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -200,7 +200,9 @@ class ClusterMapMetrics {
   }
 
   private void addDiskToStateMetrics(final Disk disk) {
-    final String metricName = disk + "-ResourceState";
+    final String metricName =
+        disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
+            + "-ResourceState";
     Gauge<Long> diskState = new Gauge<Long>() {
       @Override
       public Long getValue() {
