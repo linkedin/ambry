@@ -5,6 +5,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import java.util.EnumSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.codahale.metrics.MetricRegistry;
@@ -96,7 +97,7 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public StoreInfo get(List<? extends StoreKey> ids)
+  public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
       throws StoreException {
     checkStarted();
     // allows concurrent gets
@@ -121,10 +122,11 @@ public class BlobStore implements Store {
     } catch (StoreException e) {
       throw e;
     } catch (IOException e) {
-      throw new StoreException("IO error while trying to fetch blobs from store " + dataDir, e, StoreErrorCodes.IOError);
+      throw new StoreException("IO error while trying to fetch blobs from store " + dataDir, e,
+          StoreErrorCodes.IOError);
     } catch (Exception e) {
-      throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir,
-          e, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
     }
@@ -166,8 +168,8 @@ public class BlobStore implements Store {
     } catch (IOException e) {
       throw new StoreException("IO error while trying to put blobs to store " + dataDir, e, StoreErrorCodes.IOError);
     } catch (Exception e) {
-      throw new StoreException("Unknown error while trying to put blobs to store " + dataDir,
-          e, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Unknown error while trying to put blobs to store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
     }
@@ -202,12 +204,12 @@ public class BlobStore implements Store {
       }
     } catch (StoreException e) {
       throw e;
-    }  catch (IOException e) {
-      throw new StoreException("IO error while trying to delete blobs from store " + dataDir,
-          e, StoreErrorCodes.IOError);
+    } catch (IOException e) {
+      throw new StoreException("IO error while trying to delete blobs from store " + dataDir, e,
+          StoreErrorCodes.IOError);
     } catch (Exception e) {
-      throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir,
-          e, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
     }
