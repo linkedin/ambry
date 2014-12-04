@@ -155,6 +155,27 @@ public class ServerTest {
         Assert.assertEquals(false, true);
       }
 
+      // get blob properties with expired flag set
+      ids = new ArrayList<BlobId>();
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      ids.add(blobId1);
+      partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfo = new PartitionRequestInfo(partition, ids);
+      partitionRequestInfoList.add(partitionRequestInfo);
+      getRequest1 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties,
+              partitionRequestInfoList, GetOptions.Include_Expired_Blobs);
+      channel.send(getRequest1);
+      stream = channel.receive().getInputStream();
+      resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      try {
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
+        Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
+        Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+      } catch (MessageFormatException e) {
+        Assert.assertEquals(false, true);
+      }
+
       // get blob properties for expired blob
       // 1. With no flag
       ArrayList<BlobId> idsExpired = new ArrayList<BlobId>();

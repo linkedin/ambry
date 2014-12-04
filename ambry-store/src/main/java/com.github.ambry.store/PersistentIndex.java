@@ -307,8 +307,8 @@ public class PersistentIndex {
       throws StoreException {
     final Timer.Context context = metrics.findTime.time();
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapsToFind = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : segmentsMapsToFind.entrySet()) {
+      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToFind = indexes.descendingMap();
+      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToFind.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
