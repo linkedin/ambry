@@ -8,6 +8,7 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
+import java.util.EnumSet;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -543,14 +544,14 @@ public class PersistentIndexTest {
       list.add(entry3);
       index.addToIndex(list, new FileSpan(0, 600));
       // simple read
-      BlobReadOptions readOptions = index.getBlobReadInfo(blobId1);
+      BlobReadOptions readOptions = index.getBlobReadInfo(blobId1, EnumSet.noneOf(StoreGetOptions.class));
       Assert.assertEquals(readOptions.getOffset(), 0);
       Assert.assertEquals(readOptions.getSize(), 100);
       Assert.assertEquals(readOptions.getTTL(), -1);
 
       // read missing item
       try {
-        index.getBlobReadInfo(new MockId("id4"));
+        index.getBlobReadInfo(new MockId("id4"), EnumSet.noneOf(StoreGetOptions.class));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
@@ -559,18 +560,23 @@ public class PersistentIndexTest {
       // read deleted item
       index.markAsDeleted(blobId2, new FileSpan(600, 700));
       try {
-        index.getBlobReadInfo(blobId2);
+        index.getBlobReadInfo(blobId2, EnumSet.noneOf(StoreGetOptions.class));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       // read ttl expired item
       try {
-        index.getBlobReadInfo(blobId3);
+        index.getBlobReadInfo(blobId3, EnumSet.noneOf(StoreGetOptions.class));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
       }
+      //  read ttl expired item with include expired flag
+      BlobReadOptions blobOptionsForExpired =
+          index.getBlobReadInfo(blobId3, EnumSet.of(StoreGetOptions.Store_Include_Expired));
+      Assert.assertEquals(blobOptionsForExpired.getOffset(), 300);
+      Assert.assertEquals(blobOptionsForExpired.getSize(), 300);
 
       // try to delete or update a missing blob
       try {
