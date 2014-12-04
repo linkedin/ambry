@@ -1,5 +1,6 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,7 +24,7 @@ public class Datacenter {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject)
+  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Datacenter " + jsonObject.toString());
@@ -33,7 +34,7 @@ public class Datacenter {
 
     this.dataNodes = new ArrayList<DataNode>(jsonObject.getJSONArray("dataNodes").length());
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
-      this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i)));
+      this.dataNodes.add(new DataNode(this, jsonObject.getJSONArray("dataNodes").getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
     validate();

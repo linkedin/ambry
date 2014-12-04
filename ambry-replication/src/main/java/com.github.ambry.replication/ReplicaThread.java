@@ -15,6 +15,7 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ChannelOutput;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
@@ -313,7 +314,7 @@ class ReplicaThread implements Runnable {
     connectedChannel.send(request);
     ChannelOutput channelOutput = connectedChannel.receive();
     ByteBufferInputStream byteBufferInputStream =
-        new ByteBufferInputStream(channelOutput.getInputStream(), (int)channelOutput.getStreamSize());
+        new ByteBufferInputStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
     logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
         remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
     ReplicaMetadataResponse response =
@@ -393,7 +394,7 @@ class ReplicaThread implements Runnable {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     for (MessageInfo messageInfo : messageInfoList) {
-      BlobId blobId = (BlobId)messageInfo.getStoreKey();
+      BlobId blobId = (BlobId) messageInfo.getStoreKey();
       if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
         throw new IllegalStateException("Blob id is not in the expected partition Actual partition " +
             blobId.getPartition() + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
@@ -512,7 +513,7 @@ class ReplicaThread implements Runnable {
     }
     GetRequest getRequest =
         new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
-            MessageFormatFlags.All, partitionRequestInfoList);
+            MessageFormatFlags.All, partitionRequestInfoList, GetOptions.None);
     long startTime = SystemTime.getInstance().milliseconds();
     connectedChannel.send(getRequest);
     ChannelOutput channelOutput = connectedChannel.receive();
@@ -543,7 +544,8 @@ class ReplicaThread implements Runnable {
    */
   private void writeMessagesToLocalStore(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode,
-      boolean remoteColo) throws IOException {
+      boolean remoteColo)
+      throws IOException {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
@@ -597,7 +599,7 @@ class ReplicaThread implements Runnable {
             }
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo);
-            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: ", remoteNode, threadName,
+            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           }
         } else {

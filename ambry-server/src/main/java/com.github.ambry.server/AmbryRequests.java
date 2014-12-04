@@ -28,6 +28,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.shared.DeleteRequest;
 import com.github.ambry.shared.DeleteResponse;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
@@ -47,6 +48,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
@@ -55,6 +57,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -238,7 +241,11 @@ public class AmbryRequests implements RequestAPI {
         } else {
           try {
             Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
-            StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds());
+            EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
+            if (getRequest.getGetOptions() == GetOptions.Include_Expired_Blobs) {
+              storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
+            }
+            StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory);
@@ -252,13 +259,13 @@ public class AmbryRequests implements RequestAPI {
                   "for partition " + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                  " for partition " + partitionRequestInfo.getPartition(), e);
               if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
                 metrics.ttlExpiredError.inc();
               } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
                 metrics.idDeletedError.inc();
               } else {
+                logger.error("Store exception on a get with error code " + e.getErrorCode() +
+                    " for partition " + partitionRequestInfo.getPartition(), e);
                 metrics.unExpectedStoreGetError.inc();
               }
             }
@@ -296,6 +303,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
+        metrics.getBlobAllProcessingTimeInMs.update(processingTime);
       }
     }
     sendGetResponse(requestResponseChannel, response, request, responseQueueTimeMeasurement,

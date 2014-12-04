@@ -4,7 +4,7 @@ package com.github.ambry.clustermap;
  * A DiskId stores {@link ReplicaId}s. Each DiskId is hosted on one specific {@link DataNodeId}. Each DiskId is uniquely
  * identified by its DataNodeId and mount path (the path to this Disk's device on its DataNode).
  */
-public interface DiskId {
+public interface DiskId extends Resource {
 
   /**
    * Gets the absolute path to the mounted device
@@ -26,10 +26,4 @@ public interface DiskId {
    * @return the raw capacity in bytes
    */
   public long getRawCapacityInBytes();
-
-  /**
-   * Performs the required action when the associated Disk encounters an error.
-   */
-  public void onDiskError();
 }
-

@@ -7,11 +7,9 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-
-import com.github.ambry.utils.SystemTime;
+import java.util.Set;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -27,6 +25,10 @@ public class OperationPolicyTest {
   final String datacenterAlpha = "alpha";
   final String datacenterBeta = "beta";
 
+  /**
+   * SerialOperationPolicy is used as the Policy for GetOperation
+   * @throws CoordinatorException
+   */
   @Test
   public void testSerialOperationPolicy()
       throws CoordinatorException {
@@ -38,7 +40,7 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       ReplicaId replicaId = op.getNextReplicaIdForSend();
       assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
@@ -55,7 +57,7 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 5; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -79,13 +81,13 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
       for (int i = 0; i < 3; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
         assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
-        replicasInFlight.put(replicaId, SystemTime.getInstance().milliseconds());
+        replicasInFlight.add(replicaId);
         assertFalse(op.sendMoreRequests(replicasInFlight));
         assertTrue(op.mayComplete());
         op.onFailedResponse(replicaId);
@@ -95,7 +97,7 @@ public class OperationPolicyTest {
       for (int i = 0; i < 3; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
         assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterBeta);
-        replicasInFlight.put(replicaId, SystemTime.getInstance().milliseconds());
+        replicasInFlight.add(replicaId);
         assertFalse(op.sendMoreRequests(replicasInFlight));
         assertTrue(op.mayComplete());
         op.onFailedResponse(replicaId);
@@ -119,13 +121,13 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 3);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
       for (int i = 0; i < 3; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
         assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
-        replicasInFlight.put(replicaId, SystemTime.getInstance().milliseconds());
+        replicasInFlight.add(replicaId);
         assertFalse(op.sendMoreRequests(replicasInFlight));
         assertTrue(op.mayComplete());
         op.onFailedResponse(replicaId);
@@ -151,7 +153,7 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 3; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -172,17 +174,18 @@ public class OperationPolicyTest {
   }
 
   @Test
-  public void testGetPolicy()
+  public void testGetTwoInParallelOperationPolicy()
       throws CoordinatorException {
     // Simple success test
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       ReplicaId replicaId = op.getNextReplicaIdForSend();
       assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
@@ -193,9 +196,10 @@ public class OperationPolicyTest {
 
     // One failure but still succeeds
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -204,12 +208,12 @@ public class OperationPolicyTest {
       assertTrue(op.sendMoreRequests(replicasInFlight));
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.mayComplete());
       assertTrue(op.sendMoreRequests(replicasInFlight));
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertTrue(op.mayComplete());
       assertFalse(op.sendMoreRequests(replicasInFlight));
 
@@ -227,13 +231,14 @@ public class OperationPolicyTest {
 
     // Many failures but still succeeds
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 5; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -252,25 +257,26 @@ public class OperationPolicyTest {
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
     // plus 1 for good luck in flight)
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -281,7 +287,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -292,7 +298,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId3 = op.getNextReplicaIdForSend();
       assertEquals(replicaId3.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId3, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId3);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -303,7 +309,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId4 = op.getNextReplicaIdForSend();
       assertEquals(replicaId4.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId4, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId4);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -314,7 +320,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId5 = op.getNextReplicaIdForSend();
       assertEquals(replicaId5.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId5, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId5);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -334,25 +340,26 @@ public class OperationPolicyTest {
 
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 3);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -363,7 +370,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -383,13 +390,14 @@ public class OperationPolicyTest {
 
     // Corruption test
     {
-      OperationPolicy op = new GetPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 3; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -414,13 +422,13 @@ public class OperationPolicyTest {
       throws CoordinatorException {
     // Simple success test. Requires 2 successes to complete
     {
-      OperationPolicy op = new PutPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       ReplicaId replicaId = op.getNextReplicaIdForSend();
       assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
@@ -439,13 +447,13 @@ public class OperationPolicyTest {
 
     // Failures but still succeed test
     {
-      OperationPolicy op = new PutPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 4; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -471,31 +479,31 @@ public class OperationPolicyTest {
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
     // plus 1 for good luck in flight)
     {
-      OperationPolicy op = new PutPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -506,7 +514,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId3 = op.getNextReplicaIdForSend();
       assertEquals(replicaId3.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId3, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId3);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -517,7 +525,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId4 = op.getNextReplicaIdForSend();
       assertEquals(replicaId4.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId4, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId4);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -528,7 +536,7 @@ public class OperationPolicyTest {
 
       ReplicaId replicaId5 = op.getNextReplicaIdForSend();
       assertEquals(replicaId5.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId5, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId5);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -548,31 +556,31 @@ public class OperationPolicyTest {
 
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op = new PutPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), false);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 3);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
       op.onFailedResponse(replicaId0);
@@ -600,7 +608,7 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       ReplicaId replicaId = op.getNextReplicaIdForSend();
       assertEquals(replicaId.getDataNodeId().getDatacenterName(), datacenterAlpha);
@@ -625,7 +633,7 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
       for (int i = 0; i < 4; i++) {
         ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -656,49 +664,49 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 6);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       System.out.println(op);
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       System.out.println(op);
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       System.out.println(op);
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       System.out.println(op);
       ReplicaId replicaId3 = op.getNextReplicaIdForSend();
       assertEquals(replicaId3.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId3, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId3);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       System.out.println(op);
       ReplicaId replicaId4 = op.getNextReplicaIdForSend();
       assertEquals(replicaId4.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId4, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId4);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       System.out.println(op);
       ReplicaId replicaId5 = op.getNextReplicaIdForSend();
       assertEquals(replicaId5.getDataNodeId().getDatacenterName(), datacenterBeta);
-      replicasInFlight.put(replicaId5, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId5);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -745,25 +753,25 @@ public class OperationPolicyTest {
       assertFalse(op.isComplete());
       assertEquals(op.getReplicaIdCount(), 3);
       assertTrue(op.mayComplete());
-      assertTrue(op.sendMoreRequests(new HashMap<ReplicaId, Long>()));
+      assertTrue(op.sendMoreRequests(new HashSet<ReplicaId>()));
 
-      Map<ReplicaId, Long> replicasInFlight = new HashMap<ReplicaId, Long>();
+      Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
       ReplicaId replicaId0 = op.getNextReplicaIdForSend();
       assertEquals(replicaId0.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId0, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId0);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId1 = op.getNextReplicaIdForSend();
       assertEquals(replicaId1.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId1, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId1);
       assertTrue(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
       ReplicaId replicaId2 = op.getNextReplicaIdForSend();
       assertEquals(replicaId2.getDataNodeId().getDatacenterName(), datacenterAlpha);
-      replicasInFlight.put(replicaId2, SystemTime.getInstance().milliseconds());
+      replicasInFlight.add(replicaId2);
       assertFalse(op.sendMoreRequests(replicasInFlight));
       assertTrue(op.mayComplete());
 
@@ -819,11 +827,6 @@ public class OperationPolicyTest {
     public int compareTo(PartitionId partitionId) {
       throw new IllegalStateException("Should not be invoked.");
     }
-
-    @Override
-    public void onPartitionReadOnly() {
-      throw new IllegalStateException("Should not be invoked.");
-    }
   }
 
   class OperationPolicyReplicaId implements ReplicaId {
@@ -870,6 +873,11 @@ public class OperationPolicyTest {
     @Override
     public DiskId getDiskId() {
       throw new IllegalStateException("Should not be invoked.");
+    }
+
+    @Override
+    public boolean isDown() {
+      return false;
     }
 
     @Override
@@ -944,11 +952,5 @@ public class OperationPolicyTest {
       }
       return compare;
     }
-
-    @Override
-    public void onNodeTimeout() {
-      throw new IllegalStateException("Should not be invoked.");
-    }
   }
 }
-

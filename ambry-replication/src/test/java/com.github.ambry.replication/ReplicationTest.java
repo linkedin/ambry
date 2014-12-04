@@ -33,6 +33,7 @@ import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -41,6 +42,7 @@ import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
+import java.util.EnumSet;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -171,7 +173,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public StoreInfo get(List<? extends StoreKey> ids)
+    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions)
         throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
@@ -499,12 +501,12 @@ public class ReplicationTest {
       Map<String, Map<PartitionId, List<ByteBuffer>>> replicaBuffers =
           new HashMap<String, Map<PartitionId, List<ByteBuffer>>>();
 
-      long partitionCount = clusterMap.getWritablePartitionIdsCount();
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       Map<PartitionId, List<MessageInfo>> messageInfoNode1 = new HashMap<PartitionId, List<MessageInfo>>();
       Map<PartitionId, List<MessageInfo>> messageInfoNode2 = new HashMap<PartitionId, List<MessageInfo>>();
       Map<PartitionId, List<ByteBuffer>> bufferListNode1 = new HashMap<PartitionId, List<ByteBuffer>>();
       Map<PartitionId, List<ByteBuffer>> bufferListNode2 = new HashMap<PartitionId, List<ByteBuffer>>();
-      for (int i = 0; i < partitionCount; i++) {
+      for (int i = 0; i < partitionIds.size(); i++) {
         List<MessageInfo> messageInfoListLocalReplica = new ArrayList<MessageInfo>();
         List<ByteBuffer> messageBufferListLocalReplica = new ArrayList<ByteBuffer>();
 
@@ -512,7 +514,7 @@ public class ReplicationTest {
         List<ByteBuffer> messageBufferListLocalReplica2 = new ArrayList<ByteBuffer>();
 
         for (int j = 0; j < 10; j++) {
-          BlobId id = new BlobId(clusterMap.getWritablePartitionIdAt(i));
+          BlobId id = new BlobId(partitionIds.get(i));
           messageInfoListLocalReplica.add(new MessageInfo(id, 1000));
           messageInfoListRemoteReplica2.add(new MessageInfo(id, 1000));
           byte[] bytes = new byte[1000];
@@ -523,7 +525,7 @@ public class ReplicationTest {
 
         // add additional messages to replica 2
         for (int j = 10; j < 15; j++) {
-          BlobId id = new BlobId(clusterMap.getWritablePartitionIdAt(i));
+          BlobId id = new BlobId(partitionIds.get(i));
           messageInfoListRemoteReplica2.add(new MessageInfo(id, 1000));
           byte[] bytes = new byte[1000];
           new Random().nextBytes(bytes);
@@ -531,15 +533,15 @@ public class ReplicationTest {
         }
 
         // add an expired message to replica 2
-        BlobId idExpired = new BlobId(clusterMap.getWritablePartitionIdAt(i));
+        BlobId idExpired = new BlobId(partitionIds.get(i));
         messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, 1000, 1));
         byte[] bytesExpired = new byte[1000];
         new Random().nextBytes(bytesExpired);
         messageBufferListLocalReplica2.add(ByteBuffer.wrap(bytesExpired));
-        messageInfoNode1.put(clusterMap.getWritablePartitionIdAt(i), messageInfoListLocalReplica);
-        bufferListNode1.put(clusterMap.getWritablePartitionIdAt(i), messageBufferListLocalReplica);
-        messageInfoNode2.put(clusterMap.getWritablePartitionIdAt(i), messageInfoListRemoteReplica2);
-        bufferListNode2.put(clusterMap.getWritablePartitionIdAt(i), messageBufferListLocalReplica2);
+        messageInfoNode1.put(partitionIds.get(i), messageInfoListLocalReplica);
+        bufferListNode1.put(partitionIds.get(i), messageBufferListLocalReplica);
+        messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
+        bufferListNode2.put(partitionIds.get(i), messageBufferListLocalReplica2);
       }
       replicaStores.put("localhost" + 64423, messageInfoNode2);
       replicaBuffers.put("localhost" + 64423, bufferListNode2);

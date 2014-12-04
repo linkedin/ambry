@@ -107,10 +107,8 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoProcessMetadataResponseTime"));
     intraColoProcessMetadataResponseTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoProcessMetadataResponseTime"));
-    interColoGetRequestTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
-    intraColoGetRequestTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
+    interColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
+    intraColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
     interColoBatchStoreWriteTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoBatchStoreWriteTime"));
     intraColoBatchStoreWriteTime =

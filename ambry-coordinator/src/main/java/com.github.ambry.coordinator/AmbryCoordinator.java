@@ -16,6 +16,7 @@ import com.github.ambry.shared.ConnectionPoolFactory;
 import com.github.ambry.shared.LoggingNotificationSystem;
 import com.github.ambry.shared.ResponseFailureHandler;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +44,6 @@ public class AmbryCoordinator implements Coordinator {
   private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
-  private int nodeTimeoutMs;
   private int connectionPoolCheckoutTimeout;
 
   private JmxReporter reporter = null;
@@ -89,7 +89,6 @@ public class AmbryCoordinator implements Coordinator {
             "Coordinator cannot start.");
       }
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
-      this.nodeTimeoutMs = coordinatorConfig.nodeTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
@@ -142,16 +141,17 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled, coordinatorMetrics,
+        responseFailureHandler);
   }
 
   private PartitionId getPartitionForPut()
       throws CoordinatorException {
-    if (clusterMap.getWritablePartitionIdsCount() < 1) {
+    List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
+    if (partitions.isEmpty()) {
       throw new CoordinatorException("No writable partitions available.", CoordinatorError.AmbryUnavailable);
     }
-    long index = getRandomLong(randomForPartitionSelection, clusterMap.getWritablePartitionIdsCount());
-    return clusterMap.getWritablePartitionIdAt(index);
+    return partitions.get((int) getRandomLong(randomForPartitionSelection, partitions.size()));
   }
 
   private BlobId getBlobIdFromString(String blobIdString)
@@ -174,9 +174,10 @@ public class AmbryCoordinator implements Coordinator {
   @Override
   public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
+    long startTimeInMs = System.currentTimeMillis();
     try {
       logger.trace("putBlob. " + blobProperties);
-      long startTimeInMs = System.currentTimeMillis();
+      coordinatorMetrics.putBlobOperationRate.mark();
 
       if (blobProperties == null) {
         logger.info("Caller passed in null blobProperties.");
@@ -197,114 +198,112 @@ public class AmbryCoordinator implements Coordinator {
       PartitionId partitionId = getPartitionForPut();
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
-          new PutOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler, getOperationContext(),
-              blobId, operationTimeoutMs, nodeTimeoutMs, blobProperties, userMetadata, blobStream);
+          new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata.array());
-      coordinatorMetrics.putBlobOperationRate.mark();
-      coordinatorMetrics.putBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
-
       return blobId.toString();
     } catch (CoordinatorException e) {
       logger.trace("putBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.PutBlob, e.getErrorCode());
       throw e;
+    } finally {
+      coordinatorMetrics.putBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   @Override
   public void deleteBlob(String blobIdString)
       throws CoordinatorException {
+    long startTimeInMs = System.currentTimeMillis();
     try {
       logger.trace("deleteBlob. " + blobIdString);
-      long startTimeInMs = System.currentTimeMillis();
-
+      coordinatorMetrics.deleteBlobOperationRate.mark();
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
-          new DeleteOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-          getOperationContext(), blobId,
-          operationTimeoutMs, nodeTimeoutMs);
+          new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
-      coordinatorMetrics.deleteBlobOperationRate.mark();
-      coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     } catch (CoordinatorException e) {
       logger.trace("deleteBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.DeleteBlob, e.getErrorCode());
       throw e;
+    } finally {
+      coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   @Override
   public BlobProperties getBlobProperties(String blobIdString)
       throws CoordinatorException {
+
+    long startTimeInMs = System.currentTimeMillis();
     try {
       logger.trace("getBlobProperties. " + blobIdString);
-      long startTimeInMs = System.currentTimeMillis();
+      coordinatorMetrics.getBlobPropertiesOperationRate.mark();
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
-          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gbpo.execute();
-
-      coordinatorMetrics.getBlobPropertiesOperationRate.mark();
-      coordinatorMetrics.getBlobPropertiesOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
-
       return gbpo.getBlobProperties();
     } catch (CoordinatorException e) {
       logger.trace("getBlobProperties re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobProperties, e.getErrorCode());
       throw e;
+    } finally {
+      coordinatorMetrics.getBlobPropertiesOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   @Override
   public ByteBuffer getBlobUserMetadata(String blobIdString)
       throws CoordinatorException {
+    long startTimeInMs = System.currentTimeMillis();
     try {
       logger.trace("getBlobUserMetadata. " + blobIdString);
-      long startTimeInMs = System.currentTimeMillis();
+      coordinatorMetrics.getBlobUserMetadataOperationRate.mark();
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
-          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gumo.execute();
-
-      coordinatorMetrics.getBlobUserMetadataOperationRate.mark();
-      coordinatorMetrics.getBlobUserMetadataOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
-
       return gumo.getUserMetadata();
     } catch (CoordinatorException e) {
       logger.trace("getBlobUserMetadata re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobUserMetadata, e.getErrorCode());
       throw e;
+    } finally {
+      coordinatorMetrics.getBlobUserMetadataOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   @Override
   public BlobOutput getBlob(String blobIdString)
       throws CoordinatorException {
+
+    long startTimeInMs = System.currentTimeMillis();
     try {
       logger.trace("getBlob. " + blobIdString);
-      long startTimeInMs = System.currentTimeMillis();
+      coordinatorMetrics.getBlobOperationRate.mark();
 
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
-          new GetBlobOperation(datacenterName, connectionPool, requesterPool, responseFailureHandler,
-              getOperationContext(), blobId, operationTimeoutMs, nodeTimeoutMs, clusterMap);
+          new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
+              operationTimeoutMs, clusterMap);
       gbdo.execute();
-
-      coordinatorMetrics.getBlobOperationRate.mark();
-      coordinatorMetrics.getBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
 
       return gbdo.getBlobOutput();
     } catch (CoordinatorException e) {
       logger.trace("getBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlob, e.getErrorCode());
       throw e;
+    } finally {
+      coordinatorMetrics.getBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
 }

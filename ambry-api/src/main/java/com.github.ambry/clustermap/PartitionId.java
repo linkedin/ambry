@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * A PartitionId consists of one or more {@link ReplicaId}s. A PartitionId is uniquely identified by an ID.
  */
-public abstract class PartitionId implements Comparable<PartitionId> {
+public abstract class PartitionId implements Resource, Comparable<PartitionId> {
   /**
    * Serializes the ID of this PartitionId to bytes.
    *
@@ -34,10 +34,4 @@ public abstract class PartitionId implements Comparable<PartitionId> {
    * @return True, if the partitions match, false otherwise
    */
   public abstract boolean isEqual(String partitionId);
-
-  /**
-   * Performs the required action when an operation on the associated Partition receives a Partition_ReadOnly error.
-   */
-  public abstract void onPartitionReadOnly();
 }
-

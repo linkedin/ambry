@@ -2,12 +2,15 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
  * Metrics for ClusterMap (HardwareLayout & PartitionLayout)
  */
-public class ClusterMapMetrics {
+class ClusterMapMetrics {
+  private MetricRegistry registry;
   private final HardwareLayout hardwareLayout;
   private final PartitionLayout partitionLayout;
 
@@ -17,12 +20,16 @@ public class ClusterMapMetrics {
   public final Gauge<Long> datacenterCount;
   public final Gauge<Long> dataNodeCount;
   public final Gauge<Long> diskCount;
+
   public final Gauge<Long> dataNodesHardUpCount;
   public final Gauge<Long> dataNodesHardDownCount;
-  public final Gauge<Long> dataNodesSoftDownCount;
+  public final Gauge<Long> dataNodesUnavailableCount;
+  public List<Gauge<Long>> dataNodeStateList;
+
   public final Gauge<Long> disksHardUpCount;
   public final Gauge<Long> disksHardDownCount;
-  public final Gauge<Long> disksSoftDownCount;
+  public final Gauge<Long> disksUnavailableCount;
+  public List<Gauge<Long>> diskStateList;
 
   public final Gauge<Long> partitionCount;
   public final Gauge<Long> partitionsReadWrite;
@@ -33,6 +40,7 @@ public class ClusterMapMetrics {
   public final Gauge<Long> allocatedUsableCapacityInBytes;
 
   public ClusterMapMetrics(HardwareLayout hardwareLayout, PartitionLayout partitionLayout, MetricRegistry registry) {
+    this.registry = registry;
     this.hardwareLayout = hardwareLayout;
     this.partitionLayout = partitionLayout;
 
@@ -87,10 +95,10 @@ public class ClusterMapMetrics {
         return countDataNodesInHardState(HardwareState.UNAVAILABLE);
       }
     };
-    this.dataNodesSoftDownCount = new Gauge<Long>() {
+    this.dataNodesUnavailableCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countSoftDownDataNodes();
+        return countUnavailableDataNodes();
       }
     };
     this.disksHardUpCount = new Gauge<Long>() {
@@ -105,18 +113,18 @@ public class ClusterMapMetrics {
         return countDisksInHardState(HardwareState.UNAVAILABLE);
       }
     };
-    this.disksSoftDownCount = new Gauge<Long>() {
+    this.disksUnavailableCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return countSoftDownDisks();
+        return countUnavailableDisks();
       }
     };
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardUpCount"), dataNodesHardUpCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardDownCount"), dataNodesHardDownCount);
-    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesSoftDownCount"), dataNodesSoftDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesUnavailableCount"), dataNodesUnavailableCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "disksHardUpCount"), disksHardUpCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "disksHardDownCount"), disksHardDownCount);
-    registry.register(MetricRegistry.name(ClusterMap.class, "disksSoftDownCount"), disksSoftDownCount);
+    registry.register(MetricRegistry.name(ClusterMap.class, "disksUnavailableCount"), disksUnavailableCount);
 
     // Metrics based on PartitionLayout
 
@@ -165,6 +173,44 @@ public class ClusterMapMetrics {
         .register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
     registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"),
         allocatedUsableCapacityInBytes);
+
+    dataNodeStateList = new ArrayList<Gauge<Long>>();
+    diskStateList = new ArrayList<Gauge<Long>>();
+
+    for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+      for (DataNode dataNode : datacenter.getDataNodes()) {
+        addDataNodeToStateMetrics(dataNode);
+        for (Disk disk : dataNode.getDisks()) {
+          addDiskToStateMetrics(disk);
+        }
+      }
+    }
+  }
+
+  private void addDataNodeToStateMetrics(final DataNode dataNode) {
+    final String metricName = dataNode.getHostname() + "-" + dataNode.getPort() + "-ResourceState";
+    Gauge<Long> dataNodeState = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return dataNode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, metricName), dataNodeState);
+    dataNodeStateList.add(dataNodeState);
+  }
+
+  private void addDiskToStateMetrics(final Disk disk) {
+    final String metricName =
+        disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
+            + "-ResourceState";
+    Gauge<Long> diskState = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, metricName), diskState);
+    dataNodeStateList.add(diskState);
   }
 
   private long getHardwareLayoutVersion() {
@@ -191,16 +237,16 @@ public class ClusterMapMetrics {
     return hardwareLayout.getDataNodeInHardStateCount(hardwareState);
   }
 
-  private long countSoftDownDataNodes() {
-    return hardwareLayout.calculateSoftDownDataNodeCount();
+  private long countUnavailableDataNodes() {
+    return hardwareLayout.calculateUnavailableDataNodeCount();
   }
 
   private long countDisksInHardState(HardwareState hardwareState) {
     return hardwareLayout.getDiskInHardStateCount(hardwareState);
   }
 
-  private long countSoftDownDisks() {
-    return hardwareLayout.calculateSoftDownDiskCount();
+  private long countUnavailableDisks() {
+    return hardwareLayout.calculateUnavailableDiskCount();
   }
 
   private long countPartitions() {

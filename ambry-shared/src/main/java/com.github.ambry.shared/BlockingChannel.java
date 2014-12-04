@@ -115,7 +115,7 @@ public class BlockingChannel implements ConnectedChannel {
       if (read == -1) {
         throw new IOException("Could not read complete size from readChannel ");
       }
-      streamSizeBuffer.put((byte)read);
+      streamSizeBuffer.put((byte) read);
     }
     streamSizeBuffer.flip();
     return new ChannelOutput(readChannel, streamSizeBuffer.getLong() - 8);

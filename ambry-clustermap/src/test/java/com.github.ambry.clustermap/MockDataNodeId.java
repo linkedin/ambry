@@ -80,9 +80,7 @@ public class MockDataNodeId extends DataNodeId {
     return compare;
   }
 
-  @Override
   public void onNodeTimeout() {
     /* no-op for now */
   }
 }
-

@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.ClusterMapConfig;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.JSONException;
@@ -41,10 +42,10 @@ public class ClusterMapManager implements ClusterMap {
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath)
+  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath, ClusterMapConfig clusterMapConfig)
       throws IOException, JSONException {
     logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
-    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)));
+    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)), clusterMapConfig);
     this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
     this.metricRegistry = new MetricRegistry();
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
@@ -57,14 +58,15 @@ public class ClusterMapManager implements ClusterMap {
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
-  public List<? extends PartitionId> getAllPartitions() {
+  public List<PartitionId> getAllPartitions() {
     return partitionLayout.getPartitions();
   }
 
   // Implementation of ClusterMap interface
   // --------------------------------------
 
-  public List<? extends PartitionId> getWritablePartitionIds() {
+  @Override
+  public List<PartitionId> getWritablePartitionIds() {
     return partitionLayout.getWritablePartitions();
   }
 
@@ -72,16 +74,6 @@ public class ClusterMapManager implements ClusterMap {
   public PartitionId getPartitionIdFromStream(DataInputStream stream)
       throws IOException {
     return partitionLayout.getPartition(stream);
-  }
-
-  @Override
-  public long getWritablePartitionIdsCount() {
-    return getWritablePartitionIds().size();
-  }
-
-  @Override
-  public PartitionId getWritablePartitionIdAt(long index) {
-    return partitionLayout.getWritablePartitions().get((int) index);
   }
 
   @Override
@@ -102,8 +94,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public List<Replica> getReplicas(DataNodeId dataNodeId) {
     List<Replica> replicas = new ArrayList<Replica>();
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         if (replica.getDataNodeId().equals(dataNodeId)) {
           replicas.add(replica);
         }
@@ -143,8 +135,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -156,8 +148,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -169,8 +161,8 @@ public class ClusterMapManager implements ClusterMap {
 
   public long getAllocatedRawCapacityInBytes(Disk disk) {
     long allocatedRawCapacityInBytes = 0;
-    for (Partition partition : partitionLayout.getPartitions()) {
-      for (Replica replica : partition.getReplicas()) {
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk currentDisk = (Disk) replica.getDiskId();
         if (currentDisk.equals(disk)) {
           allocatedRawCapacityInBytes += replica.getCapacityInBytes();
@@ -348,16 +340,14 @@ public class ClusterMapManager implements ClusterMap {
     return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
   }
 
-  @Override
   public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
     switch (error) {
       case Disk_Error:
-        replicaId.getDiskId().onDiskError();
+        ((Disk) replicaId.getDiskId()).onDiskError();
       case Node_Timeout:
-        replicaId.getDataNodeId().onNodeTimeout();
+        ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
       case Partition_ReadOnly:
-        replicaId.getPartitionId().onPartitionReadOnly();
+        ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
     }
   }
 }
-

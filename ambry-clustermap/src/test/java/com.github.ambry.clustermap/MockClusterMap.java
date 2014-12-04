@@ -98,16 +98,12 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public long getWritablePartitionIdsCount() {
-    return partitions.size();
-  }
-
-  @Override
-  public PartitionId getWritablePartitionIdAt(long index) {
-    if (index < 0 || index >= partitions.size()) {
-      throw new IndexOutOfBoundsException("argument invalid");
+  public List<PartitionId> getWritablePartitionIds() {
+    List<PartitionId> partitionIdList = new ArrayList<PartitionId>();
+    for (PartitionId partitionId : partitions.values()) {
+      partitionIdList.add(partitionId);
     }
-    return partitions.get(index);
+    return partitionIdList;
   }
 
   @Override
@@ -173,15 +169,14 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  @Override
   public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
     switch (error) {
       case Disk_Error:
-        replicaId.getDiskId().onDiskError();
+        ((Disk) replicaId.getDiskId()).onDiskError();
       case Node_Timeout:
-        replicaId.getDataNodeId().onNodeTimeout();
+        ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
       case Partition_ReadOnly:
-        replicaId.getPartitionId().onPartitionReadOnly();
+        ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
     }
   }
 }
@@ -261,11 +256,13 @@ class MockReplicaId implements ReplicaId {
       public long getRawCapacityInBytes() {
         return 100000;
       }
-
-      @Override
-      public void onDiskError() {
-      }
     };
+  }
+
+  @Override
+  public boolean isDown() {
+    return getDataNodeId().getState() == HardwareState.UNAVAILABLE
+        || getDiskId().getState() == HardwareState.UNAVAILABLE;
   }
 
   @Override
@@ -281,4 +278,3 @@ class MockReplicaId implements ReplicaId {
     replicaDir.delete();
   }
 }
-

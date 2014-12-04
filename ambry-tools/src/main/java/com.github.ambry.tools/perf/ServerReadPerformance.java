@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
@@ -17,6 +18,7 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
@@ -100,7 +102,8 @@ public class ServerReadPerformance {
       }
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath);
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
@@ -143,7 +146,8 @@ public class ServerReadPerformance {
             partitionRequestInfoList.clear();
             PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
-            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList);
+            GetRequest getRequest =
+                new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
             channel = connectionPool
                 .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                     10000);
@@ -182,7 +186,8 @@ public class ServerReadPerformance {
             partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestProperties =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                    GetOptions.None);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
             InputStream receivePropertyStream = channel.receive().getInputStream();
@@ -195,7 +200,8 @@ public class ServerReadPerformance {
             partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestUserMetadata =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
+                    GetOptions.None);
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);

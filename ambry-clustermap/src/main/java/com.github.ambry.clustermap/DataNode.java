@@ -1,5 +1,7 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,14 +25,13 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
-  private final HardwareState hardState;
-  private HardwareState softState;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
+  private final ResourceStatePolicy dataNodeStatePolicy;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public DataNode(Datacenter datacenter, JSONObject jsonObject)
+  public DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("DataNode " + jsonObject.toString());
@@ -39,12 +40,20 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.hardState = HardwareState.valueOf(jsonObject.getString("hardwareState"));
-    this.softState = hardState;
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
+          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+              HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
+      this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error creating resource state policy when instantiating a datanode " + e);
+      throw new IllegalStateException(
+          "Error creating resource state policy when instantiating a datanode: " + hostname + " " + port, e);
+    }
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
     for (int i = 0; i < diskJSONArray.length(); ++i) {
-      this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i)));
+      this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
 
@@ -84,22 +93,15 @@ public class DataNode extends DataNodeId {
 
   @Override
   public HardwareState getState() {
-    if (hardState == HardwareState.UNAVAILABLE) {
-      return HardwareState.UNAVAILABLE;
-    }
-    return softState;
+    return dataNodeStatePolicy.isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
-  public boolean isSoftDown() {
-    return (hardState == HardwareState.AVAILABLE && softState == HardwareState.UNAVAILABLE);
+  public void onNodeTimeout() {
+    dataNodeStatePolicy.onError();
   }
 
-  public void setSoftState(HardwareState hardwareState) {
-    if (hardState == HardwareState.AVAILABLE) {
-      softState = hardwareState;
-    } else {
-      logger.warn("Tried to set soft state " + this.toString() + " when hard state is not " + HardwareState.AVAILABLE);
-    }
+  public boolean isDown() {
+    return dataNodeStatePolicy.isDown();
   }
 
   @Override
@@ -162,7 +164,8 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port).put("hardwareState", hardState)
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port)
+        .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
@@ -212,10 +215,4 @@ public class DataNode extends DataNodeId {
     }
     return compare;
   }
-
-  @Override
-  public void onNodeTimeout() {
-    // @todo: Maintain state and handle node unreachable error. Note that this method could be accessed concurrently.
-  }
 }
-

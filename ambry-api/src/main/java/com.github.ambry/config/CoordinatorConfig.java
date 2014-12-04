@@ -28,16 +28,8 @@ public class CoordinatorConfig {
    * Timeout for operations that the coordinator issues.
    */
   @Config("coordinator.operation.timeout.ms")
-  @Default("10000")
+  @Default("2000")
   public final int operationTimeoutMs;
-
-  /**
-  * Duration for which a data node should be unresponsive in order to be considered as soft failed when the operation
-  * times out.
-  */
-  @Config("coordinator.node.timeout.ms")
-  @Default("5000")
-  public final int nodeTimeoutMs;
 
   /**
    * The factory class the coordinator uses to create a connection pool.
@@ -50,7 +42,7 @@ public class CoordinatorConfig {
    * Timeout for checking out a connection from the connection pool
    */
   @Config("coordinator.connection.pool.checkout.timeout.ms")
-  @Default("2000")
+  @Default("1000")
   public final int connectionPoolCheckoutTimeoutMs;
 
   /**
@@ -66,14 +58,11 @@ public class CoordinatorConfig {
     this.requesterPoolSize =
         verifiableProperties.getIntInRange("coordinator.requester.pool.size", 100, 1, Integer.MAX_VALUE);
     this.operationTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 10000, 1, Integer.MAX_VALUE);
-      this.nodeTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.node.timeout.ms", 5000, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 2000, 1, Integer.MAX_VALUE);
     this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
         "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
-        verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 2000, 1, 5000);
+        verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
   }
 }
-

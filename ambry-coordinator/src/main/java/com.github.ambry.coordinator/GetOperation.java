@@ -7,14 +7,13 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
 import com.github.ambry.shared.RequestOrResponse;
 import com.github.ambry.shared.Response;
 import com.github.ambry.shared.ServerErrorCode;
-import com.github.ambry.shared.ResponseFailureHandler;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,11 +52,10 @@ public abstract class GetOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      ResponseFailureHandler responseFailureHandler, OperationContext oc, BlobId blobId, long operationTimeoutMs,
-      long nodeTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, responseFailureHandler, oc, blobId, operationTimeoutMs, nodeTimeoutMs,
-        new GetPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
+        new SerialOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -81,7 +79,8 @@ public abstract class GetOperation extends Operation {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
     partitionRequestInfoList.add(partitionRequestInfo);
-    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, partitionRequestInfoList);
+    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, partitionRequestInfoList,
+        GetOptions.None);
   }
 
   @Override
@@ -196,4 +195,3 @@ abstract class GetOperationRequest extends OperationRequest {
   protected abstract void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException;
 }
-
