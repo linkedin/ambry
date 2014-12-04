@@ -18,18 +18,22 @@ import java.util.List;
 public class GetRequest extends RequestOrResponse {
 
   private MessageFormatFlags flags;
+  private GetOptions getOptions;
   private List<PartitionRequestInfo> partitionRequestInfoList;
   private int sizeSent;
   private int totalPartitionRequestInfoListSize;
 
-  private static final int MessageFormat_Size_InBytes = 2;
+  private static final int MessageFormat_Size_In_Bytes = 2;
+  private static final int GetOptions_Size_In_Bytes = 2;
   private static final int Partition_Request_Info_List_Size = 4;
+  private static final short Get_Request_Version = 2;
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
-      List<PartitionRequestInfo> partitionRequestInfoList) {
-    super(RequestOrResponseType.GetRequest, Request_Response_Version, correlationId, clientId);
+      List<PartitionRequestInfo> partitionRequestInfoList, GetOptions getOptions) {
+    super(RequestOrResponseType.GetRequest, Get_Request_Version, correlationId, clientId);
 
     this.flags = flags;
+    this.getOptions = getOptions;
     if (partitionRequestInfoList == null) {
       throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
@@ -48,6 +52,10 @@ public class GetRequest extends RequestOrResponse {
     return partitionRequestInfoList;
   }
 
+  public GetOptions getGetOptions() {
+    return getOptions;
+  }
+
   public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
     RequestOrResponseType type = RequestOrResponseType.GetRequest;
@@ -62,8 +70,12 @@ public class GetRequest extends RequestOrResponse {
       PartitionRequestInfo partitionRequestInfo = PartitionRequestInfo.readFrom(stream, clusterMap);
       partitionRequestInfoList.add(partitionRequestInfo);
     }
+    GetOptions getOption = GetOptions.None;
+    if (versionId == Get_Request_Version) {
+      getOption = GetOptions.values()[stream.readShort()];
+    }
     // ignore version for now
-    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList);
+    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption);
   }
 
   @Override
@@ -77,6 +89,7 @@ public class GetRequest extends RequestOrResponse {
       for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
         partitionRequestInfo.writeTo(bufferToSend);
       }
+      bufferToSend.putShort((short) getOptions.ordinal());
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -93,8 +106,8 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + message format size + partition request info size + total partition request info list size
-    return super.sizeInBytes() + MessageFormat_Size_InBytes +
-        Partition_Request_Info_List_Size + totalPartitionRequestInfoListSize;
+    return super.sizeInBytes() + MessageFormat_Size_In_Bytes +
+        Partition_Request_Info_List_Size + totalPartitionRequestInfoListSize + GetOptions_Size_In_Bytes;
   }
 
   @Override
@@ -105,6 +118,7 @@ public class GetRequest extends RequestOrResponse {
       sb.append(partitionRequestInfo.toString());
     }
     sb.append(", ").append("MessageFormatFlags=").append(flags);
+    sb.append(", ").append("GetOptions=").append(getOptions);
     sb.append("]");
     return sb.toString();
   }

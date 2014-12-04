@@ -1,6 +1,5 @@
 package com.github.ambry.clustermap;
 
-
 /** ResourceStatePolicy is used to determine if the state of a resource is "up" or "down". For resources like data nodes
  *  and disks, up and down mean available and unavailable, respectively.
  */

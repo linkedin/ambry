@@ -106,7 +106,7 @@ public class BlobStore implements Store {
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
       Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(ids.size());
       for (StoreKey key : ids) {
-        BlobReadOptions readInfo = index.getBlobReadInfo(key);
+        BlobReadOptions readInfo = index.getBlobReadInfo(key, storeGetOptions);
         readOptions.add(readInfo);
         indexMessages.put(key, new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
       }

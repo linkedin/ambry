@@ -18,6 +18,7 @@ import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.BlockingChannelConnectionPool;
 import com.github.ambry.shared.ConnectedChannel;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
@@ -145,7 +146,8 @@ public class ServerReadPerformance {
             partitionRequestInfoList.clear();
             PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
-            GetRequest getRequest = new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList);
+            GetRequest getRequest =
+                new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
             channel = connectionPool
                 .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                     10000);
@@ -184,7 +186,8 @@ public class ServerReadPerformance {
             partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestProperties =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                    GetOptions.None);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
             InputStream receivePropertyStream = channel.receive().getInputStream();
@@ -197,7 +200,8 @@ public class ServerReadPerformance {
             partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestUserMetadata =
-                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList);
+                new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
+                    GetOptions.None);
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);

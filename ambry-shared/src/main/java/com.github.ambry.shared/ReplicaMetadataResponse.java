@@ -71,8 +71,7 @@ public class ReplicaMetadataResponse extends Response {
       return new ReplicaMetadataResponse(correlationId, clientId, error);
     } else {
       // ignore version for now
-      return new ReplicaMetadataResponse(correlationId, clientId, error,
-          replicaMetadataResponseInfoList);
+      return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList);
     }
   }
 

@@ -25,8 +25,8 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private List<MessageInfo> streamInfo;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo,
-      long maxWriteTimeInMs, boolean materializeStream)
+  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, long maxWriteTimeInMs,
+      boolean materializeStream)
       throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
@@ -35,8 +35,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
     this.maxWriteTimeInMs = maxWriteTimeInMs;
     this.streamInfo = streamInfo;
     if (materializeStream) {
-      ByteBufferInputStream byteBufferInputStream =
-          new ByteBufferInputStream(stream, (int) sizeToWrite);
+      ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(stream, (int) sizeToWrite);
       streamToWrite = byteBufferInputStream;
     } else {
       streamToWrite = stream;

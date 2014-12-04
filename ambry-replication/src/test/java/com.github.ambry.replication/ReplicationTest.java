@@ -33,6 +33,7 @@ import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -41,6 +42,7 @@ import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
+import java.util.EnumSet;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -171,7 +173,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public StoreInfo get(List<? extends StoreKey> ids)
+    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions)
         throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();

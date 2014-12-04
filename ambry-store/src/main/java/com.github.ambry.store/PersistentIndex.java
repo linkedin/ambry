@@ -307,8 +307,8 @@ public class PersistentIndex {
       throws StoreException {
     final Timer.Context context = metrics.findTime.time();
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> descendMap = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : descendMap.entrySet()) {
+      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapsToFind = indexes.descendingMap();
+      for (Map.Entry<Long, IndexSegment> entry : segmentsMapsToFind.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -335,6 +335,8 @@ public class PersistentIndex {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
     IndexValue newValue =
         new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getTimeToLiveInMs());
@@ -356,8 +358,7 @@ public class PersistentIndex {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index) && !getOptions
-        .contains(StoreGetOptions.Store_Ignore_Deleted)) {
+    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     } else if (value.isExpired() && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);

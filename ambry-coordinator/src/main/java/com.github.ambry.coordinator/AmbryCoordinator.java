@@ -208,8 +208,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.trace("putBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.PutBlob, e.getErrorCode());
       throw e;
-    }
-    finally {
+    } finally {
       coordinatorMetrics.putBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
@@ -231,8 +230,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.trace("deleteBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.DeleteBlob, e.getErrorCode());
       throw e;
-    }
-    finally {
+    } finally {
       coordinatorMetrics.deleteBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
@@ -256,8 +254,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.trace("getBlobProperties re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobProperties, e.getErrorCode());
       throw e;
-    }
-    finally {
+    } finally {
       coordinatorMetrics.getBlobPropertiesOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
@@ -280,8 +277,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.trace("getBlobUserMetadata re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlobUserMetadata, e.getErrorCode());
       throw e;
-    }
-    finally {
+    } finally {
       coordinatorMetrics.getBlobUserMetadataOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }
@@ -301,14 +297,12 @@ public class AmbryCoordinator implements Coordinator {
               operationTimeoutMs, clusterMap);
       gbdo.execute();
 
-
       return gbdo.getBlobOutput();
     } catch (CoordinatorException e) {
       logger.trace("getBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlob, e.getErrorCode());
       throw e;
-    }
-    finally {
+    } finally {
       coordinatorMetrics.getBlobOperationLatencyInMs.update(System.currentTimeMillis() - startTimeInMs);
     }
   }

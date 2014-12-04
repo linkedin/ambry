@@ -15,5 +15,5 @@ public enum StoreGetOptions {
    * marked for deletion as long as the message has not been physically deleted from the
    * store.
    */
-  Store_Ignore_Deleted
+  Store_Include_Deleted
 }
