@@ -127,7 +127,9 @@ public class DataNodeTest {
       throws JSONException, InterruptedException {
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    Properties props = new Properties();
+    props.setProperty("clustermap.fixedtimeout.datanode.retry.backoff.ms", Integer.toString(2000));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     long windowMs = clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs;
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
     long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;

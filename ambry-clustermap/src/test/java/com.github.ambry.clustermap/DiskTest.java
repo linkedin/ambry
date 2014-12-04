@@ -2,7 +2,9 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+
 import java.util.Properties;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -110,7 +112,9 @@ public class DiskTest {
   public void testDiskSoftState()
       throws JSONException, InterruptedException {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    Properties props = new Properties();
+    props.setProperty("clustermap.fixedtimeout.disk.retry.backoff.ms", Integer.toString(2000));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     long windowMs = clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs;
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold;
