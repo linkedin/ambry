@@ -86,8 +86,8 @@ public class Log implements Write, Read {
     return bytesWritten;
   }
 
-  @Override
-  public long appendFrom(ReadableByteChannel channel, long size)
+ @Override
+  public void appendFrom(ReadableByteChannel channel, long size)
       throws IOException {
     logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {}", file.getAbsolutePath(),
         currentWriteOffset, capacityInBytes, size);
@@ -96,11 +96,13 @@ public class Log implements Write, Read {
       throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to append to log " +
           "from channel since new data size " + size + "exceeds total log size " + capacityInBytes);
     }
-    long bytesWritten = fileChannel.transferFrom(channel, currentWriteOffset.get(), size);
+    long bytesWritten = 0;
+    while(bytesWritten < size) {
+      bytesWritten += fileChannel.transferFrom(channel, currentWriteOffset.get() + bytesWritten, size - bytesWritten);
+    }
     currentWriteOffset.addAndGet(bytesWritten);
     logger.trace("Log : {} bytes appended to the log from read channel bytesWritten: {}", file.getAbsolutePath(),
         bytesWritten);
-    return bytesWritten;
   }
 
   /**

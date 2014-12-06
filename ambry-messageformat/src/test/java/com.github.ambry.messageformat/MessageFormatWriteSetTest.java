@@ -33,10 +33,9 @@ public class MessageFormatWriteSetTest {
     }
 
     @Override
-    public long appendFrom(ReadableByteChannel channel, long size)
+    public void appendFrom(ReadableByteChannel channel, long size)
         throws IOException {
       channel.read(buf);
-      return size;
     }
 
     public ByteBuffer getBuffer() {
@@ -55,7 +54,7 @@ public class MessageFormatWriteSetTest {
     infoList.add(info1);
     infoList.add(info2);
     MessageFormatWriteSet set =
-        new MessageFormatWriteSet(new ByteBufferInputStream(ByteBuffer.wrap(buf)), infoList, 10000, false);
+        new MessageFormatWriteSet(new ByteBufferInputStream(ByteBuffer.wrap(buf)), infoList, false);
     MockWrite write = new MockWrite(2000);
     long written = set.writeTo(write);
     Assert.assertEquals(written, 2000);

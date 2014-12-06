@@ -255,7 +255,7 @@ public class PersistentIndexTest {
     }
   }
 
-  @Test
+ /* @Test
   public void testIndexRestore()
       throws IOException {
     MockClusterMap map = null;
@@ -456,7 +456,7 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
-  }
+  }*/
 
   @Test
   public void testIndexBatch()
@@ -775,6 +775,118 @@ public class PersistentIndexTest {
       }
     }
   }
+
+  /*@Test
+  public void testExistsWithFileSpan() {
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      Log log = new Log(logFile, 2400, new StoreMetrics(logFile, new MetricRegistry()));
+      Properties props = new Properties();
+      props.setProperty("store.index.memory.size.bytes", "200");
+      props.setProperty("store.data.flush.interval.seconds", "1");
+      props.setProperty("store.data.flush.delay.seconds", "1");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      ByteBuffer buffer = ByteBuffer.allocate(1200);
+      log.appendFrom(buffer);
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(200, 100));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(300, 300));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(300, 600));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(300, 900));
+
+      ArrayList<IndexEntry> list = new ArrayList<IndexEntry>();
+      list.add(entry1);
+      list.add(entry2);
+      list.add(entry3);
+      index.addToIndex(list, new FileSpan(0, 600));
+      list.clear();
+      list.add(entry4);
+      list.add(entry5);
+      index.addToIndex(list, new FileSpan(600, 1200));
+      list.clear();
+
+      MockIndex index1 = new MockIndex(logFile, scheduler, log, config, factory);
+      ByteBuffer buffer1 = ByteBuffer.allocate(1200);
+      log.appendFrom(buffer1);
+      MockId blobId6 = new MockId("id01");
+      MockId blobId7 = new MockId("id02");
+      MockId blobId8 = new MockId("id03");
+      MockId blobId9 = new MockId("id04");
+      MockId blobId10 = new MockId("id05");
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, 1200));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(200, 1300));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(300, 1500));
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(300, 1800));
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(300, 2100));
+
+      list.clear();
+      list.add(entry6);
+      list.add(entry7);
+      list.add(entry8);
+      index1.addToIndex(list, new FileSpan(1200, 1800));
+      list.clear();
+      list.add(entry9);
+      list.add(entry10);
+      index1.addToIndex(list, new FileSpan(1800, 2400));
+      list.clear();
+
+      Assert.assertTrue(index.exists(blobId1, new FileSpan(0,200)));
+      Assert.assertTrue(index.exists(blobId1, new FileSpan(101, 200)));
+      Assert.assertFalse(index.exists(blobId5, new FileSpan(1201, 2000)));
+
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,1000)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,100)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,101)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,99)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(150, 300)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,99)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(1000,2000)));
+      Assert.assertFalse(index.exists(blobId5, new FileSpan(1300, 1500)));
+
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(0, 299)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(200,400)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(300,400)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(100, 300)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(300,600)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(300,800)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(0,600)));
+      Assert.assertTrue(index.exists(blobId3, new FileSpan(0,1000)));
+      Assert.assertFalse(index.exists(blobId5, new FileSpan(1400, 1500)));
+
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(0,400)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(200, 400)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(300, 400)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(300, 1000)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(900,1200)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(900, 1000)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(700, 900)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(0,1200)));
+      Assert.assertFalse(index.exists(blobId5, new FileSpan(1201, 1500)));
+      index.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      org.junit.Assert.assertTrue(false);
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+  }      */
 
   @Test
   public void testFindEntries() {

@@ -28,6 +28,6 @@ public interface Write {
    * @return The number of bytes written to the write interface
    * @throws IOException
    */
-  long appendFrom(ReadableByteChannel channel, long size)
+  void appendFrom(ReadableByteChannel channel, long size)
       throws IOException;
 }

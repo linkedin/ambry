@@ -286,7 +286,7 @@ public class PersistentIndex {
   }
 
   /**
-   * Indicates if a key is present in the index
+   * Indicates if a key is present in the index. Searches through entire index
    * @param key The key to do the exist check against
    * @return True, if the key exist in the index. False, otherwise.
    * @throws StoreException
@@ -294,6 +294,57 @@ public class PersistentIndex {
   public boolean exists(StoreKey key)
       throws StoreException {
     return findKey(key) != null;
+  }
+
+  /**
+   * Indicates if a key is present in the index within the passed in filespan. Filespan represents
+   * the start offset and end offset
+   * @param key The key to do the exist check against
+   * @param fileSpan FileSpan which specifies the range within which search should be made
+   * @return True, if the key exist in the index within the filespan. False, otherwise.
+   * @throws StoreException
+   */
+  public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
+    final Timer.Context context = metrics.findTime.time();
+    System.out.println("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
+        " to " + fileSpan.getEndOffset());
+    logger.trace("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
+    " to " + fileSpan.getEndOffset());
+    try {
+      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = new ConcurrentSkipListMap<Long, IndexSegment>();
+      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
+        long startOffset = entry.getValue().getStartOffset();
+        long endOffSet = entry.getValue().getEndOffset();
+        if((fileSpan.getStartOffset() >= startOffset && fileSpan.getStartOffset() <= endOffSet) ||
+            (fileSpan.getEndOffset() >= startOffset && fileSpan.getEndOffset() <= endOffSet)){
+          interestedSegmentsMap.put(entry.getKey(), entry.getValue());
+        }
+      }
+
+      System.out.println("All segments: ");
+      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
+        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
+      }
+
+      System.out.println("Interested segments: ");
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
+        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
+      }
+      boolean foundValue = false;
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
+        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
+        IndexValue value = entry.getValue().find(key);
+        if (value != null) {
+          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
+              value.getTimeToLiveInMs());
+          foundValue = true;
+          break;
+        }
+     }
+      return foundValue;
+    }finally {
+      context.stop();
+    }
   }
 
   /**
@@ -668,9 +719,9 @@ public class PersistentIndex {
           // before iterating the map, get the current file end pointer
           Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
-          long fileEndPointerBeforeFlush = log.getLogEndOffset();
+          long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
 
-          // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+          //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
           long lastOffset = lastEntry.getKey();
@@ -688,7 +739,7 @@ public class PersistentIndex {
             Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-          currentInfo.writeIndexToFile(fileEndPointerBeforeFlush);
+          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush );
         }
       } catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
