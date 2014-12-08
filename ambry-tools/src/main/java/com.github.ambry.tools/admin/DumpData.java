@@ -7,7 +7,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.FindToken;
@@ -16,17 +15,17 @@ import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
-
-import java.io.*;
-import java.nio.channels.Channels;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
+import java.io.DataInputStream;
+import java.io.FileInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.io.File;
 
 
 /**
@@ -52,10 +51,6 @@ public class DumpData {
           parser.accepts("typeOfFile", "The type of file to read - log or index or replicatoken").withRequiredArg()
               .describedAs("The type of file").ofType(String.class).defaultsTo("log");
 
-      ArgumentAcceptingOptionSpec<String> ignoreErrorsOpt =
-              parser.accepts("ignoreErrors", "IgnoreErrors and proceed until end of log").withRequiredArg()
-                      .describedAs("To ignore errors or not").ofType(String.class).defaultsTo("falses");
-
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -77,7 +72,6 @@ public class DumpData {
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
       String fileToRead = options.valueOf(fileToReadOpt);
       String typeOfFile = options.valueOf(typeOfFileOpt);
-      boolean ignoreErrors = Boolean.parseBoolean(options.valueOf(ignoreErrorsOpt));
 
       System.out.println("File to read " + fileToRead);
       System.out.println("Type of file " + typeOfFile);
@@ -111,95 +105,40 @@ public class DumpData {
       } else if (typeOfFile.compareTo("log") == 0) {
         System.out.println("Dumping log");
         long currentOffset = 0;
-        RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
-        long fileSize = file.length();
-        while (currentOffset < fileSize) {
-          long startOffset = randomAccessFile.getChannel().position();
-          try{
-          short version = randomAccessFile.readShort();
-              String messageheader = null;
-              String id = null;
-              String blobProperty = null;
-              String usermetadata = null;
-              String blobOutput = null;
-
+        while (true) {
+          short version = stream.readShort();
           if (version == 1) {
             ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             buffer.putShort(version);
-            randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+            stream.read(buffer.array(), 2, buffer.capacity() - 2);
             buffer.clear();
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-            messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
+            System.out.println(" Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
                 " currentOffset " + currentOffset +
                 " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
                 " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
                 " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
-                " crc " + header.getCrc();
+                " crc " + header.getCrc());
             // read blob id
-            InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-            BlobId blobId = new BlobId(new DataInputStream(streamlog), map);
-            id = "Id - " + blobId.toString();
+            BlobId id = new BlobId(stream, map);
+            System.out.println("Id - " + id.toString());
             if (header.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-              blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
-                  " serviceId " + props.getServiceId();
-              ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-              usermetadata = " Metadata - size " + metadata.capacity();
-              BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
-              blobOutput = "Blob - size " + output.getSize();
+              BlobProperties props = MessageFormatRecord.deserializeBlobProperties(stream);
+              System.out.println(" Blob properties - blobSize  " + props.getBlobSize() +
+                  " serviceId " + props.getServiceId());
+              ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(stream);
+              System.out.println(" Metadata - size " + metadata.capacity());
+              BlobOutput output = MessageFormatRecord.deserializeBlob(stream);
+              System.out.println("Blob - size " + output.getSize());
             } else {
-              boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+              boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
               System.out.println("delete change " + deleteFlag);
             }
-              System.out.println(messageheader +"\n " + id + "\n" + blobProperty + "\n" +usermetadata +"\n" + blobOutput );
-            currentOffset += (header.getMessageSize() + buffer.capacity() + blobId.sizeInBytes());
+            currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
           }
         }
-          catch(IllegalArgumentException e) {
-            e.printStackTrace();
-            if(ignoreErrors) {
-              System.out.println("IllegalArgumentException at "+ randomAccessFile.getChannel().position()+
-                    ". Hence moving the offset to next byte from current offset "+(startOffset+1)) ;
-              currentOffset = startOffset + 1;
-              randomAccessFile.seek(currentOffset);
-            }
-            else{
-                System.exit(1);
-            }
-          }
-          catch(MessageFormatException e) {
-            e.printStackTrace();
-            if(ignoreErrors) {
-              System.out.println("MessageFormatException at " + randomAccessFile.getChannel().position() +
-                      ". Hence moving the offset to next byte from current offset " + (startOffset + 1)) ;
-              currentOffset = startOffset + 1;
-              randomAccessFile.seek(++startOffset);
-            }
-            else{
-                System.exit(1);
-            }
-
-          }
-          catch(EOFException e){
-            e.printStackTrace();
-            System.out.println("Exiting due to EOFException ");
-            System.exit(1);
-          }
-          catch(Exception e) {
-            e.printStackTrace();
-            if(ignoreErrors) {
-              System.out.println("Exception at "+ randomAccessFile.getChannel().position()+
-                      ". Hence moving the offset to next byte from current offset "+(startOffset+1));
-              currentOffset = startOffset+1;
-              randomAccessFile.seek(currentOffset);
-            }
-            else{
-              System.exit(1);
-            }
-          }
-      }
       } else if (typeOfFile.compareTo("replicatoken") == 0) {
         System.out.println("Dumping replica token");
         short version = stream.readShort();
