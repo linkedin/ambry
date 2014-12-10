@@ -437,8 +437,8 @@ class IndexSegment {
   public void writeIndexToFile(long safeEndPoint)
       throws IOException, StoreException {
     if (prevNumOfEntriesWritten != index.size()) {
-      if (safeEndPoint  > getEndOffset()) {
-        throw new StoreException("SafeEndOffSet " + safeEndPoint +" is greater than current end offset for current " +
+      if (safeEndPoint > getEndOffset()) {
+        throw new StoreException("SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " +
             "index segment " + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
       }
       File temp = new File(getFile().getAbsolutePath() + ".tmp");

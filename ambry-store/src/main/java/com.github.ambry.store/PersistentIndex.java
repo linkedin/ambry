@@ -304,16 +304,17 @@ public class PersistentIndex {
    * @return True, if the key exist in the index within the filespan. False, otherwise.
    * @throws StoreException
    */
-  public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
+  public boolean exists(StoreKey key, FileSpan fileSpan)
+      throws StoreException {
     final Timer.Context context = metrics.findTime.time();
-    logger.trace("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
-    " to " + fileSpan.getEndOffset());
+    logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
+        " to " + fileSpan.getEndOffset());
     try {
       Map.Entry<Long, IndexSegment> startEntry = indexes.floorEntry(fileSpan.getStartOffset());
       Map.Entry<Long, IndexSegment> endEntry = indexes.floorEntry(fileSpan.getEndOffset());
-      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = indexes.subMap(startEntry.getKey(), true,
-          endEntry.getKey(), true);
-
+      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
+          indexes.subMap(startEntry.getKey(), true, endEntry.getKey(), true);
+      metrics.subMapSizeUsedToCheckMultiplePuts.mark(interestedSegmentsMap.size());
       boolean foundValue = false;
       for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
@@ -324,9 +325,9 @@ public class PersistentIndex {
           foundValue = true;
           break;
         }
-     }
+      }
       return foundValue;
-    }finally {
+    } finally {
       context.stop();
     }
   }
@@ -723,7 +724,7 @@ public class PersistentIndex {
             Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush );
+          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
         }
       } catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);

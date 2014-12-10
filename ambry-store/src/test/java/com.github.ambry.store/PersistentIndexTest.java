@@ -255,7 +255,7 @@ public class PersistentIndexTest {
     }
   }
 
-  /*
+   /*
   @Test
   public void testIndexRestore()
       throws IOException {
@@ -457,7 +457,7 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
-  }                    */
+  }       */
 
   @Test
   public void testIndexBatch()
