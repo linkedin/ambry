@@ -57,9 +57,10 @@ public class Log implements Write, Read {
 
   public void setLogEndOffset(long endOffset)
       throws IOException {
-    if (endOffset < 0 || endOffset > fileChannel.size()) {
+    long fileSize = fileChannel.size();
+    if (endOffset < 0 || endOffset > fileSize) {
       throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " endOffset " + endOffset +
-          " outside the file size " + fileChannel.size());
+          " outside the file size " + fileSize);
     }
     fileChannel.position(endOffset);
     logger.trace("Log : {} setting log end offset {}", file.getAbsolutePath(), endOffset);

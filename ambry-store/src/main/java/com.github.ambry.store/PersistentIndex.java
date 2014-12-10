@@ -305,30 +305,14 @@ public class PersistentIndex {
    */
   public boolean exists(StoreKey key, FileSpan fileSpan) throws StoreException {
     final Timer.Context context = metrics.findTime.time();
-    System.out.println("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
-        " to " + fileSpan.getEndOffset());
     logger.trace("Searching for " + key +" in index with filespan ranging from " + fileSpan.getStartOffset() +
     " to " + fileSpan.getEndOffset());
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = new ConcurrentSkipListMap<Long, IndexSegment>();
-      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
-        long startOffset = entry.getValue().getStartOffset();
-        long endOffSet = entry.getValue().getEndOffset();
-        if((fileSpan.getStartOffset() >= startOffset && fileSpan.getStartOffset() <= endOffSet) ||
-            (fileSpan.getEndOffset() >= startOffset && fileSpan.getEndOffset() <= endOffSet)){
-          interestedSegmentsMap.put(entry.getKey(), entry.getValue());
-        }
-      }
+      Map.Entry<Long, IndexSegment> startEntry = indexes.floorEntry(fileSpan.getStartOffset());
+      Map.Entry<Long, IndexSegment> endEntry = indexes.floorEntry(fileSpan.getEndOffset());
+      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap = indexes.subMap(startEntry.getKey(), true,
+          endEntry.getKey(), true);
 
-      System.out.println("All segments: ");
-      for (Map.Entry<Long, IndexSegment> entry : indexes.entrySet()) {
-        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
-      }
-
-      System.out.println("Interested segments: ");
-      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
-        System.out.println(entry.getKey()+" "+ entry.getValue().getStartOffset()+" "+ entry.getValue().getEndOffset());
-      }
       boolean foundValue = false;
       for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
