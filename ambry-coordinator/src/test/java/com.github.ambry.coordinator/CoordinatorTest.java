@@ -153,7 +153,8 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    HardwareLayout hl =
+        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -237,7 +238,8 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    HardwareLayout hl =
+        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -355,7 +357,8 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    HardwareLayout hl =
+        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }
@@ -634,7 +637,8 @@ public class CoordinatorTest {
         "    ]\n" +
         "  }  \n";
 
-    HardwareLayout hl = new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    HardwareLayout hl =
+        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
     PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
     return new ClusterMapManager(pl);
   }

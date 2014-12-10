@@ -8,6 +8,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.shared.BlobId;
 import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.shared.GetOptions;
 import com.github.ambry.shared.GetRequest;
 import com.github.ambry.shared.GetResponse;
 import com.github.ambry.shared.PartitionRequestInfo;
@@ -90,7 +91,8 @@ public abstract class GetOperation extends Operation {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
     partitionRequestInfoList.add(partitionRequestInfo);
-    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, partitionRequestInfoList);
+    return new GetRequest(context.getCorrelationId(), context.getClientId(), flags, partitionRequestInfoList,
+        GetOptions.None);
   }
 
   @Override

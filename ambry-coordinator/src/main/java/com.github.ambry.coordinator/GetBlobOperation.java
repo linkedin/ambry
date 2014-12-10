@@ -66,7 +66,7 @@ final class GetBlobOperationRequest extends GetOperationRequest {
       GetBlobOperation getBlobOperation) {
     super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobOperation = getBlobOperation;
-    logger.trace("Created GetBlobOperationRequest for " + replicaId );
+    logger.trace("Created GetBlobOperationRequest for " + replicaId);
   }
 
   @Override

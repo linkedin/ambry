@@ -228,7 +228,7 @@ class MockBlockingChannel extends BlockingChannel {
     // consume the size header and return the remaining response.
     ByteBuffer streamSizeBuffer = ByteBuffer.allocate(8);
     while (streamSizeBuffer.position() < streamSizeBuffer.capacity()) {
-      streamSizeBuffer.put((byte)responseStream.read());
+      streamSizeBuffer.put((byte) responseStream.read());
     }
     streamSizeBuffer.flip();
     return new ChannelOutput(responseStream, streamSizeBuffer.getLong() - 8);

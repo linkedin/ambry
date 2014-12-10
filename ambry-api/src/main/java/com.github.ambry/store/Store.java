@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -19,10 +20,11 @@ public interface Store {
   /**
    * Returns the store info for the given ids
    * @param ids The list of ids whose messages need to be retrieved
+   * @param storeGetOptions A set of additional options that the store needs to use while getting the message
    * @return The store info for the given ids
    * @throws StoreException
    */
-  StoreInfo get(List<? extends StoreKey> ids)
+  StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
       throws StoreException;
 
   /**

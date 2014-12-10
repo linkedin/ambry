@@ -8,6 +8,7 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
+import java.util.EnumSet;
 import org.junit.Test;
 import org.junit.Assert;
 import com.codahale.metrics.MetricRegistry;
@@ -91,7 +92,7 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(blobId1);
       keys.add(blobId2);
-      StoreInfo info = store.get(keys);
+      StoreInfo info = store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
@@ -164,7 +165,7 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(blobId1);
       keys.add(blobId2);
-      StoreInfo info = store.get(keys);
+      StoreInfo info = store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
@@ -224,7 +225,7 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(blobId1);
       keys.add(blobId2);
-      StoreInfo info = store.get(keys);
+      StoreInfo info = store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
@@ -251,14 +252,14 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keysDeleted = new ArrayList<StoreKey>();
       keysDeleted.add(blobId1);
       try {
-        store.get(keysDeleted);
+        store.get(keysDeleted, EnumSet.noneOf(StoreGetOptions.class));
         Assert.assertEquals(false, true);
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.ID_Deleted);
       }
       keysDeleted.clear();
       keysDeleted.add(blobId2);
-      store.get(keysDeleted);
+      store.get(keysDeleted, EnumSet.noneOf(StoreGetOptions.class));
       Assert.assertEquals(true, true);
     } catch (Exception e) {
       Assert.assertEquals(false, true);
@@ -304,7 +305,7 @@ public class BlobStoreTest {
       ArrayList<StoreKey> keys = new ArrayList<StoreKey>();
       keys.add(blobId1);
       keys.add(blobId2);
-      StoreInfo info = store.get(keys);
+      StoreInfo info = store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
       MessageReadSet readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 2);
 
@@ -312,7 +313,7 @@ public class BlobStoreTest {
       store.shutdown();
 
       try {
-        store.get(keys);
+        store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Store_Not_Started);

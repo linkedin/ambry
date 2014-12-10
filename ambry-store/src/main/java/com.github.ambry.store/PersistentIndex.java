@@ -5,6 +5,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.EnumSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -341,8 +342,8 @@ public class PersistentIndex {
       throws StoreException {
     final Timer.Context context = metrics.findTime.time();
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> descendMap = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : descendMap.entrySet()) {
+      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToFind = indexes.descendingMap();
+      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToFind.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -369,6 +370,8 @@ public class PersistentIndex {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
     IndexValue newValue =
         new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getTimeToLiveInMs());
@@ -385,14 +388,14 @@ public class PersistentIndex {
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
    */
-  public BlobReadOptions getBlobReadInfo(StoreKey id)
+  public BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions)
       throws StoreException {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
-    } else if (value.isExpired()) {
+    } else if (value.isExpired() && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
@@ -523,8 +526,8 @@ public class PersistentIndex {
     } catch (IOException e) {
       throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
     } catch (Exception e) {
-      throw new StoreException("Unknown error when finding entries for index " + dataDir,
-          e, StoreErrorCodes.Unknown_Error);
+      throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
     }
   }
 
