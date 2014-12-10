@@ -1,7 +1,6 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -56,7 +55,7 @@ public abstract class GetOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        getOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+        new SerialOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -72,17 +71,6 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.AmbryUnavailable, 3);
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 4);
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
-  }
-
-  static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId,
-      boolean isCrossDCProxyCallEnabled) throws CoordinatorException{
-    OperationPolicy getOperationPolicy = null;
-    if (isCrossDCProxyCallEnabled) {
-      getOperationPolicy = new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, 2);
-    } else {
-      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, isCrossDCProxyCallEnabled);
-    }
-    return getOperationPolicy;
   }
 
   GetRequest makeGetRequest() {
