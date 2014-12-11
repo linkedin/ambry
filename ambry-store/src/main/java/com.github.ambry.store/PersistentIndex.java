@@ -317,7 +317,7 @@ public class PersistentIndex {
       Map.Entry<Long, IndexSegment> endEntry = indexes.floorEntry(fileSpan.getEndOffset());
       ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
           indexes.subMap(startEntry.getKey(), true, endEntry.getKey(), true);
-      metrics.subMapSizeUsedToCheckMultiplePuts.mark(interestedSegmentsMap.size());
+      metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
       boolean foundValue = false;
       for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());

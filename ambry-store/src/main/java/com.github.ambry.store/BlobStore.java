@@ -146,8 +146,7 @@ public class BlobStore implements Store {
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.exists(info.getStoreKey())) {
-          throw new StoreException("Key already exist in store during initial check. " + "Cannot be overwritten",
-              StoreErrorCodes.Already_Exist);
+          throw new StoreException("Key already exist in store", StoreErrorCodes.Already_Exist);
         }
       }
 
@@ -159,8 +158,7 @@ public class BlobStore implements Store {
           FileSpan fileSpan = new FileSpan(logEndOffsetBeforeCheck, currentLogEndOffset);
           for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
             if (index.exists(info.getStoreKey(), fileSpan)) {
-              throw new StoreException("Key already exist in store during redundant check. " + "cannot be overwritten",
-                  StoreErrorCodes.Already_Exist);
+              throw new StoreException("Key already exist on filespan check", StoreErrorCodes.Already_Exist);
             }
           }
         }

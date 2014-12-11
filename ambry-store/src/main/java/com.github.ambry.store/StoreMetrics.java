@@ -2,6 +2,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -28,7 +29,7 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public Gauge<Long> currentCapacityUsed;
-  public final Meter subMapSizeUsedToCheckMultiplePuts;
+  public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
   private final MetricRegistry registry;
   private final String name;
@@ -55,8 +56,8 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
-    subMapSizeUsedToCheckMultiplePuts =
-        registry.meter(MetricRegistry.name(IndexSegment.class, name + "-subMapSizeUsedToCheckMultiplePuts"));
+    segmentSizeForExists =
+        registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 
   public void initializeCapacityUsedMetric(final Log log, final long capacityInBytes) {

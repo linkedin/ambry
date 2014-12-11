@@ -255,7 +255,6 @@ public class PersistentIndexTest {
     }
   }
 
-
   @Test
   public void testIndexRestore()
       throws IOException {
