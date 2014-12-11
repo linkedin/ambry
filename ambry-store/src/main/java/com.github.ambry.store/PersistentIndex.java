@@ -159,8 +159,11 @@ public class PersistentIndex {
       this.scheduler.schedule("index persistor", persistor,
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+    } catch (StoreException e) {
+      throw e;
     } catch (Exception e) {
-      throw new StoreException("Error while creating index " + datadir, e, StoreErrorCodes.Index_Creation_Failure);
+      throw new StoreException("Unknown error while creating index " + datadir, e,
+          StoreErrorCodes.Index_Creation_Failure);
     }
   }
 
@@ -705,6 +708,11 @@ public class PersistentIndex {
           Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
           long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
+          long logEndOffsetBeforeFlush = log.getLogEndOffset();
+          if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
+            throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than " +
+                "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
+          }
 
           //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
