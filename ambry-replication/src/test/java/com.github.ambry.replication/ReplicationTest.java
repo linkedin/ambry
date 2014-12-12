@@ -125,11 +125,12 @@ public class ReplicationTest {
       }
 
       @Override
-      public long appendFrom(ReadableByteChannel channel, long size)
+      public void appendFrom(ReadableByteChannel channel, long size)
           throws IOException {
-        int tempIndex = index;
-        index++;
-        return channel.read(buflist.get(tempIndex));
+        int sizeRead = 0;
+        while(sizeRead < size) {
+          sizeRead += channel.read(buflist.get(index++));
+        }
       }
     }
 
