@@ -313,10 +313,10 @@ public class PersistentIndex {
     logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
         " to " + fileSpan.getEndOffset());
     try {
-      Map.Entry<Long, IndexSegment> startEntry = indexes.floorEntry(fileSpan.getStartOffset());
-      Map.Entry<Long, IndexSegment> endEntry = indexes.floorEntry(fileSpan.getEndOffset());
+      Long floorKey = indexes.floorEntry(fileSpan.getStartOffset()).getKey();
+      Long ceilKey = indexes.floorEntry(fileSpan.getEndOffset()).getKey();
       ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
-          indexes.subMap(startEntry.getKey(), true, endEntry.getKey(), true);
+          indexes.subMap(floorKey, true, ceilKey, true);
       metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
       boolean foundValue = false;
       for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
