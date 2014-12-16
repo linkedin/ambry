@@ -384,20 +384,19 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
 
   @Override
   public void onSuccessfulResponse(ReplicaId replicaId) {
-    successfulRequests.add(replicaId);
+    super.onSuccessfulResponse(replicaId);
     onReplicaResponse(replicaId);
   }
 
   @Override
   public void onCorruptResponse(ReplicaId replicaId) {
-    corruptRequests.add(replicaId);
-    failedRequests.add(replicaId);
+    super.onCorruptResponse(replicaId);
     onReplicaResponse(replicaId);
   }
 
   @Override
   public void onFailedResponse(ReplicaId replicaId) {
-    failedRequests.add(replicaId);
+    super.onFailedResponse(replicaId);
     onReplicaResponse(replicaId);
   }
 
@@ -522,16 +521,6 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       }
     }
     return toReturn;
-  }
-
-  @Override
-  public boolean isComplete() {
-    return successfulRequests.size() >= successTarget;
-  }
-
-  @Override
-  public boolean mayComplete() {
-    return (replicaIdCount - failedRequests.size()) >= successTarget;
   }
 }
 
