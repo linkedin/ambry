@@ -317,30 +317,25 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     localDataCenterName = datacenterName;
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
-    Map<String, Deque<ReplicaId>> replicasPerDatacenter = new HashMap<String, Deque<ReplicaId>>();
     Map<String, Integer> availableReplicaCountPerDatacenter = new HashMap<String, Integer>();
 
     List<ReplicaId> replicaIds = partitionId.getReplicaIds();
-    //Populate replicasPerDatacenter and availableReplicaCountPerDatacenter
     for (ReplicaId replicaId : replicaIds) {
-      String dcName = replicaId.getDataNodeId().getDatacenterName();
-      addReplicaToDataCenter(replicaId, dcName, replicasPerDatacenter, availableReplicaCountPerDatacenter);
+      addReplicaToDataCenter(replicaId, availableReplicaCountPerDatacenter);
     }
 
-    remoteDataCenterCount += replicasPerDatacenter.size() - 1;
-    shuffleAndPopulate(replicasPerDatacenter, availableReplicaCountPerDatacenter);
+    remoteDataCenterCount += replicaListPerDatacenter.size() - 1;
+    shuffleAndPopulate(availableReplicaCountPerDatacenter);
   }
 
   /**
    * To shuffle the replicas for all datacenters
-   * @param replicasPerDatacenter Map of datacenter to Deque of replicas
    * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
    */
-  private void shuffleAndPopulate(Map<String, Deque<ReplicaId>> replicasPerDatacenter,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
-    for (String dataCenter : replicasPerDatacenter.keySet()) {
+  private void shuffleAndPopulate(Map<String, Integer> availableReplicaCountPerDatacenter) {
+    for (String dataCenter : replicaListPerDatacenter.keySet()) {
       List<ReplicaId> replicaList =
-          shuffleReplicaListForDataCenter(dataCenter, replicasPerDatacenter, availableReplicaCountPerDatacenter);
+          shuffleReplicaListForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
       replicaListPerDatacenter.put(dataCenter, replicaList);
       replicasInFlightPerDatacenter.put(dataCenter, new ArrayList<ReplicaId>());
     }
@@ -349,14 +344,13 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   /**
    * To shuffle replicas for a particular datacenter with down replicas pushed to end
    * @param dataCenter Datacenter for which the replicas has to be shuffled
-   * @param replicasPerDatacenter Map of datacenter to Deque of replicas
    * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
-   * @return
+   * @return List<ReplicaId> shuffled List of replicaIds for the passed in datacenter
    */
   private List<ReplicaId> shuffleReplicaListForDataCenter(String dataCenter,
-      Map<String, Deque<ReplicaId>> replicasPerDatacenter, Map<String, Integer> availableReplicaCountPerDatacenter) {
+      Map<String, Integer> availableReplicaCountPerDatacenter) {
     List<ReplicaId> replicaList = new ArrayList<ReplicaId>();
-    replicaList.addAll(replicasPerDatacenter.get(dataCenter));
+    replicaList.addAll(replicaListPerDatacenter.get(dataCenter));
     List<ReplicaId> availableReplicas = replicaList.subList(0, availableReplicaCountPerDatacenter.get(dataCenter));
     Collections.shuffle(availableReplicas);
     List<ReplicaId> downReplicas =
@@ -369,32 +363,23 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * Add a replica to replicasPerDatacenter (Map of datacenter to Deque of replicas)
    * and availableReplicaCountPerDatacenter (Map of datacenter to count of available replicas)
    * @param replicaId ReplicaId which is to be added
-   * @param dataCenterName Datacenter to which the replica has to be added
-   * @param replicasPerDatacenter Map of datacenter to Deque of replicas
    * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
    */
-  private void addReplicaToDataCenter(ReplicaId replicaId, String dataCenterName,
-      Map<String, Deque<ReplicaId>> replicasPerDatacenter, Map<String, Integer> availableReplicaCountPerDatacenter) {
-    if (!replicasPerDatacenter.containsKey(dataCenterName)) {
-      Deque<ReplicaId> replicaIdList = new LinkedList<ReplicaId>();
-      replicasPerDatacenter.put(dataCenterName, replicaIdList);
+  private void addReplicaToDataCenter(ReplicaId replicaId,
+      Map<String, Integer> availableReplicaCountPerDatacenter) {
+    String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
+    if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
+      List<ReplicaId> replicaIdList = new ArrayList<ReplicaId>();
+      replicaListPerDatacenter.put(dataCenterName, replicaIdList);
       availableReplicaCountPerDatacenter.put(dataCenterName, 0);
     }
     if (replicaId.isDown()) {
-      replicasPerDatacenter.get(dataCenterName).addLast(replicaId);
+      replicaListPerDatacenter.get(dataCenterName).add(replicaId);
     } else {
-      replicasPerDatacenter.get(dataCenterName).addFirst(replicaId);
+      replicaListPerDatacenter.get(dataCenterName).add(0, replicaId);
       availableReplicaCountPerDatacenter
           .put(dataCenterName, availableReplicaCountPerDatacenter.get(dataCenterName) + 1);
     }
-  }
-
-  @Override
-  public boolean isCorrupt() {
-    if (!mayComplete()) {
-      return (corruptRequests.size() == failedRequests.size());
-    }
-    return false;
   }
 
   @Override
