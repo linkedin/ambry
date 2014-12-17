@@ -2,9 +2,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -294,7 +292,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   private int remoteDataCenterCount = 0;
   private final String localDataCenterName;
   private final CoordinatorMetrics coordinatorMetrics;
-  private int leftOverReplicaCount;
+  private int remainingReplicaCount;
   //contains the replica List for each datacenter including local
   private Map<String, List<ReplicaId>> replicaListPerDatacenter;
   //contains the replicas in flight for remote datacenters
@@ -308,7 +306,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     super.requestParallelism = parallelism;
     this.localDataCenterName = datacenterName;
     this.coordinatorMetrics = oc.getCoordinatorMetrics();
-    this.leftOverReplicaCount = replicaIdCount;
+    this.remainingReplicaCount = replicaIdCount;
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
     Map<String, Integer> availableReplicaCountPerDatacenter = new HashMap<String, Integer>();
@@ -321,7 +319,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   }
 
   /**
-   * Add a replica to replicasPerDatacenter (Map of datacenter to Deque of replicas)
+   * Add a replica to replicasPerDatacenter (Map of datacenter to List of replicas)
    * and availableReplicaCountPerDatacenter (Map of datacenter to count of available replicas)
    * @param replicaId ReplicaId which is to be added
    * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
@@ -348,7 +346,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    */
   private void shuffleAndPopulate(Map<String, Integer> availableReplicaCountPerDatacenter) {
     for (String dataCenter : replicaListPerDatacenter.keySet()) {
-      shuffleReplicaListForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
+      shuffleReplicasForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
     }
   }
 
@@ -357,8 +355,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * @param dataCenter Datacenter for which the replicas has to be shuffled
    * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
    */
-  private void shuffleReplicaListForDataCenter(String dataCenter,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
+  private void shuffleReplicasForDataCenter(String dataCenter, Map<String, Integer> availableReplicaCountPerDatacenter) {
     List<ReplicaId> replicaList = replicaListPerDatacenter.get(dataCenter);
     List<ReplicaId> availableReplicas = replicaList.subList(0, availableReplicaCountPerDatacenter.get(dataCenter));
     Collections.shuffle(availableReplicas);
@@ -429,8 +426,10 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
         if (!dataCenter.equalsIgnoreCase(localDataCenterName)) {
           List<ReplicaId> replicaIdList = replicasInFlightPerDatacenter.get(dataCenter);
           if (replicaIdList.size() < requestParallelism) {
-            nextDataCenter = dataCenter;
-            break;
+            if(replicaListPerDatacenter.get(dataCenter).size() > 0){
+              nextDataCenter = dataCenter;
+              break;
+            }
           }
         }
       }
@@ -439,7 +438,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     if (replicaListPerDatacenter.get(nextDataCenter).size() > 0) {
       nextRemoteReplica = replicaListPerDatacenter.get(nextDataCenter).remove(0);
       replicasInFlightPerDatacenter.get(nextDataCenter).add(nextRemoteReplica);
-      leftOverReplicaCount--;
+      remainingReplicaCount--;
     }
     return nextRemoteReplica;
   }
@@ -458,7 +457,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
 
   @Override
   public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
-    if (leftOverReplicaCount == 0) {
+    if (remainingReplicaCount == 0) {
       return false;
     }
     int inFlightTarget = requestParallelism;
