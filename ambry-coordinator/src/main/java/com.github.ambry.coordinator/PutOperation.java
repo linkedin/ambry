@@ -42,7 +42,7 @@ final public class PutOperation extends Operation {
       ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 

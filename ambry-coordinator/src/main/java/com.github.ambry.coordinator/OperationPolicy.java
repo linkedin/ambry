@@ -220,9 +220,9 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
  * Serially probes data nodes until blob is retrieved.
  */
 class SerialOperationPolicy extends ProbeLocalFirstOperationPolicy {
-  public SerialOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+  public SerialOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, crossDCProxyCallEnabled);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
   }
 
   @Override
@@ -293,70 +293,31 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   private ReplicaId nextReplicaId = null;
   private int remoteDataCenterCount = 0;
   private final String localDataCenterName;
+  private final CoordinatorMetrics coordinatorMetrics;
+  private int leftOverReplicaCount;
   //contains the replica List for each datacenter including local
   private Map<String, List<ReplicaId>> replicaListPerDatacenter;
   //contains the replicas in flight for remote datacenters
   private Map<String, List<ReplicaId>> replicasInFlightPerDatacenter;
 
-  public GetCrossColoParallelOperationPolicy(String datacenterName, PartitionId partitionId)
-      throws CoordinatorException {
-    this(datacenterName, partitionId, 2);
-  }
-
-  public GetCrossColoParallelOperationPolicy(String datacenterName, PartitionId partitionId, int parallelism)
+  public GetCrossColoParallelOperationPolicy(String datacenterName, PartitionId partitionId, int parallelism,
+      OperationContext oc)
       throws CoordinatorException {
     super(datacenterName, partitionId, true);
-    if (replicaIdCount == 1) {
-      super.successTarget = 1;
-      super.requestParallelism = 1;
-    } else {
-      super.successTarget = 1;
-    }
-
+    super.successTarget = 1;
     super.requestParallelism = parallelism;
-    localDataCenterName = datacenterName;
+    this.localDataCenterName = datacenterName;
+    this.coordinatorMetrics = oc.getCoordinatorMetrics();
+    this.leftOverReplicaCount = replicaIdCount;
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
     Map<String, Integer> availableReplicaCountPerDatacenter = new HashMap<String, Integer>();
-
     List<ReplicaId> replicaIds = partitionId.getReplicaIds();
     for (ReplicaId replicaId : replicaIds) {
       addReplicaToDataCenter(replicaId, availableReplicaCountPerDatacenter);
     }
-
     remoteDataCenterCount += replicaListPerDatacenter.size() - 1;
     shuffleAndPopulate(availableReplicaCountPerDatacenter);
-  }
-
-  /**
-   * To shuffle the replicas for all datacenters
-   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
-   */
-  private void shuffleAndPopulate(Map<String, Integer> availableReplicaCountPerDatacenter) {
-    for (String dataCenter : replicaListPerDatacenter.keySet()) {
-      List<ReplicaId> replicaList =
-          shuffleReplicaListForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
-      replicaListPerDatacenter.put(dataCenter, replicaList);
-      replicasInFlightPerDatacenter.put(dataCenter, new ArrayList<ReplicaId>());
-    }
-  }
-
-  /**
-   * To shuffle replicas for a particular datacenter with down replicas pushed to end
-   * @param dataCenter Datacenter for which the replicas has to be shuffled
-   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
-   * @return List<ReplicaId> shuffled List of replicaIds for the passed in datacenter
-   */
-  private List<ReplicaId> shuffleReplicaListForDataCenter(String dataCenter,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
-    List<ReplicaId> replicaList = new ArrayList<ReplicaId>();
-    replicaList.addAll(replicaListPerDatacenter.get(dataCenter));
-    List<ReplicaId> availableReplicas = replicaList.subList(0, availableReplicaCountPerDatacenter.get(dataCenter));
-    Collections.shuffle(availableReplicas);
-    List<ReplicaId> downReplicas =
-        replicaList.subList(availableReplicaCountPerDatacenter.get(dataCenter), replicaList.size());
-    Collections.shuffle(downReplicas);
-    return replicaList;
   }
 
   /**
@@ -365,8 +326,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * @param replicaId ReplicaId which is to be added
    * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
    */
-  private void addReplicaToDataCenter(ReplicaId replicaId,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
+  private void addReplicaToDataCenter(ReplicaId replicaId, Map<String, Integer> availableReplicaCountPerDatacenter) {
     String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
     if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
       List<ReplicaId> replicaIdList = new ArrayList<ReplicaId>();
@@ -380,6 +340,36 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       availableReplicaCountPerDatacenter
           .put(dataCenterName, availableReplicaCountPerDatacenter.get(dataCenterName) + 1);
     }
+  }
+
+  /**
+   * To shuffle the replicas for all datacenters
+   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
+   */
+  private void shuffleAndPopulate(Map<String, Integer> availableReplicaCountPerDatacenter) {
+    for (String dataCenter : replicaListPerDatacenter.keySet()) {
+      shuffleReplicaListForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
+    }
+  }
+
+  /**
+   * To shuffle replicas for a particular datacenter with down replicas pushed to end
+   * @param dataCenter Datacenter for which the replicas has to be shuffled
+   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
+   */
+  private void shuffleReplicaListForDataCenter(String dataCenter,
+      Map<String, Integer> availableReplicaCountPerDatacenter) {
+    List<ReplicaId> replicaList = replicaListPerDatacenter.get(dataCenter);
+    List<ReplicaId> availableReplicas = replicaList.subList(0, availableReplicaCountPerDatacenter.get(dataCenter));
+    Collections.shuffle(availableReplicas);
+    List<ReplicaId> downReplicas =
+        replicaList.subList(availableReplicaCountPerDatacenter.get(dataCenter), replicaList.size());
+    Collections.shuffle(downReplicas);
+    List<ReplicaId> shuffledReplicas = new ArrayList<ReplicaId>();
+    shuffledReplicas.addAll(availableReplicas);
+    shuffledReplicas.addAll(downReplicas);
+    replicaListPerDatacenter.put(dataCenter, shuffledReplicas);
+    replicasInFlightPerDatacenter.put(dataCenter, new ArrayList<ReplicaId>());
   }
 
   @Override
@@ -405,28 +395,21 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * @param replicaId ReplicaId for which the response was received
    */
   private void onReplicaResponse(ReplicaId replicaId) {
-    boolean isReplicaFound = false;
-    for (String dataCenter : replicasInFlightPerDatacenter.keySet()) {
-      List<ReplicaId> replicasInFlight = replicasInFlightPerDatacenter.get(dataCenter);
-      if (replicasInFlight.contains(replicaId)) {
-        replicasInFlight.remove(replicaId);
-        isReplicaFound = true;
-        replicasInFlightPerDatacenter.get(dataCenter).clear();
-        replicasInFlightPerDatacenter.get(dataCenter).addAll(replicasInFlight);
-        if (dataCenter.equalsIgnoreCase(localDataCenterName)) {
-          if (replicaListPerDatacenter.get(localDataCenterName) == null
-              && replicasInFlightPerDatacenter.get(localDataCenterName).size() == 0) {
-            isLocalDone = true;
-            requestParallelism = requestParallelism * remoteDataCenterCount;
-          }
+    String dataCenter = replicaId.getDataNodeId().getDatacenterName();
+    List<ReplicaId> replicasInFlight = replicasInFlightPerDatacenter.get(dataCenter);
+    if (replicasInFlight.contains(replicaId)) {
+      replicasInFlight.remove(replicaId);
+      if (dataCenter.equalsIgnoreCase(localDataCenterName)) {
+        if (replicaListPerDatacenter.get(localDataCenterName).size() == 0 &&
+            replicasInFlight.size() == 0) {
+          isLocalDone = true;
+          requestParallelism = requestParallelism * remoteDataCenterCount;
         }
-        break;
       }
-    }
-    if (!isReplicaFound) {
-      logger.error("Found response for which no request was sent ",
-          new CoordinatorException("Found response from " + replicaId + "replica for which no request was sent ",
-              CoordinatorError.UnexpectedInternalError));
+    } else {
+      logger.error("Found response for which no request was sent " + replicaId);
+      coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.GetBlob,
+          CoordinatorError.UnexpectedInternalError);
     }
   }
 
@@ -439,39 +422,26 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * Fetches the next replica for which the request to be sent to a remote data centre
    * @return ReplicaId for which the request has to be sent
    */
-  private ReplicaId getNextRemoteReplicaToSend() {
-    String nextDataCenter = null;
-    for (String dataCenter : replicasInFlightPerDatacenter.keySet()) {
-      if (!dataCenter.equalsIgnoreCase(localDataCenterName)) {
-        List<ReplicaId> replicaIdList = replicasInFlightPerDatacenter.get(dataCenter);
-        if (nextDataCenter == null) {
-          nextDataCenter = dataCenter;
-        }
-        if (replicaIdList.size() < requestParallelism) {
-          nextDataCenter = dataCenter;
-          break;
+  private ReplicaId getNextReplicaToSend(boolean forRemoteDatacenter) {
+    String nextDataCenter = localDataCenterName;
+    if (forRemoteDatacenter) {
+      for (String dataCenter : replicasInFlightPerDatacenter.keySet()) {
+        if (!dataCenter.equalsIgnoreCase(localDataCenterName)) {
+          List<ReplicaId> replicaIdList = replicasInFlightPerDatacenter.get(dataCenter);
+          if (replicaIdList.size() < requestParallelism) {
+            nextDataCenter = dataCenter;
+            break;
+          }
         }
       }
     }
-    ReplicaId nextRemoteReplica = replicaListPerDatacenter.get(nextDataCenter).remove(0);
-    if (replicaListPerDatacenter.get(nextDataCenter).size() == 0) {
-      replicaListPerDatacenter.remove(nextDataCenter);
+    ReplicaId nextRemoteReplica = null;
+    if (replicaListPerDatacenter.get(nextDataCenter).size() > 0) {
+      nextRemoteReplica = replicaListPerDatacenter.get(nextDataCenter).remove(0);
+      replicasInFlightPerDatacenter.get(nextDataCenter).add(nextRemoteReplica);
+      leftOverReplicaCount--;
     }
-    replicasInFlightPerDatacenter.get(nextDataCenter).add(nextRemoteReplica);
     return nextRemoteReplica;
-  }
-
-  /**
-   * Fetches the next replica for which the request to be sent to a local data centre
-   * @return ReplicaId for which the request has to be sent
-   */
-  private ReplicaId getNextLocalReplicaToSend() {
-    ReplicaId nextLocalReplica = replicaListPerDatacenter.get(localDataCenterName).remove(0);
-    if (replicaListPerDatacenter.get(localDataCenterName).size() == 0) {
-      replicaListPerDatacenter.remove(localDataCenterName);
-    }
-    replicasInFlightPerDatacenter.get(localDataCenterName).add(nextLocalReplica);
-    return nextLocalReplica;
   }
 
   /**
@@ -480,47 +450,26 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    */
   private int getReplicasInFlightCount() {
     int replicasInFlight = 0;
-    if (isLocalDone) {
       for (String dataCenter : replicasInFlightPerDatacenter.keySet()) {
-        if (!dataCenter.equalsIgnoreCase(localDataCenterName)) {
           replicasInFlight += replicasInFlightPerDatacenter.get(dataCenter).size();
         }
-      }
-    } else {
-      replicasInFlight = replicasInFlightPerDatacenter.get(localDataCenterName).size();
-    }
     return replicasInFlight;
   }
 
   @Override
   public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
-    if (replicaListPerDatacenter.isEmpty()) {
+    if (leftOverReplicaCount == 0) {
       return false;
     }
-    boolean toReturn = false;
     int inFlightTarget = requestParallelism;
-
     int replicasInFlight = getReplicasInFlightCount();
-    if (isLocalDone) {
-      if (replicasInFlight < inFlightTarget) {
-        nextReplicaId = getNextRemoteReplicaToSend();
-        toReturn = true;
-      } else {
-        nextReplicaId = null;
-      }
-    } else {
-      if (replicasInFlight < inFlightTarget) {
-        List<ReplicaId> replicaIdList = replicaListPerDatacenter.get(localDataCenterName);
-        if (replicaIdList == null || replicaIdList.size() == 0) {
-          nextReplicaId = null;
-          toReturn = false;
-        } else {
-          nextReplicaId = getNextLocalReplicaToSend();
-          toReturn = true;
-        }
-      }
+    if (replicasInFlight < inFlightTarget) {
+      nextReplicaId = getNextReplicaToSend(isLocalDone);
     }
-    return toReturn;
+    else {
+      nextReplicaId = null;
+    }
+    return (nextReplicaId != null);
   }
 }
 
@@ -555,9 +504,9 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
 
    (2) sending additional put requests (increasing the requestParallelism) after a short timeout.
   */
-  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, crossDCProxyCallEnabled);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
@@ -576,9 +525,9 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
  * the partition. Policy is used for delete
  */
 class AllInParallelOperationPolicy extends ParallelOperationPolicy {
-  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
+  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, crossDCProxyCallEnabled);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
