@@ -75,7 +75,7 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
 
-  static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId,
+  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId,
       OperationContext oc)
       throws CoordinatorException {
     OperationPolicy getOperationPolicy = null;

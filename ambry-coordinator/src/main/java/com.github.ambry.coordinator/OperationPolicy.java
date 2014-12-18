@@ -309,19 +309,19 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     this.remainingReplicaCount = replicaIdCount;
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
-    Map<String, Integer> availableReplicaCountPerDatacenter = new HashMap<String, Integer>();
-    addReplicaToDataCenter(partitionId.getReplicaIds(), availableReplicaCountPerDatacenter);
+    Map<String, Integer> availableReplicasCountPerDatacenter = new HashMap<String, Integer>();
+    populateReplicaListPerDatacenter(partitionId.getReplicaIds(), availableReplicasCountPerDatacenter);
     remoteDataCenterCount = replicaListPerDatacenter.size() - 1;
-    shuffleAndPopulate(availableReplicaCountPerDatacenter);
+    shuffleAndPopulate(availableReplicasCountPerDatacenter);
   }
 
   /**
-   * Add a replica to replicasPerDatacenter (Map of datacenter to List of replicas)
+   * Adds replicas to replicasPerDatacenter (Map of datacenter to List of replicas)
    * and availableReplicaCountPerDatacenter (Map of datacenter to count of available replicas)
    * @param replicaIds ReplicaIds which are to be added to the interested data structure
    * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
    */
-  private void addReplicaToDataCenter(List<ReplicaId> replicaIds,
+  private void populateReplicaListPerDatacenter(List<ReplicaId> replicaIds,
       Map<String, Integer> availableReplicaCountPerDatacenter) {
     for (ReplicaId replicaId : replicaIds) {
       String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
@@ -400,8 +400,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       }
     } else {
       logger.error("Found response for which no request was sent " + replicaId);
-      coordinatorMetrics
-          .countError(CoordinatorMetrics.CoordinatorOperationType.GetBlob, CoordinatorError.UnexpectedInternalError);
+      coordinatorMetrics.unknownReplicaResponseError.inc();
     }
   }
 
