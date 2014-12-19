@@ -1,6 +1,5 @@
 package com.github.ambry.coordinator;
 
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.shared.BlockingChannel;
 import com.github.ambry.shared.ConnectedChannel;

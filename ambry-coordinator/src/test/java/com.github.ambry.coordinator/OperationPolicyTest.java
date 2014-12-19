@@ -3,6 +3,7 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
@@ -36,8 +37,9 @@ public class OperationPolicyTest {
    */
   @Test
   public void testSerialOperationPolicy()
-      throws CoordinatorException {
-    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
+      throws Exception {
+    OperationContext oc =
+        new OperationContext("client1", 1000, true, null, null);
     // Simple success test
     {
       OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
@@ -428,9 +430,9 @@ public class OperationPolicyTest {
 
   @Test
   public void testGetCrossColoParallelOperationPolicy()
-      throws CoordinatorException {
+      throws Exception {
 
-    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
+    OperationContext oc = new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap()), null);
     // Simple success test
     {
       OperationPolicy op =
@@ -1130,8 +1132,8 @@ public class OperationPolicyTest {
       for (int i = 0; i < 6; i++) {
         assertTrue(op.sendMoreRequests(replicasInFlight));
         ReplicaId replicaId = op.getNextReplicaIdForSend();
-        assertTrue((replicaId.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-            || (replicaId.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+        assertTrue((replicaId.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId.getDataNodeId()
+            .getDatacenterName().equals(datacenterGamma)));
         replicasInFlight.add(replicaId);
         assertTrue(op.mayComplete());
         op.onCorruptResponse(replicaId);

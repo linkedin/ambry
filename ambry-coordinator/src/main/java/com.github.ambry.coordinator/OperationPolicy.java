@@ -290,13 +290,13 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   private boolean isLocalDone = false;
   private ReplicaId nextReplicaId = null;
   private int remoteDataCenterCount = 0;
-  private final String localDataCenterName;
-  private final CoordinatorMetrics coordinatorMetrics;
   private int remainingReplicaCount;
   //contains the replica List for each datacenter including local
   private Map<String, List<ReplicaId>> replicaListPerDatacenter;
   //contains the replicas in flight for remote datacenters
   private Map<String, List<ReplicaId>> replicasInFlightPerDatacenter;
+  private final String localDataCenterName;
+  private final CoordinatorMetrics coordinatorMetrics;
 
   public GetCrossColoParallelOperationPolicy(String datacenterName, PartitionId partitionId, int parallelism,
       OperationContext oc)
@@ -368,6 +368,9 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   @Override
   public void onSuccessfulResponse(ReplicaId replicaId) {
     super.onSuccessfulResponse(replicaId);
+    if(isLocalDone) {
+      coordinatorMetrics.crossColoProxyCallCount.inc();
+    }
     onReplicaResponse(replicaId);
   }
 
@@ -411,8 +414,6 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
 
   @Override
   public boolean sendMoreRequests(Collection<ReplicaId> requestsInFlight) {
-    // requestsInFlight parameter is not used anymore in this policy. In fight requests are
-    // stored within this policy in replicaInFlightPerDatacenter
     if (remainingReplicaCount == 0) {
       return false;
     }
