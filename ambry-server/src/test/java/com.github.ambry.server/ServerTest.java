@@ -1382,7 +1382,7 @@ public class ServerTest {
   private VerifiableProperties getCoordinatorProperties() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
-    properties.setProperty("coordinator.datacenter.name", "Datacenter");
+    properties.setProperty("coordinator.datacenter.name", "DC1");
     return new VerifiableProperties(properties);
   }
 

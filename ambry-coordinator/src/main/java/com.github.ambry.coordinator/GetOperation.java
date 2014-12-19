@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -38,6 +39,7 @@ public abstract class GetOperation extends Operation {
   private int blobNotFoundCount;
   private int blobDeletedCount;
   private int blobExpiredCount;
+  private static final int OPERATION_PARALLELISM = 2;
 
   // Number of replicas in the partition. This is used to set threshold to determine blob not found (all replicas
   // must reply). Also used to modify blob deleted and blob expired thresholds for partitions with a small number of
@@ -55,7 +57,7 @@ public abstract class GetOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new SerialOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+        getOperationPolicy(datacenterName, blobId.getPartition(), oc));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -71,6 +73,18 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.AmbryUnavailable, 3);
     precedenceLevels.put(CoordinatorError.UnexpectedInternalError, 4);
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
+  }
+
+  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId,
+      OperationContext oc)
+      throws CoordinatorException {
+    OperationPolicy getOperationPolicy = null;
+    if (oc.isCrossDCProxyCallEnabled()) {
+      getOperationPolicy = new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc);
+    } else {
+      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc);
+    }
+    return getOperationPolicy;
   }
 
   GetRequest makeGetRequest() {

@@ -51,6 +51,9 @@ public class CoordinatorMetrics {
 
   public final Counter corruptionError;
 
+  public final Counter unknownReplicaResponseError;
+  public final Counter crossColoProxyCallCount;
+
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -97,6 +100,10 @@ public class CoordinatorMetrics {
     blobExpiredError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
     unknownError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownError"));
     corruptionError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "corruptionError"));
+    unknownReplicaResponseError =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownReplicaResponseError"));
+    crossColoProxyCallCount =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "crossColoProxyCallCount"));
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.

@@ -32,7 +32,7 @@ final public class DeleteOperation extends Operation {
       OperationContext oc, BlobId blobId, long operationTimeoutMs)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc.isCrossDCProxyCallEnabled()));
+        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
