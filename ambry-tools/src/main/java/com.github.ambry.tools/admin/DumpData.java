@@ -1,5 +1,6 @@
 package com.github.ambry.tools.admin;
 
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
@@ -8,7 +9,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.shared.BlobId;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.IndexValue;
@@ -90,7 +90,7 @@ public class DumpData {
           System.out.println("value size " + valueSize);
           System.out.println("file end pointer " + fileEndPointer);
           int Crc_Size = 8;
-          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", map);
+          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
           while (stream.available() > Crc_Size) {
             StoreKey key = storeKeyFactory.getStoreKey(stream);
             byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
@@ -145,7 +145,7 @@ public class DumpData {
         switch (version) {
           case 0:
             int Crc_Size = 8;
-            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", map);
+            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
             FindTokenFactory findTokenFactory =
                 Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
             while (stream.available() > Crc_Size) {

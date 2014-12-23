@@ -1,13 +1,13 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.DeleteResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.Response;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.HashMap;

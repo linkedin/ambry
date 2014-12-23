@@ -1,21 +1,21 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Send;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.ChannelOutput;
-import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.DeleteResponse;
-import com.github.ambry.shared.GetRequest;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.PartitionResponseInfo;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ChannelOutput;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Crc32;
 

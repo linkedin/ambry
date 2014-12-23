@@ -1,10 +1,10 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.ServerErrorCode;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;

@@ -10,7 +10,7 @@ public class StoreConfig {
    * The factory class the store uses to creates its keys
    */
   @Config("store.key.factory")
-  @Default("com.github.ambry.shared.BlobIdFactory")
+  @Default("com.github.ambry.commons.BlobIdFactory")
   public final String storeKeyFactory;
 
   /**
@@ -57,7 +57,7 @@ public class StoreConfig {
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
-    storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.shared.BlobIdFactory");
+    storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
     storeDataFlushDelaySeconds = verifiableProperties.getInt("store.data.flush.delay.seconds", 5);

@@ -11,7 +11,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.shared.ConnectionPool;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.Store;

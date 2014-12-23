@@ -1,16 +1,16 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.commons.ResponseFailureHandler;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.ConnectedChannel;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.shared.ConnectionPoolTimeoutException;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ResponseFailureHandler;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;

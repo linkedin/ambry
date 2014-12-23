@@ -1,1 +1,1 @@
-include 'ambry-api', 'ambry-server', 'ambry-network', 'ambry-utils', 'ambry-store', 'ambry-shared', 'ambry-messageformat', 'ambry-replication', 'ambry-coordinator', 'ambry-clustermap', 'ambry-tools', 'ambry-metrics'
+include 'ambry-api', 'ambry-server', 'ambry-network', 'ambry-utils', 'ambry-store', 'ambry-commons', 'ambry-messageformat', 'ambry-replication', 'ambry-coordinator', 'ambry-clustermap', 'ambry-tools', 'ambry-metrics', 'ambry-protocol'

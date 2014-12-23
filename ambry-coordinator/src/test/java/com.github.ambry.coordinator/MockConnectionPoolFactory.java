@@ -2,8 +2,8 @@ package com.github.ambry.coordinator;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.shared.ConnectionPoolFactory;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolFactory;
 
 
 public class MockConnectionPoolFactory implements ConnectionPoolFactory {

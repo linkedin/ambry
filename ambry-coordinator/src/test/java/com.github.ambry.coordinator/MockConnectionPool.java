@@ -1,10 +1,10 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.ConnectedChannel;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.shared.ConnectionPoolTimeoutException;
+import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
 
 import java.io.IOException;
 
