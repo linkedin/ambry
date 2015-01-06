@@ -9,10 +9,10 @@ import java.nio.channels.Channels;
 import java.util.Random;
 
 
-public class SocketServerInputSetTest {
+public class BoundedByteBufferReceiveTest {
 
   @Test
-  public void testSocketServerInputSet() {
+  public void testBoundedByteBufferReceive() {
     try {
       ByteBuffer buffer = ByteBuffer.allocate(2000);
       buffer.putLong(2000);
@@ -20,11 +20,12 @@ public class SocketServerInputSetTest {
       new Random().nextBytes(buf);
       buffer.put(buf);
       buffer.flip();
-      SocketServerInputSet set = new SocketServerInputSet();
+      BoundedByteBufferReceive set = new BoundedByteBufferReceive();
       set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer)));
       buffer.clear();
+      ByteBuffer payload = set.getPayload();
       for (int i = 8; i < 2000; i++) {
-        Assert.assertEquals(buffer.array()[i], (byte) set.read());
+        Assert.assertEquals(buffer.array()[i], payload.get());
       }
     } catch (Exception e) {
       Assert.assertEquals(true, false);

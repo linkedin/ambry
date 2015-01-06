@@ -1,39 +1,29 @@
 package com.github.ambry.network;
 
-import com.github.ambry.utils.ByteBufferInputStream;
+import java.io.EOFException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.ByteBuffer;
 
 
 /**
- * This represents data received from the channel and provides an input stream
- * interface to read from it. This class is responsible for deciding when to buffer
- * the input data or stream content directly from the channel
+ * A byte buffer version of Receive to buffer the incoming request or response.
  */
-public class SocketServerInputSet extends InputStream implements Receive {
+public class BoundedByteBufferReceive implements Receive {
 
   private ByteBuffer buffer = null;
-  private ByteBufferInputStream stream;
   private ByteBuffer sizeBuffer;
   private int sizeToRead;        // need to change to long
   private int sizeRead;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServerInputSet() {
+  public BoundedByteBufferReceive() {
     sizeToRead = 0;
     sizeRead = 0;
     sizeBuffer = ByteBuffer.allocate(8);
-  }
-
-  @Override
-  public int read()
-      throws IOException {
-    return (buffer.get() & 0xFF);
   }
 
   @Override
@@ -47,8 +37,8 @@ public class SocketServerInputSet extends InputStream implements Receive {
     long bytesRead = 0;
     if (buffer == null) {
       bytesRead = channel.read(sizeBuffer);
-      if (bytesRead == -1) {
-        return -1;
+      if (bytesRead < 0) {
+        throw new EOFException();
       }
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
@@ -61,6 +51,9 @@ public class SocketServerInputSet extends InputStream implements Receive {
     }
     if (buffer != null && sizeRead < sizeToRead) {
       long bytesReadFromChannel = channel.read(buffer);
+      if (bytesReadFromChannel < 0) {
+        throw new EOFException();
+      }
       sizeRead += bytesReadFromChannel;
       bytesRead += bytesReadFromChannel;
       if (sizeRead == sizeToRead) {
@@ -69,5 +62,9 @@ public class SocketServerInputSet extends InputStream implements Receive {
     }
     logger.trace("size read from channel {}", sizeRead);
     return bytesRead;
+  }
+
+  public ByteBuffer getPayload() {
+    return buffer;
   }
 }

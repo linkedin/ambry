@@ -32,6 +32,14 @@ public class BoundedByteBufferSend implements Send {
     buffer.rewind();
   }
 
+  public BoundedByteBufferSend(ByteBuffer buffer) {
+    if (buffer == null) {
+      throw new IllegalArgumentException("Input buffer cannot be null for BoundedByteBufferSend");
+    }
+    this.buffer = buffer;
+  }
+
+  @Override
   public void writeTo(WritableByteChannel channel)
       throws IOException {
     if (!isSendComplete()) {
@@ -39,11 +47,17 @@ public class BoundedByteBufferSend implements Send {
     }
   }
 
+  @Override
   public boolean isSendComplete() {
     return buffer.remaining() == 0;
   }
 
+  @Override
   public long sizeInBytes() {
     return buffer.limit();
+  }
+
+  public BoundedByteBufferSend duplicate() {
+    return new BoundedByteBufferSend(buffer.duplicate());
   }
 }

@@ -89,12 +89,8 @@ public class SocketServerTest {
     for (int i = 0; i < 10; i++) {
       Assert.assertEquals(bufdata[i], (byte) streamFromNetwork.read());
     }
-    try {
-      streamFromNetwork.read();
-      Assert.assertTrue(false);
-    } catch (BufferUnderflowException e) {
-      Assert.assertTrue(true);
-    }
+    int read = streamFromNetwork.read();
+    Assert.assertTrue(read == -1);
 
     // send response back and ensure response is received
     PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);

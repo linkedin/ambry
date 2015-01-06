@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -449,12 +450,12 @@ class Processor extends AbstractServerThread {
   private void read(SelectionKey key)
       throws InterruptedException, IOException {
     SocketChannel socketChannel = (SocketChannel) key.channel();
-    SocketServerInputSet input = null;
+    BoundedByteBufferReceive input = null;
     if (key.attachment() == null) {
-      input = new SocketServerInputSet();
+      input = new BoundedByteBufferReceive();
       key.attach(input);
     } else {
-      input = (SocketServerInputSet) key.attachment();
+      input = (BoundedByteBufferReceive) key.attachment();
     }
     long bytesRead = input.readFrom(socketChannel);
 
@@ -466,7 +467,7 @@ class Processor extends AbstractServerThread {
     logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
 
     if (input.isReadComplete()) {
-      SocketServerRequest req = new SocketServerRequest(id, key, input);
+      SocketServerRequest req = new SocketServerRequest(id, key, new ByteBufferInputStream(input.getPayload()));
       channel.sendRequest(req);
       key.attach(null);
       // explicitly reset interest ops to not READ, no need to wake up the selector just yet
