@@ -26,20 +26,21 @@ import org.slf4j.LoggerFactory;
  * This class works with {@link BoundedByteBufferSend} and {@link BoundedByteBufferReceive} to
  * transmit network requests and responses.
  * <p>
- * A connection can be added to the selector associated with an integer id by doing
+ * A connection can be added to the selector by doing
  *
  * <pre>
- * selector.connect(42, new InetSocketAddress(&quot;google.com&quot;, server.port), 64000, 64000);
+ * long id = selector.connect(new InetSocketAddress(&quot;google.com&quot;, server.port), 64000, 64000);
  * </pre>
  *
  * The connect call does not block on the creation of the TCP connection, so the connect method only begins initiating
- * the connection. The successful invocation of this method does not mean a valid connection has been established.
+ * the connection. The successful invocation of this method does not mean a valid connection has been established. The
+ * call on return provides a unique id that identifies this connection
  *
  * Sending requests, receiving responses, processing connection completions, and disconnections on the existing
  * connections are all done using the <code>poll()</code> call.
  *
  * <pre>
- * List&lt;NetworkRequest&gt; requestsToSend = Arrays.asList(new NetworkRequest(0, myBytes), new NetworkRequest(1, myOtherBytes));
+ * List&lt;NetworkSend&gt; requestsToSend = Arrays.asList(new NetworkSend(0, bytes), new NetworkSend(1, otherBytes));
  * selector.poll(TIMEOUT_MS, requestsToSend);
  * </pre>
  *
@@ -81,8 +82,8 @@ class Selector implements Selectable {
   }
 
   /**
-   * Begin connecting to the given address and add the connection to this selector associated with the given id
-   * number.
+   * Begin connecting to the given address and add the connection to this selector and returns an id that identifies
+   * the connection
    * <p>
    * Note that this call only initiates the connection, which will be completed on a future {@link #poll(long, List)}
    * call. Check {@link #connected()} to see which (if any) connections have completed after a given poll call.
@@ -166,7 +167,7 @@ class Selector implements Selectable {
    * @param timeout The amount of time to wait, in milliseconds. If negative, wait indefinitely.
    * @param sends The list of new sends to begin
    *
-   * @throws IllegalStateException If a send is given for which we have no existing connection or for which there is
+   * @throws IOException If a send is given for which we have no existing connection or for which there is
    *         already an in-progress send
    */
   @Override
@@ -368,7 +369,7 @@ class Selector implements Selectable {
   }
 
   /**
-   * The id and in-progress send and receive associated with a connection
+   * The id, hostname, port and in-progress send and receive associated with a connection
    */
   private static class Transmissions {
     public long connectionId;

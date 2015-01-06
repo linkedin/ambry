@@ -37,7 +37,7 @@ public interface Selectable {
   /**
    * Initiate any sends provided, and make progress on any other I/O operations in-flight (connections,
    * disconnections, existing sends, and receives)
-   * @param timeout The amount of time to block if there is nothing to do
+   * @param timeout The amount of time to block if there is nothing to do in ms
    * @param sends The new sends to initiate
    * @throws IOException
    */
