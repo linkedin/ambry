@@ -38,7 +38,7 @@ public abstract class Operation {
   protected BlobId blobId;
 
   // Operation state
-  private OperationPolicy operationPolicy;
+  protected OperationPolicy operationPolicy;
   private long operationExpirationMs;
   private final AtomicBoolean operationComplete;
 
@@ -117,6 +117,7 @@ public abstract class Operation {
           if (errorCode == ServerErrorCode.No_Error) {
             operationPolicy.onSuccessfulResponse(replicaId);
             logger.trace("Success response from this replica. Operation Success ");
+
           } else {
             logger.trace("Failure response from this replica ");
             if (errorCode == ServerErrorCode.Data_Corrupt) {
@@ -140,6 +141,7 @@ public abstract class Operation {
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
           logger.trace("{} operation successfully completing execute", context);
+          this.onOperationComplete();
           return;
         }
         if (!operationPolicy.mayComplete()) {
@@ -216,6 +218,13 @@ public abstract class Operation {
 
   public synchronized CoordinatorError getCurrentError() {
     return this.currentError;
+  }
+
+  /**
+   * Actions to be taken on completion of an operation
+   */
+  public void onOperationComplete(){
+    // only GetOperation should have definition. For rest, its a no-op
   }
 }
 

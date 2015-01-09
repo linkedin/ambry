@@ -92,6 +92,13 @@ public interface OperationPolicy {
    * @return count of replica Ids in partition.
    */
   public int getReplicaIdCount();
+
+  /**
+   * Returns whether the operation has proxied to remote colo or not
+   *
+   * @return true if proxied to remote colo, false otherwise
+   */
+  public boolean hasProxied();
 }
 
 /**
@@ -101,6 +108,7 @@ public interface OperationPolicy {
 abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   int replicaIdCount;
   Queue<ReplicaId> orderedReplicaIds;
+  protected boolean proxied = false;
 
   List<ReplicaId> corruptRequests;
   List<ReplicaId> failedRequests;
@@ -188,6 +196,12 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   public int getReplicaIdCount() {
     return replicaIdCount;
   }
+
+  @Override
+  public boolean hasProxied(){
+    return this.proxied;
+  }
+
 
   @Override
   public String toString() {
@@ -370,19 +384,23 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     super.onSuccessfulResponse(replicaId);
     if(isLocalDone) {
       coordinatorMetrics.crossColoProxyCallCount.inc();
+      logger.trace("Operation succeeded after going cross colo");
     }
+    logger.trace("Successful response from " + replicaId);
     onReplicaResponse(replicaId);
   }
 
   @Override
   public void onCorruptResponse(ReplicaId replicaId) {
     super.onCorruptResponse(replicaId);
+    logger.trace("Corrupt response from " + replicaId);
     onReplicaResponse(replicaId);
   }
 
   @Override
   public void onFailedResponse(ReplicaId replicaId) {
     super.onFailedResponse(replicaId);
+    logger.trace("Failed response from " + replicaId);
     onReplicaResponse(replicaId);
   }
 
@@ -399,6 +417,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
         if (replicaListPerDatacenter.get(localDataCenterName).size() == 0 && replicasInFlight.size() == 0) {
           isLocalDone = true;
           requestParallelism = requestParallelism * remoteDataCenterCount;
+          logger.trace("All local replicas exhausted. RequestParallelism changed to " + requestParallelism);
         }
       }
     } else {
@@ -456,6 +475,10 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
           }
         }
       }
+      if(getReplicasInFlightCount() == 0){
+        proxied = true;
+        logger.trace("Operation going cross colo after exhausting all local replicas");
+      }
     }
     ReplicaId nextReplicaToSend = null;
     if (replicaListPerDatacenter.get(nextDataCenterToSend).size() > 0) {
@@ -464,6 +487,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       remainingReplicaCount--;
     }
     nextReplicaId = nextReplicaToSend;
+    logger.trace("Setting next replica to send " + nextReplicaId);
   }
 }
 
