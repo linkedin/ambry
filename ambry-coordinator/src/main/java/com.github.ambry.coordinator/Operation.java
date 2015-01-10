@@ -117,7 +117,6 @@ public abstract class Operation {
           if (errorCode == ServerErrorCode.No_Error) {
             operationPolicy.onSuccessfulResponse(replicaId);
             logger.trace("Success response from this replica. Operation Success ");
-
           } else {
             logger.trace("Failure response from this replica ");
             if (errorCode == ServerErrorCode.Data_Corrupt) {

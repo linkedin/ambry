@@ -202,7 +202,6 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     return this.proxied;
   }
 
-
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
