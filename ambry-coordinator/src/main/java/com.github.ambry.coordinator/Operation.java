@@ -85,7 +85,6 @@ public abstract class Operation {
       requestsInFlight.add(replicaIdToSendTo);
       requesterPool.submit(makeOperationRequest(replicaIdToSendTo));
     }
-
   }
 
   public void execute()
