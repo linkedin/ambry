@@ -38,7 +38,7 @@ public abstract class Operation {
   protected BlobId blobId;
 
   // Operation state
-  private OperationPolicy operationPolicy;
+  protected OperationPolicy operationPolicy;
   private long operationExpirationMs;
   private final AtomicBoolean operationComplete;
 
@@ -140,6 +140,7 @@ public abstract class Operation {
         if (operationPolicy.isComplete()) {
           operationComplete.set(true);
           logger.trace("{} operation successfully completing execute", context);
+          this.onOperationComplete();
           return;
         }
         if (!operationPolicy.mayComplete()) {
@@ -216,6 +217,13 @@ public abstract class Operation {
 
   public synchronized CoordinatorError getCurrentError() {
     return this.currentError;
+  }
+
+  /**
+   * Actions to be taken on completion of an operation
+   */
+  public void onOperationComplete(){
+    // only GetOperation should have definition. For rest, its a no-op
   }
 }
 

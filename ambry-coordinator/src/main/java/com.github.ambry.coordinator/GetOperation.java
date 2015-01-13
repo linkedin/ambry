@@ -169,6 +169,13 @@ public abstract class GetOperation extends Operation {
   }
 
   @Override
+  public void onOperationComplete(){
+    if(operationPolicy.hasProxied()){
+      logger.trace("GetOperation for " + blobId +"  succeeded after proxying to remote colo");
+    }
+  }
+
+  @Override
   public Integer getPrecedenceLevel(CoordinatorError coordinatorError) {
     return precedenceLevels.get(coordinatorError);
   }
