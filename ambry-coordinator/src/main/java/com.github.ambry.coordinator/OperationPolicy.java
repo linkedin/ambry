@@ -381,7 +381,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   @Override
   public void onSuccessfulResponse(ReplicaId replicaId) {
     super.onSuccessfulResponse(replicaId);
-    if(isLocalDone) {
+    if(proxied) {
       coordinatorMetrics.crossColoProxyCallCount.inc();
       logger.trace("Operation succeeded after going cross colo");
     }
