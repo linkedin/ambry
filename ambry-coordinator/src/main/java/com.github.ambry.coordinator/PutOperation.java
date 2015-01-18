@@ -1,14 +1,14 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.ConnectionPool;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.RequestOrResponse;
-import com.github.ambry.shared.Response;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.util.HashMap;
 import org.slf4j.Logger;

@@ -1,19 +1,16 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.metrics.MetricsRegistryMap;
-import com.github.ambry.metrics.ReadableMetricsRegistry;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlobIdFactory;
 import com.github.ambry.store.Log;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreMetrics;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -23,10 +20,13 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 import java.io.BufferedReader;
-import java.io.DataInputStream;
 import java.io.FileReader;
-import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;

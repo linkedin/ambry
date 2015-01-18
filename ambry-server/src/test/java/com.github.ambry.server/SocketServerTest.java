@@ -1,8 +1,9 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -10,11 +11,9 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.util.List;
 import org.junit.After;
@@ -90,12 +89,8 @@ public class SocketServerTest {
     for (int i = 0; i < 10; i++) {
       Assert.assertEquals(bufdata[i], (byte) streamFromNetwork.read());
     }
-    try {
-      streamFromNetwork.read();
-      Assert.assertTrue(false);
-    } catch (BufferUnderflowException e) {
-      Assert.assertTrue(true);
-    }
+    int read = streamFromNetwork.read();
+    Assert.assertTrue(read == -1);
 
     // send response back and ensure response is received
     PutResponse response = new PutResponse(1, "clientid1", ServerErrorCode.IO_Error);

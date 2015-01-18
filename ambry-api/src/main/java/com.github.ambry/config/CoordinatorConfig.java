@@ -35,7 +35,7 @@ public class CoordinatorConfig {
    * The factory class the coordinator uses to create a connection pool.
    */
   @Config("coordinator.connection.pool.factory")
-  @Default("com.github.ambry.shared.BlockingChannelConnectionPoolFactory")
+  @Default("com.github.ambry.network.BlockingChannelConnectionPoolFactory")
   public final String connectionPoolFactory;
 
   /**
@@ -60,7 +60,7 @@ public class CoordinatorConfig {
     this.operationTimeoutMs =
         verifiableProperties.getIntInRange("coordinator.operation.timeout.ms", 2000, 1, Integer.MAX_VALUE);
     this.connectionPoolFactory = verifiableProperties.getString("coordinator.connection.pool.factory",
-        "com.github.ambry.shared.BlockingChannelConnectionPoolFactory");
+        "com.github.ambry.network.BlockingChannelConnectionPoolFactory");
     this.connectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);

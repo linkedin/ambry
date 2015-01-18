@@ -1,0 +1,77 @@
+package com.github.ambry.protocol;
+
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.store.MessageInfo;
+
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
+
+/**
+ * A serde for serializing and deserializing list of message info
+ */
+public class MessageInfoListSerde {
+
+  private final List<MessageInfo> messageInfoList;
+
+  public MessageInfoListSerde(List<MessageInfo> messageInfoList) {
+    this.messageInfoList = messageInfoList;
+  }
+
+  public int getMessageInfoListSize() {
+    int listcountSize = 4;
+    if (messageInfoList == null) {
+      return listcountSize;
+    }
+    int size = 0;
+    int longfieldSize = 8;
+    size += listcountSize;
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        size += messageInfo.getStoreKey().sizeInBytes();
+        size += longfieldSize;
+        size += longfieldSize;
+        size += 1;
+      }
+    }
+    return size;
+  }
+
+  public void serializeMessageInfoList(ByteBuffer outputBuffer) {
+    outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
+    if (messageInfoList != null) {
+      for (MessageInfo messageInfo : messageInfoList) {
+        outputBuffer.put(messageInfo.getStoreKey().toBytes());
+        outputBuffer.putLong(messageInfo.getSize());
+        outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
+        outputBuffer.put(messageInfo.isDeleted() ? (byte) 1 : 0);
+      }
+    }
+  }
+
+  public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map)
+      throws IOException {
+    int messageInfoListCount = stream.readInt();
+    ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
+    for (int i = 0; i < messageInfoListCount; i++) {
+      BlobId id = new BlobId(stream, map);
+      long size = stream.readLong();
+      long ttl = stream.readLong();
+      byte b = stream.readByte();
+      boolean isDeleted = false;
+      if (b == 1) {
+        isDeleted = true;
+      }
+      messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
+    }
+    return messageListInfo;
+  }
+
+  public List<MessageInfo> getMessageInfoList() {
+    return messageInfoList;
+  }
+}

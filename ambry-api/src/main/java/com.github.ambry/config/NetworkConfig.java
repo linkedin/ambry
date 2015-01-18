@@ -34,7 +34,7 @@ public class NetworkConfig {
   public final int port;
 
   /**
-   * Hostname of broker. If this is set, it will only bind to this address. If this is not set,
+   * Hostname of server. If this is set, it will only bind to this address. If this is not set,
    * it will bind to all interfaces, and publish one to ZK
    */
   @Config("host.name")

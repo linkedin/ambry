@@ -1,5 +1,7 @@
 package com.github.ambry.server;
 
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -15,17 +17,15 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.shared.BlobId;
-import com.github.ambry.shared.BlockingChannel;
-import com.github.ambry.shared.DeleteRequest;
-import com.github.ambry.shared.DeleteResponse;
-import com.github.ambry.shared.GetOptions;
-import com.github.ambry.shared.GetRequest;
-import com.github.ambry.shared.GetResponse;
-import com.github.ambry.shared.PartitionRequestInfo;
-import com.github.ambry.shared.PutRequest;
-import com.github.ambry.shared.PutResponse;
-import com.github.ambry.shared.ServerErrorCode;
+import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreException;
@@ -488,7 +488,7 @@ public class ServerTest {
           try {
             short version = dataInputStream.readShort();
             Assert.assertEquals(version, 0);
-            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.shared.BlobIdFactory", clusterMap);
+            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
             FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
             System.out.println("setToCheck" + setToCheck.size());
