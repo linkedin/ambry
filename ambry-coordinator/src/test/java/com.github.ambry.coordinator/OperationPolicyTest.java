@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -432,7 +433,8 @@ public class OperationPolicyTest {
   public void testGetCrossColoParallelOperationPolicy()
       throws Exception {
 
-    OperationContext oc = new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap()), null);
+    OperationContext oc = new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(),
+        true), null);
     // Simple success test
     {
       OperationPolicy op =

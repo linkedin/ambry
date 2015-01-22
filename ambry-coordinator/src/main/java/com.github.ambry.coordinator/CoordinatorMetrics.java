@@ -1,12 +1,14 @@
 package com.github.ambry.coordinator;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,13 +54,16 @@ public class CoordinatorMetrics {
   public final Counter corruptionError;
 
   public final Counter unknownReplicaResponseError;
-  public final Counter crossColoProxyCallCount;
+  public final Counter successfulCrossColoProxyCallCount;
+  public final Counter totalCrossColoProxyCallCount;
+
+  public final Gauge<Integer> crossColoCallsEnabled;
 
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -102,8 +107,16 @@ public class CoordinatorMetrics {
     corruptionError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "corruptionError"));
     unknownReplicaResponseError =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "unknownReplicaResponseError"));
-    crossColoProxyCallCount =
-        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "crossColoProxyCallCount"));
+    successfulCrossColoProxyCallCount =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "successfulCrossColoProxyCallCount"));
+    totalCrossColoProxyCallCount =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "totalCrossColoProxyCallCount"));
+    this.crossColoCallsEnabled = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return (crossDCProxyCallsEnabled == true ? 1 : 0);
+      }
+    };
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.

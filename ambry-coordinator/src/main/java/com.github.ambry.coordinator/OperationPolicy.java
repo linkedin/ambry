@@ -382,7 +382,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   public void onSuccessfulResponse(ReplicaId replicaId) {
     super.onSuccessfulResponse(replicaId);
     if(proxied) {
-      coordinatorMetrics.crossColoProxyCallCount.inc();
+      coordinatorMetrics.successfulCrossColoProxyCallCount.inc();
       logger.trace("Operation succeeded after going cross colo");
     }
     logger.trace("Successful response from " + replicaId);
@@ -477,6 +477,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       if(getReplicasInFlightCount() == 0){
         proxied = true;
         logger.trace("Operation going cross colo after exhausting all local replicas");
+        coordinatorMetrics.totalCrossColoProxyCallCount.inc();
       }
     }
     ReplicaId nextReplicaToSend = null;
