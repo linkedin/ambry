@@ -65,7 +65,6 @@ public class AmbryCoordinator implements Coordinator {
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
     this.responseFailureHandler = new ResponseFailureHandler(clusterMap);
-    this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled);
     this.notificationSystem = notificationSystem;
     this.randomForPartitionSelection = new Random();
     logger.info("coordinator starting");
@@ -82,7 +81,8 @@ public class AmbryCoordinator implements Coordinator {
 
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
-      this.crossDCProxyCallsEnabled.set(coordinatorConfig.crossDCProxyCallEnable);
+      this.crossDCProxyCallsEnabled = new AtomicBoolean(coordinatorConfig.crossDCProxyCallEnable);
+      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled);
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
