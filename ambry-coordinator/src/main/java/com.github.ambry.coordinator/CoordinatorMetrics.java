@@ -63,11 +63,8 @@ public class CoordinatorMetrics {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  private AtomicBoolean crossDCProxyCallsEnabled;
-
-  public CoordinatorMetrics(ClusterMap clusterMap, AtomicBoolean crossDCProxyCallsEnabled) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
-    this.crossDCProxyCallsEnabled = crossDCProxyCallsEnabled;
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
     deleteBlobOperationLatencyInMs =
@@ -117,7 +114,7 @@ public class CoordinatorMetrics {
     this.crossColoCallsEnabled = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return isCrossColoCallsEnabled();
+        return (crossDCProxyCallsEnabled == true ? 1 : 0);
       }
     };
 
@@ -127,10 +124,6 @@ public class CoordinatorMetrics {
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
       requestMetrics.put(dataNodeId, new RequestMetrics(registry, dataNodeId));
     }
-  }
-
-  private int isCrossColoCallsEnabled() {
-    return (this.crossDCProxyCallsEnabled.get() == true ? 1 : 0);
   }
 
   public enum CoordinatorOperationType {

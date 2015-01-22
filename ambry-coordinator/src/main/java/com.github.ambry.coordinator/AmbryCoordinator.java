@@ -82,7 +82,7 @@ public class AmbryCoordinator implements Coordinator {
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
       this.crossDCProxyCallsEnabled = new AtomicBoolean(coordinatorConfig.crossDCProxyCallEnable);
-      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled);
+      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled.get());
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
