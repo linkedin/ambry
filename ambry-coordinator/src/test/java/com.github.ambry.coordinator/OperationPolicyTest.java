@@ -434,7 +434,7 @@ public class OperationPolicyTest {
       throws Exception {
 
     OperationContext oc = new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(),
-        new AtomicBoolean(true)), null);
+        true), null);
     // Simple success test
     {
       OperationPolicy op =
