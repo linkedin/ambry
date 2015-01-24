@@ -100,6 +100,10 @@ public class DataNode extends DataNodeId {
     dataNodeStatePolicy.onError();
   }
 
+  public void onNodeResponse() {
+    dataNodeStatePolicy.onSuccess();
+  }
+
   public boolean isDown() {
     return dataNodeStatePolicy.isDown();
   }

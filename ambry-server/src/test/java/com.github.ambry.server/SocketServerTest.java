@@ -66,7 +66,7 @@ public class SocketServerTest {
         new PutRequest(correlationId, "test", new BlobId(partitionIds.get(0)), new BlobProperties(10, "id"),
             ByteBuffer.wrap(bufmetadata), stream);
 
-    BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000);
+    BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000, 2000);
     channel.connect();
     channel.send(emptyRequest);
     RequestResponseChannel requestResponseChannel = server.getRequestResponseChannel();

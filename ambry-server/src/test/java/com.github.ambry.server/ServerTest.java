@@ -103,7 +103,7 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
+      BlockingChannel channel = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
@@ -291,9 +291,9 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000);
+      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
+      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000, 2000);
+      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000, 2000);
 
       channel1.connect();
       channel2.connect();
@@ -717,9 +717,9 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000);
+      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
+      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000, 2000);
+      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000, 2000);
 
       // put all the blobs to random servers
 
@@ -1197,7 +1197,7 @@ public class ServerTest {
             notificationSystem.awaitBlobCreations(payload.blobId);
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
               BlockingChannel channel1 =
-                  new BlockingChannel(dataNodeId.getHostname(), dataNodeId.getPort(), 10000, 10000, 10000);
+                  new BlockingChannel(dataNodeId.getHostname(), dataNodeId.getPort(), 10000, 10000, 10000, 2000);
               channel1.connect();
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
               ids.add(new BlobId(payload.blobId, clusterMap));

@@ -169,14 +169,23 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType error) {
     switch (error) {
       case Disk_Error:
         ((Disk) replicaId.getDiskId()).onDiskError();
+        break;
+      case Disk_Ok:
+        ((Disk) replicaId.getDiskId()).onDiskOk();
+        break;
       case Node_Timeout:
         ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
+        break;
+      case Node_Response:
+        ((DataNode) replicaId.getDataNodeId()).onNodeResponse();
+        break;
       case Partition_ReadOnly:
         ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
+        break;
     }
   }
 }

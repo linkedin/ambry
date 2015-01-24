@@ -43,8 +43,8 @@ class MockBlockingChannel extends BlockingChannel {
   private InputStream responseStream;
 
   public MockBlockingChannel(MockDataNode mockDataNode, String host, int port, int readBufferSize, int writeBufferSize,
-      int readTimeoutMs) {
-    super(host, port, readBufferSize, writeBufferSize, readTimeoutMs);
+      int readTimeoutMs, int connectTimeoutMs) {
+    super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
 
     this.mockDataNode = mockDataNode;
     this.connected = new AtomicBoolean(false);

@@ -16,6 +16,7 @@ public class MockConnectionPool implements ConnectionPool {
   private final int readBufferSizeBytes;
   private final int writeBufferSizeBytes;
   private final int readTimeoutMs;
+  private final int connectTimeoutMs;
 
   // Need static instance of MockCluster so that all connection pools share common MockCluster.
   public static MockCluster mockCluster = null;
@@ -24,6 +25,7 @@ public class MockConnectionPool implements ConnectionPool {
     this.readBufferSizeBytes = config.connectionPoolReadBufferSizeBytes;
     this.writeBufferSizeBytes = config.connectionPoolWriteBufferSizeBytes;
     this.readTimeoutMs = config.connectionPoolReadTimeoutMs;
+    this.connectTimeoutMs = config.connectionPoolConnectTimeoutMs;
   }
 
   @Override
@@ -39,7 +41,7 @@ public class MockConnectionPool implements ConnectionPool {
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     BlockingChannel blockingChannel =
         new MockBlockingChannel(mockCluster.getMockDataNode(host, port), host, port, readBufferSizeBytes,
-            writeBufferSizeBytes, readTimeoutMs);
+            writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
     blockingChannel.connect();
     return blockingChannel;
   }

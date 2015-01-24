@@ -22,5 +22,10 @@ public interface ResourceStatePolicy {
    * Should be called by the caller every time an error is encountered for the corresponding resource.
    */
   public void onError();
+
+  /**
+   * May be called by the caller when the resource is responsive.
+   */
+  public void onSuccess();
 }
 
