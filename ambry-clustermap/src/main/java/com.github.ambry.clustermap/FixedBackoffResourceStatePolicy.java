@@ -3,79 +3,73 @@ package com.github.ambry.clustermap;
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * FixedBackoffResourceStatePolicy marks a resource as unavailable for retryBackoff milliseconds if the number of errors
- * the resource encountered in the most recent window of failureWindowSize milliseconds is greater than
- * failureCountThreshold.
+ * FixedBackoffResourceStatePolicy marks a resource as unavailable for retryBackoff milliseconds if the number of
+ * consecutive errors the resource encountered is greater than failureCountThreshold.
  */
 class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final Object resource;
   private final boolean hardDown;
+  private final AtomicInteger failureCount;
   private final int failureCountThreshold;
-  private final long failureWindowSizeMs;
   private final long retryBackoffMs;
-  private long downUntil;
-  private AtomicBoolean down;
-  private ArrayDeque<Long> failureQueue;
+  private AtomicLong downUntil;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, long failureWindowSizeMs,
-      int failureCountThreshold, long retryBackoffMs) {
+  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown,  int failureCountThreshold,
+      long retryBackoffMs) {
     this.resource = resource;
     this.hardDown = hardDown;
-    this.failureWindowSizeMs = failureWindowSizeMs;
     this.failureCountThreshold = failureCountThreshold;
     this.retryBackoffMs = retryBackoffMs;
-    this.downUntil = 0;
-    this.down = new AtomicBoolean(false);
-    failureQueue = new ArrayDeque<Long>();
+    this.downUntil = new AtomicLong(0);
+    this.failureCount = new AtomicInteger(0);
   }
 
-  /** On error, check if there have been threshold number of errors in the last failure window milliseconds.
-   *  If so, make this resource down until now + retryBackoffMs. The size of the queue is bounded by the threshold.
+  /*
+   * On an error, if the failureCount is greater than the threshold, mark the node as down.
    */
   @Override
   public void onError() {
-    synchronized (this) {
-      // Ignore errors if it has already been determined that the node is down.
-      if (!down.get()) {
-        while (failureQueue.size() > 0
-            && failureQueue.getFirst() < SystemTime.getInstance().milliseconds() - failureWindowSizeMs) {
-          failureQueue.remove();
-        }
-        if (failureQueue.size() < failureCountThreshold) {
-          failureQueue.add(SystemTime.getInstance().milliseconds());
-        } else {
-          failureQueue.clear();
-          down.set(true);
-          downUntil = SystemTime.getInstance().milliseconds() + retryBackoffMs;
-          logger.error("Resource " + resource + " has gone down");
-        }
+      if (failureCount.incrementAndGet() >= failureCountThreshold) {
+        downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
+        logger.error("Resource " + resource + " has gone down");
       }
-    }
   }
 
-  /* If down (which is checked locklessly), check to see if it is time to be up.
+  /*
+   * A single response resets the count.
+   */
+  @Override
+  public void onSuccess() {
+    failureCount.set(0);
+  }
+
+  /*
+   * If the number of failures are above the threshold, the resource will be counted as down unless downUntil is in
+   * the past.
+   * Note how failureCount is not reset to 0 here. This is so that the node is marked as down if the first request after
+   * marking a node back up, also times out. We only reset failureCount on an actual response, so down nodes get a
+   * 'chance' to prove they are back up every retryBackoffMs - they do not get 'fully up' status until they are actually
+   * responsive.
    */
   @Override
   public boolean isDown() {
-    boolean ret = false;
+    boolean down = false;
     if (hardDown) {
-      ret = true;
-    } else if (down.get()) {
-      synchronized (this) {
-        if (SystemTime.getInstance().milliseconds() > downUntil) {
-          down.set(false);
-        } else {
-          ret = true;
-        }
+      down = true;
+    } else if (failureCount.get() >= failureCountThreshold) {
+      if (SystemTime.getInstance().milliseconds() < downUntil.get()) {
+        down = true;
       }
     }
-    return ret;
+    return down;
   }
 
   @Override

@@ -21,6 +21,7 @@ public class BlockingChannel implements ConnectedChannel {
   private final int readBufferSize;
   private final int writeBufferSize;
   private final int readTimeoutMs;
+  private final int connectTimeoutMs;
   private boolean connected = false;
   private SocketChannel channel = null;
   public InputStream readChannel = null;
@@ -28,12 +29,14 @@ public class BlockingChannel implements ConnectedChannel {
   private Object lock = new Object();
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs) {
+  public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
+      int connectTimeoutMs) {
     this.host = host;
     this.port = port;
     this.readBufferSize = readBufferSize;
     this.writeBufferSize = writeBufferSize;
     this.readTimeoutMs = readTimeoutMs;
+    this.connectTimeoutMs = connectTimeoutMs;
   }
 
   public void connect()
@@ -51,7 +54,7 @@ public class BlockingChannel implements ConnectedChannel {
         channel.socket().setSoTimeout(readTimeoutMs);
         channel.socket().setKeepAlive(true);
         channel.socket().setTcpNoDelay(true);
-        channel.connect(new InetSocketAddress(host, port));
+        channel.socket().connect(new InetSocketAddress(host, port), connectTimeoutMs);
         writeChannel = channel;
         readChannel = channel.socket().getInputStream();
         connected = true;

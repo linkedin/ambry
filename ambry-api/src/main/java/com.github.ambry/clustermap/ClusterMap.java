@@ -65,7 +65,7 @@ public interface ClusterMap {
   public MetricRegistry getMetricRegistry();
 
   /**
-   * Performs the required action when an operation on a replica encounters an error.
+   * Performs the required action for a replica related event.
    */
-  public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error);
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event);
 }
