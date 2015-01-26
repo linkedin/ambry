@@ -169,22 +169,22 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType error) {
-    switch (error) {
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
+    switch (event) {
       case Disk_Error:
-        ((Disk) replicaId.getDiskId()).onDiskError();
+        ((MockDiskId) replicaId.getDiskId()).onDiskError();
         break;
       case Disk_Ok:
-        ((Disk) replicaId.getDiskId()).onDiskOk();
+        ((MockDiskId) replicaId.getDiskId()).onDiskOk();
         break;
       case Node_Timeout:
-        ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
+        ((MockDataNodeId) replicaId.getDataNodeId()).onNodeTimeout();
         break;
       case Node_Response:
-        ((DataNode) replicaId.getDataNodeId()).onNodeResponse();
+        ((MockDataNodeId) replicaId.getDataNodeId()).onNodeResponse();
         break;
       case Partition_ReadOnly:
-        ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
+        ((MockPartitionId) replicaId.getPartitionId()).onPartitionReadOnly();
         break;
     }
   }
@@ -197,6 +197,7 @@ class MockReplicaId implements ReplicaId {
   private List<ReplicaId> peerReplicas;
   private PartitionId partitionId;
   private MockDataNodeId dataNodeId;
+  private MockDiskId diskId;
 
   public MockReplicaId(int port, PartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
     this.partitionId = partitionId;
@@ -207,6 +208,7 @@ class MockReplicaId implements ReplicaId {
     replicaFile.mkdir();
     replicaFile.deleteOnExit();
     replicaPath = replicaFile.getAbsolutePath();
+    diskId = new MockDiskId(dataNodeId, mountPath);
   }
 
   @Override
@@ -250,22 +252,7 @@ class MockReplicaId implements ReplicaId {
 
   @Override
   public DiskId getDiskId() {
-    return new DiskId() {
-      @Override
-      public String getMountPath() {
-        return mountPath;
-      }
-
-      @Override
-      public HardwareState getState() {
-        return HardwareState.AVAILABLE;
-      }
-
-      @Override
-      public long getRawCapacityInBytes() {
-        return 100000;
-      }
-    };
+    return diskId;
   }
 
   @Override
