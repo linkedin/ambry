@@ -13,23 +13,15 @@ public class ClusterMapConfig {
   public final String clusterMapResourceStatePolicyFactory;
 
   /**
-   * The fixed timeout based resource state handling checks if we have had a 'threshold' number of errors in the last
-   * time window of size 'window' milliseconds, and if so, considers the resource as down for 'retry backoff'
-   * milliseconds.
+   * The fixed timeout based resource state handling checks if we have had a 'threshold' number of consecutive errors,
+   * and if so, considers the resource as down for 'retry backoff' milliseconds.
    */
 
   /**
-   * The window size for datanode state determination.
-   */
-  @Config("clustermap.fixedtimeout.datanode.window.ms")
-  @Default("2000")
-  public final int clusterMapFixedTimeoutDatanodeWindowMs;
-
-  /**
-   * The threshold for the number of errors to tolerate for a datanode in the datanode window
+   * The threshold for the number of consecutive errors to tolerate for a datanode.
    */
   @Config("clustermap.fixedtimeout.datanode.error.threshold")
-  @Default("3")
+  @Default("6")
   public final int clusterMapFixedTimeoutDatanodeErrorThreshold;
 
   /**
@@ -40,14 +32,7 @@ public class ClusterMapConfig {
   public final int clusterMapFixedTimeoutDataNodeRetryBackoffMs;
 
   /**
-   * The window size for disk state determination.
-   */
-  @Config("clustermap.fixedtimeout.disk.window.ms")
-  @Default("2000")
-  public final int clusterMapFixedTimeoutDiskWindowMs;
-
-  /**
-   * The threshold for the number of errors to tolerate for a disk in the disk window
+   * The threshold for the number of errors to tolerate for a disk.
    */
   @Config("clustermap.fixedtimeout.disk.error.threshold")
   @Default("1")
@@ -63,14 +48,10 @@ public class ClusterMapConfig {
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
         "com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory");
-    clusterMapFixedTimeoutDatanodeWindowMs =
-        verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.window.ms", 2000, 1, 100000);
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
     clusterMapFixedTimeoutDataNodeRetryBackoffMs = verifiableProperties
         .getIntInRange("clustermap.fixedtimeout.datanode.retry.backoff.ms", 5 * 60 * 1000, 1, 20 * 60 * 1000);
-    clusterMapFixedTimeoutDiskWindowMs =
-        verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.window.ms", 2000, 1, 100000);
     clusterMapFixedTimeoutDiskErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.error.threshold", 1, 1, 100);
     clusterMapFixedTimeoutDiskRetryBackoffMs = verifiableProperties

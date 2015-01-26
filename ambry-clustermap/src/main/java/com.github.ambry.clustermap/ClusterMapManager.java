@@ -340,14 +340,23 @@ public class ClusterMapManager implements ClusterMap {
     return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
   }
 
-  public void onReplicaError(ReplicaId replicaId, ReplicaFailureType error) {
-    switch (error) {
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
+    switch (event) {
       case Disk_Error:
         ((Disk) replicaId.getDiskId()).onDiskError();
+        break;
+      case Disk_Ok:
+        ((Disk) replicaId.getDiskId()).onDiskOk();
+        break;
       case Node_Timeout:
         ((DataNode) replicaId.getDataNodeId()).onNodeTimeout();
+        break;
+      case Node_Response:
+        ((DataNode) replicaId.getDataNodeId()).onNodeResponse();
+        break;
       case Partition_ReadOnly:
         ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
+        break;
     }
   }
 }

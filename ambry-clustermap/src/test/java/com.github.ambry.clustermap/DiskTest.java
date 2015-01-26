@@ -116,26 +116,21 @@ public class DiskTest {
     props.setProperty("clustermap.fixedtimeout.disk.retry.backoff.ms", Integer.toString(2000));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
-    long windowMs = clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs;
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold;
     long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs;
 
     Disk testDisk = new TestDisk(jsonObject, clusterMapConfig);
-    for (int i = 0; i <= threshold; i++) {
+    for (int i = 0; i < threshold; i++) {
       assertEquals(testDisk.getState(), HardwareState.AVAILABLE);
       testDisk.onDiskError();
     }
     assertEquals(testDisk.getState(), HardwareState.UNAVAILABLE);
     Thread.sleep(retryBackoffMs + 1);
     assertEquals(testDisk.getState(), HardwareState.AVAILABLE);
-
-    if (threshold > 1) {
-      for (int i = 0; i <= threshold; i++) {
-        assertEquals(testDisk.getState(), HardwareState.AVAILABLE);
-        testDisk.onDiskError();
-        Thread.sleep(windowMs + 1);
-      }
-    }
+    //A single error should make it unavailable
+    testDisk.onDiskError();
+    assertEquals(testDisk.getState(), HardwareState.UNAVAILABLE);
+    testDisk.onDiskOk();
     assertEquals(testDisk.getState(), HardwareState.AVAILABLE);
   }
 }

@@ -1,6 +1,6 @@
 package com.github.ambry.coordinator;
 
-import com.github.ambry.commons.ResponseFailureHandler;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ReplicaId;
@@ -239,7 +239,7 @@ abstract class OperationRequest implements Runnable {
   private final BlobId blobId;
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
-  private ResponseFailureHandler responseFailureHandler;
+  private ResponseHandler responseHandler;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -251,7 +251,7 @@ abstract class OperationRequest implements Runnable {
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
-    this.responseFailureHandler = context.getResponseFailureHandler();
+    this.responseHandler = context.getResponseHandler();
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)
@@ -301,27 +301,27 @@ abstract class OperationRequest implements Runnable {
       enqueueOperationResponse(new OperationResponse(replicaId, response));
       markRequest();
       updateRequest(System.currentTimeMillis() - startTimeInMs);
-      responseFailureHandler.onRequestResponseError(replicaId, response.getError());
+      responseHandler.onRequestResponseError(replicaId, response.getError());
     } catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.IO_ERROR));
       countError(RequestResponseError.IO_ERROR);
-      responseFailureHandler.onRequestResponseException(replicaId, e);
+      responseHandler.onRequestResponseException(replicaId, e);
     } catch (MessageFormatException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.MESSAGE_FORMAT_ERROR));
       countError(e.getErrorCode());
-      responseFailureHandler.onRequestResponseException(replicaId, e);
+      responseHandler.onRequestResponseException(replicaId, e);
     } catch (ConnectionPoolTimeoutException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.TIMEOUT_ERROR));
       countError(RequestResponseError.TIMEOUT_ERROR);
-      responseFailureHandler.onRequestResponseException(replicaId, e);
+      responseHandler.onRequestResponseException(replicaId, e);
     } catch (Exception e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
       enqueueOperationResponse(new OperationResponse(replicaId, RequestResponseError.UNEXPECTED_ERROR));
       countError(RequestResponseError.UNEXPECTED_ERROR);
-      responseFailureHandler.onRequestResponseException(replicaId, e);
+      responseHandler.onRequestResponseException(replicaId, e);
     } finally {
       if (connectedChannel != null) {
         logger.trace("{} {} destroying connection", context, replicaId);

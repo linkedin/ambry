@@ -156,4 +156,8 @@ public class Disk implements DiskId {
   public void onDiskError() {
     diskStatePolicy.onError();
   }
+
+  public void onDiskOk() {
+    diskStatePolicy.onSuccess();
+  }
 }

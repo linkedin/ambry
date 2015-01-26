@@ -130,43 +130,35 @@ public class DataNodeTest {
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.datanode.retry.backoff.ms", Integer.toString(2000));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    long windowMs = clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs;
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
     long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;
 
     DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
-    for (int i = 0; i <= threshold; i++) {
-      assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
-      for (DiskId disk : dataNode.getDisks()) {
-        assertEquals(disk.getState(), HardwareState.AVAILABLE);
-      }
+    for (int i = 0; i < threshold; i++) {
+      ensure(dataNode, HardwareState.AVAILABLE);
       dataNode.onNodeTimeout();
     }
-    // After threshold number of continuous errors, the resource should be unavailable (assuming the window is
-    // large enough to hold all the above errors in the queue)
-    assertEquals(dataNode.getState(), HardwareState.UNAVAILABLE);
-    for (DiskId disk : dataNode.getDisks()) {
-      assertEquals(disk.getState(), HardwareState.UNAVAILABLE);
-    }
+    // After threshold number of continuous errors, the resource should be unavailable
+    ensure(dataNode, HardwareState.UNAVAILABLE);
+
     Thread.sleep(retryBackoffMs + 1);
     // If retryBackoffMs has passed, the resource should be available.
-    assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
-    for (DiskId disk : dataNode.getDisks()) {
-      assertEquals(disk.getState(), HardwareState.AVAILABLE);
-    }
+    ensure(dataNode, HardwareState.AVAILABLE);
 
-    if (threshold > 1) {
-      for (int i = 1; i <= threshold; i++) {
-        assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
-        for (DiskId disk : dataNode.getDisks()) {
-          assertEquals(disk.getState(), HardwareState.AVAILABLE);
-        }
-        dataNode.onNodeTimeout();
-        Thread.sleep(windowMs);
-      }
+    //A single timeout should make the node unavailable now
+    dataNode.onNodeTimeout();
+    ensure(dataNode, HardwareState.UNAVAILABLE);
+
+    //A single response should make the node available now
+    dataNode.onNodeResponse();
+    ensure(dataNode, HardwareState.AVAILABLE);
+  }
+
+  void ensure(DataNode dataNode, HardwareState state)
+  {
+    assertEquals(dataNode.getState(), state);
+    for (DiskId disk : dataNode.getDisks()) {
+      assertEquals(disk.getState(), state);
     }
-    // Even if we had more than threshold number of errors, if they did not fit in the
-    // same window, the resource should be available.
-    assertEquals(dataNode.getState(), HardwareState.AVAILABLE);
   }
 }

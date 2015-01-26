@@ -116,7 +116,8 @@ class BlockingChannelInfo {
         if (numberOfConnections.get() < config.connectionPoolMaxConnectionsPerHost) {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
           BlockingChannel channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
-              config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs);
+              config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
+              config.connectionPoolConnectTimeoutMs);
           channel.connect();
           blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
@@ -159,7 +160,7 @@ class BlockingChannelInfo {
       // to create the connection
       BlockingChannel channel = new BlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
           config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
-          config.connectionPoolReadTimeoutMs);
+          config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
       blockingChannelAvailableConnections.add(channel);

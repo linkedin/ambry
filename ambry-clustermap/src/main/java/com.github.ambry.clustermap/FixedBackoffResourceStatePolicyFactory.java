@@ -12,12 +12,10 @@ public class FixedBackoffResourceStatePolicyFactory implements ResourceStatePoli
     resourceStatePolicy = null;
     if (resource instanceof DataNodeId) {
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
-          clusterMapConfig.clusterMapFixedTimeoutDatanodeWindowMs,
           clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold,
           clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs);
     } else if (resource instanceof DiskId) {
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
-          clusterMapConfig.clusterMapFixedTimeoutDiskWindowMs,
           clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold,
           clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs);
     }

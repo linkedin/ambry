@@ -4,7 +4,7 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.ResponseFailureHandler;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -40,7 +40,7 @@ public class AmbryCoordinator implements Coordinator {
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
-  private final ResponseFailureHandler responseFailureHandler;
+  private final ResponseHandler responseHandler;
   private final NotificationSystem notificationSystem;
 
   private int operationTimeoutMs;
@@ -64,7 +64,7 @@ public class AmbryCoordinator implements Coordinator {
       NotificationSystem notificationSystem) {
     this.shuttingDown = new AtomicBoolean(false);
     this.clusterMap = clusterMap;
-    this.responseFailureHandler = new ResponseFailureHandler(clusterMap);
+    this.responseHandler = new ResponseHandler(clusterMap);
     this.notificationSystem = notificationSystem;
     this.randomForPartitionSelection = new Random();
     logger.info("coordinator starting");
@@ -141,8 +141,8 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
-        coordinatorMetrics, responseFailureHandler);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(), coordinatorMetrics,
+        responseHandler);
   }
 
   private PartitionId getPartitionForPut()

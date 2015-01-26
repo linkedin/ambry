@@ -1,6 +1,6 @@
 package com.github.ambry.coordinator;
 
-import com.github.ambry.commons.ResponseFailureHandler;
+import com.github.ambry.commons.ResponseHandler;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -16,16 +16,16 @@ public class OperationContext {
   private int connectionPoolCheckoutTimeout;
   private boolean crossDCProxyCallEnable;
   private CoordinatorMetrics coordinatorMetrics;
-  private ResponseFailureHandler responseFailureHandler;
+  private ResponseHandler responseHandler;
 
   public OperationContext(String clientId, int connectionPoolCheckoutTimeout, boolean crossDCProxyCallEnable,
-      CoordinatorMetrics coordinatorMetrics, ResponseFailureHandler responseFailureHandler) {
+      CoordinatorMetrics coordinatorMetrics, ResponseHandler responseHandler) {
     this.clientId = clientId;
     this.correlationId = currentCount.incrementAndGet();
     this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
     this.coordinatorMetrics = coordinatorMetrics;
     this.crossDCProxyCallEnable = crossDCProxyCallEnable;
-    this.responseFailureHandler = responseFailureHandler;
+    this.responseHandler = responseHandler;
   }
 
   public String getClientId() {
@@ -48,8 +48,8 @@ public class OperationContext {
     return crossDCProxyCallEnable;
   }
 
-  public ResponseFailureHandler getResponseFailureHandler() {
-    return responseFailureHandler;
+  public ResponseHandler getResponseHandler() {
+    return responseHandler;
   }
 
   @Override
