@@ -4,6 +4,7 @@ import com.github.ambry.utils.SystemTime;
 import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +19,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final AtomicInteger failureCount;
   private final int failureCountThreshold;
   private final long retryBackoffMs;
-  private long downUntil;
+  private AtomicLong downUntil;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown,  int failureCountThreshold,
@@ -27,7 +28,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     this.hardDown = hardDown;
     this.failureCountThreshold = failureCountThreshold;
     this.retryBackoffMs = retryBackoffMs;
-    this.downUntil = 0;
+    this.downUntil = new AtomicLong(0);
     this.failureCount = new AtomicInteger(0);
   }
 
@@ -36,25 +37,18 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onError() {
-    synchronized(this) {
       if (failureCount.incrementAndGet() >= failureCountThreshold) {
-        downUntil = SystemTime.getInstance().milliseconds() + retryBackoffMs;
+        downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
         logger.error("Resource " + resource + " has gone down");
       }
-    }
   }
 
   /*
-   * Only take the lock if failureCount is greater than 0, so that the lock is not taken during normal conditions.
-   * Note that a single response resets the count.
+   * A single response resets the count.
    */
   @Override
   public void onSuccess() {
-    if (failureCount.get() > 0) {
-      synchronized (this) {
-        failureCount.set(0);
-      }
-    }
+    failureCount.set(0);
   }
 
   /*
@@ -67,17 +61,15 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public boolean isDown() {
-    boolean ret = false;
+    boolean down = false;
     if (hardDown) {
-      ret = true;
+      down = true;
     } else if (failureCount.get() >= failureCountThreshold) {
-      synchronized (this) {
-        if (SystemTime.getInstance().milliseconds() < downUntil) {
-          ret = true;
-        }
+      if (SystemTime.getInstance().milliseconds() < downUntil.get()) {
+        down = true;
       }
     }
-    return ret;
+    return down;
   }
 
   @Override
