@@ -19,6 +19,7 @@ public interface Router extends Closeable {
    * @return A future that would contain the BlobInfo eventually
    */
   public Future<BlobInfo> getBlobInfo(String blobId);
+
   /**
    * Request for the BlobInfo asynchronously and invokes the callback when the request completes.
    * @param blobId The ID of the blob for which the BlobInfo is requested
@@ -26,6 +27,7 @@ public interface Router extends Closeable {
    * @return A future that would contain the BlobInfo eventually
    */
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback);
+
   /**
    * Request for the blob content asynchronously and returns a future which will finally contain
    * the Blob on a successful response.
@@ -33,6 +35,7 @@ public interface Router extends Closeable {
    * @return A future that would contain the Blob eventually
    */
   public Future<BlobOutput> getBlob(String blobId);
+
   /**
    * Request for the blob content asynchronously and invokes the callback when the request completes.
    * @param blobId The ID of the blob for which the Blob is requested
@@ -40,6 +43,7 @@ public interface Router extends Closeable {
    * @return A future that would contain the blob output eventually
    */
   public Future<BlobOutput> getBlob(String blobId, Callback<BlobOutput> callback);
+
   /**
    * Request for a new blob to be put asynchronously and returns a future which will finally contain
    * the BlobId of the new blob on a successful response.
@@ -49,6 +53,7 @@ public interface Router extends Closeable {
    * @return A future that contains the blob Id eventually
    */
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel);
+
   /**
    * Request for a new blob to be put asynchronously and invokes the callback when the request completes.
    * @param blobProperties The blob properties of the blob
@@ -57,7 +62,9 @@ public interface Router extends Closeable {
    * @param callback The callback which will be invoked on the completion of a request
    * @return A future that contains the blob Id eventually
    */
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel, Callback<String> callback);
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel,
+      Callback<String> callback);
+
   /**
    * Request for a blob to be deleted asynchronously and returns a future which will finally contain if the request
    * succeeded or not.
@@ -65,6 +72,7 @@ public interface Router extends Closeable {
    * @return A future that contains response about whether the deletion succeeded or not eventually
    */
   public Future<Void> deleteBlob(String blobId);
+
   /**
    * Request for a blob to be deleted asynchronously and invokes the callback when the request completes.
    * @param blobId The Id of the blob that needs to be deleted
@@ -72,6 +80,7 @@ public interface Router extends Closeable {
    * @return A future that contains response about whether the deletion succeeded or not eventually
    */
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback);
+
   /**
    * Close the router
    */

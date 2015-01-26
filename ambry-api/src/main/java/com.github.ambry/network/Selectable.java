@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 
+
 /**
  * An interface for asynchronous, multi-channel network I/O
  */
@@ -17,7 +18,8 @@ public interface Selectable {
    * @return A unique id that identifies this connection
    * @throws java.io.IOException If we cannot begin connecting
    */
-  public long connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException;
+  public long connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize)
+      throws IOException;
 
   /**
    * Begin disconnecting the connection identified by the given id
@@ -41,7 +43,8 @@ public interface Selectable {
    * @param sends The new sends to initiate
    * @throws IOException
    */
-  public void poll(long timeout, List<NetworkSend> sends) throws IOException;
+  public void poll(long timeout, List<NetworkSend> sends)
+      throws IOException;
 
   /**
    * The list of sends that completed on the last {@link #poll(long, List) poll()} call.
@@ -64,5 +67,4 @@ public interface Selectable {
    * call.
    */
   public List<Long> connected();
-
 }

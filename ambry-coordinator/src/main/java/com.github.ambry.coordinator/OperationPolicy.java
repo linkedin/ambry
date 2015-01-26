@@ -198,7 +198,7 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   }
 
   @Override
-  public boolean hasProxied(){
+  public boolean hasProxied() {
     return this.proxied;
   }
 
@@ -381,7 +381,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   @Override
   public void onSuccessfulResponse(ReplicaId replicaId) {
     super.onSuccessfulResponse(replicaId);
-    if(proxied) {
+    if (proxied) {
       coordinatorMetrics.successfulCrossColoProxyCallCount.inc();
       logger.trace("Operation succeeded after going cross colo");
     }
@@ -463,7 +463,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   private void setNextReplicaToSend(boolean forRemoteDatacenter) {
     String nextDataCenterToSend = localDataCenterName;
     if (forRemoteDatacenter) {
-      int requestParallelismPerDatacenter = requestParallelism/remoteDataCenterCount;
+      int requestParallelismPerDatacenter = requestParallelism / remoteDataCenterCount;
       for (String dataCenter : replicasInFlightPerDatacenter.keySet()) {
         if (!dataCenter.equals(localDataCenterName)) {
           if (replicasInFlightPerDatacenter.get(dataCenter).size() < requestParallelismPerDatacenter) {
@@ -474,7 +474,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
           }
         }
       }
-      if(getReplicasInFlightCount() == 0){
+      if (getReplicasInFlightCount() == 0) {
         proxied = true;
         logger.trace("Operation going cross colo after exhausting all local replicas");
         coordinatorMetrics.totalCrossColoProxyCallCount.inc();

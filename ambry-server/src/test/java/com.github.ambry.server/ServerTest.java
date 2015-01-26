@@ -162,9 +162,8 @@ public class ServerTest {
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
-      getRequest1 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties,
-              partitionRequestInfoList, GetOptions.Include_Expired_Blobs);
+      getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+          GetOptions.Include_Expired_Blobs);
       channel.send(getRequest1);
       stream = channel.receive().getInputStream();
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);

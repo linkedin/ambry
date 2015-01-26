@@ -156,7 +156,8 @@ public abstract class Operation {
         logger.trace("Requests in flight after processing an operation response " + requestsInFlight);
       } catch (CoordinatorException e) {
         operationComplete.set(true);
-        if (logger.isTraceEnabled()) {
+        if (logger.isTraceEnabled() || e.getErrorCode() == CoordinatorError.BlobDoesNotExist
+            || e.getErrorCode() == CoordinatorError.BlobExpired) {
           logger.trace(context + " operation threw CoordinatorException during execute.", e);
         } else {
           logger.error(context + " operation threw CoordinatorException during execute: " + e);
@@ -205,8 +206,8 @@ public abstract class Operation {
         message += "Cannot perform the operation " + context + ":" + operationPolicy + " as Blob expired ";
         break;
       default:
-        message += "Experienced an unexpected internal " + resolvedError + " error for operation " + context + ":"
-            + operationPolicy;
+        message +=
+            "Experienced an unexpected error " + resolvedError + " for operation " + context + ":" + operationPolicy;
     }
     return message;
   }
@@ -222,7 +223,7 @@ public abstract class Operation {
   /**
    * Actions to be taken on completion of an operation
    */
-  public void onOperationComplete(){
+  public void onOperationComplete() {
     // only GetOperation should have definition. For rest, its a no-op
   }
 }
