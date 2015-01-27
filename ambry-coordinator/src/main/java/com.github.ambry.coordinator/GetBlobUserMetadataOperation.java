@@ -70,16 +70,21 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   }
 
   @Override
-  protected void markRequest()
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestRate.mark();
+  protected void markRequest() {
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.getBlobUserMetadataRequestRate.mark();
+    }
   }
 
   @Override
-  protected void updateRequest(long durationInMs)
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().
-        getRequestMetrics(replicaId.getDataNodeId()).getBlobUserMetadataRequestLatencyInMs.update(durationInMs);
+  protected void updateRequest(long durationInMs) {
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.getBlobUserMetadataRequestLatencyInMs.update(durationInMs);
+    }
   }
 
   @Override

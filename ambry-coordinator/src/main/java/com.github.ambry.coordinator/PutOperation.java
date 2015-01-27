@@ -129,16 +129,21 @@ final class PutOperationRequest extends OperationRequest {
   }
 
   @Override
-  protected void markRequest()
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestRate.mark();
+  protected void markRequest() {
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.putBlobRequestRate.mark();
+    }
   }
 
   @Override
-  protected void updateRequest(long durationInMs)
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().
-        getRequestMetrics(replicaId.getDataNodeId()).putBlobRequestLatencyInMs.update(durationInMs);
+  protected void updateRequest(long durationInMs) {
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.putBlobRequestLatencyInMs.update(durationInMs);
+    }
   }
 
   @Override

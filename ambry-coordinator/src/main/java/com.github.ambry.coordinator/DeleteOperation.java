@@ -116,16 +116,21 @@ final class DeleteOperationRequest extends OperationRequest {
   }
 
   @Override
-  protected void markRequest()
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).deleteBlobRequestRate.mark();
+  protected void markRequest() {
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.deleteBlobRequestRate.mark();
+    }
   }
 
   @Override
-  protected void updateRequest(long durationInMs)
-      throws CoordinatorException {
-    context.getCoordinatorMetrics().
-        getRequestMetrics(replicaId.getDataNodeId()).deleteBlobRequestLatencyInMs.update(durationInMs);
+  protected void updateRequest(long durationInMs) {
+    CoordinatorMetrics.RequestMetrics metric = context.getCoordinatorMetrics().
+        getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.deleteBlobRequestLatencyInMs.update(durationInMs);
+    }
   }
 
   @Override

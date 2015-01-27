@@ -257,11 +257,9 @@ abstract class OperationRequest implements Runnable {
   protected abstract Response getResponse(DataInputStream dataInputStream)
       throws IOException;
 
-  protected abstract void markRequest()
-      throws CoordinatorException;
+  protected abstract void markRequest();
 
-  protected abstract void updateRequest(long durationInMs)
-      throws CoordinatorException;
+  protected abstract void updateRequest(long durationInMs);
 
   void deserializeResponsePayload(Response response)
       throws IOException, MessageFormatException {
@@ -299,8 +297,6 @@ abstract class OperationRequest implements Runnable {
       connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
-      markRequest();
-      updateRequest(System.currentTimeMillis() - startTimeInMs);
       responseHandler.onRequestResponseError(replicaId, response.getError());
     } catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
@@ -327,22 +323,24 @@ abstract class OperationRequest implements Runnable {
         logger.trace("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
+      markRequest();
+      updateRequest(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   private void countError(MessageFormatErrorCodes error) {
-    try {
-      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    } catch (CoordinatorException e) {
-      logger.error("Swallowing exception fetching RequestMetrics: ", e);
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.countError(error);
     }
   }
 
   private void countError(RequestResponseError error) {
-    try {
-      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    } catch (CoordinatorException e) {
-      logger.error("Swallowing exception fetching RequestMetrics: ", e);
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.countError(error);
     }
   }
 
