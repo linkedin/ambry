@@ -273,6 +273,8 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
         return requestsWaitingToCheckoutConnectionCount.get();
       }
     };
+    registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "requestsWaitingToCheckoutConnection"),
+        requestsWaitingToCheckoutConnection);
   }
 
   @Override
