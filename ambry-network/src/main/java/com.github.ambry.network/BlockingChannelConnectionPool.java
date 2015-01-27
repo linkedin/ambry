@@ -220,10 +220,13 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   private final Timer connectionCheckOutTime;
   private final Timer connectionCheckInTime;
   private final Timer connectionDestroyTime;
+  private final AtomicInteger requestsWaitingToCheckoutConnectionCount;
   // Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
   private Gauge<Integer> totalNumberOfNodesConnectedTo;
   // Represents the total number of connections, in other words, aggregate of the connections from all nodes
   public Gauge<Integer> totalNumberOfConnections;
+  // Represents the number of requests waiting to checkout a connection
+  public Gauge<Integer> requestsWaitingToCheckoutConnection;
 
   public BlockingChannelConnectionPool(ConnectionPoolConfig config, MetricRegistry registry) {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
@@ -263,6 +266,13 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfConnections"),
         totalNumberOfConnections);
+    requestsWaitingToCheckoutConnectionCount = new AtomicInteger(0);
+    requestsWaitingToCheckoutConnection = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return requestsWaitingToCheckoutConnectionCount.get();
+      }
+    };
   }
 
   @Override
@@ -283,6 +293,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     final Timer.Context context = connectionCheckOutTime.time();
     try {
+      requestsWaitingToCheckoutConnectionCount.incrementAndGet();
       BlockingChannelInfo blockingChannelInfo = connections.get(host + port);
       if (blockingChannelInfo == null) {
         synchronized (this) {
@@ -301,6 +312,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
       }
       return blockingChannelInfo.getBlockingChannel(timeoutInMs);
     } finally {
+      requestsWaitingToCheckoutConnectionCount.decrementAndGet();
       context.stop();
     }
   }
