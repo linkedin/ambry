@@ -37,9 +37,12 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onError() {
-      if (failureCount.incrementAndGet() >= failureCountThreshold) {
+      int count = failureCount.incrementAndGet();
+      if (count >= failureCountThreshold) {
+        if (count == failureCountThreshold) {
+          logger.error("Resource " + resource + " has gone down");
+        }
         downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
-        logger.error("Resource " + resource + " has gone down");
       }
   }
 
@@ -48,7 +51,9 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onSuccess() {
-    failureCount.set(0);
+    if (failureCount.getAndSet(0) >= failureCountThreshold) {
+      logger.info("Resource " + resource + " is back up");
+    }
   }
 
   /*
