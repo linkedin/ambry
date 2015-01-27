@@ -20,7 +20,6 @@ public class ServerConfig {
   @Default("10")
   public final int serverSchedulerNumOfthreads;
 
-
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);

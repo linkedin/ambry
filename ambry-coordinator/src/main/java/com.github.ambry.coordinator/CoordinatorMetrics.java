@@ -197,14 +197,13 @@ public class CoordinatorMetrics {
     }
   }
 
-  public RequestMetrics getRequestMetrics(DataNodeId dataNodeId)
-      throws CoordinatorException {
+  public RequestMetrics getRequestMetrics(DataNodeId dataNodeId) {
     if (requestMetrics.containsKey(dataNodeId)) {
       return requestMetrics.get(dataNodeId);
     } else {
       String message = "Could not find RequestMetrics for DataNode " + dataNodeId;
-      logger.error(message);
-      throw new CoordinatorException(message, CoordinatorError.UnexpectedInternalError);
+      logger.warn(message);
+      return null;
     }
   }
 

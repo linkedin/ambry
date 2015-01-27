@@ -156,7 +156,8 @@ public abstract class Operation {
         logger.trace("Requests in flight after processing an operation response " + requestsInFlight);
       } catch (CoordinatorException e) {
         operationComplete.set(true);
-        if (logger.isTraceEnabled()) {
+        if (logger.isTraceEnabled() || e.getErrorCode() == CoordinatorError.BlobDoesNotExist
+            || e.getErrorCode() == CoordinatorError.BlobExpired) {
           logger.trace(context + " operation threw CoordinatorException during execute.", e);
         } else {
           logger.error(context + " operation threw CoordinatorException during execute: " + e);
@@ -205,8 +206,8 @@ public abstract class Operation {
         message += "Cannot perform the operation " + context + ":" + operationPolicy + " as Blob expired ";
         break;
       default:
-        message += "Experienced an unexpected internal " + resolvedError + " error for operation " + context + ":"
-            + operationPolicy;
+        message +=
+            "Experienced an unexpected error " + resolvedError + " for operation " + context + ":" + operationPolicy;
     }
     return message;
   }
@@ -222,7 +223,7 @@ public abstract class Operation {
   /**
    * Actions to be taken on completion of an operation
    */
-  public void onOperationComplete(){
+  public void onOperationComplete() {
     // only GetOperation should have definition. For rest, its a no-op
   }
 }
@@ -256,11 +257,9 @@ abstract class OperationRequest implements Runnable {
   protected abstract Response getResponse(DataInputStream dataInputStream)
       throws IOException;
 
-  protected abstract void markRequest()
-      throws CoordinatorException;
+  protected abstract void markRequest();
 
-  protected abstract void updateRequest(long durationInMs)
-      throws CoordinatorException;
+  protected abstract void updateRequest(long durationInMs);
 
   void deserializeResponsePayload(Response response)
       throws IOException, MessageFormatException {
@@ -298,8 +297,6 @@ abstract class OperationRequest implements Runnable {
       connectedChannel = null;
 
       enqueueOperationResponse(new OperationResponse(replicaId, response));
-      markRequest();
-      updateRequest(System.currentTimeMillis() - startTimeInMs);
       responseHandler.onRequestResponseError(replicaId, response.getError());
     } catch (IOException e) {
       logger.error(context + " " + replicaId + " Error processing request-response for BlobId " + blobId, e);
@@ -326,22 +323,24 @@ abstract class OperationRequest implements Runnable {
         logger.trace("{} {} destroying connection", context, replicaId);
         connectionPool.destroyConnection(connectedChannel);
       }
+      markRequest();
+      updateRequest(System.currentTimeMillis() - startTimeInMs);
     }
   }
 
   private void countError(MessageFormatErrorCodes error) {
-    try {
-      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    } catch (CoordinatorException e) {
-      logger.error("Swallowing exception fetching RequestMetrics: ", e);
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.countError(error);
     }
   }
 
   private void countError(RequestResponseError error) {
-    try {
-      context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId()).countError(error);
-    } catch (CoordinatorException e) {
-      logger.error("Swallowing exception fetching RequestMetrics: ", e);
+    CoordinatorMetrics.RequestMetrics metric =
+        context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
+    if (metric != null) {
+      metric.countError(error);
     }
   }
 

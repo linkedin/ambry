@@ -126,7 +126,7 @@ public class ReplicationTest {
       public void appendFrom(ReadableByteChannel channel, long size)
           throws IOException {
         int sizeRead = 0;
-        while(sizeRead < size) {
+        while (sizeRead < size) {
           sizeRead += channel.read(buflist.get(index++));
         }
       }

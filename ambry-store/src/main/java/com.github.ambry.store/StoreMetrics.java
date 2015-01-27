@@ -55,8 +55,7 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
-    segmentSizeForExists =
-        registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
+    segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 
   public void initializeCapacityUsedMetric(final Log log, final long capacityInBytes) {
