@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * A selector interface for doing non-blocking multi-connection network I/O.
  * <p>
@@ -67,7 +68,8 @@ class Selector implements Selectable {
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time) throws IOException {
+  public Selector(NetworkMetrics metrics, Time time)
+      throws IOException {
     this.selector = java.nio.channels.Selector.open();
     this.time = time;
     this.keys = new HashMap<Long, SelectionKey>();
@@ -95,7 +97,8 @@ class Selector implements Selectable {
    * @throws IOException if DNS resolution fails on the hostname or if the server is down
    */
   @Override
-  public long connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
+  public long connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize)
+      throws IOException {
     SocketChannel channel = SocketChannel.open();
     channel.configureBlocking(false);
     Socket socket = channel.socket();
@@ -127,8 +130,9 @@ class Selector implements Selectable {
   @Override
   public void disconnect(long id) {
     SelectionKey key = this.keys.get(id);
-    if (key != null)
+    if (key != null) {
       key.cancel();
+    }
   }
 
   /**
@@ -144,8 +148,9 @@ class Selector implements Selectable {
    */
   @Override
   public void close() {
-    for (SelectionKey key : this.selector.keys())
+    for (SelectionKey key : this.selector.keys()) {
       close(key);
+    }
     try {
       this.selector.close();
     } catch (IOException e) {
@@ -171,15 +176,18 @@ class Selector implements Selectable {
    *         already an in-progress send
    */
   @Override
-  public void poll(long timeout, List<NetworkSend> sends) throws IOException {
+  public void poll(long timeout, List<NetworkSend> sends)
+      throws IOException {
     clear();
 
     // register for write interest on any new sends
     for (NetworkSend send : sends) {
       SelectionKey key = keyForId(send.getConnectionId());
       Transmissions lastTransmission = transmissions(key);
-      if (lastTransmission.hasSend())
-        throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
+      if (lastTransmission.hasSend()) {
+        throw new IllegalStateException(
+            "Attempt to begin a send operation with prior send operation still in progress.");
+      }
       lastTransmission.send = send;
       try {
         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
@@ -220,9 +228,11 @@ class Selector implements Selectable {
 
           // read from any connections that have readable data
           if (key.isReadable()) {
-            if (!transmissions.hasReceive())
+            if (!transmissions.hasReceive()) {
               transmissions.receive =
-                  new NetworkReceive(transmissions.getConnectionId(), new BoundedByteBufferReceive(), SystemTime.getInstance());
+                  new NetworkReceive(transmissions.getConnectionId(), new BoundedByteBufferReceive(),
+                      SystemTime.getInstance());
+            }
             long bytesRead = transmissions.receive.getReceivedBytes().readFrom(channel);
             if (bytesRead > 0) {
               metrics.selectorBytesReceived.update(bytesRead);
@@ -251,7 +261,7 @@ class Selector implements Selectable {
           }
 
           // cancel any defunct sockets
-          if (!key.isValid())  {
+          if (!key.isValid()) {
             close(key);
           }
         } catch (IOException e) {
@@ -260,7 +270,7 @@ class Selector implements Selectable {
           if (socket != null) {
             remoteAddress = socket.getInetAddress();
           }
-          logger.warn("Error in I/O with " + remoteAddress , e);
+          logger.warn("Error in I/O with " + remoteAddress, e);
           close(key);
         }
       }
@@ -311,13 +321,15 @@ class Selector implements Selectable {
    * @return The number of keys ready
    * @throws IOException
    */
-  private int select(long ms) throws IOException {
-    if (ms == 0L)
+  private int select(long ms)
+      throws IOException {
+    if (ms == 0L) {
       return this.selector.selectNow();
-    else if (ms < 0L)
+    } else if (ms < 0L) {
       return this.selector.select();
-    else
+    } else {
       return this.selector.select(ms);
+    }
   }
 
   /**
@@ -349,8 +361,9 @@ class Selector implements Selectable {
    */
   private SelectionKey keyForId(long id) {
     SelectionKey key = this.keys.get(id);
-    if (key == null)
+    if (key == null) {
       throw new IllegalStateException("Attempt to write to socket for which there is no open connection.");
+    }
     return key;
   }
 

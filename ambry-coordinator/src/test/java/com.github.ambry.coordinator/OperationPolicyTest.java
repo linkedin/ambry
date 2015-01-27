@@ -29,7 +29,7 @@ public class OperationPolicyTest {
   final String datacenterAlpha = "alpha";
   final String datacenterBeta = "beta";
   final String datacenterGamma = "gamma";
-  final String[] dataCenters = new String[]{datacenterAlpha,datacenterBeta,datacenterGamma};
+  final String[] dataCenters = new String[]{datacenterAlpha, datacenterBeta, datacenterGamma};
   final int REPLICAS_PER_DATACENTER = 3;
 
   /**
@@ -39,8 +39,7 @@ public class OperationPolicyTest {
   @Test
   public void testSerialOperationPolicy()
       throws Exception {
-    OperationContext oc =
-        new OperationContext("client1", 1000, true, null, null);
+    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
     // Simple success test
     {
       OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
@@ -433,8 +432,8 @@ public class OperationPolicyTest {
   public void testGetCrossColoParallelOperationPolicy()
       throws Exception {
 
-    OperationContext oc = new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(),
-        true), null);
+    OperationContext oc =
+        new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(), true), null);
     // Simple success test
     {
       OperationPolicy op =
@@ -486,7 +485,6 @@ public class OperationPolicyTest {
 
       op.onFailedResponse(replicaId0);
       op.onFailedResponse(replicaId1);
-
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId = op.getNextReplicaIdForSend();
@@ -799,7 +797,6 @@ public class OperationPolicyTest {
       op.onFailedResponse(replicaId0);
       op.onFailedResponse(replicaId1);
 
-
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId = op.getNextReplicaIdForSend();
       assertTrue((replicaId.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId.getDataNodeId()
@@ -914,7 +911,7 @@ public class OperationPolicyTest {
       replicasInFlight.remove(replicaId2);
       // send more should return true for remote now
 
-      Map<String,List<ReplicaId>> dataCentertoReplicaListMap = new HashMap<String, List<ReplicaId>>();
+      Map<String, List<ReplicaId>> dataCentertoReplicaListMap = new HashMap<String, List<ReplicaId>>();
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId3 = op.getNextReplicaIdForSend();
@@ -934,23 +931,23 @@ public class OperationPolicyTest {
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId5 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId5.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId5.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId5.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId5.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId5);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId5);
       assertTrue(op.mayComplete());
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId6 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId6.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId6.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId6.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId6.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId6);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId6);
       assertTrue(op.mayComplete());
 
       assertFalse(op.sendMoreRequests(replicasInFlight));
 
-      for(List<ReplicaId> replicaIdList: dataCentertoReplicaListMap.values()){
+      for (List<ReplicaId> replicaIdList : dataCentertoReplicaListMap.values()) {
         ReplicaId replicaIdToFail = replicaIdList.remove(0);
         op.onFailedResponse(replicaIdToFail);
         replicasInFlight.remove(replicaIdToFail);
@@ -967,14 +964,14 @@ public class OperationPolicyTest {
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId8 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId8.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId8.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId8.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId8.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId8);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId8);
       assertTrue(op.mayComplete());
 
       assertFalse(op.sendMoreRequests(replicasInFlight));
-      for(List<ReplicaId> replicaIdList: dataCentertoReplicaListMap.values()){
+      for (List<ReplicaId> replicaIdList : dataCentertoReplicaListMap.values()) {
         ReplicaId replicaIdToFail = replicaIdList.remove(0);
         op.onFailedResponse(replicaIdToFail);
         replicasInFlight.remove(replicaIdToFail);
@@ -1031,7 +1028,7 @@ public class OperationPolicyTest {
       replicasInFlight.remove(replicaId2);
       // send more should return true for remote now
 
-      Map<String,List<ReplicaId>> dataCentertoReplicaListMap = new HashMap<String, List<ReplicaId>>();
+      Map<String, List<ReplicaId>> dataCentertoReplicaListMap = new HashMap<String, List<ReplicaId>>();
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId3 = op.getNextReplicaIdForSend();
@@ -1051,23 +1048,23 @@ public class OperationPolicyTest {
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId5 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId5.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId5.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId5.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId5.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId5);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId5);
       assertTrue(op.mayComplete());
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId6 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId6.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId6.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId6.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId6.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId6);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId6);
       assertTrue(op.mayComplete());
 
       assertFalse(op.sendMoreRequests(replicasInFlight));
 
-      for(List<ReplicaId> replicaIdList: dataCentertoReplicaListMap.values()){
+      for (List<ReplicaId> replicaIdList : dataCentertoReplicaListMap.values()) {
         ReplicaId replicaIdToFail = replicaIdList.remove(0);
         op.onFailedResponse(replicaIdToFail);
         replicasInFlight.remove(replicaIdToFail);
@@ -1084,15 +1081,15 @@ public class OperationPolicyTest {
 
       assertTrue(op.sendMoreRequests(replicasInFlight));
       ReplicaId replicaId8 = op.getNextReplicaIdForSend();
-      assertTrue((replicaId8.getDataNodeId().getDatacenterName().equals(datacenterBeta))
-          || (replicaId8.getDataNodeId().getDatacenterName().equals(datacenterGamma)));
+      assertTrue((replicaId8.getDataNodeId().getDatacenterName().equals(datacenterBeta)) || (replicaId8.getDataNodeId()
+          .getDatacenterName().equals(datacenterGamma)));
       replicasInFlight.add(replicaId8);
       addReplicaToDataCenter(dataCentertoReplicaListMap, replicaId8);
       assertTrue(op.mayComplete());
 
       assertFalse(op.sendMoreRequests(replicasInFlight));
 
-      for(List<ReplicaId> replicaIdList: dataCentertoReplicaListMap.values()){
+      for (List<ReplicaId> replicaIdList : dataCentertoReplicaListMap.values()) {
         ReplicaId replicaIdToFail = replicaIdList.remove(0);
         op.onFailedResponse(replicaIdToFail);
         replicasInFlight.remove(replicaIdToFail);
@@ -1510,14 +1507,13 @@ public class OperationPolicyTest {
     }
   }
 
-  private void addReplicaToDataCenter(Map<String, List<ReplicaId>> dataCenterToReplicaListMap, ReplicaId replicaId){
+  private void addReplicaToDataCenter(Map<String, List<ReplicaId>> dataCenterToReplicaListMap, ReplicaId replicaId) {
     String dataCenter = replicaId.getDataNodeId().getDatacenterName();
-    if(!dataCenterToReplicaListMap.containsKey(dataCenter)){
+    if (!dataCenterToReplicaListMap.containsKey(dataCenter)) {
       List<ReplicaId> replicaIdList = new ArrayList<ReplicaId>();
-      dataCenterToReplicaListMap.put(dataCenter,replicaIdList);
+      dataCenterToReplicaListMap.put(dataCenter, replicaIdList);
     }
     dataCenterToReplicaListMap.get(dataCenter).add(replicaId);
-
   }
 
   class OperationPolicyPartitionId extends PartitionId {
@@ -1525,9 +1521,9 @@ public class OperationPolicyTest {
 
     OperationPolicyPartitionId(int replicaCount) {
       this.replicaIds = new ArrayList<ReplicaId>(replicaCount);
-      int dataCenterCount = replicaCount/REPLICAS_PER_DATACENTER;
+      int dataCenterCount = replicaCount / REPLICAS_PER_DATACENTER;
       for (int i = 0; i < replicaCount; i++) {
-          replicaIds.add(new OperationPolicyReplicaId(this, i, dataCenters[i%dataCenterCount]));
+        replicaIds.add(new OperationPolicyReplicaId(this, i, dataCenters[i % dataCenterCount]));
       }
     }
 

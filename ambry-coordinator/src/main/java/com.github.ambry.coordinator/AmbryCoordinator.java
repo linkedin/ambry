@@ -164,9 +164,9 @@ public class AmbryCoordinator implements Coordinator {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);
-    } catch (IOException e) {
-      logger.info("Caller passed in invalid BlobId.");
-      throw new CoordinatorException("BlobId is invalid.", CoordinatorError.InvalidBlobId);
+    } catch (Exception e) {
+      logger.error("Caller passed in invalid BlobId " + blobIdString);
+      throw new CoordinatorException("BlobId is invalid " + blobIdString, CoordinatorError.InvalidBlobId);
     }
     return blobId;
   }

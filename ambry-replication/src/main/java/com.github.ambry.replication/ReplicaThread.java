@@ -405,8 +405,7 @@ class ReplicaThread implements Runnable {
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
-          MessageFormatWriteSet writeset =
-              new MessageFormatWriteSet(deleteStream, infoList, false);
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           remoteReplicaInfo.getLocalStore().delete(writeset);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -458,7 +457,8 @@ class ReplicaThread implements Runnable {
     long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
 
     long startTime = SystemTime.getInstance().milliseconds();
-    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag) {
+    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag
+        && !remoteColo) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
           + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
@@ -569,8 +569,8 @@ class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              MessageFormatWriteSet writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList,
-                  true);
+              MessageFormatWriteSet writeset =
+                  new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
               remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {

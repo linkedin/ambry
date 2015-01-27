@@ -1,6 +1,5 @@
 package com.github.ambry.router;
 
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -34,7 +33,8 @@ final class FutureRouterResult<T> implements Future<T> {
   /**
    * Await the completion of this request
    */
-  public void await() throws InterruptedException {
+  public void await()
+      throws InterruptedException {
     latch.await();
   }
 
@@ -44,7 +44,8 @@ final class FutureRouterResult<T> implements Future<T> {
    * @param unit The unit for the max time
    * @return true if the request completed, false if we timed out
    */
-  public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
+  public boolean await(long timeout, TimeUnit unit)
+      throws InterruptedException {
     return latch.await(timeout, unit);
   }
 
@@ -95,16 +96,19 @@ final class FutureRouterResult<T> implements Future<T> {
   public T get(long timeout, TimeUnit unit)
       throws InterruptedException, ExecutionException, TimeoutException {
     boolean occurred = this.await(timeout, unit);
-    if (!occurred)
+    if (!occurred) {
       throw new TimeoutException("Timeout after waiting for " + TimeUnit.MILLISECONDS.convert(timeout, unit) + " ms.");
+    }
     return resultOrThrow();
   }
 
-  private T resultOrThrow() throws ExecutionException {
-    if (this.error() != null)
+  private T resultOrThrow()
+      throws ExecutionException {
+    if (this.error() != null) {
       throw new ExecutionException(this.error());
-    else
+    } else {
       return result();
+    }
   }
 }
 

@@ -75,12 +75,12 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
 
-  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId,
-      OperationContext oc)
+  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
     OperationPolicy getOperationPolicy = null;
     if (oc.isCrossDCProxyCallEnabled()) {
-      getOperationPolicy = new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc);
+      getOperationPolicy =
+          new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc);
     } else {
       getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc);
     }
@@ -169,9 +169,9 @@ public abstract class GetOperation extends Operation {
   }
 
   @Override
-  public void onOperationComplete(){
-    if(operationPolicy.hasProxied()){
-      logger.trace("GetOperation for " + blobId +"  succeeded after proxying to remote colo");
+  public void onOperationComplete() {
+    if (operationPolicy.hasProxied()) {
+      logger.trace("GetOperation for " + blobId + "  succeeded after proxying to remote colo");
     }
   }
 

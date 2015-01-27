@@ -313,8 +313,7 @@ public class PersistentIndexTest {
       try {
         indexNew.close();
         Assert.assertFalse("Should have thrown StoreException since index has new entires compared to log", true);
-      }
-      catch(StoreException e){
+      } catch (StoreException e) {
         Assert.assertTrue("StoreException thrown as expected ", true);
       }
       indexNew = new MockIndex(logFile, scheduler, log, config, factory);
@@ -800,7 +799,7 @@ public class PersistentIndexTest {
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
       props.setProperty("store.data.flush.delay.seconds", "1");
-      props.setProperty("store.index.max.number.of.inmem.elements","5");
+      props.setProperty("store.index.max.number.of.inmem.elements", "5");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -851,7 +850,7 @@ public class PersistentIndexTest {
       index.addToIndex(list, new FileSpan(1800, 2400));
       list.clear();
 
-      Assert.assertTrue(index.exists(blobId1, new FileSpan(0,200)));
+      Assert.assertTrue(index.exists(blobId1, new FileSpan(0, 200)));
       Assert.assertTrue(index.exists(blobId1, new FileSpan(101, 500)));
       Assert.assertTrue(index.exists(blobId1, new FileSpan(700, 1200)));
       Assert.assertTrue(index.exists(blobId1, new FileSpan(1000, 1500)));
@@ -860,7 +859,7 @@ public class PersistentIndexTest {
       Assert.assertFalse(index.exists(blobId1, new FileSpan(1600, 2200)));
       Assert.assertFalse(index.exists(blobId1, new FileSpan(3000, 4000)));
 
-      Assert.assertTrue(index.exists(blobId2, new FileSpan(0,200)));
+      Assert.assertTrue(index.exists(blobId2, new FileSpan(0, 200)));
       Assert.assertTrue(index.exists(blobId2, new FileSpan(101, 500)));
       Assert.assertTrue(index.exists(blobId2, new FileSpan(700, 1200)));
       Assert.assertTrue(index.exists(blobId2, new FileSpan(1000, 1500)));
@@ -869,7 +868,7 @@ public class PersistentIndexTest {
       Assert.assertFalse(index.exists(blobId2, new FileSpan(1600, 2200)));
       Assert.assertFalse(index.exists(blobId2, new FileSpan(3000, 4000)));
 
-      Assert.assertTrue(index.exists(blobId5, new FileSpan(0,200)));
+      Assert.assertTrue(index.exists(blobId5, new FileSpan(0, 200)));
       Assert.assertTrue(index.exists(blobId5, new FileSpan(101, 500)));
       Assert.assertTrue(index.exists(blobId5, new FileSpan(700, 1200)));
       Assert.assertTrue(index.exists(blobId5, new FileSpan(1000, 1500)));
@@ -878,7 +877,7 @@ public class PersistentIndexTest {
       Assert.assertFalse(index.exists(blobId5, new FileSpan(1600, 2200)));
       Assert.assertFalse(index.exists(blobId5, new FileSpan(3000, 4000)));
 
-      Assert.assertFalse(index.exists(blobId6, new FileSpan(0,200)));
+      Assert.assertFalse(index.exists(blobId6, new FileSpan(0, 200)));
       Assert.assertFalse(index.exists(blobId6, new FileSpan(101, 500)));
       Assert.assertFalse(index.exists(blobId6, new FileSpan(700, 1199)));
       Assert.assertTrue(index.exists(blobId6, new FileSpan(1000, 1400)));
@@ -887,7 +886,7 @@ public class PersistentIndexTest {
       Assert.assertTrue(index.exists(blobId6, new FileSpan(1600, 2200)));
       Assert.assertTrue(index.exists(blobId6, new FileSpan(3000, 4000)));
 
-      Assert.assertFalse(index.exists(blobId9, new FileSpan(0,200)));
+      Assert.assertFalse(index.exists(blobId9, new FileSpan(0, 200)));
       Assert.assertFalse(index.exists(blobId9, new FileSpan(101, 500)));
       Assert.assertFalse(index.exists(blobId9, new FileSpan(700, 1199)));
       Assert.assertTrue(index.exists(blobId9, new FileSpan(1000, 1400)));
@@ -896,7 +895,7 @@ public class PersistentIndexTest {
       Assert.assertTrue(index.exists(blobId9, new FileSpan(1600, 2200)));
       Assert.assertTrue(index.exists(blobId9, new FileSpan(3000, 4000)));
 
-      Assert.assertFalse(index.exists(blobId10, new FileSpan(0,200)));
+      Assert.assertFalse(index.exists(blobId10, new FileSpan(0, 200)));
       Assert.assertFalse(index.exists(blobId10, new FileSpan(101, 500)));
       Assert.assertFalse(index.exists(blobId10, new FileSpan(700, 1199)));
       Assert.assertTrue(index.exists(blobId10, new FileSpan(1000, 1400)));
@@ -904,7 +903,6 @@ public class PersistentIndexTest {
       Assert.assertTrue(index.exists(blobId10, new FileSpan(1200, 2400)));
       Assert.assertTrue(index.exists(blobId10, new FileSpan(1600, 2200)));
       Assert.assertTrue(index.exists(blobId10, new FileSpan(3000, 4000)));
-
 
       index.close();
     } catch (Exception e) {
