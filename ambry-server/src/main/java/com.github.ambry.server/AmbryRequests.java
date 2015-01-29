@@ -273,7 +273,7 @@ public class AmbryRequests implements RequestAPI {
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (MessageFormatException e) {
             logger.error("Message format exception on a get with error code " + e.getErrorCode() +
-                " for partition " + partitionRequestInfo.getPartition(), e);
+                " for partitionRequestInfo " + partitionRequestInfo, e);
             if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
               metrics.dataCorruptError.inc();
             } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
