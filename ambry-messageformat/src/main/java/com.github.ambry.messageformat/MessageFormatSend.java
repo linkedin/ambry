@@ -150,8 +150,8 @@ public class MessageFormatSend implements Send {
               }
               break;
             default:
-              String message = "Version not known while reading message - version " + version;
-              message += ", i value " + i + ", Offset " + readSet.getKeyAt(i);
+              String message = "Version not known while reading message - version " + version +
+                  ", i value " + i + ", Offset " + readSet.getKeyAt(i);
               throw new MessageFormatException(message, MessageFormatErrorCodes.Unknown_Format_Version);
           }
         }
