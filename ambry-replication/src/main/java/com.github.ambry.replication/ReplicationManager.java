@@ -231,7 +231,7 @@ public final class ReplicationManager {
         if (peerReplicas != null) {
           List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
           for (ReplicaId remoteReplica : peerReplicas) {
-            // We need to ensure that replica tokens gets persisted only after the corresponding data in the
+            // We need to ensure that a replica token gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
             RemoteReplicaInfo remoteReplicaInfo =
@@ -274,24 +274,18 @@ public final class ReplicationManager {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         readFromFile(mountPath);
       }
-      // start replica threads and divide the partitions between them
-      // if the number of replica threads is less than or equal to the number of mount paths
-      logger.info("Number of intra DC replica threads " + replicationConfig.replicationNumOfIntraDCReplicaThreads);
-      if (replicasToReplicateIntraDC.size() >= replicationConfig.replicationNumOfIntraDCReplicaThreads) {
-        logger.info("Number of replica threads for intra DC is less than or equal to the number of nodes");
-        assignReplicasToThreads(replicasToReplicateIntraDC, replicationConfig.replicationNumOfIntraDCReplicaThreads,
-            replicationIntraDCThreads, "Intra DC");
-      } else {
+      // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
+      // number of nodes. Otherwise, assign one thread to one node.
+      logger.info("Number of intra DC replica threads: " + replicationConfig.replicationNumOfIntraDCReplicaThreads);
+      logger.info("Number of intra DC nodes to replicate from: " + replicasToReplicateIntraDC.size());
+      assignReplicasToThreads(replicasToReplicateIntraDC, replicationConfig.replicationNumOfIntraDCReplicaThreads,
+        replicationIntraDCThreads, "Intra DC");
 
-      }
-      logger.info("Number of inter DC replica threads " + replicationConfig.replicationNumOfInterDCReplicaThreads);
-      if (replicasToReplicateInterDC.size() >= replicationConfig.replicationNumOfInterDCReplicaThreads) {
-        logger.info("Number of replica threads for inter DC is less than or equal to the number of nodes");
-        assignReplicasToThreads(replicasToReplicateInterDC, replicationConfig.replicationNumOfInterDCReplicaThreads,
-            replicationInterDCThreads, "Inter DC");
-      } else {
+      logger.info("Number of inter DC replica threads: " + replicationConfig.replicationNumOfInterDCReplicaThreads);
+      logger.info("Number of inter DC nodes to replicate from: " + replicasToReplicateInterDC.size());
+      assignReplicasToThreads(replicasToReplicateInterDC, replicationConfig.replicationNumOfInterDCReplicaThreads,
+        replicationInterDCThreads, "Inter DC");
 
-      }
       // start all replica threads
       for (ReplicaThread thread : replicationIntraDCThreads) {
         Thread replicaThread = Utils.newThread(thread.getName(), thread, false);
@@ -419,8 +413,12 @@ public final class ReplicationManager {
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
+    if (replicasToReplicate.size() < numberOfReplicaThreads) {
+      numberOfReplicaThreads = replicasToReplicate.size();
+    }
     int numberOfNodesPerThread = replicasToReplicate.size() / numberOfReplicaThreads;
     int remainingNodes = replicasToReplicate.size() % numberOfReplicaThreads;
+
     Iterator<Map.Entry<DataNodeId, List<RemoteReplicaInfo>>> mapIterator = replicasToReplicate.entrySet().iterator();
 
     for (int i = 0; i < numberOfReplicaThreads; i++) {
@@ -490,6 +488,7 @@ public final class ReplicationManager {
                       .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
                   updatedToken = true;
+                  break;
                 }
               }
               if (!updatedToken) {
