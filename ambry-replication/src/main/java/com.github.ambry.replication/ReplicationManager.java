@@ -47,8 +47,8 @@ final class RemoteReplicaInfo {
   private final long tokenPersistIntervalInMs;
   private FindToken currentToken = null;
   private FindToken tokenToPersist = null;
-  private long timeTokenSetInMs;
-  private FindToken tokenPersisted = null;
+  private long timeTokenToPersistSetInMs;
+  private FindToken lastPersistedToken = null;
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
 
@@ -57,10 +57,9 @@ final class RemoteReplicaInfo {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
-    if (tokenToPersist == null) {
-      this.tokenToPersist = token;
-      timeTokenSetInMs = SystemTime.getInstance().milliseconds();
-    }
+    this.tokenToPersist = token;
+    this.lastPersistedToken = null;
+    this.timeTokenToPersistSetInMs = SystemTime.getInstance().milliseconds();
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
@@ -110,18 +109,16 @@ final class RemoteReplicaInfo {
 
   public FindToken getTokenToPersist() {
     synchronized (lock) {
-      if ((SystemTime.getInstance().milliseconds() - timeTokenSetInMs) > tokenPersistIntervalInMs) {
-        return tokenToPersist;
-      }
-      return tokenPersisted;
+      return (SystemTime.getInstance().milliseconds() - timeTokenToPersistSetInMs) > tokenPersistIntervalInMs
+          ? tokenToPersist : lastPersistedToken;
     }
   }
 
-  public void onTokenPersisted() {
+  public void onTokenPersisted(FindToken lastPersistedToken) {
     synchronized (lock) {
-      this.tokenPersisted = tokenToPersist;
+      this.lastPersistedToken = lastPersistedToken;
       this.tokenToPersist = currentToken;
-      timeTokenSetInMs = SystemTime.getInstance().milliseconds();
+      timeTokenToPersistSetInMs = SystemTime.getInstance().milliseconds();
     }
   }
 
@@ -564,8 +561,9 @@ public final class ReplicationManager {
               writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
               writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
               writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
-              writer.write(remoteReplica.getTokenToPersist().toBytes());
-              remoteReplica.onTokenPersisted();
+              tokenToPersist = remoteReplica.getTokenToPersist();
+              writer.write(tokenToPersist.toBytes());
+              remoteReplica.onTokenPersisted(tokenToPersist);
             }
           }
         }
