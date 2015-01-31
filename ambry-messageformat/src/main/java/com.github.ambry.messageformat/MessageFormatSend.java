@@ -150,8 +150,9 @@ public class MessageFormatSend implements Send {
               }
               break;
             default:
-              throw new MessageFormatException("Version not known while reading message - " + version,
-                  MessageFormatErrorCodes.Unknown_Format_Version);
+              String message = "Version not known while reading message - version " + version +
+                  ", StoreKey " + readSet.getKeyAt(i);
+              throw new MessageFormatException(message, MessageFormatErrorCodes.Unknown_Format_Version);
           }
         }
       }

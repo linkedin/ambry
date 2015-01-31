@@ -272,9 +272,7 @@ public final class ReplicationManager {
       // read stored tokens
       // iterate through all mount paths and read replication info for the partitions it owns
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        if (readFromFile(mountPath)) {
-          persistor.write(mountPath);
-        }
+        readFromFileAndPersist(mountPath);
       }
       // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
       // number of nodes. Otherwise, assign one thread to one node.
@@ -450,16 +448,17 @@ public final class ReplicationManager {
 
   /**
    * Reads the replica tokens from the file and populates the Remote replica info
+   * and persists the token file if necessary.
    * @param mountPath The mount path where the replica tokens are stored
    * @throws ReplicationException
    * @throws IOException
    */
-  private boolean readFromFile(String mountPath)
+  private void readFromFileAndPersist(String mountPath)
       throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
-    boolean shouldPersist = false;
+    boolean tokenWasReset = false;
     if (replicaTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
@@ -487,6 +486,9 @@ public final class ReplicationManager {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
                     && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
                     .equals(replicaPath)) {
+                  logger
+                      .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
+                          token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
                     info.setToken(token);
                     info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
@@ -495,14 +497,11 @@ public final class ReplicationManager {
                     // every peer replica which the local replica lags from should be set to 0, so that the local
                     // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
                     // local replica should also be set to 0. During initialization these values are already set to 0,
-                    // so we let them be. However, we must ensure that the the tokens are persisted if any of them gets
-                    // reset, before the store takes any writes as that might get persisted before the replicaToken is.
-
-                    shouldPersist = true;
+                    // so we let them be.
+                    tokenWasReset = true;
+                    logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}",
+                        partitionId, hostname, port, token);
                   }
-                  logger
-                      .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
-                          token);
                   updatedToken = true;
                   break;
                 }
@@ -528,7 +527,13 @@ public final class ReplicationManager {
             .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
-    return shouldPersist;
+
+    if (tokenWasReset) {
+      // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
+      // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
+      // before the replica token file is persisted after the reset.
+      persistor.write(mountPath);
+    }
   }
 
   class ReplicaTokenPersistor implements Runnable {
