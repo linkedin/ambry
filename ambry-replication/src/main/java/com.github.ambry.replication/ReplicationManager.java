@@ -272,19 +272,21 @@ public final class ReplicationManager {
       // read stored tokens
       // iterate through all mount paths and read replication info for the partitions it owns
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        readFromFile(mountPath);
+        if (readFromFile(mountPath)) {
+          persistor.write(mountPath);
+        }
       }
       // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
       // number of nodes. Otherwise, assign one thread to one node.
       logger.info("Number of intra DC replica threads: " + replicationConfig.replicationNumOfIntraDCReplicaThreads);
       logger.info("Number of intra DC nodes to replicate from: " + replicasToReplicateIntraDC.size());
       assignReplicasToThreads(replicasToReplicateIntraDC, replicationConfig.replicationNumOfIntraDCReplicaThreads,
-        replicationIntraDCThreads, "Intra DC");
+          replicationIntraDCThreads, "Intra DC");
 
       logger.info("Number of inter DC replica threads: " + replicationConfig.replicationNumOfInterDCReplicaThreads);
       logger.info("Number of inter DC nodes to replicate from: " + replicasToReplicateInterDC.size());
       assignReplicasToThreads(replicasToReplicateInterDC, replicationConfig.replicationNumOfInterDCReplicaThreads,
-        replicationInterDCThreads, "Inter DC");
+          replicationInterDCThreads, "Inter DC");
 
       // start all replica threads
       for (ReplicaThread thread : replicationIntraDCThreads) {
@@ -414,6 +416,8 @@ public final class ReplicationManager {
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
     if (replicasToReplicate.size() < numberOfReplicaThreads) {
+      logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
+          numberOfReplicaThreads, replicasToReplicate.size());
       numberOfReplicaThreads = replicasToReplicate.size();
     }
     int numberOfNodesPerThread = replicasToReplicate.size() / numberOfReplicaThreads;
@@ -450,11 +454,12 @@ public final class ReplicationManager {
    * @throws ReplicationException
    * @throws IOException
    */
-  private void readFromFile(String mountPath)
+  private boolean readFromFile(String mountPath)
       throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
+    boolean shouldPersist = false;
     if (replicaTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
@@ -482,8 +487,19 @@ public final class ReplicationManager {
                 if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
                     && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
                     .equals(replicaPath)) {
-                  info.setToken(token);
-                  info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
+                  if (partitionInfo.getStore().getSizeInBytes() > 0) {
+                    info.setToken(token);
+                    info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
+                  } else {
+                    // if the local replica is empty, it could have been newly created. In this case, the offset in
+                    // every peer replica which the local replica lags from should be set to 0, so that the local
+                    // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
+                    // local replica should also be set to 0. During initialization these values are already set to 0,
+                    // so we let them be. However, we must ensure that the the tokens are persisted if any of them gets
+                    // reset, before the store takes any writes as that might get persisted before the replicaToken is.
+
+                    shouldPersist = true;
+                  }
                   logger
                       .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
@@ -512,6 +528,7 @@ public final class ReplicationManager {
             .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
+    return shouldPersist;
   }
 
   class ReplicaTokenPersistor implements Runnable {
@@ -519,55 +536,61 @@ public final class ReplicationManager {
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
 
+    private void write(String mountPath)
+        throws IOException, ReplicationException {
+      long writeStartTimeMs = SystemTime.getInstance().milliseconds();
+      File temp = new File(mountPath, replicaTokenFileName + ".tmp");
+      File actual = new File(mountPath, replicaTokenFileName);
+      FileOutputStream fileStream = new FileOutputStream(temp);
+      CrcOutputStream crc = new CrcOutputStream(fileStream);
+      DataOutputStream writer = new DataOutputStream(crc);
+      try {
+        // write the current version
+        writer.writeShort(version);
+        // Get all partitions for the mount path and persist the tokens for them
+        for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
+          for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
+            FindToken tokenToPersist = remoteReplica.getTokenToPersist();
+            if (tokenToPersist != null) {
+              writer.write(info.getPartitionId().getBytes());
+              writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes().length);
+              writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
+              writer.writeInt(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
+              writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
+              writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
+              writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
+              writer.write(remoteReplica.getTokenToPersist().toBytes());
+              remoteReplica.onTokenPersisted();
+            }
+          }
+        }
+        long crcValue = crc.getValue();
+        writer.writeLong(crcValue);
+
+        // flush and overwrite old file
+        fileStream.getChannel().force(true);
+        // swap temp file with the original file
+        temp.renameTo(actual);
+      } catch (IOException e) {
+        logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
+        throw new ReplicationException("IO error while persisting replica tokens to disk ");
+      } finally {
+        writer.close();
+        replicationMetrics.remoteReplicaTokensPersistTime
+            .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
+      }
+      logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
+    }
+
     /**
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
      * path to a file. The file is saved on the corresponding mount path
      */
-    public void write()
-        throws IOException, ReplicationException {
-      long writeStartTimeMs = SystemTime.getInstance().milliseconds();
-      for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        File temp = new File(mountPath, replicaTokenFileName + ".tmp");
-        File actual = new File(mountPath, replicaTokenFileName);
-        FileOutputStream fileStream = new FileOutputStream(temp);
-        CrcOutputStream crc = new CrcOutputStream(fileStream);
-        DataOutputStream writer = new DataOutputStream(crc);
-        try {
-          // write the current version
-          writer.writeShort(version);
-          // Get all partitions for the mount path and persist the tokens for them
-          for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
-            for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
-              FindToken tokenToPersist = remoteReplica.getTokenToPersist();
-              if (tokenToPersist != null) {
-                writer.write(info.getPartitionId().getBytes());
-                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes().length);
-                writer.write(remoteReplica.getReplicaId().getDataNodeId().getHostname().getBytes());
-                writer.writeInt(remoteReplica.getReplicaId().getReplicaPath().getBytes().length);
-                writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
-                writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
-                writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
-                writer.write(remoteReplica.getTokenToPersist().toBytes());
-                remoteReplica.onTokenPersisted();
-              }
-            }
-          }
-          long crcValue = crc.getValue();
-          writer.writeLong(crcValue);
 
-          // flush and overwrite old file
-          fileStream.getChannel().force(true);
-          // swap temp file with the original file
-          temp.renameTo(actual);
-        } catch (IOException e) {
-          logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
-          throw new ReplicationException("IO error while persisting replica tokens to disk ");
-        } finally {
-          writer.close();
-          replicationMetrics.remoteReplicaTokensPersistTime
-              .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
-        }
-        logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
+    private void write()
+        throws IOException, ReplicationException {
+      for (String mountPath : partitionGroupedByMountPath.keySet()) {
+        write(mountPath);
       }
     }
 
