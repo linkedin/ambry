@@ -46,9 +46,9 @@ final class RemoteReplicaInfo {
   // tracks the point up to which a node is in sync with a remote replica
   private final long tokenPersistIntervalInMs;
   private FindToken currentToken = null;
+  private FindToken candidateTokenToPersist = null;
+  private long timeCandidateSetInMs;
   private FindToken tokenToPersist = null;
-  private long timeTokenToPersistSetInMs;
-  private FindToken lastPersistedToken = null;
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
 
@@ -57,9 +57,9 @@ final class RemoteReplicaInfo {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
+    this.candidateTokenToPersist = token;
     this.tokenToPersist = token;
-    this.lastPersistedToken = null;
-    this.timeTokenToPersistSetInMs = SystemTime.getInstance().milliseconds();
+    this.timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
@@ -107,18 +107,42 @@ final class RemoteReplicaInfo {
     }
   }
 
+  /**
+   * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
+   * replicaTokens file before the entry itself is persisted in the store. This is done as follows. Objects of this
+   * class maintain 3 tokens: tokenToPersist, candidateTokenToPersist and currentToken:
+   *
+   * tokenToPersist: this is the token that we know is safe to be persisted. The associated store entry from the
+   * remote replica is guaranteed to have been persisted by the store.
+   *
+   * candidateTokenToPersist: this is the token that we would like to persist next. We would go ahead with this
+   * only if we know for sure that the associated store entry has been persisted. We ensure safety by maintaining the
+   * time at which candidateTokenToPersist was set and ensuring that tokenToPersist is assigned this value only if
+   * sufficient time has passed since the time we set candidateTokenToPersist.
+   *
+   * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
+   *
+   * tokenToPersist <= candidateTokenToPersist <= currentToken
+   */
+
+  /**
+   * get the token to persist. Returns either the candidate token if enough time has passed since it was
+   * set, or the last token again.
+   */
   public FindToken getTokenToPersist() {
     synchronized (lock) {
-      return (SystemTime.getInstance().milliseconds() - timeTokenToPersistSetInMs) > tokenPersistIntervalInMs
-          ? tokenToPersist : lastPersistedToken;
+      if (SystemTime.getInstance().milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
+        // candidateTokenToPersist is now safe to be persisted.
+        tokenToPersist = candidateTokenToPersist;
+      }
+      return tokenToPersist;
     }
   }
 
-  public void onTokenPersisted(FindToken lastPersistedToken) {
+  public void onTokenPersisted() {
     synchronized (lock) {
-      this.lastPersistedToken = lastPersistedToken;
-      this.tokenToPersist = currentToken;
-      timeTokenToPersistSetInMs = SystemTime.getInstance().milliseconds();
+      this.candidateTokenToPersist = currentToken;
+      timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
     }
   }
 
@@ -561,9 +585,8 @@ public final class ReplicationManager {
               writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
               writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
               writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
-              tokenToPersist = remoteReplica.getTokenToPersist();
-              writer.write(tokenToPersist.toBytes());
-              remoteReplica.onTokenPersisted(tokenToPersist);
+              writer.write(remoteReplica.getTokenToPersist().toBytes());
+              remoteReplica.onTokenPersisted();
             }
           }
         }
