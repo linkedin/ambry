@@ -45,10 +45,14 @@ final class RemoteReplicaInfo {
 
   // tracks the point up to which a node is in sync with a remote replica
   private final long tokenPersistIntervalInMs;
+  // The latest know token
   private FindToken currentToken = null;
+  // The token that will be safe to persist eventually
   private FindToken candidateTokenToPersist = null;
+  // The time at which the candidate token is set
   private long timeCandidateSetInMs;
-  private FindToken tokenToPersist = null;
+  // The token that is known to be safe to persist.
+  private FindToken tokenSafeToPersist = null;
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
 
@@ -58,7 +62,7 @@ final class RemoteReplicaInfo {
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
     this.candidateTokenToPersist = token;
-    this.tokenToPersist = token;
+    this.tokenSafeToPersist = token;
     this.timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
@@ -110,19 +114,19 @@ final class RemoteReplicaInfo {
   /**
    * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
    * replicaTokens file before the entry itself is persisted in the store. This is done as follows. Objects of this
-   * class maintain 3 tokens: tokenToPersist, candidateTokenToPersist and currentToken:
+   * class maintain 3 tokens: tokenSafeToPersist, candidateTokenToPersist and currentToken:
    *
-   * tokenToPersist: this is the token that we know is safe to be persisted. The associated store entry from the
+   * tokenSafeToPersist: this is the token that we know is safe to be persisted. The associated store entry from the
    * remote replica is guaranteed to have been persisted by the store.
    *
    * candidateTokenToPersist: this is the token that we would like to persist next. We would go ahead with this
    * only if we know for sure that the associated store entry has been persisted. We ensure safety by maintaining the
-   * time at which candidateTokenToPersist was set and ensuring that tokenToPersist is assigned this value only if
+   * time at which candidateTokenToPersist was set and ensuring that tokenSafeToPersist is assigned this value only if
    * sufficient time has passed since the time we set candidateTokenToPersist.
    *
    * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
    *
-   * tokenToPersist <= candidateTokenToPersist <= currentToken
+   * tokenSafeToPersist <= candidateTokenToPersist <= currentToken
    */
 
   /**
@@ -133,9 +137,9 @@ final class RemoteReplicaInfo {
     synchronized (lock) {
       if (SystemTime.getInstance().milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
         // candidateTokenToPersist is now safe to be persisted.
-        tokenToPersist = candidateTokenToPersist;
+        tokenSafeToPersist = candidateTokenToPersist;
       }
-      return tokenToPersist;
+      return tokenSafeToPersist;
     }
   }
 
@@ -293,7 +297,7 @@ public final class ReplicationManager {
       // read stored tokens
       // iterate through all mount paths and read replication info for the partitions it owns
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        readFromFileAndPersist(mountPath);
+        readFromFileAndPersistIfNecessary(mountPath);
       }
       // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
       // number of nodes. Otherwise, assign one thread to one node.
@@ -474,7 +478,7 @@ public final class ReplicationManager {
    * @throws ReplicationException
    * @throws IOException
    */
-  private void readFromFileAndPersist(String mountPath)
+  private void readFromFileAndPersistIfNecessary(String mountPath)
       throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
@@ -503,16 +507,16 @@ public final class ReplicationManager {
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
-              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
-                if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
-                    .equals(replicaPath)) {
+              for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+                if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
+                    remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port &&
+                    remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
                   logger
                       .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
-                    info.setToken(token);
-                    info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
+                    remoteReplicaInfo.setToken(token);
+                    remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   } else {
                     // if the local replica is empty, it could have been newly created. In this case, the offset in
                     // every peer replica which the local replica lags from should be set to 0, so that the local
