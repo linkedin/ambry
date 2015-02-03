@@ -503,16 +503,16 @@ public final class ReplicationManager {
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
-              for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
-                if (info.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && info.getReplicaId().getDataNodeId().getPort() == port && info.getReplicaId().getReplicaPath()
-                    .equals(replicaPath)) {
+              for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+                if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
+                    remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port &&
+                    remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
                   logger
                       .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
-                    info.setToken(token);
-                    info.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
+                    remoteReplicaInfo.setToken(token);
+                    remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   } else {
                     // if the local replica is empty, it could have been newly created. In this case, the offset in
                     // every peer replica which the local replica lags from should be set to 0, so that the local
