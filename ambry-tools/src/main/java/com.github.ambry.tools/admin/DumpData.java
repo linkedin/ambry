@@ -124,6 +124,25 @@ public class DumpData {
       File file = new File(fileToRead);
       DataInputStream stream = new DataInputStream(new FileInputStream(file));
       if (typeOfFile.compareTo("index") == 0) {
+        /**
+         * dump index file:
+         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
+         -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
+         -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log
+         -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile index
+         --fileToRead [indexFile]
+
+         dump index filtering for list of blobs:
+         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
+         -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
+         -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log
+         -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile index
+         --fileToRead [indexFile] --listOfBlobs AAEAAQAAAAAAAAHoAAAAJGZmOWNhZTNkLWQ5Y2QtNGFlMS1iY2FkLTE2NjljOWNhZGFiZQ,
+         AAEAAQAAAAAAAAHoAAAAJGZmOWNhZTNkLWQ5Y2QtNGFlMS1iY2FkLTE2NjljOWNhZGFi3Y,
+         AAEAAQAAAAAAAAHoAAAAJGZmMjI3OTI5LTczM2ItNDUzNC05YmFkLTI1NzIxZWMyYWY5ZQ
+         */
         System.out.println("Dumping index");
         short version = stream.readShort();
         System.out.println("version " + version);
@@ -151,6 +170,34 @@ public class DumpData {
           System.out.println("crc " + stream.readLong());
         }
       } else if (typeOfFile.compareTo("log") == 0) {
+        /**
+         * dump log file:
+         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
+         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
+         --fileToRead [logFile]
+
+         dump log ending at offset 100000:
+         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
+         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
+         --fileToRead [logFile] --endOffset 100000
+
+         dump log starting at 70000 offset and ending at 100000 filtered with a set of blobs:
+         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
+         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
+         --fileToRead [logFile] --startOffset 70000 --endOffset 100000
+         --listOfBlobs AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM2OA,
+         AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM23G,
+         AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM21S
+         */
         System.out.println("Dumping log");
         long currentOffset = 0;
         RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
@@ -290,6 +337,13 @@ public class DumpData {
             System.out.println("crc " + stream.readLong());
         }
       } else if (typeOfFile.compareTo("compareIndexToLog") == 0) {
+        /**
+         * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
+         * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
+         * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+         * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
+         * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json
+         */
         DumpData dumpData = new DumpData();
         if (logFileToDump == null) {
           System.out.println("logFileToDump needs to be set for compareIndexToLog");
