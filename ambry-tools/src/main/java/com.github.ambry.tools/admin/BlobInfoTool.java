@@ -34,44 +34,12 @@ import joptsimple.OptionSpec;
 
 
 /**
- * Tool to perform blob operations direclty with server
- *
- * Example commands:
- * List Replicas:
- * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
- * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
- * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
- * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.BlobInfoTool
- * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json --typeOfOperation LIST_REPLICAS
- * --ambryBlobId AAEAAQAAAAAAAAAJAAAAJDdhMzI4NDEyLTZlMDEtNGRlZC1iZmZiLTgzYzlhMGM0NzE0ZA
- *
- *
- * Get blob from a replica:
- * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
- * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
- * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
- * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.BlobInfoTool
- * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json --typeOfOperation
- * GET_BLOB_FROM_REPLICA --ambryBlobId AAEAAQAAAAAAAAAJAAAAJDdhMzI4NDEyLTZlMDEtNGRlZC1iZmZiLTgzYzlhMGM0NzE0ZA
- * --replicaHost eat1-app837.corp.linkedin.com
- *
- * Get blob from a local replica:
- * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
- * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
- * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
- * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.BlobInfoTool
- * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json --typeOfOperation
- * GET_BLOB_FROM_LOCAL_REPLICA --fabric EI1 --ambryBlobId
- * AAEAAQAAAAAAAAAJAAAAJDdhMzI4NDEyLTZlMDEtNGRlZC1iZmZiLTgzYzlhMGM0NzE0ZA
- *
- * Get blob from all replicas:
- * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
- * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
- * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
- * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.BlobInfoTool
- * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json
- * --typeOfOperation GET_BLOB_FROM_ALL_REPLICAS --ambryBlobId
- * AAEAAQAAAAAAAAAJAAAAJDdhMzI4NDEyLTZlMDEtNGRlZC1iZmZiLTgzYzlhMGM0NzE0ZA
+ * Tool to perform blob operations directly with the server for a blobid
+ * Features supported so far are:
+ * List Replicas for a given blob id
+ * Get blob (in other words deserialize blob) for a given blobid from all replicas
+ * Get blob (in other words deserialize blob) for a given blobid from local replicas
+ * Get blob (in other words deserialize blob) for a given blobid for a specific replica
  *
  */
 public class BlobInfoTool {
@@ -436,7 +404,6 @@ public class BlobInfoTool {
       ChannelOutput channelOutput = blockingChannel.receive();
       InputStream stream = channelOutput.getInputStream();
       getResponse = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      long dbCallLatency = System.currentTimeMillis() - startTimeDbCall;
     } catch (Exception exception) {
       blockingChannel = null;
       exception.printStackTrace();

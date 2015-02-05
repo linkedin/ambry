@@ -42,9 +42,10 @@ public class DumpData {
   public static void main(String args[]) {
     try {
       OptionParser parser = new OptionParser();
-      ArgumentAcceptingOptionSpec<String> fileToReadOpt =
-          parser.accepts("fileToRead", "The file that needs to be dumped").withRequiredArg().describedAs("file_to_read")
-              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> fileToReadOpt = parser.accepts("fileToRead",
+          "The file that needs to be dumped. Index file incase of \"DumpIndex\", "
+              + "log file incase of \"DumpLog\", replicatoken file incase of \"DumpReplicatoken\" and index file incase "
+              + "of \"CompareIndexToLog\" ").withRequiredArg().describedAs("file_to_read").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
           parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
@@ -54,9 +55,10 @@ public class DumpData {
           parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
               .describedAs("partition_layout").ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> typeOfFileOpt =
-          parser.accepts("typeOfFile", "The type of file to read - log or index or replicatoken compareIndexToLog")
-              .withRequiredArg().describedAs("The type of file").ofType(String.class).defaultsTo("log");
+      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
+          "The type of operation to be performed - DumpLog or DumpIndex or DumpReplicatoken CompareIndexToLog")
+          .withRequiredArg().describedAs("The type of Operation to be performed").ofType(String.class)
+          .defaultsTo("log");
 
       ArgumentAcceptingOptionSpec<String> listOfBlobs =
           parser.accepts("listOfBlobs", "List Of Blobs to look for during log/index dump").withRequiredArg()
@@ -94,7 +96,7 @@ public class DumpData {
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
       String fileToRead = options.valueOf(fileToReadOpt);
-      String typeOfFile = options.valueOf(typeOfFileOpt);
+      String typeOfOperation = options.valueOf(typeOfOperationOpt);
       String startOffsetStr = options.valueOf(startOffsetOpt);
       String endOffsetStr = options.valueOf(endOffsetOpt);
       String logFileToDump = options.valueOf(logFileToDumpOpt);
@@ -119,30 +121,11 @@ public class DumpData {
       }
 
       System.out.println("File to read " + fileToRead);
-      System.out.println("Type of file " + typeOfFile);
+      System.out.println("Type of file " + typeOfOperation);
 
       File file = new File(fileToRead);
       DataInputStream stream = new DataInputStream(new FileInputStream(file));
-      if (typeOfFile.compareTo("index") == 0) {
-        /**
-         * dump index file:
-         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
-         -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
-         -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log
-         -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile index
-         --fileToRead [indexFile]
-
-         dump index filtering for list of blobs:
-         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
-         -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
-         -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log
-         -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile index
-         --fileToRead [indexFile] --listOfBlobs AAEAAQAAAAAAAAHoAAAAJGZmOWNhZTNkLWQ5Y2QtNGFlMS1iY2FkLTE2NjljOWNhZGFiZQ,
-         AAEAAQAAAAAAAAHoAAAAJGZmOWNhZTNkLWQ5Y2QtNGFlMS1iY2FkLTE2NjljOWNhZGFi3Y,
-         AAEAAQAAAAAAAAHoAAAAJGZmMjI3OTI5LTczM2ItNDUzNC05YmFkLTI1NzIxZWMyYWY5ZQ
-         */
+      if (typeOfOperation.compareTo("DumpIndex") == 0) {
         System.out.println("Dumping index");
         short version = stream.readShort();
         System.out.println("version " + version);
@@ -160,50 +143,26 @@ public class DumpData {
             byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
             stream.read(value);
             IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
-            String msg = "key " + key + " value - offset " + blobValue.getOffset() + " size " +
-                blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
-                " Flag " + blobValue.getFlags();
+            String msg =
+                "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
+                    + " size " + blobValue.getSize() + " Original Message Offset " + blobValue
+                    .getOriginalMessageOffset() +
+                    " Flag " + blobValue.getFlags();
             if ((blobList == null) || blobs.contains(key.toString())) {
               System.out.println(msg);
+              if (keysize != key.sizeInBytes()) {
+                System.out.println("KeySize mismatch for this key " + key);
+              }
             }
           }
           System.out.println("crc " + stream.readLong());
         }
-      } else if (typeOfFile.compareTo("log") == 0) {
-        /**
-         * dump log file:
-         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
-         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
-         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
-         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
-         --fileToRead [logFile]
-
-         dump log ending at offset 100000:
-         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
-         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
-         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
-         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
-         --fileToRead [logFile] --endOffset 100000
-
-         dump log starting at 70000 offset and ending at 100000 filtered with a set of blobs:
-         java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
-         -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
-         -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
-         -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         --hardwareLayout HardwareLayoutProd.json --partitionLayout PartitionLayoutProd.json --typeOfFile log
-         --fileToRead [logFile] --startOffset 70000 --endOffset 100000
-         --listOfBlobs AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM2OA,
-         AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM23G,
-         AAEAAQAAAAAAAAHoAAAAJDQ1OWM2MWE0LThkNGMtNDNlNi1hNGU2LTQxNzgxNTVhNDM21S
-         */
+      } else if (typeOfOperation.compareTo("DumpLog") == 0) {
         System.out.println("Dumping log");
         long currentOffset = 0;
         RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
         long fileSize = file.length();
         boolean lastBlobFailed = false;
-        long blobsProcessed = 0;
         if (startOffset != -1) {
           currentOffset = startOffset;
           randomAccessFile.seek(currentOffset);
@@ -308,7 +267,7 @@ public class DumpData {
             currentOffset = tempCurrentOffset;
           }
         }
-      } else if (typeOfFile.compareTo("replicatoken") == 0) {
+      } else if (typeOfOperation.compareTo("DumpReplicatoken") == 0) {
         System.out.println("Dumping replica token");
         short version = stream.readShort();
         switch (version) {
@@ -336,14 +295,7 @@ public class DumpData {
             }
             System.out.println("crc " + stream.readLong());
         }
-      } else if (typeOfFile.compareTo("compareIndexToLog") == 0) {
-        /**
-         * java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
-         * -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
-         * -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
-         * -Xloggc:gc.log -Dlog4j.configuration=file:log4j.properties -cp "*" com.github.ambry.tools.admin.DumpData
-         * --hardwareLayout HardwareLayoutEI.json --partitionLayout PartitionLayoutEI.json
-         */
+      } else if (typeOfOperation.compareTo("CompareIndexToLog") == 0) {
         DumpData dumpData = new DumpData();
         if (logFileToDump == null) {
           System.out.println("logFileToDump needs to be set for compareIndexToLog");
