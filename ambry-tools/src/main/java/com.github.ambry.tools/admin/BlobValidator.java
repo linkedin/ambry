@@ -36,13 +36,12 @@ import joptsimple.OptionSpec;
 /**
  * Tool to perform blob operations directly with the server for a blobid
  * Features supported so far are:
- * List Replicas for a given blob id
  * Get blob (in other words deserialize blob) for a given blobid from all replicas
- * Get blob (in other words deserialize blob) for a given blobid from local replicas
+ * Get blob (in other words deserialize blob) for a given blobid from replicas for a datacenter
  * Get blob (in other words deserialize blob) for a given blobid for a specific replica
  *
  */
-public class BlobInfoTool {
+public class BlobValidator {
 
   public static void main(String args[]) {
     try {
@@ -57,8 +56,8 @@ public class BlobInfoTool {
               .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to execute - GET_BLOB_FROM_REPLICA/"
-              + "/GET_BLOB_FROM_LOCAL_REPLICA/GET_BLOB_FROM_ALL_REPLICAS/LIST_REPLICAS").withRequiredArg()
+          "The type of operation to execute - VALIDATE_BLOB_ON_REPLICA/"
+              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICASS").withRequiredArg()
           .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdOpt =
@@ -73,8 +72,8 @@ public class BlobInfoTool {
           parser.accepts("replicaPort", "The replica port to execute get on").withRequiredArg()
               .describedAs("The host name").defaultsTo("15088").ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> fabricOpt =
-          parser.accepts("fabric", "Fabric for which the replicas should be chosen from").withRequiredArg()
+      ArgumentAcceptingOptionSpec<String> datacenterOpt =
+          parser.accepts("datacenter", "Datacenter for which the replicas should be chosen from").withRequiredArg()
               .describedAs("The file name with absolute path").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> expiredBlobsOpt =
@@ -98,8 +97,8 @@ public class BlobInfoTool {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.out.println("BlobInfoTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
-              "/GET_BLOB_FROM_REPLICA/GET_BLOB_FROM_LOCAL_REPLICA/GET_BLOB_FROM_ALL_REPLICA/" +
-              "LIST_REPLICAS -- ambryBlobId blobId --fabric fabric --replicaHost replicaHost " +
+              "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/" +
+              " -- ambryBlobId blobId --datacenter datacenter --replicaHost replicaHost " +
               "--replicaPort replicaPort --includeExpiredBlob true/false");
           System.exit(1);
         }
@@ -118,9 +117,9 @@ public class BlobInfoTool {
       if (verbose) {
         System.out.println("Blob Id " + blobIdStr);
       }
-      String fabric = options.valueOf(fabricOpt);
+      String datacenter = options.valueOf(datacenterOpt);
       if (verbose) {
-        System.out.println("Fabric " + fabric);
+        System.out.println("Datacenter " + datacenter);
       }
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       if (verbose) {
@@ -140,25 +139,23 @@ public class BlobInfoTool {
         System.out.println("ReplicPort " + replicaPort);
       }
 
-      BlobInfoTool obj = new BlobInfoTool();
+      BlobValidator blobValidator = new BlobValidator();
       if (verbose) {
         System.out.println("Blob Id " + blobIdStr);
       }
       BlobId blobId = new BlobId(blobIdStr, map);
-      if (typeOfOperation.equalsIgnoreCase("GET_BLOB_FROM_REPLICA")) {
-        obj.validate(new String[]{replicaHost});
-        if (obj.getBlob(blobId, map, replicaHost, replicaPort, expiredBlobs)) {
+      if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_REPLICA")) {
+        blobValidator.validate(new String[]{replicaHost});
+        if (blobValidator.validateBlobOnReplica(blobId, map, replicaHost, replicaPort, expiredBlobs)) {
           System.out.println("Successfully read the blob");
         } else {
           System.out.println("Failed to read the blob");
         }
-      } else if (typeOfOperation.equalsIgnoreCase("GET_BLOB_FROM_LOCAL_REPLICA")) {
-        obj.validate(new String[]{replicaHost, fabric});
-        obj.getBlob(blobId, map, fabric, expiredBlobs);
-      } else if (typeOfOperation.equalsIgnoreCase("GET_BLOB_FROM_ALL_REPLICAS")) {
-        obj.getBlob(blobId, map, expiredBlobs);
-      } else if (typeOfOperation.equalsIgnoreCase("LIST_REPLICAS")) {
-        obj.printReplicas(blobId);
+      } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_DATACENTER")) {
+        blobValidator.validate(new String[]{replicaHost, datacenter});
+        blobValidator.validateBlobOnDatacenter(blobId, map, datacenter, expiredBlobs);
+      } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_ALL_REPLICAS")) {
+        blobValidator.validateBlobOnAllReplicas(blobId, map, expiredBlobs);
       } else {
         System.out.println("Invalid Type of Operation ");
         System.exit(1);
@@ -177,18 +174,12 @@ public class BlobInfoTool {
     }
   }
 
-  public void printReplicas(BlobId blobId) {
-    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      System.out.println(replicaId);
-    }
-  }
-
-  private void getBlob(BlobId blobId, ClusterMap clusterMap, boolean expiredBlobs) {
+  private void validateBlobOnAllReplicas(BlobId blobId, ClusterMap clusterMap, boolean expiredBlobs) {
     List<ReplicaId> failedReplicas = new ArrayList<ReplicaId>();
     List<ReplicaId> passedReplicas = new ArrayList<ReplicaId>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      if (getBlob(blobId, clusterMap, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-          expiredBlobs)) {
+      if (validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
+          replicaId.getDataNodeId().getPort(), expiredBlobs)) {
         passedReplicas.add(replicaId);
         System.out.println("Successfully read the blob from " + replicaId);
       } else {
@@ -201,13 +192,13 @@ public class BlobInfoTool {
     System.out.println("Failed Replicas : " + failedReplicas);
   }
 
-  private void getBlob(BlobId blobId, ClusterMap clusterMap, String fabric, boolean expiredBlobs) {
+  private void validateBlobOnDatacenter(BlobId blobId, ClusterMap clusterMap, String datacenter, boolean expiredBlobs) {
     List<ReplicaId> failedReplicas = new ArrayList<ReplicaId>();
     List<ReplicaId> passedReplicas = new ArrayList<ReplicaId>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(fabric)) {
-        if (getBlob(blobId, clusterMap, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-            expiredBlobs)) {
+      if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
+        if (validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
+            replicaId.getDataNodeId().getPort(), expiredBlobs)) {
           passedReplicas.add(replicaId);
           System.out.println("Successfully read the blob from " + replicaId);
         } else {
@@ -221,7 +212,7 @@ public class BlobInfoTool {
     System.out.println("Failed Replicas : " + failedReplicas);
   }
 
-  private boolean getBlob(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
+  private boolean validateBlobOnReplica(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
       boolean expiredBlobs) {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
@@ -247,7 +238,7 @@ public class BlobInfoTool {
       GetResponse getResponse = null;
 
       getResponse =
-          getGetResponseFromStream(blockingChannel, getRequest, clusterMap, MessageFormatFlags.BlobProperties);
+          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
@@ -289,7 +280,7 @@ public class BlobInfoTool {
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       getResponse = null;
       getResponse =
-          getGetResponseFromStream(blockingChannel, getRequest, clusterMap, MessageFormatFlags.BlobUserMetadata);
+          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");
@@ -319,9 +310,6 @@ public class BlobInfoTool {
         }
       } else {
         ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream());
-                /*StringMapCodec codec = null;
-                Map<String, String> ambryMetadata = codec.decode(new String(userMetadata.array(), "UTF-8"));
-                System.out.println("UserMetadata " + ambryMetadata);*/
         System.out.println("Usermetadata deserialized. Size " + userMetadata.capacity());
       }
 
@@ -329,7 +317,7 @@ public class BlobInfoTool {
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to get blob : " + getRequest);
       getResponse = null;
-      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap, MessageFormatFlags.Blob);
+      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob is null ");
         System.out.println(blobId + " STATE FAILED");
@@ -392,14 +380,12 @@ public class BlobInfoTool {
    * @param blockingChannel
    * @param getRequest
    * @param clusterMap
-   * @param messageFormatFlags
    * @return
    */
   private static GetResponse getGetResponseFromStream(ConnectedChannel blockingChannel, GetRequest getRequest,
-      ClusterMap clusterMap, MessageFormatFlags messageFormatFlags) {
+      ClusterMap clusterMap) {
     GetResponse getResponse = null;
     try {
-      long startTimeDbCall = System.currentTimeMillis();
       blockingChannel.send(getRequest);
       ChannelOutput channelOutput = blockingChannel.receive();
       InputStream stream = channelOutput.getInputStream();

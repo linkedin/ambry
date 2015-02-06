@@ -56,7 +56,7 @@ public class DumpData {
               .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to be performed - DumpLog or DumpIndex or DumpReplicatoken CompareIndexToLog")
+          "The type of operation to be performed - DumpLog or DumpIndex or DumpReplicatoken or CompareIndexToLog")
           .withRequiredArg().describedAs("The type of Operation to be performed").ofType(String.class)
           .defaultsTo("log");
 
@@ -72,8 +72,8 @@ public class DumpData {
           parser.accepts("endOffset", "Log Offset to end dumping").withRequiredArg().describedAs("endOffset")
               .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> logFileToDumpOpt =
-          parser.accepts("logFileToDump", "Log file that needs to be dumped for Index comparison").withRequiredArg()
+      ArgumentAcceptingOptionSpec<String> logFileToCompareOpt =
+          parser.accepts("logFileToDump", "Log file that needs to be dumped for Operation \"CompareIndexToLog\" ").withRequiredArg()
               .describedAs("log_file_to_dump").ofType(String.class);
 
       OptionSet options = parser.parse(args);
@@ -99,7 +99,7 @@ public class DumpData {
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       String startOffsetStr = options.valueOf(startOffsetOpt);
       String endOffsetStr = options.valueOf(endOffsetOpt);
-      String logFileToDump = options.valueOf(logFileToDumpOpt);
+      String logFileToDump = options.valueOf(logFileToCompareOpt);
 
       long startOffset = -1;
       long endOffset = -1;
@@ -121,7 +121,7 @@ public class DumpData {
       }
 
       System.out.println("File to read " + fileToRead);
-      System.out.println("Type of file " + typeOfOperation);
+      System.out.println("Type of Operation " + typeOfOperation);
 
       File file = new File(fileToRead);
       DataInputStream stream = new DataInputStream(new FileInputStream(file));
