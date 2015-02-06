@@ -25,6 +25,7 @@ public class ReplicationMetrics {
   public final Counter intraColoBlobsReplicatedCount;
   public final Counter unknownRemoteReplicaRequestCount;
   public final Counter replicationErrors;
+  public final Counter replicationTokenResetCount;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
@@ -75,6 +76,7 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "UnknownRemoteReplicaRequestCount"));
     registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBlobsCount"));
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
+    replicationTokenResetCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
     interColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =

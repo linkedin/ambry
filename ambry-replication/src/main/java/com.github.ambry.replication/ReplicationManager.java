@@ -524,6 +524,7 @@ public final class ReplicationManager {
                     // local replica should also be set to 0. During initialization these values are already set to 0,
                     // so we let them be.
                     tokenWasReset = true;
+                    replicationMetrics.replicationTokenResetCount.inc();
                     logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}",
                         partitionId, hostname, port, token);
                   }
