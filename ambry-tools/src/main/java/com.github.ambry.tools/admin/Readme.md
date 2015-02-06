@@ -96,23 +96,23 @@ Get blob from all replicas:
 java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
 -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
 -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobInfoTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_ALL_REPLICAS --ambryBlobId [blobid]
+-Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --ambryBlobId [blobid]
 
-Get blob from a local replica:
+Get blob from all replicas from a datecenter:
 java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
 -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
 -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobInfoTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_LOCAL_REPLICA --fabric [fabric]
+-Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
 --ambryBlobId [blobid]
 
 Get blob from a replica:
 java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
 -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
 -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobInfoTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_REPLICA --ambryBlobId [blobid]
+-Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --ambryBlobId [blobid]
 --replicaHost [replicaHost] --replicaPort [replicaPort]
 
 AdminTool:
@@ -121,9 +121,8 @@ List Replica:
 java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
 -XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
 -XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobInfoTool
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS
---ambryBlobId [blobid]
+-Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
 
 
 
