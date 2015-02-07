@@ -85,41 +85,7 @@ public class BlobValidator {
           parser.accepts("verbose", "Verbosity").withRequiredArg().describedAs("Verbosity").defaultsTo("false")
               .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> helpOpt =
-          parser.accepts("help", "Help").withRequiredArg().describedAs("help").ofType(String.class);
-
       OptionSet options = parser.parse(args);
-
-      String help = options.valueOf(helpOpt);
-      if (help != null) {
-        System.out.println("\nExample Usages:\n\nGet blob from all replicas:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]\n"
-            +
-            "--partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_ALL_REPLICAS --ambryBlobId [blobid]\n"
-            +
-            "\n" +
-            "Get blob from a local replica:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]\n"
-            +
-            "--partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_LOCAL_REPLICA --fabric [fabric]\n"
-            +
-            "--ambryBlobId [blobid]\n" +
-            "\n" +
-            "Get blob from a replica:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]\n"
-            +
-            "--partitionLayout [PartitionLayoutFile] --typeOfOperation GET_BLOB_FROM_REPLICA --ambryBlobId [blobid]\n" +
-            "--replicaHost [replicaHost] --replicaPort [replicaPort]\n\n");
-      }
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(hardwareLayoutOpt);
@@ -130,7 +96,7 @@ public class BlobValidator {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("BlobValidator --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
+          System.out.println("BlobInfoTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
               "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/" +
               " -- ambryBlobId blobId --datacenter datacenter --replicaHost replicaHost " +
               "--replicaPort replicaPort --includeExpiredBlob true/false");
@@ -271,7 +237,8 @@ public class BlobValidator {
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
-      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse =
+          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
@@ -312,7 +279,8 @@ public class BlobValidator {
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       getResponse = null;
-      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse =
+          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");

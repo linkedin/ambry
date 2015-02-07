@@ -33,32 +33,15 @@ public class AdminTool {
           parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
               .describedAs("partition_layout").ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt =
-          parser.accepts("typeOfOperation", "The type of operation to execute - LIST_REPLICAS").withRequiredArg()
-              .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
+      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
+          "The type of operation to execute - LIST_REPLICAS").withRequiredArg()
+          .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdOpt =
           parser.accepts("ambryBlobId", "The blob id to execute get on").withRequiredArg().describedAs("The blob id")
               .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> helpOpt =
-          parser.accepts("help", "Help").withRequiredArg().describedAs("help").ofType(String.class);
-
       OptionSet options = parser.parse(args);
-
-      String help = options.valueOf(helpOpt);
-      if (help != null) {
-        System.out.println(
-            "\nExample Usage: \njava -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n"
-                + "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n"
-                +
-                "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n"
-                +
-                "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.AdminTool\n" +
-                "--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS\n"
-                +
-                "--ambryBlobId [blobid]\n\n");
-      }
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(hardwareLayoutOpt);
@@ -69,8 +52,8 @@ public class AdminTool {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation "
-              + "LIST_REPLICAS -- ambryBlobId blobId");
+          System.out.println("BlobInfoTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
+              "LIST_REPLICAS -- ambryBlobId blobId");
           System.exit(1);
         }
       }

@@ -73,70 +73,10 @@ public class DumpData {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> logFileToCompareOpt =
-          parser.accepts("logFileToDump", "Log file that needs to be dumped for Operation \"CompareIndexToLog\" ")
-              .withRequiredArg().describedAs("log_file_to_dump").ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> helpOpt =
-          parser.accepts("help", "Help").withRequiredArg().describedAs("help").ofType(String.class);
+          parser.accepts("logFileToDump", "Log file that needs to be dumped for Operation \"CompareIndexToLog\" ").withRequiredArg()
+              .describedAs("log_file_to_dump").ofType(String.class);
 
       OptionSet options = parser.parse(args);
-
-      String help = options.valueOf(helpOpt);
-      if (help != null) {
-        System.out.println("\nExample Usages:\n\nDump Index:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128\n"
-            +
-            "-verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15\n"
-            +
-            "-XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log\n" +
-            " -cp \"*\" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]\n" +
-            " --partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [indexFile]\n" +
-            "\n" +
-            "Dump index filtering for a list of blobs:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128\n"
-            +
-            "-verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15\n"
-            +
-            "-XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log -cp \"*\"\n" +
-            "com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile]\n"
-            +
-            "--typeOfFile index --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]\n" +
-            "\n" +
-            "Dumping Log:\n" +
-            "\n" +
-            "Dump log file:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]\n" +
-            "--partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [logFile]\n" +
-            "\n" +
-            "Dump log ending at offset x:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.DumpData\n" +
-            "--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index\n" +
-            "--fileToRead [logFile] --endOffset x\n" +
-            "\n" +
-            "dump log starting at x offset and ending at y filtered with a set of blobs:\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.DumpData\n" +
-            "--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index\n" +
-            "--fileToRead [logFile] --startOffset x --endOffset y --listOfBlobs [blobid1,blobid2,blobid3]\n" +
-            "\n" +
-            "Comparing index entries to log entries(or in other words, trying to find index entry in the log with index info):\n"
-            +
-            "\n" +
-            "java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC\n" +
-            "-XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15\n" +
-            "-XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution\n" +
-            "-Xloggc:gc.log -cp \"*\" com.github.ambry.tools.admin.DumpData\n" +
-            "--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --fileToRead [indexFile]\n"
-            + "--logFileToDump [logFile]\n\n");
-      }
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(fileToReadOpt);

@@ -1,5 +1,3 @@
-This document describes about various tools in this package and their usages
-
 Before we get into the details about each tool, some terminologies to be aware of:
 
 HardwareLayout   - Has information about the nodes available in the cluster. disks for those nodes and their states
@@ -41,50 +39,32 @@ Examples:
 Dumping Index:
 
 Dump Index:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
--verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
--XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log
- -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
  --partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [indexFile]
 
 Dump index filtering for a list of blobs:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:SurvivorRatio=128
--verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15 -XX:MaxTenuringThreshold=15
--XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -Xloggc:gc.log -cp "*"
-com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile]
 --typeOfFile index --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]
 
 Dumping Log:
 
 Dump log file:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [logFile]
 
 Dump log ending at offset x:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.DumpData
+java -cp "*" com.github.ambry.tools.admin.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index
 --fileToRead [logFile] --endOffset x
 
 dump log starting at x offset and ending at y filtered with a set of blobs:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.DumpData
+java -cp "*" com.github.ambry.tools.admin.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index
 --fileToRead [logFile] --startOffset x --endOffset y --listOfBlobs [blobid1,blobid2,blobid3]
 
 Comparing index entries to log entries(or in other words, trying to find index entry in the log with index info):
 
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.DumpData
+java -cp "*" com.github.ambry.tools.admin.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --fileToRead [indexFile]
 --logFileToDump [logFile]
 
@@ -93,35 +73,23 @@ java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC 
 BlobValidator:
 
 Get blob from all replicas:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --ambryBlobId [blobid]
 
 Get blob from all replicas from a datecenter:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
 --ambryBlobId [blobid]
 
 Get blob from a replica:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --ambryBlobId [blobid]
 --replicaHost [replicaHost] --replicaPort [replicaPort]
 
 AdminTool:
 
 List Replica:
-java -Xms4g -Xmx4g -XX:NewSize=500m -XX:MaxNewSize=500m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC
--XX:SurvivorRatio=128 -verbose:gc -XX:+PrintGCApplicationStoppedTime -XX:InitialTenuringThreshold=15
--XX:MaxTenuringThreshold=15 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
--Xloggc:gc.log -cp "*" com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
+java -cp "*" com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
 
 
