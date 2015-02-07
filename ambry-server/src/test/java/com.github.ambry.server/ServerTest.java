@@ -496,10 +496,15 @@ public class ServerTest {
               PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
               // read remote node host name
               String hostname = Utils.readIntString(dataInputStream);
+              // read remote replica path
+              Utils.readIntString(dataInputStream);
+
               // read remote port
               int port = dataInputStream.readInt();
               Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
               setToCheck.remove(partitionId.toString() + hostname + port);
+              // read total bytes read from local store
+              dataInputStream.readLong();
               // read replica token
               FindToken token = factory.getFindToken(dataInputStream);
               System.out.println(
