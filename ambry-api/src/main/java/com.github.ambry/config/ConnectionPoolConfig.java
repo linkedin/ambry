@@ -23,21 +23,21 @@ public class ConnectionPoolConfig {
    * Read timeout in milliseconds for a connection.
    */
   @Config("connectionpool.read.timeout.ms")
-  @Default("10000")
+  @Default("1500")
   public final int connectionPoolReadTimeoutMs;
 
   /**
    * Connect timeout in milliseconds for a connection.
    */
    @Config("connectionpool.connect.timeout.ms")
-   @Default("2000")
+   @Default("800")
    public final int connectionPoolConnectTimeoutMs;
 
   /**
    * The max connections allowed per host
    */
   @Config("connectionpool.max.connections.per.host")
-  @Default("40")
+  @Default("5")
   public final int connectionPoolMaxConnectionsPerHost;
 
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
@@ -46,9 +46,9 @@ public class ConnectionPoolConfig {
     connectionPoolWriteBufferSizeBytes =
         verifiableProperties.getIntInRange("connectionpool.write.buffer.size.bytes", 10000, 1, 1024 * 1024 * 1024);
     connectionPoolReadTimeoutMs =
-        verifiableProperties.getIntInRange("connectionpool.read.timeout.ms", 10000, 1, 100000);
+        verifiableProperties.getIntInRange("connectionpool.read.timeout.ms", 1500, 1, 100000);
     connectionPoolConnectTimeoutMs =
-        verifiableProperties.getIntInRange("connectionpool.connect.timeout.ms", 2000, 1, 100000);
+        verifiableProperties.getIntInRange("connectionpool.connect.timeout.ms", 800, 1, 100000);
     connectionPoolMaxConnectionsPerHost =
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.host", 5, 1, 20);
   }
