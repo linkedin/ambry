@@ -33,6 +33,21 @@ public class ByteBufferInputStreamTest {
     for (int i = 500; i < 1000; i++) {
       Assert.assertEquals(outputBuf[i - 500], buf[i]);
     }
+    ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(buf));
+    ByteBufferInputStream stream3 = new ByteBufferInputStream(stream2, 1024);
+    byte[] output = new byte[1001];
+    output[0] = (byte) stream3.read();
+    Assert.assertEquals(output[0], buf[0]);
+    stream3.read(output, 1, 1000);
+    for (int i = 0; i < 1001; i++) {
+      Assert.assertEquals(output[i], buf[i]);
+    }
+    output = new byte[23];
+    stream3.read(output);
+    for (int i = 0; i < 23; i++) {
+      Assert.assertEquals(output[i], buf[i + 1001]);
+    }
+    Assert.assertEquals(stream3.read(), -1);
   }
 
   @Test

@@ -303,8 +303,8 @@ class ReplicaThread implements Runnable {
               remoteReplicaInfo.getLocalReplicaId().getReplicaPath());
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger
-          .trace("Remote node: {} Thread name: {} Remote replica: {} Token sent to remote: {} ", remoteNode, threadName,
-              remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
+          .trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ", remoteNode,
+              threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
     }
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,

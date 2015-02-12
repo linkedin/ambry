@@ -22,7 +22,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private AtomicLong downUntil;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown,  int failureCountThreshold,
+  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, int failureCountThreshold,
       long retryBackoffMs) {
     this.resource = resource;
     this.hardDown = hardDown;
@@ -37,10 +37,13 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onError() {
-      if (failureCount.incrementAndGet() >= failureCountThreshold) {
-        downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
+    int count = failureCount.incrementAndGet();
+    if (count >= failureCountThreshold) {
+      if (count == failureCountThreshold) {
         logger.error("Resource " + resource + " has gone down");
       }
+      downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
+    }
   }
 
   /*
@@ -48,7 +51,9 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onSuccess() {
-    failureCount.set(0);
+    if (failureCount.getAndSet(0) >= failureCountThreshold) {
+      logger.info("Resource " + resource + " is back up");
+    }
   }
 
   /*

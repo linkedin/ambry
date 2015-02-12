@@ -154,8 +154,7 @@ public class DataNodeTest {
     ensure(dataNode, HardwareState.AVAILABLE);
   }
 
-  void ensure(DataNode dataNode, HardwareState state)
-  {
+  void ensure(DataNode dataNode, HardwareState state) {
     assertEquals(dataNode.getState(), state);
     for (DiskId disk : dataNode.getDisks()) {
       assertEquals(disk.getState(), state);

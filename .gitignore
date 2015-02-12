@@ -10,6 +10,7 @@ target/
 *.iml
 *.ipr
 *.iws
+*.jar
 */.cache
 deploy
 *~

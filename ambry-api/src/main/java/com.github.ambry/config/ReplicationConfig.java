@@ -52,7 +52,7 @@ public class ReplicationConfig {
    * the entire blob would be returned
    */
   @Config("replication.fetch.size.in.bytes")
-  @Default("256000")
+  @Default("1048576")
   public final long replicationFetchSizeInBytes;
 
   /**
