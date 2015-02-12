@@ -31,7 +31,7 @@ This tool is used to perform read operations for a blob directly from the server
 This tool exposes some admin APIs to get more information for debugging purposes
 
 #### Operations supported
-* List partitions for a blobid
+* List replicas for a blobid
 
 ## Examples
 
