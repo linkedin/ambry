@@ -103,7 +103,7 @@ java -cp "*" com.github.ambry.tools.admin.BlobValidator --hardwareLayout [Hardwa
 
 ### AdminTool
 
-#### List Replica
+#### List Replicas
 ```java
 java -cp "*" com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
