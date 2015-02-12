@@ -34,9 +34,9 @@ public class AdminTool {
           parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
               .describedAs("partition_layout").ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to execute - LIST_REPLICAS").withRequiredArg()
-          .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
+      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt =
+          parser.accepts("typeOfOperation", "The type of operation to execute - LIST_REPLICAS").withRequiredArg()
+              .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdOpt =
           parser.accepts("ambryBlobId", "The blob id to execute get on").withRequiredArg().describedAs("The blob id")
@@ -53,8 +53,8 @@ public class AdminTool {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
-              "LIST_REPLICAS -- ambryBlobId blobId");
+          System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation "
+              + "LIST_REPLICAS -- ambryBlobId blobId");
           System.exit(1);
         }
       }
@@ -70,7 +70,7 @@ public class AdminTool {
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       if (typeOfOperation.equalsIgnoreCase("LIST_REPLICAS")) {
         List<ReplicaId> replicaIdList = adminTool.getReplicas(blobId);
-        for(ReplicaId replicaId: replicaIdList) {
+        for (ReplicaId replicaId : replicaIdList) {
           System.out.println(replicaId);
         }
       } else {

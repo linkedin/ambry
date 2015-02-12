@@ -151,7 +151,7 @@ public class BlobValidator {
         } else {
           System.out.println("Failed to read the blob");
         }
-        } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_DATACENTER")) {
+      } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_DATACENTER")) {
         blobValidator.validate(new String[]{datacenter});
         blobValidator.validateBlobOnDatacenter(blobId, map, datacenter, expiredBlobs);
       } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_ALL_REPLICAS")) {
@@ -241,8 +241,7 @@ public class BlobValidator {
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
-      getResponse =
-          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
@@ -283,8 +282,7 @@ public class BlobValidator {
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       getResponse = null;
-      getResponse =
-          getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse = getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");
