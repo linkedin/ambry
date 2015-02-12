@@ -7,6 +7,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -52,7 +53,7 @@ public class AdminTool {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("BlobInfoTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
+          System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
               "LIST_REPLICAS -- ambryBlobId blobId");
           System.exit(1);
         }
@@ -68,7 +69,10 @@ public class AdminTool {
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       if (typeOfOperation.equalsIgnoreCase("LIST_REPLICAS")) {
-        adminTool.printReplicas(blobId);
+        List<ReplicaId> replicaIdList = adminTool.getReplicas(blobId);
+        for(ReplicaId replicaId: replicaIdList) {
+          System.out.println(replicaId);
+        }
       } else {
         System.out.println("Invalid Type of Operation ");
         System.exit(1);
@@ -78,9 +82,7 @@ public class AdminTool {
     }
   }
 
-  public void printReplicas(BlobId blobId) {
-    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      System.out.println(replicaId);
-    }
+  public List<ReplicaId> getReplicas(BlobId blobId) {
+    return blobId.getPartition().getReplicaIds();
   }
 }
