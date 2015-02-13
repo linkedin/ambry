@@ -262,6 +262,9 @@ public class PersistentIndex {
   public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
       throws StoreException {
     verifyFileEndOffset(fileSpan);
+    if (!keySizesMatch(entries)) {
+      throw new StoreException("Key sizes in the entries list are not the same", StoreErrorCodes.Index_Creation_Failure);
+    }
     if (needToRollOverIndex(entries.get(0))) {
       IndexSegment info = new IndexSegment(dataDir, entries.get(0).getValue().getOffset(), factory,
           entries.get(0).getKey().sizeInBytes(), IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -286,6 +289,23 @@ public class PersistentIndex {
         indexes.lastEntry().getValue().getNumberOfItems() >= maxInMemoryNumElements ||
         indexes.lastEntry().getValue().getKeySize() != entry.getKey().sizeInBytes() ||
         indexes.lastEntry().getValue().getValueSize() != IndexValue.Index_Value_Size_In_Bytes;
+  }
+
+  /**
+   * Checks if all the keys in the entry set have the same key size.
+   * @param entries The set of new entries.
+   * @throws StoreException
+   */
+  private boolean keySizesMatch(ArrayList<IndexEntry> entries) {
+    int sizeOfFirstKey = entries.get(0).getKey().sizeInBytes();
+    for (IndexEntry entry : entries) {
+      if (entry.getKey().sizeInBytes() != sizeOfFirstKey) {
+        logger.error("Sizes of keys in a set do not match, key size: " + entry.getKey().sizeInBytes()
+            + " is different from size of first key: " + sizeOfFirstKey);
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
