@@ -53,13 +53,16 @@ class IndexSegment {
   private IFilter bloomFilter;
   private final static int Key_Size_Invalid_Value = -1;
   private final static int Value_Size_Invalid_Value = -1;
-  private final static int Version_Size = 2;
-  private final static int Key_Size = 4;
-  private final static int Value_Size = 4;
-  private final static int Crc_Size = 8;
-  private final static int Log_End_Offset_Size = 8;
+
+  private final static int Version_Field_Length = 2;
+  private final static int Key_Size_Field_Length = 4;
+  private final static int Value_Size_Field_Length = 4;
+  private final static int Crc_Field_Length = 8;
+  private final static int Log_End_Offset_Field_Length = 8;
   private final static int Index_Size_Excluding_Entries =
-      Version_Size + Key_Size + Value_Size + Log_End_Offset_Size + Crc_Size;
+      Version_Field_Length + Key_Size_Field_Length + Value_Size_Field_Length + Log_End_Offset_Field_Length
+          + Crc_Field_Length;
+
   private int keySize;
   private int valueSize;
   private File bloomFile;
@@ -227,10 +230,8 @@ class IndexSegment {
       if (!(mapped.get())) {
         return index.get(keyToFind);
       } else {
-        boolean bloomSaysYes = false;
         // check bloom filter first
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
-          bloomSaysYes = true;
           metrics.bloomPositiveCount.inc(1);
           logger.trace(bloomFilter == null
               ? "IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {} "
@@ -257,8 +258,6 @@ class IndexSegment {
               high = mid - 1;
             }
           }
-        }
-        if (bloomSaysYes) {
           metrics.bloomFalsePositiveCount.inc(1);
         }
         return null;
@@ -277,7 +276,9 @@ class IndexSegment {
 
   private StoreKey getKeyAt(ByteBuffer mmap, int index)
       throws IOException {
-    mmap.position(Version_Size + Key_Size + Value_Size + Log_End_Offset_Size + (index * (keySize + valueSize)));
+    mmap.position(
+        Version_Field_Length + Key_Size_Field_Length + Value_Size_Field_Length + Log_End_Offset_Field_Length + (index
+            * (keySize + valueSize)));
     return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
   }
 
@@ -327,9 +328,10 @@ class IndexSegment {
       bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
-        keySize = entry.getKey().sizeInBytes();
-        logger.info("IndexSegment : {} setting key size to {} for index with start offset {}",
-            indexFile.getAbsolutePath(), keySize, startOffset);
+        StoreKey key = entry.getKey();
+        keySize = key.sizeInBytes();
+        logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key.toAltString(), startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entry.getValue().getBytes().capacity();
@@ -371,9 +373,10 @@ class IndexSegment {
       }
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
-        keySize = entries.get(0).getKey().sizeInBytes();
-        logger.info("IndexSegment : {} setting key size to {} for index with start offset {}",
-            indexFile.getAbsolutePath(), keySize, startOffset);
+        StoreKey key = entries.get(0).getKey();
+        keySize = key.sizeInBytes();
+        logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key.toAltString(), startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entries.get(0).getValue().getBytes().capacity();
@@ -549,7 +552,7 @@ class IndexSegment {
           logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(),
               logEndOffset);
           long maxEndOffset = Long.MIN_VALUE;
-          while (stream.available() > Crc_Size) {
+          while (stream.available() > Crc_Field_Length) {
             StoreKey key = factory.getStoreKey(stream);
             byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
             stream.read(value);

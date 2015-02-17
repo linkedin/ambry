@@ -49,6 +49,11 @@ public class MessageFormatInputStreamTest {
     public String toString() {
       return id;
     }
+
+    @Override
+    public String toAltString() {
+      return toString();
+    }
   }
 
   @Test

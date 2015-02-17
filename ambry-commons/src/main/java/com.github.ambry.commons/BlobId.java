@@ -88,6 +88,13 @@ public class BlobId extends StoreKey {
   }
 
   @Override
+  public String toAltString() {
+    return "[Version:" + version + "]" +
+        "[Partition:" + partitionId + "]" +
+        "[uuid" + uuid + "]";
+  }
+
+  @Override
   public int compareTo(StoreKey o) {
     BlobId other = (BlobId) o;
 
