@@ -32,7 +32,7 @@ public class MessageFormatInputStreamTest {
     }
 
     @Override
-    public String getIDString() {
+    public String getID() {
       return toString();
     }
 

@@ -292,18 +292,17 @@ public class PersistentIndex {
   /**
    * Checks if all the keys in the entry set have the same key size.
    * @param entries The set of new entries.
-   * @throws StoreException
+   * @throws IllegalArgumentException
    */
-  private void verifyKeySizesMatch(ArrayList<IndexEntry> entries)
-      throws StoreException {
+  private void verifyKeySizesMatch(ArrayList<IndexEntry> entries) {
     StoreKey firstKey = entries.get(0).getKey();
 
     for (IndexEntry entry : entries) {
       if (entry.getKey().sizeInBytes() != firstKey.sizeInBytes()) {
-        throw new StoreException(
+        throw new IllegalArgumentException(
             "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
                 + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
-                + firstKey, StoreErrorCodes.Index_Creation_Failure);
+                + firstKey);
       }
     }
   }
@@ -711,64 +710,64 @@ public class PersistentIndex {
     }
   }
 
-class IndexPersistor implements Runnable {
+  class IndexPersistor implements Runnable {
 
-  /**
-   * Writes all the individual index segments to disk. It flushes the log before starting the
-   * index flush. The penultimate index segment is flushed if it is not already flushed and mapped.
-   * The last index segment is flushed whenever write is invoked.
-   * @throws StoreException
-   */
-  public void write()
-      throws StoreException {
-    final Timer.Context context = metrics.indexFlushTime.time();
-    try {
-      if (indexes.size() > 0) {
-        // before iterating the map, get the current file end pointer
-        Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
-        IndexSegment currentInfo = lastEntry.getValue();
-        long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
-        long logEndOffsetBeforeFlush = log.getLogEndOffset();
-        if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
-          throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than " +
-              "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
-        }
-
-        //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
-        log.flush();
-
-        long lastOffset = lastEntry.getKey();
-        IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
-        long currentLogEndPointer = log.getLogEndOffset();
-        while (prevInfo != null && !prevInfo.isMapped()) {
-          if (prevInfo.getEndOffset() > currentLogEndPointer) {
-            String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
-                " greater than the log end offset " + currentLogEndPointer;
-            throw new StoreException(message, StoreErrorCodes.IOError);
+    /**
+     * Writes all the individual index segments to disk. It flushes the log before starting the
+     * index flush. The penultimate index segment is flushed if it is not already flushed and mapped.
+     * The last index segment is flushed whenever write is invoked.
+     * @throws StoreException
+     */
+    public void write()
+        throws StoreException {
+      final Timer.Context context = metrics.indexFlushTime.time();
+      try {
+        if (indexes.size() > 0) {
+          // before iterating the map, get the current file end pointer
+          Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
+          IndexSegment currentInfo = lastEntry.getValue();
+          long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
+          long logEndOffsetBeforeFlush = log.getLogEndOffset();
+          if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
+            throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than " +
+                "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
-          logger.info("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
-          prevInfo.writeIndexToFile(prevInfo.getEndOffset());
-          prevInfo.map(true);
-          Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
-          prevInfo = infoEntry != null ? infoEntry.getValue() : null;
-        }
-        currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
-      }
-    } catch (IOException e) {
-      throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
-    } finally {
-      context.stop();
-    }
-  }
 
-  public void run() {
-    try {
-      write();
-    } catch (Exception e) {
-      logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
+          //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+          log.flush();
+
+          long lastOffset = lastEntry.getKey();
+          IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
+          long currentLogEndPointer = log.getLogEndOffset();
+          while (prevInfo != null && !prevInfo.isMapped()) {
+            if (prevInfo.getEndOffset() > currentLogEndPointer) {
+              String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
+                  " greater than the log end offset " + currentLogEndPointer;
+              throw new StoreException(message, StoreErrorCodes.IOError);
+            }
+            logger.info("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
+            prevInfo.writeIndexToFile(prevInfo.getEndOffset());
+            prevInfo.map(true);
+            Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
+            prevInfo = infoEntry != null ? infoEntry.getValue() : null;
+          }
+          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
+        }
+      } catch (IOException e) {
+        throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
+      } finally {
+        context.stop();
+      }
+    }
+
+    public void run() {
+      try {
+        write();
+      } catch (Exception e) {
+        logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
+      }
     }
   }
-}
 }
 
 /**

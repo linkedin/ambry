@@ -159,7 +159,7 @@ public class AmbryRequests implements RequestAPI {
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
           notification
-              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().getIDString(),
+              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().getID(),
                   BlobReplicaSourceType.PRIMARY);
         }
       }
@@ -337,7 +337,7 @@ public class AmbryRequests implements RequestAPI {
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
           notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
-              deleteRequest.getBlobId().getIDString(), BlobReplicaSourceType.PRIMARY);
+              deleteRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {

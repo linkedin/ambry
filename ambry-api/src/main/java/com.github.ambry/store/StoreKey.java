@@ -22,5 +22,5 @@ public abstract class StoreKey implements Comparable<StoreKey> {
    * Get the key in String form
    * @return the key in String form
    */
-  public abstract String getIDString();
+  public abstract String getID();
 }
