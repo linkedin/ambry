@@ -299,6 +299,7 @@ public class PersistentIndex {
 
     for (IndexEntry entry : entries) {
       if (entry.getKey().sizeInBytes() != firstKey.sizeInBytes()) {
+        metrics.keySizeMismatchCount.inc(1);
         throw new IllegalArgumentException(
             "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
                 + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
