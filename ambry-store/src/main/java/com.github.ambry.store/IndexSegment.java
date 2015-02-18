@@ -331,7 +331,7 @@ class IndexSegment {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
         logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), key.sizeInBytes(), key.toAltString(), startOffset);
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key, startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entry.getValue().getBytes().capacity();
@@ -376,7 +376,7 @@ class IndexSegment {
         StoreKey key = entries.get(0).getKey();
         keySize = key.sizeInBytes();
         logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), key.sizeInBytes(), key.toAltString(), startOffset);
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key, startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entries.get(0).getValue().getBytes().capacity();

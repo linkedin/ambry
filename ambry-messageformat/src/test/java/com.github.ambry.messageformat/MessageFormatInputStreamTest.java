@@ -32,6 +32,11 @@ public class MessageFormatInputStreamTest {
     }
 
     @Override
+    public String getIDString() {
+      return toString();
+    }
+
+    @Override
     public short sizeInBytes() {
       return (short) (2 + id.length());
     }
@@ -48,11 +53,6 @@ public class MessageFormatInputStreamTest {
     @Override
     public String toString() {
       return id;
-    }
-
-    @Override
-    public String toAltString() {
-      return toString();
     }
   }
 

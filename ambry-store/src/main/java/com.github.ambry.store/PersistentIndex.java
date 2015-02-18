@@ -211,7 +211,7 @@ public class PersistentIndex {
         } else {
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         }
-        verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
@@ -223,7 +223,7 @@ public class PersistentIndex {
       } else {
         // create a new entry in the index
         IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
-        verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
@@ -241,7 +241,7 @@ public class PersistentIndex {
    */
   public void addToIndex(IndexEntry entry, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
+    validateFileEndOffset(fileSpan);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
           IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -261,11 +261,8 @@ public class PersistentIndex {
    */
   public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
-    if (!keySizesMatch(entries)) {
-      throw new StoreException("Key sizes in the entries list are not the same",
-          StoreErrorCodes.Index_Creation_Failure);
-    }
+    validateFileEndOffset(fileSpan);
+    verifyKeySizesMatch(entries);
     if (needToRollOverIndex(entries.get(0))) {
       IndexSegment info = new IndexSegment(dataDir, entries.get(0).getValue().getOffset(), factory,
           entries.get(0).getKey().sizeInBytes(), IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -297,19 +294,18 @@ public class PersistentIndex {
    * @param entries The set of new entries.
    * @throws StoreException
    */
-  private boolean keySizesMatch(ArrayList<IndexEntry> entries) {
+  private void verifyKeySizesMatch(ArrayList<IndexEntry> entries)
+      throws StoreException {
     StoreKey firstKey = entries.get(0).getKey();
 
     for (IndexEntry entry : entries) {
       if (entry.getKey().sizeInBytes() != firstKey.sizeInBytes()) {
-        logger.error(
-            "Sizes of keys in a set do not match, key size: " + entry.getKey().sizeInBytes() + " key: " + entry.getKey()
-                .toAltString() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
-                + firstKey.toAltString());
-        return false;
+        throw new StoreException(
+            "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
+                + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
+                + firstKey, StoreErrorCodes.Index_Creation_Failure);
       }
     }
-    return true;
   }
 
   /**
@@ -394,7 +390,7 @@ public class PersistentIndex {
    */
   public void markAsDeleted(StoreKey id, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
+    validateFileEndOffset(fileSpan);
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -702,7 +698,7 @@ public class PersistentIndex {
    * Ensures that the provided fileendoffset satisfies constraints
    * @param fileSpan The filespan that needs to be verified
    */
-  private void verifyFileEndOffset(FileSpan fileSpan) {
+  private void validateFileEndOffset(FileSpan fileSpan) {
     if (getCurrentEndOffset() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
       logger.error("File span offsets provided to the index does not meet constraints "
           + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", getCurrentEndOffset(),
@@ -715,64 +711,64 @@ public class PersistentIndex {
     }
   }
 
-  class IndexPersistor implements Runnable {
+class IndexPersistor implements Runnable {
 
-    /**
-     * Writes all the individual index segments to disk. It flushes the log before starting the
-     * index flush. The penultimate index segment is flushed if it is not already flushed and mapped.
-     * The last index segment is flushed whenever write is invoked.
-     * @throws StoreException
-     */
-    public void write()
-        throws StoreException {
-      final Timer.Context context = metrics.indexFlushTime.time();
-      try {
-        if (indexes.size() > 0) {
-          // before iterating the map, get the current file end pointer
-          Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
-          IndexSegment currentInfo = lastEntry.getValue();
-          long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
-          long logEndOffsetBeforeFlush = log.getLogEndOffset();
-          if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
-            throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than " +
-                "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
-          }
-
-          //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
-          log.flush();
-
-          long lastOffset = lastEntry.getKey();
-          IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
-          long currentLogEndPointer = log.getLogEndOffset();
-          while (prevInfo != null && !prevInfo.isMapped()) {
-            if (prevInfo.getEndOffset() > currentLogEndPointer) {
-              String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
-                  " greater than the log end offset " + currentLogEndPointer;
-              throw new StoreException(message, StoreErrorCodes.IOError);
-            }
-            logger.info("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
-            prevInfo.writeIndexToFile(prevInfo.getEndOffset());
-            prevInfo.map(true);
-            Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
-            prevInfo = infoEntry != null ? infoEntry.getValue() : null;
-          }
-          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
+  /**
+   * Writes all the individual index segments to disk. It flushes the log before starting the
+   * index flush. The penultimate index segment is flushed if it is not already flushed and mapped.
+   * The last index segment is flushed whenever write is invoked.
+   * @throws StoreException
+   */
+  public void write()
+      throws StoreException {
+    final Timer.Context context = metrics.indexFlushTime.time();
+    try {
+      if (indexes.size() > 0) {
+        // before iterating the map, get the current file end pointer
+        Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
+        IndexSegment currentInfo = lastEntry.getValue();
+        long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
+        long logEndOffsetBeforeFlush = log.getLogEndOffset();
+        if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
+          throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than " +
+              "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
         }
-      } catch (IOException e) {
-        throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
-      } finally {
-        context.stop();
-      }
-    }
 
-    public void run() {
-      try {
-        write();
-      } catch (Exception e) {
-        logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
+        //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+        log.flush();
+
+        long lastOffset = lastEntry.getKey();
+        IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
+        long currentLogEndPointer = log.getLogEndOffset();
+        while (prevInfo != null && !prevInfo.isMapped()) {
+          if (prevInfo.getEndOffset() > currentLogEndPointer) {
+            String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset() +
+                " greater than the log end offset " + currentLogEndPointer;
+            throw new StoreException(message, StoreErrorCodes.IOError);
+          }
+          logger.info("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
+          prevInfo.writeIndexToFile(prevInfo.getEndOffset());
+          prevInfo.map(true);
+          Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
+          prevInfo = infoEntry != null ? infoEntry.getValue() : null;
+        }
+        currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
       }
+    } catch (IOException e) {
+      throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
+    } finally {
+      context.stop();
     }
   }
+
+  public void run() {
+    try {
+      write();
+    } catch (Exception e) {
+      logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
+    }
+  }
+}
 }
 
 /**

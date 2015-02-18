@@ -30,7 +30,7 @@ public class MockId extends StoreKey {
   }
 
   @Override
-  public String toAltString() {
+  public String getIDString() {
     return toString();
   }
 

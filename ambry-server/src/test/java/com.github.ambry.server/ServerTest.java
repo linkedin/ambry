@@ -232,7 +232,7 @@ public class ServerTest {
         // get blob data
         // Use coordinator to get the blob
         Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
-        BlobOutput output = coordinator.getBlob(blobId1.toString());
+        BlobOutput output = coordinator.getBlob(blobId1.getIDString());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
         output.getStream().read(dataOutputStream);
@@ -340,12 +340,12 @@ public class ServerTest {
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
       // wait till replication can complete
-      notificationSystem.awaitBlobCreations(blobId1.toString());
-      notificationSystem.awaitBlobCreations(blobId2.toString());
-      notificationSystem.awaitBlobCreations(blobId3.toString());
-      notificationSystem.awaitBlobCreations(blobId4.toString());
-      notificationSystem.awaitBlobCreations(blobId5.toString());
-      notificationSystem.awaitBlobCreations(blobId6.toString());
+      notificationSystem.awaitBlobCreations(blobId1.getIDString());
+      notificationSystem.awaitBlobCreations(blobId2.getIDString());
+      notificationSystem.awaitBlobCreations(blobId3.getIDString());
+      notificationSystem.awaitBlobCreations(blobId4.getIDString());
+      notificationSystem.awaitBlobCreations(blobId5.getIDString());
+      notificationSystem.awaitBlobCreations(blobId6.getIDString());
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -447,7 +447,7 @@ public class ServerTest {
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
 
-      notificationSystem.awaitBlobDeletions(blobId1.toString());
+      notificationSystem.awaitBlobDeletions(blobId1.getIDString());
       ids = new ArrayList<BlobId>();
       ids.add(blobId1);
       partitionRequestInfoList.clear();
@@ -571,11 +571,11 @@ public class ServerTest {
 
       cluster.getServers().get(0).startup();
       // wait for server to recover
-      notificationSystem.awaitBlobCreations(blobId7.toString());
-      notificationSystem.awaitBlobCreations(blobId8.toString());
-      notificationSystem.awaitBlobCreations(blobId9.toString());
-      notificationSystem.awaitBlobCreations(blobId10.toString());
-      notificationSystem.awaitBlobCreations(blobId11.toString());
+      notificationSystem.awaitBlobCreations(blobId7.getIDString());
+      notificationSystem.awaitBlobCreations(blobId8.getIDString());
+      notificationSystem.awaitBlobCreations(blobId9.getIDString());
+      notificationSystem.awaitBlobCreations(blobId10.getIDString());
+      notificationSystem.awaitBlobCreations(blobId11.getIDString());
       channel1.disconnect();
       channel1.connect();
 
@@ -604,28 +604,28 @@ public class ServerTest {
       for (File toDelete : mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
-      notificationSystem.decrementCreatedReplica(blobId2.toString());
-      notificationSystem.decrementCreatedReplica(blobId3.toString());
-      notificationSystem.decrementCreatedReplica(blobId4.toString());
-      notificationSystem.decrementCreatedReplica(blobId5.toString());
-      notificationSystem.decrementCreatedReplica(blobId6.toString());
-      notificationSystem.decrementCreatedReplica(blobId7.toString());
-      notificationSystem.decrementCreatedReplica(blobId8.toString());
-      notificationSystem.decrementCreatedReplica(blobId9.toString());
-      notificationSystem.decrementCreatedReplica(blobId10.toString());
-      notificationSystem.decrementCreatedReplica(blobId11.toString());
+      notificationSystem.decrementCreatedReplica(blobId2.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId3.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId4.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId5.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId6.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId7.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId8.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId9.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId10.getIDString());
+      notificationSystem.decrementCreatedReplica(blobId11.getIDString());
 
       cluster.getServers().get(0).startup();
-      notificationSystem.awaitBlobCreations(blobId2.toString());
-      notificationSystem.awaitBlobCreations(blobId3.toString());
-      notificationSystem.awaitBlobCreations(blobId4.toString());
-      notificationSystem.awaitBlobCreations(blobId5.toString());
-      notificationSystem.awaitBlobCreations(blobId6.toString());
-      notificationSystem.awaitBlobCreations(blobId7.toString());
-      notificationSystem.awaitBlobCreations(blobId8.toString());
-      notificationSystem.awaitBlobCreations(blobId9.toString());
-      notificationSystem.awaitBlobCreations(blobId10.toString());
-      notificationSystem.awaitBlobCreations(blobId11.toString());
+      notificationSystem.awaitBlobCreations(blobId2.getIDString());
+      notificationSystem.awaitBlobCreations(blobId3.getIDString());
+      notificationSystem.awaitBlobCreations(blobId4.getIDString());
+      notificationSystem.awaitBlobCreations(blobId5.getIDString());
+      notificationSystem.awaitBlobCreations(blobId6.getIDString());
+      notificationSystem.awaitBlobCreations(blobId7.getIDString());
+      notificationSystem.awaitBlobCreations(blobId8.getIDString());
+      notificationSystem.awaitBlobCreations(blobId9.getIDString());
+      notificationSystem.awaitBlobCreations(blobId10.getIDString());
+      notificationSystem.awaitBlobCreations(blobId11.getIDString());
 
       channel1.disconnect();
       channel1.connect();
@@ -756,7 +756,7 @@ public class ServerTest {
         blobIds.addAll(runnables.get(i).getBlobIds());
       }
       for (BlobId blobId : blobIds) {
-        notificationSystem.awaitBlobCreations(blobId.toString());
+        notificationSystem.awaitBlobCreations(blobId.getIDString());
       }
 
       // verify blob properties, metadata and blob across all nodes
@@ -865,7 +865,7 @@ public class ServerTest {
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       while (iterator.hasNext()) {
         BlobId deletedId = iterator.next();
-        notificationSystem.awaitBlobDeletions(deletedId.toString());
+        notificationSystem.awaitBlobDeletions(deletedId.getIDString());
         for (int j = 0; j < 3; j++) {
           if (j == 0) {
             channel = channel1;
@@ -906,10 +906,10 @@ public class ServerTest {
         for (ReplicaId replicaId : blobIds.get(i).getPartition().getReplicaIds()) {
           if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
             if (blobsDeleted.contains(blobIds.get(i))) {
-              notificationSystem.decrementDeletedReplica(blobIds.get(i).toString());
+              notificationSystem.decrementDeletedReplica(blobIds.get(i).getIDString());
             } else {
               totalblobs++;
-              notificationSystem.decrementCreatedReplica(blobIds.get(i).toString());
+              notificationSystem.decrementCreatedReplica(blobIds.get(i).getIDString());
             }
           }
         }
@@ -921,9 +921,9 @@ public class ServerTest {
 
       for (int j = 0; j < blobIds.size(); j++) {
         if (blobsDeleted.contains(blobIds.get(j))) {
-          notificationSystem.awaitBlobDeletions(blobIds.get(j).toString());
+          notificationSystem.awaitBlobDeletions(blobIds.get(j).getIDString());
         } else {
-          notificationSystem.awaitBlobCreations(blobIds.get(j).toString());
+          notificationSystem.awaitBlobCreations(blobIds.get(j).getIDString());
         }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
@@ -1019,9 +1019,9 @@ public class ServerTest {
       }
       for (int i = 0; i < blobIds.size(); i++) {
         if (blobsChecked.contains(blobIds.get(i))) {
-          notificationSystem.decrementDeletedReplica(blobIds.get(i).toString());
+          notificationSystem.decrementDeletedReplica(blobIds.get(i).getIDString());
         } else {
-          notificationSystem.decrementCreatedReplica(blobIds.get(i).toString());
+          notificationSystem.decrementCreatedReplica(blobIds.get(i).getIDString());
         }
       }
       serverList.get(0).startup();
@@ -1031,9 +1031,9 @@ public class ServerTest {
 
       for (int j = 0; j < blobIds.size(); j++) {
         if (blobsChecked.contains(blobIds.get(j))) {
-          notificationSystem.awaitBlobDeletions(blobIds.get(j).toString());
+          notificationSystem.awaitBlobDeletions(blobIds.get(j).getIDString());
         } else {
-          notificationSystem.awaitBlobCreations(blobIds.get(j).toString());
+          notificationSystem.awaitBlobCreations(blobIds.get(j).getIDString());
         }
         ArrayList<BlobId> ids = new ArrayList<BlobId>();
         ids.add(blobIds.get(j));
@@ -1353,7 +1353,7 @@ public class ServerTest {
 
   private void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data)
       throws CoordinatorException, IOException {
-    BlobOutput output = coordinator.getBlob(blobId.toString());
+    BlobOutput output = coordinator.getBlob(blobId.getIDString());
     Assert.assertEquals(output.getSize(), 1000);
     byte[] dataOutputStream = new byte[(int) output.getSize()];
     output.getStream().read(dataOutputStream);

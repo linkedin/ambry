@@ -29,10 +29,9 @@ public class ReplicaMetadataRequestInfo {
 
   public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {
-      logger.error(
-          "A parameter in replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
+      throw new IllegalArgumentException(
+          "A parameter in the replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
               + ", hostName: " + hostName + ", replicaPath: " + replicaPath);
-      throw new IllegalArgumentException("no parameters of replica metadata request info can be null");
     }
     this.partitionId = partitionId;
     this.token = token;

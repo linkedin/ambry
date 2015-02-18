@@ -104,7 +104,7 @@ class BlobIndexMetrics extends PersistentIndex {
 
   public boolean exists(StoreKey key)
       throws StoreException {
-    System.out.println("data dir " + datadir + " searching id " + key.toString());
+    System.out.println("data dir " + datadir + " searching id " + key);
     long startTimeMs = System.currentTimeMillis();
     boolean exist = super.exists(key);
     long endTimeMs = System.currentTimeMillis();
@@ -117,16 +117,8 @@ class BlobIndexMetrics extends PersistentIndex {
   public void markAsDeleted(StoreKey id, long logEndOffset)
       throws StoreException {
     long startTimeMs = System.currentTimeMillis();
-    markAsDeleted(id, logEndOffset);
+    super.markAsDeleted(id, new FileSpan(0, logEndOffset));
     long endTimeMs = System.currentTimeMillis();
     System.out.println("Time to delete an entry - " + (endTimeMs - startTimeMs));
-  }
-
-  public void updateTTL(StoreKey id, long ttl, long logEnfOffset)
-      throws StoreException {
-    long startTimeMs = System.currentTimeMillis();
-    updateTTL(id, ttl, logEnfOffset);
-    long endTimeMs = System.currentTimeMillis();
-    System.out.println("Time to update ttl - " + (endTimeMs - startTimeMs));
   }
 }

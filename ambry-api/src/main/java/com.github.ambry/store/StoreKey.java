@@ -19,7 +19,8 @@ public abstract class StoreKey implements Comparable<StoreKey> {
   public abstract short sizeInBytes();
 
   /**
-   * customized String output
+   * Get the key in String form
+   * @return the key in String form
    */
-  public abstract String toAltString();
+  public abstract String getIDString();
 }
