@@ -211,7 +211,7 @@ public class PersistentIndex {
         } else {
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         }
-        verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
@@ -223,7 +223,7 @@ public class PersistentIndex {
       } else {
         // create a new entry in the index
         IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
-        verifyFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
@@ -241,7 +241,7 @@ public class PersistentIndex {
    */
   public void addToIndex(IndexEntry entry, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
+    validateFileEndOffset(fileSpan);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
           IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -261,7 +261,8 @@ public class PersistentIndex {
    */
   public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
+    validateFileEndOffset(fileSpan);
+    verifyKeySizesMatch(entries);
     if (needToRollOverIndex(entries.get(0))) {
       IndexSegment info = new IndexSegment(dataDir, entries.get(0).getValue().getOffset(), factory,
           entries.get(0).getKey().sizeInBytes(), IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -286,6 +287,25 @@ public class PersistentIndex {
         indexes.lastEntry().getValue().getNumberOfItems() >= maxInMemoryNumElements ||
         indexes.lastEntry().getValue().getKeySize() != entry.getKey().sizeInBytes() ||
         indexes.lastEntry().getValue().getValueSize() != IndexValue.Index_Value_Size_In_Bytes;
+  }
+
+  /**
+   * Checks if all the keys in the entry set have the same key size.
+   * @param entries The set of new entries.
+   * @throws IllegalArgumentException
+   */
+  private void verifyKeySizesMatch(ArrayList<IndexEntry> entries) {
+    StoreKey firstKey = entries.get(0).getKey();
+
+    for (IndexEntry entry : entries) {
+      if (entry.getKey().sizeInBytes() != firstKey.sizeInBytes()) {
+        metrics.keySizeMismatchCount.inc(1);
+        throw new IllegalArgumentException(
+            "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
+                + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
+                + firstKey);
+      }
+    }
   }
 
   /**
@@ -370,7 +390,7 @@ public class PersistentIndex {
    */
   public void markAsDeleted(StoreKey id, FileSpan fileSpan)
       throws StoreException {
-    verifyFileEndOffset(fileSpan);
+    validateFileEndOffset(fileSpan);
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -678,7 +698,7 @@ public class PersistentIndex {
    * Ensures that the provided fileendoffset satisfies constraints
    * @param fileSpan The filespan that needs to be verified
    */
-  private void verifyFileEndOffset(FileSpan fileSpan) {
+  private void validateFileEndOffset(FileSpan fileSpan) {
     if (getCurrentEndOffset() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
       logger.error("File span offsets provided to the index does not meet constraints "
           + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", getCurrentEndOffset(),

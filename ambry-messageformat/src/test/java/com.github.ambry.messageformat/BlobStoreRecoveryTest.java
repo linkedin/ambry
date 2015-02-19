@@ -39,6 +39,11 @@ class MockId extends StoreKey {
   }
 
   @Override
+  public String getID() {
+    return toString();
+  }
+
+  @Override
   public short sizeInBytes() {
     return (short) (Id_Size_In_Bytes + id.length());
   }

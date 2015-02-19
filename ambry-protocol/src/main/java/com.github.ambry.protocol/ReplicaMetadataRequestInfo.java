@@ -25,9 +25,13 @@ public class ReplicaMetadataRequestInfo {
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
 
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+
   public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {
-      throw new IllegalArgumentException("no parameters of replica metadata request info can be null");
+      throw new IllegalArgumentException(
+          "A parameter in the replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
+              + ", hostName: " + hostName + ", replicaPath: " + replicaPath);
     }
     this.partitionId = partitionId;
     this.token = token;

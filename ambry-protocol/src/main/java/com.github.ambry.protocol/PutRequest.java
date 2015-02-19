@@ -119,7 +119,7 @@ public class PutRequest extends RequestOrResponse {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("PutRequest[");
-    sb.append("BlobID=").append(blobId);
+    sb.append("BlobID=").append(blobId.getID());
     if (properties != null) {
       sb.append(", ").append(getBlobProperties());
     } else {
