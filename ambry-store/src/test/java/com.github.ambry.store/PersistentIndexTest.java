@@ -9,6 +9,7 @@ import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
 import java.util.EnumSet;
+import java.util.UUID;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1052,6 +1053,138 @@ public class PersistentIndexTest {
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);
+      indexFile.delete();
+      scheduler.shutdown();
+      log.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      org.junit.Assert.assertEquals(false, true);
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+
+    // provide token with offset that is in journal
+
+    // provide token with offset that is not in journal
+
+    // provide token with key
+
+  }
+
+  @Test
+  public void testFindEntriesUncleanShutdown() {
+    // provide token referencing an offset from before
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      StoreMetrics metrics = new StoreMetrics(tempFile().getParent(), new MetricRegistry());
+      Log log = new Log(logFile, 10000, metrics);
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+      MockId blobId6 = new MockId("id06");
+      MockId blobId7 = new MockId("id07");
+      MockId blobId8 = new MockId("id08");
+      MockId blobId9 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
+      IndexEntry entry2 = new IndexEntry(blobId3, new IndexValue(100, 100, flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId2, new IndexValue(100, 200, flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId5, new IndexValue(100, 300, flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId4, new IndexValue(100, 400, flags, 12567));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, 500, flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId8, new IndexValue(100, 600, flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId9, new IndexValue(100, 700, flags, 12567));
+      IndexEntry entry9 = new IndexEntry(blobId7, new IndexValue(100, 800, flags, 12567));
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, 900, flags, 12567));
+      IndexEntry entry11 = new IndexEntry(blobId12, new IndexValue(100, 1000, flags, 12567));
+      IndexEntry entry12 = new IndexEntry(blobId11, new IndexValue(100, 1100, flags, 12567));
+
+      long entrySize = entry1.getValue().getSize();
+
+      index.addToIndex(entry1, new FileSpan(0, 100));
+      index.addToIndex(entry2, new FileSpan(100, 200));
+      index.addToIndex(entry3, new FileSpan(200, 300));
+      index.addToIndex(entry4, new FileSpan(300, 400));
+      index.addToIndex(entry5, new FileSpan(400, 500));
+
+      // this was not a start after a clean shutdown. Ensure that a token from a previous
+      // session with a key that is beyond the logEndOffsetOnStartup gets reset correctly -
+      // meaning findEntriesSince gets keys starting and *including* the key at logEndOffsetOnStartup.
+      StoreFindToken token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
+      FindInfo finfo = index.findEntriesSince(token, 500);
+      List<MessageInfo> mEntries = finfo.getMessageEntries();
+
+      // Ensure we do get the all the keys and ordered by offset
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId4);
+
+      index.addToIndex(entry6, new FileSpan(500, 600));
+      index.addToIndex(entry7, new FileSpan(600, 700));
+      index.addToIndex(entry8, new FileSpan(700, 800));
+      index.addToIndex(entry9, new FileSpan(800, 900));
+      index.addToIndex(entry10, new FileSpan(900, 1000));
+
+      // Get the first 5 entries again
+      token = new StoreFindToken();
+      finfo = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 5);
+
+      // Ensure we get them in the order of keys (as we we are outside the journal).
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId2);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId4);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId5);
+
+      // Get the token that was updated.
+      token = (StoreFindToken) finfo.getFindToken();
+
+      index.addToIndex(entry11, new FileSpan(1000, 1100));
+      index.addToIndex(entry12, new FileSpan(1100, 1200));
+
+      // Get the next 7 entries
+      finfo = index.findEntriesSince(token, 7 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(7, mEntries.size());
+
+      // Ensure the first 5 are ordered by keys
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId7);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
+
+      // Ensure the last 2 are ordered by offset
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId12);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
+
       indexFile.delete();
       scheduler.shutdown();
       log.close();

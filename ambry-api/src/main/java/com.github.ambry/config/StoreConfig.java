@@ -38,7 +38,7 @@ public class StoreConfig {
    * The max number of the elements in the index that can be in memory for a single store
    */
   @Config("store.index.max.number.of.inmem.elements")
-  @Default("50000")
+  @Default("10000")
   public final int storeIndexMaxNumberOfInmemElements;
 
   /**

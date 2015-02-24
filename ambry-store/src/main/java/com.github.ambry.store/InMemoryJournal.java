@@ -96,9 +96,9 @@ class InMemoryJournal {
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
     int entriesAdded = 0;
-    for (Map.Entry<Long, StoreKey> entries : subsetMap.entrySet()) {
-      if (inclusive || entries.getKey() != offset) {
-        journalEntries.add(new JournalEntry(entries.getKey(), entries.getValue()));
+    for (Map.Entry<Long, StoreKey> entry : subsetMap.entrySet()) {
+      if (inclusive || entry.getKey() != offset) {
+        journalEntries.add(new JournalEntry(entry.getKey(), entry.getValue()));
         entriesAdded++;
         if (entriesAdded == entriesToReturn) {
           break;
