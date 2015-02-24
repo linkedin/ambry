@@ -624,7 +624,7 @@ public class PersistentIndex {
         break; // we have entered the journal, so we are done.
       }
 
-      /* First, since this segmentStartOffset is not in the journal, it must be there in a read-only segment */
+      /* Since this segmentStartOffset is not in the journal, it must be there in a read-only segment */
       if (segmentStartOffset == indexes.lastKey()) {
         throw new IllegalStateException("Index : " + dataDir +
             " findEntriesFromOffset segment start offset " + segmentStartOffset
@@ -650,6 +650,7 @@ public class PersistentIndex {
       if (messageEntries.size() == 0) {
         throw new IllegalStateException("Message entries cannot be null. Expect at least one entry");
       }
+      /* If we did not enter the journal, then the last entry in messageEntries must be from the lastProcessedSegment */
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(),
           lastProcessedSegment.getStartOffset(), sessionId);
     }
