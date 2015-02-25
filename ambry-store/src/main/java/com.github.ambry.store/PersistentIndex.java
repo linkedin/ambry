@@ -528,7 +528,7 @@ public class PersistentIndex {
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
           if (entry != null) {
-            newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
+            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
             messageEntries = updateDeleteStateForMessages(messageEntries);
           } else {
             newToken = storeToken;
@@ -546,8 +546,8 @@ public class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         StoreFindToken newToken =
-            findEntriesFromOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(), messageEntries,
-                maxTotalSizeOfEntries);
+            findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
+                messageEntries, maxTotalSizeOfEntries);
         messageEntries = updateDeleteStateForMessages(messageEntries);
         eliminateDuplicates(messageEntries);
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
@@ -580,79 +580,103 @@ public class PersistentIndex {
     }
   }
 
-  private StoreFindToken findEntriesFromOffset(long segmentStartOffset, StoreKey key, List<MessageInfo> messageEntries,
-      long maxTotalSizeOfEntries)
+  /**
+   * Finds entries starting from a key from the segment with start offset initialSegmentStartOffset. The key represents
+   * the position in the segment starting from where entries needs to be fetched.
+   * @param initialSegmentStartOffset The segment start offset of the segment to start reading entries from.
+   * @param key The key representing the position (exclusive) in the segment to start reading entries from. If the key
+   *            is null, all the keys will be read.
+   * @param messageEntries the list to be populated with the MessageInfo for every entry that is read.
+   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned.
+   * @return A token representing the position in the segment/journal up to which entries have been read and returned.
+   */
+  private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,
+      List<MessageInfo> messageEntries, long maxTotalSizeOfEntries)
       throws IOException, StoreException {
 
+    long segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset == indexes.lastKey()) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
       throw new IllegalArgumentException("Index : " + dataDir +
           " findEntriesFromOffset segment start offset " + segmentStartOffset + " is of the last segment");
     }
 
+    long newTokenSegmentStartOffset = StoreFindToken.Uninitialized_Offset;
+    long newTokenOffsetInJournal = StoreFindToken.Uninitialized_Offset;
+
     IndexSegment segmentToProcess = indexes.get(segmentStartOffset);
-    IndexSegment lastProcessedSegment = null;
     AtomicLong currentTotalSizeOfEntries = new AtomicLong(0);
 
-    /* First, get keys from this segment, if we are already in it. If we need to get everything from this segment,
-     * we will first check in the journal. */
+    /* First, get keys from the segment corresponding to the passed in segment start offset if the token has a non-null
+       key. Otherwise, since all the keys starting from the offset have to be read, skip this and check in the journal
+       first. */
     if (key != null) {
-      segmentToProcess.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
+      if (segmentToProcess.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries)) {
+        newTokenSegmentStartOffset = segmentStartOffset;
+      }
       logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
           " with key " + key + " total entries received " + messageEntries.size());
-      lastProcessedSegment = segmentToProcess;
       segmentStartOffset = indexes.higherKey(segmentStartOffset);
       segmentToProcess = indexes.get(segmentStartOffset);
     }
 
-    long offsetEnd = StoreFindToken.Uninitialized_Offset;
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries) {
-      List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
-      if (entries != null) {
-        logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
-            segmentStartOffset + " total entries received " + entries.size());
-        for (JournalEntry entry : entries) {
-          offsetEnd = entry.getOffset();
-          IndexValue value = findKey(entry.getKey());
-          messageEntries.add(
-              new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.getTimeToLiveInMs()));
-          if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
-            break;
+      // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
+      Long journalLastOffsetBeforeCheck = journal.getLastOffset();
+      if (journalLastOffsetBeforeCheck != null) {
+        List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
+        if (entries != null) {
+          logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
+              segmentStartOffset + " total entries received " + entries.size());
+          for (JournalEntry entry : entries) {
+            newTokenOffsetInJournal = entry.getOffset();
+            IndexValue value = findKey(entry.getKey());
+            messageEntries.add(
+                new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+                    value.getTimeToLiveInMs()));
+            if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
+              break;
+            }
           }
+          break; // we have entered and finished reading from the journal, so we are done.
         }
-        break; // we have entered the journal, so we are done.
       }
 
-      /* Since this segmentStartOffset is not in the journal, it must be there in a read-only segment */
       if (segmentStartOffset == indexes.lastKey()) {
-        throw new IllegalStateException("Index : " + dataDir +
-            " findEntriesFromOffset segment start offset " + segmentStartOffset
-            + " not found in journal and is of the latest segment");
+        /* The start offset is of the latest segment, and was not found in the journal.
+           This can (and should only) happen if, as part of addToIndex, a new segment got created and entries were added
+           in it, but these were not yet added to the journal at the time the offset was looked up in the journal above.
+           In this case, segmentStartOffset must be greater than the journalLastOffsetBeforeCheck. */
+        if (journalLastOffsetBeforeCheck == null || segmentStartOffset > journalLastOffsetBeforeCheck) {
+          logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
+              " is after the journalLastOffsetBeforeCheck " + journalLastOffsetBeforeCheck);
+          // There is a valid scenario here where we could return with no entries
+        } else {
+          throw new IllegalStateException("Index : " + dataDir +
+              " findEntriesFromOffset segment start offset " + segmentStartOffset
+              + " is of the latest segment and not found in journal with last offset " + journalLastOffsetBeforeCheck
+              + " and is of the latest segment");
+        }
+        break;
+      } else {
+        // Read and populate from the first key in the segment with this segmentStartOffset
+        if (segmentToProcess.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries)) {
+          newTokenSegmentStartOffset = segmentStartOffset;
+        }
+        logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
+            " with all the keys, total entries received " + messageEntries.size());
+        segmentStartOffset = indexes.higherKey(segmentStartOffset);
+        segmentToProcess = indexes.get(segmentStartOffset);
       }
-
-      /* Read and populate from the first key in the segment with this segmentStartOffset */
-      segmentToProcess.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
-      logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
-          " with key " + key + " total entries received " + messageEntries.size());
-      lastProcessedSegment = segmentToProcess;
-
-      segmentStartOffset = indexes.higherKey(segmentStartOffset);
-      segmentToProcess = indexes.get(segmentStartOffset);
     }
 
-    if (offsetEnd != StoreFindToken.Uninitialized_Offset) {
-      /* We entered the journal, return an offset based token */
-      return new StoreFindToken(offsetEnd, sessionId);
+    if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
+      return new StoreFindToken(newTokenOffsetInJournal, sessionId);
+    } else if (newTokenSegmentStartOffset != StoreFindToken.Uninitialized_Offset) {
+      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
+          sessionId);
     } else {
-      /* We are still in the index, return an index based token. We should have some entries otherwise we would have
-      gotten into the journal */
-      if (messageEntries.size() == 0) {
-        throw new IllegalStateException("Message entries cannot be null. Expect at least one entry");
-      }
-      /* If we did not enter the journal, then the last entry in messageEntries must be from the lastProcessedSegment */
-      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(),
-          lastProcessedSegment.getStartOffset(), sessionId);
+      return new StoreFindToken(key, initialSegmentStartOffset, sessionId);
     }
   }
 

@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,9 +90,14 @@ class InMemoryJournal {
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
     // The offset may not be present in the journal as it could be removed.
 
-    if (!journal.containsKey(offset)) {
+    try {
+      if (offset < journal.firstKey() || offset > journal.lastKey() || !journal.containsKey(offset)) {
+        return null;
+      }
+    } catch (NoSuchElementException e) {
       return null;
     }
+
     ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
@@ -105,10 +111,32 @@ class InMemoryJournal {
         }
       }
     }
-    if (!journal.containsKey(offset)) {
+
+    try {
+      if (offset < journal.firstKey()) {
+        return null;
+      }
+    } catch (NoSuchElementException e) {
       return null;
     }
+
     logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
     return journalEntries;
+  }
+
+  public Long getFirstOffset() {
+    try {
+      return journal.firstKey();
+    } catch (NoSuchElementException e) {
+      return null;
+    }
+  }
+
+  public Long getLastOffset() {
+    try {
+      return journal.lastKey();
+    } catch (NoSuchElementException e) {
+      return null;
+    }
   }
 }

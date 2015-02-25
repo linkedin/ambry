@@ -618,11 +618,13 @@ class IndexSegment {
    * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @return true if any entries were added.
    * @throws IOException
    */
-  public void getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
+  public boolean getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes)
       throws IOException {
+    int entriesSizeAtStart = entries.size();
     if (mapped.get()) {
       int index = 0;
       if (key != null) {
@@ -667,6 +669,7 @@ class IndexSegment {
         }
       }
     }
+    return entries.size() > entriesSizeAtStart;
   }
 }
 
