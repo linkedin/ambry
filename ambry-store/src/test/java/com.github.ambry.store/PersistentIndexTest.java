@@ -72,7 +72,7 @@ public class PersistentIndexTest {
     }
 
     public Journal getJournal() {
-      return super.getJournal();
+      return super.journal;
     }
   }
 

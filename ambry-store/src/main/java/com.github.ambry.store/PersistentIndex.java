@@ -43,6 +43,7 @@ public class PersistentIndex {
 
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegment> indexes = new ConcurrentSkipListMap<Long, IndexSegment>();
+  protected Journal journal;
 
   private long maxInMemoryIndexSizeInBytes;
   private int maxInMemoryNumElements;
@@ -52,8 +53,7 @@ public class PersistentIndex {
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
   private StoreConfig config;
-  private JournalFactory journalFactory;
-  private Journal journal;
+  private JournalFactory storeJournalFactory;
   private UUID sessionId;
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
@@ -89,8 +89,8 @@ public class PersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      journalFactory = Utils.getObj(config.journalFactory);
-      journal = journalFactory.getJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
+      storeJournalFactory = Utils.getObj(config.storeJournalFactory);
+      journal = storeJournalFactory.getJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
           config.storeMaxNumberOfEntriesToReturnFromJournal);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
@@ -167,10 +167,6 @@ public class PersistentIndex {
       throw new StoreException("Unknown error while creating index " + datadir, e,
           StoreErrorCodes.Index_Creation_Failure);
     }
-  }
-
-  protected Journal getJournal() {
-    return journal;
   }
 
   /**
@@ -268,7 +264,6 @@ public class PersistentIndex {
   public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
       throws StoreException {
     validateFileSpan(fileSpan);
-    validateEntries(entries);
     for (IndexEntry entry : entries) {
       long entryStartOffset = entry.getValue().getOffset();
       long entryEndOffset = entryStartOffset + entry.getValue().getSize();
@@ -290,7 +285,6 @@ public class PersistentIndex {
   }
 
   /**
-   * Checks if the number of keys in the entry set are below the limit.
    * Checks if all the keys in the entry set have the same key size.
    * @param entries The set of new entries.
    * @throws IllegalArgumentException
@@ -625,23 +619,21 @@ public class PersistentIndex {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       long journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       long journalLastOffsetBeforeCheck = journal.getLastOffset();
-      if (journalFirstOffsetBeforeCheck != -1 && journalLastOffsetBeforeCheck != -1) {
-        List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
-        if (entries != null) {
-          logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
-              segmentStartOffset + " total entries received " + entries.size());
-          for (JournalEntry entry : entries) {
-            newTokenOffsetInJournal = entry.getOffset();
-            IndexValue value = findKey(entry.getKey());
-            messageEntries.add(
-                new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.getTimeToLiveInMs()));
-            if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
-              break;
-            }
+      List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
+      if (entries != null) {
+        logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
+            segmentStartOffset + " total entries received " + entries.size());
+        for (JournalEntry entry : entries) {
+          newTokenOffsetInJournal = entry.getOffset();
+          IndexValue value = findKey(entry.getKey());
+          messageEntries.add(
+              new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+                  value.getTimeToLiveInMs()));
+          if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
+            break;
           }
-          break; // we have entered and finished reading from the journal, so we are done.
         }
+        break; // we have entered and finished reading from the journal, so we are done.
       }
 
       if (segmentStartOffset == indexes.lastKey()) {
@@ -669,6 +661,11 @@ public class PersistentIndex {
 
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
+    } else if (messageEntries.size() == 0) {
+      throw new IllegalStateException(
+          "Message entries cannot be null. At least one entry should have been returned, start offset: "
+              + initialSegmentStartOffset + ", key: " + key + ", max total size of entries to return: "
+              + maxTotalSizeOfEntries);
     } else {
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
           sessionId);

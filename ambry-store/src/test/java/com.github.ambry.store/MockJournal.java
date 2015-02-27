@@ -4,7 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-public class MockJournal extends InMemoryJournal {
+/**
+ * A mock journal that makes use of InMemoryJournal in the background, and provides support for pausing and
+ * resuming the addition of entries to the backing InMemoryJournal. This can be used to simulate the race
+ * condition of an entry getting added to the index but not yet to the journal.
+ */
+class MockJournal extends InMemoryJournal {
   private List<Long> savedOffsets;
   private List<StoreKey> savedKeys;
   boolean paused;
@@ -27,6 +32,7 @@ public class MockJournal extends InMemoryJournal {
     paused = false;
   }
 
+  @Override
   public void addEntry(long offset, StoreKey key) {
     if (paused) {
       savedOffsets.add(offset);
