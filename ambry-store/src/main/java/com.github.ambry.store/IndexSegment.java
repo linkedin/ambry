@@ -111,7 +111,7 @@ class IndexSegment {
    * @throws StoreException
    */
   public IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config,
-      StoreMetrics metrics, InMemoryJournal journal)
+      StoreMetrics metrics, Journal journal)
       throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -536,7 +536,7 @@ class IndexSegment {
    * @throws StoreException
    * @throws IOException
    */
-  private void readFromFile(File fileToRead, InMemoryJournal journal)
+  private void readFromFile(File fileToRead, Journal journal)
       throws StoreException, IOException {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();

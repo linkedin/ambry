@@ -33,7 +33,7 @@ class JournalEntry {
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-class InMemoryJournal {
+class InMemoryJournal implements Journal {
 
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
@@ -62,6 +62,7 @@ class InMemoryJournal {
    *               increasing.
    * @param key The key that the entry in the journal refers to.
    */
+  @Override
   public void addEntry(long offset, StoreKey key) {
     if (key == null || offset < 0) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
@@ -84,17 +85,20 @@ class InMemoryJournal {
    * @return The entries in the journal starting from offset. If the offset is outside the range of the journal,
    *         it returns null.
    */
+  @Override
   public List<JournalEntry> getEntriesSince(long offset, boolean inclusive) {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
     // The offset may not be present in the journal as it could be removed.
 
-    try {
-      if (offset < journal.firstKey() || offset > journal.lastKey() || !journal.containsKey(offset)) {
-        return null;
-      }
-    } catch (NoSuchElementException e) {
+    Map.Entry<Long, StoreKey> first = journal.firstEntry();
+    Map.Entry<Long, StoreKey> last = journal.lastEntry();
+
+    // check if the journal contains the offset.
+    if (first == null || offset < first.getKey() ||
+        last == null || offset > last.getKey() ||
+        !journal.containsKey(offset)) {
       return null;
     }
 
@@ -112,11 +116,9 @@ class InMemoryJournal {
       }
     }
 
-    try {
-      if (offset < journal.firstKey()) {
-        return null;
-      }
-    } catch (NoSuchElementException e) {
+    // Ensure that the offset was not pushed out of the journal.
+    first = journal.firstEntry();
+    if (first == null || offset < first.getKey()) {
       return null;
     }
 
@@ -124,19 +126,15 @@ class InMemoryJournal {
     return journalEntries;
   }
 
-  public Long getFirstOffset() {
-    try {
-      return journal.firstKey();
-    } catch (NoSuchElementException e) {
-      return null;
-    }
+  @Override
+  public long getFirstOffset() {
+    Map.Entry<Long, StoreKey> first = journal.firstEntry();
+    return first == null ? -1 : first.getKey();
   }
 
-  public Long getLastOffset() {
-    try {
-      return journal.lastKey();
-    } catch (NoSuchElementException e) {
-      return null;
-    }
+  @Override
+  public long getLastOffset() {
+    Map.Entry<Long, StoreKey> last = journal.lastEntry();
+    return last == null ? -1 : last.getKey();
   }
 }

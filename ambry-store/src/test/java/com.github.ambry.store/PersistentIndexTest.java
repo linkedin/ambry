@@ -70,6 +70,10 @@ public class PersistentIndexTest {
     public boolean isEmpty() {
       return indexes.size() == 0;
     }
+
+    public Journal getJournal() {
+      return super.getJournal();
+    }
   }
 
   @Test
@@ -1064,17 +1068,14 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
-
-    // provide token with offset that is in journal
-
-    // provide token with offset that is not in journal
-
-    // provide token with key
-
   }
 
+  /* Additional tests for findEntriesSince with the mock journal. Ensure token gets reset correctly and entries are
+   * read correctly and from segments or the journal as expected. Also test out boundary conditions and that we never
+   * read from the latest segment.
+   */
   @Test
-  public void testFindEntriesUncleanShutdown() {
+  public void testFindEntriesAdditional() {
     // provide token referencing an offset from before
     MockClusterMap map = null;
     try {
@@ -1090,10 +1091,12 @@ public class PersistentIndexTest {
       Properties props = new Properties();
       props.put("store.index.max.number.of.inmem.elements", "5");
       props.put("store.max.number.of.entries.to.return.for.find", "12");
+      props.put("store.journal.factory", "com.github.ambry.store.MockJournalFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockJournal journal = (MockJournal) index.getJournal();
 
       MockId blobId1 = new MockId("id01");
       MockId blobId2 = new MockId("id02");
@@ -1107,6 +1110,15 @@ public class PersistentIndexTest {
       MockId blobId10 = new MockId("id10");
       MockId blobId11 = new MockId("id11");
       MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
+      MockId blobId16 = new MockId("id16");
+      MockId blobId17 = new MockId("id17");
+      MockId blobId18 = new MockId("id18");
+      MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+      MockId blobId21 = new MockId("id21");
 
       byte flags = 0;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
@@ -1121,55 +1133,130 @@ public class PersistentIndexTest {
       IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, 900, flags, 12567));
       IndexEntry entry11 = new IndexEntry(blobId12, new IndexValue(100, 1000, flags, 12567));
       IndexEntry entry12 = new IndexEntry(blobId11, new IndexValue(100, 1100, flags, 12567));
+      IndexEntry entry13 = new IndexEntry(blobId14, new IndexValue(100, 1200, flags, 12567));
+      IndexEntry entry14 = new IndexEntry(blobId13, new IndexValue(100, 1300, flags, 12567));
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, 1400, flags, 12567));
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, 1500, flags, 12567));
+      IndexEntry entry17 = new IndexEntry(blobId18, new IndexValue(100, 1600, flags, 12567));
+      IndexEntry entry18 = new IndexEntry(blobId17, new IndexValue(100, 1700, flags, 12567));
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 1800, flags, 12567));
 
       long entrySize = entry1.getValue().getSize();
 
+      /* Ensure older tokens are reset, and no entries are returned when the store just started.
+       * (when the index is created for the first time, it is similar to an unclean shutdown, so
+       * this tests token getting reset in the wake of an unclean shutdown case) */
+      StoreFindToken token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
+      FindInfo finfo = index.findEntriesSince(token, 500);
+      List<MessageInfo> mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 0);
+
+      /* Test the case where an entry is added to the index, but not yet to the journal.
+      There can only be at most one such entry. The index ensures an entry is added to
+      the journal before the next entry is added to a segment. */
+
+      journal.pause();
       index.addToIndex(entry1, new FileSpan(0, 100));
+
+      // Index_0:      [1]         // sorted on keys
+      // Journal:      [ ]         // sorted on offsets
+      // token before: j           // j means offset (journal) based token
+      // token after : j           // i means index based offset
+      token = new StoreFindToken();
+      finfo = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 0);
+
+      /* Ensure we get the entry after it gets into the journal */
+      journal.resume();
+      token = new StoreFindToken();
+      finfo = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 1);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+
       index.addToIndex(entry2, new FileSpan(100, 200));
       index.addToIndex(entry3, new FileSpan(200, 300));
       index.addToIndex(entry4, new FileSpan(300, 400));
       index.addToIndex(entry5, new FileSpan(400, 500));
 
-      // this was not a start after a clean shutdown. Ensure that a token from a previous
-      // session with a key that is beyond the logEndOffsetOnStartup gets reset correctly -
-      // meaning findEntriesSince gets keys starting and *including* the key at logEndOffsetOnStartup.
-      StoreFindToken token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
-      FindInfo finfo = index.findEntriesSince(token, 500);
-      List<MessageInfo> mEntries = finfo.getMessageEntries();
+      /* Ensure that a token from a previous session with a key that is beyond the logEndOffsetOnStartup gets reset
+         correctly - meaning findEntriesSince gets keys starting and *including* the key at logEndOffsetOnStartup. */
 
-      // Ensure we do get the all the keys and ordered by offset
+      // Index_0:      [1 2 3 4 5]           // sorted on keys
+      // Journal:      [1 3 2 5 4]           // sorted on offsets
+      // token before:                    i  // i means index based token
+      // token after :          j            // j means offset (journal) based token
+
+      token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
+      finfo = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      // Ensure that we got all the keys from the beginning and ordered by offset
+      Assert.assertEquals(mEntries.size(), 5);
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
       Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId4);
 
+      // Add more entries to the index to create a new segment
       index.addToIndex(entry6, new FileSpan(500, 600));
       index.addToIndex(entry7, new FileSpan(600, 700));
       index.addToIndex(entry8, new FileSpan(700, 800));
       index.addToIndex(entry9, new FileSpan(800, 900));
       index.addToIndex(entry10, new FileSpan(900, 1000));
 
-      // Get the first 5 entries again
-      token = new StoreFindToken();
+      // Get the next 5 entries. Tests the case where the token has a journal offset which is now no longer
+      // present in the journal. The entries will be read from the corresponding index segment.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10]
+      // journal:                  [6 8 9 7 10]
+      // token before:          j
+      // token after:           i
+      token = (StoreFindToken) finfo.getFindToken();
       finfo = index.findEntriesSince(token, 5 * entrySize);
       mEntries = finfo.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 5);
-
-      // Ensure we get them in the order of keys (as we we are outside the journal).
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId2);
       Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId3);
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId4);
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId5);
 
-      // Get the token that was updated.
+      // Get the next 5 entries. Tests the case where the token is index based and has the last key of the last but one
+      // segment. The entries will be read from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10]
+      // journal:                  [6 8 9 7 10]
+      // token before:          i
+      // token after:                        j
       token = (StoreFindToken) finfo.getFindToken();
+      finfo = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(5, mEntries.size());
+      // Ensure that they came from the journal (by verifying they are ordered by offsets)
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId7);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
 
+      // Create a token positioned at the last key in the last but one segment.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10]
+      // journal:                  [6 8 9 7 10]
+      // token before:  j
+      // token after:           i
+      token = new StoreFindToken();
+      finfo = index.findEntriesSince(token, 5 * entrySize);
+
+      // Add more entries to the index to create 3 segments.
       index.addToIndex(entry11, new FileSpan(1000, 1100));
       index.addToIndex(entry12, new FileSpan(1100, 1200));
 
-      // Get the next 7 entries
+      // Get the next 7 entries. Tests the case where keys are read from a segment and then from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12]
+      // journal:                        [9 7 10 12 11]
+      // token before:          i
+      // token after:                                j
+      token = (StoreFindToken) finfo.getFindToken();
       finfo = index.findEntriesSince(token, 7 * entrySize);
       mEntries = finfo.getMessageEntries();
       Assert.assertEquals(7, mEntries.size());
@@ -1180,10 +1267,86 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId8);
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId9);
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
-
       // Ensure the last 2 are ordered by offset
       Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId12);
       Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
+
+      ArrayList indexEntries = new ArrayList<IndexEntry>();
+      indexEntries.add(entry13);
+      indexEntries.add(entry14);
+      indexEntries.add(entry15);
+      indexEntries.add(entry16);
+      indexEntries.add(entry17);
+      indexEntries.add(entry18);
+      index.addToIndex(indexEntries,
+          new FileSpan(entry13.getValue().getOffset(), entry18.getValue().getOffset() + entry18.getValue().getSize()));
+
+      /* Test batched add, and that keys are read from the segment and then from the journal for the latest ones. */
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18]
+      // journal:                                           [15   16 18 17]
+      // token before:                               j
+      // token after:                                                    j
+      token = (StoreFindToken) finfo.getFindToken();
+      finfo = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      // This should get us all entries from the last but one segment ([11 - 15]) +
+      // rest of the entries from the journal
+      Assert.assertEquals(8, mEntries.size());
+      // First 5 from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId11);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId12);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId13);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId14);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId15);
+      // Last 3 from the journal
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId16);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId17);
+
+      /* Position the index at the middle of some segment. Ensure keys are read from multiple segments up to what is
+         asked.*/
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18]
+      // journal:                                           [15   16 18 17]
+      // token before:                i
+      // token after:                                i
+
+      token = new StoreFindToken();
+      finfo = index.findEntriesSince(token, 7 * entrySize);
+      token = (StoreFindToken) finfo.getFindToken();
+      finfo = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      Assert.assertEquals(5, mEntries.size());
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId10);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId11);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId12);
+
+      // Get the next entries. Ensure that the journal marks the end of the entries even if it is not up-to-date.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19]
+      // journal:                                           [15   16 18 17]
+      // token before:                               i
+      // token after:                                                    j
+
+      journal.pause();
+      index.addToIndex(entry19,
+          new FileSpan(entry19.getValue().getOffset(), entry19.getValue().getOffset() + entry19.getValue().getSize()));
+      token = (StoreFindToken) finfo.getFindToken();
+      finfo = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = finfo.getMessageEntries();
+      journal.resume();
+
+      // This should get us all entries from the last but one segment ([11 - 15]) +
+      // rest of the entries from the journal
+      Assert.assertEquals(6, mEntries.size());
+      // First 3 from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId13);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId14);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId15);
+      // Last 3 from the journal
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId16);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId17);
 
       indexFile.delete();
       scheduler.shutdown();
@@ -1196,12 +1359,5 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
-
-    // provide token with offset that is in journal
-
-    // provide token with offset that is not in journal
-
-    // provide token with key
-
   }
 }

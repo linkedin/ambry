@@ -52,7 +52,8 @@ public class PersistentIndex {
   private IndexPersistor persistor;
   private StoreKeyFactory factory;
   private StoreConfig config;
-  private InMemoryJournal journal;
+  private JournalFactory journalFactory;
+  private Journal journal;
   private UUID sessionId;
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
@@ -88,7 +89,8 @@ public class PersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      journal = new InMemoryJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
+      journalFactory = Utils.getObj(config.journalFactory);
+      journal = journalFactory.getJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
           config.storeMaxNumberOfEntriesToReturnFromJournal);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
@@ -167,6 +169,10 @@ public class PersistentIndex {
     }
   }
 
+  protected Journal getJournal() {
+    return journal;
+  }
+
   /**
    * Recovers a segment given the end offset in the log and a recovery handler
    * @param segmentToRecover The segment to recover. If this is null, it creates a new segment
@@ -211,7 +217,7 @@ public class PersistentIndex {
         } else {
           throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
         }
-        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
@@ -223,7 +229,7 @@ public class PersistentIndex {
       } else {
         // create a new entry in the index
         IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
-        validateFileEndOffset(new FileSpan(runningOffset, runningOffset + info.getSize()));
+        validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
@@ -241,7 +247,7 @@ public class PersistentIndex {
    */
   public void addToIndex(IndexEntry entry, FileSpan fileSpan)
       throws StoreException {
-    validateFileEndOffset(fileSpan);
+    validateFileSpan(fileSpan);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
           IndexValue.Index_Value_Size_In_Bytes, config, metrics);
@@ -261,18 +267,12 @@ public class PersistentIndex {
    */
   public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
       throws StoreException {
-    validateFileEndOffset(fileSpan);
-    verifyKeySizesMatch(entries);
-    if (needToRollOverIndex(entries.get(0))) {
-      IndexSegment info = new IndexSegment(dataDir, entries.get(0).getValue().getOffset(), factory,
-          entries.get(0).getKey().sizeInBytes(), IndexValue.Index_Value_Size_In_Bytes, config, metrics);
-      info.addEntries(entries, fileSpan.getEndOffset());
-      indexes.put(info.getStartOffset(), info);
-    } else {
-      indexes.lastEntry().getValue().addEntries(entries, fileSpan.getEndOffset());
-    }
+    validateFileSpan(fileSpan);
+    validateEntries(entries);
     for (IndexEntry entry : entries) {
-      journal.addEntry(entry.getValue().getOffset(), entry.getKey());
+      long entryStartOffset = entry.getValue().getOffset();
+      long entryEndOffset = entryStartOffset + entry.getValue().getSize();
+      addToIndex(entry, new FileSpan(entryStartOffset, entryEndOffset));
     }
   }
 
@@ -290,11 +290,12 @@ public class PersistentIndex {
   }
 
   /**
+   * Checks if the number of keys in the entry set are below the limit.
    * Checks if all the keys in the entry set have the same key size.
    * @param entries The set of new entries.
    * @throws IllegalArgumentException
    */
-  private void verifyKeySizesMatch(ArrayList<IndexEntry> entries) {
+  private void validateEntries(ArrayList<IndexEntry> entries) {
     StoreKey firstKey = entries.get(0).getKey();
 
     for (IndexEntry entry : entries) {
@@ -390,7 +391,7 @@ public class PersistentIndex {
    */
   public void markAsDeleted(StoreKey id, FileSpan fileSpan)
       throws StoreException {
-    validateFileEndOffset(fileSpan);
+    validateFileSpan(fileSpan);
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -527,7 +528,7 @@ public class PersistentIndex {
           // Get entries starting from the first key in this offset.
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
-          if (entry != null) {
+          if (entry != null && entry.getKey() != indexes.lastKey()) {
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
             messageEntries = updateDeleteStateForMessages(messageEntries);
           } else {
@@ -622,8 +623,9 @@ public class PersistentIndex {
 
     while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
-      Long journalLastOffsetBeforeCheck = journal.getLastOffset();
-      if (journalLastOffsetBeforeCheck != null) {
+      long journalFirstOffsetBeforeCheck = journal.getFirstOffset();
+      long journalLastOffsetBeforeCheck = journal.getLastOffset();
+      if (journalFirstOffsetBeforeCheck != -1 && journalLastOffsetBeforeCheck != -1) {
         List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
         if (entries != null) {
           logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
@@ -643,21 +645,16 @@ public class PersistentIndex {
       }
 
       if (segmentStartOffset == indexes.lastKey()) {
-        /* The start offset is of the latest segment, and was not found in the journal.
-           This can (and should only) happen if, as part of addToIndex, a new segment got created and entries were added
-           in it, but these were not yet added to the journal at the time the offset was looked up in the journal above.
-           In this case, segmentStartOffset must be greater than the journalLastOffsetBeforeCheck. */
-        if (journalLastOffsetBeforeCheck == null || segmentStartOffset > journalLastOffsetBeforeCheck) {
-          logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
-              " is after the journalLastOffsetBeforeCheck " + journalLastOffsetBeforeCheck);
-          // There is a valid scenario here where we could return with no entries
-        } else {
-          throw new IllegalStateException("Index : " + dataDir +
-              " findEntriesFromOffset segment start offset " + segmentStartOffset
-              + " is of the latest segment and not found in journal with last offset " + journalLastOffsetBeforeCheck
-              + " and is of the latest segment");
-        }
-        break;
+        /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
+         * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
+         * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
+         * then the previous segment must have been the latest segment at the time it was scanned, which couldn't have
+         * happened due to this same argument).
+         * */
+        throw new IllegalStateException("Index : " + dataDir +
+            " findEntriesFromOffset segment start offset " + segmentStartOffset
+            + " is of the latest segment and not found in journal with range [" + journalFirstOffsetBeforeCheck + ", "
+            + journalLastOffsetBeforeCheck + "]");
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
         if (segmentToProcess.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries)) {
@@ -672,11 +669,9 @@ public class PersistentIndex {
 
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
-    } else if (newTokenSegmentStartOffset != StoreFindToken.Uninitialized_Offset) {
+    } else {
       return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
           sessionId);
-    } else {
-      return new StoreFindToken(key, initialSegmentStartOffset, sessionId);
     }
   }
 
@@ -743,10 +738,10 @@ public class PersistentIndex {
   }
 
   /**
-   * Ensures that the provided fileendoffset satisfies constraints
+   * Ensures that the provided fileendoffset in the fileSpan satisfies constraints
    * @param fileSpan The filespan that needs to be verified
    */
-  private void validateFileEndOffset(FileSpan fileSpan) {
+  private void validateFileSpan(FileSpan fileSpan) {
     if (getCurrentEndOffset() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
       logger.error("File span offsets provided to the index does not meet constraints "
           + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", getCurrentEndOffset(),

@@ -49,6 +49,13 @@ public class StoreConfig {
   public final int storeMaxNumberOfEntriesToReturnFromJournal;
 
   /**
+   * The factory class the store uses to create the journal.
+   */
+  @Config("store.journal.factory")
+  @Default("com.github.ambry.commons.JournalFactory")
+  public final String journalFactory;
+
+  /**
    * The max probability of a false positive for the index bloom filter
    */
   @Config("store.index.bloom.max.false.positive.probability")
@@ -64,6 +71,7 @@ public class StoreConfig {
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability =
         verifiableProperties.getDoubleInRange("store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
+    journalFactory = verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
   }
