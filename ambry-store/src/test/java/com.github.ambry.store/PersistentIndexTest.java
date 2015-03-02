@@ -1117,8 +1117,6 @@ public class PersistentIndexTest {
       MockId blobId17 = new MockId("id17");
       MockId blobId18 = new MockId("id18");
       MockId blobId19 = new MockId("id19");
-      MockId blobId20 = new MockId("id20");
-      MockId blobId21 = new MockId("id21");
 
       byte flags = 0;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
@@ -1147,8 +1145,8 @@ public class PersistentIndexTest {
        * (when the index is created for the first time, it is similar to an unclean shutdown, so
        * this tests token getting reset in the wake of an unclean shutdown case) */
       StoreFindToken token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
-      FindInfo finfo = index.findEntriesSince(token, 500);
-      List<MessageInfo> mEntries = finfo.getMessageEntries();
+      FindInfo info = index.findEntriesSince(token, 500);
+      List<MessageInfo> mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 0);
 
       /* Test the case where an entry is added to the index, but not yet to the journal.
@@ -1163,15 +1161,15 @@ public class PersistentIndexTest {
       // token before: j           // j means offset (journal) based token
       // token after : j           // i means index based offset
       token = new StoreFindToken();
-      finfo = index.findEntriesSince(token, 100 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 0);
 
       /* Ensure we get the entry after it gets into the journal */
       journal.resume();
       token = new StoreFindToken();
-      finfo = index.findEntriesSince(token, 100 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 1);
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
 
@@ -1189,8 +1187,8 @@ public class PersistentIndexTest {
       // token after :          j            // j means offset (journal) based token
 
       token = new StoreFindToken(blobId1, 1000, new UUID(0, 0));
-      finfo = index.findEntriesSince(token, 5 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
       // Ensure that we got all the keys from the beginning and ordered by offset
       Assert.assertEquals(mEntries.size(), 5);
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
@@ -1212,9 +1210,9 @@ public class PersistentIndexTest {
       // journal:                  [6 8 9 7 10]
       // token before:          j
       // token after:           i
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 5 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 5);
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId2);
@@ -1228,9 +1226,9 @@ public class PersistentIndexTest {
       // journal:                  [6 8 9 7 10]
       // token before:          i
       // token after:                        j
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 5 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(5, mEntries.size());
       // Ensure that they came from the journal (by verifying they are ordered by offsets)
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
@@ -1245,7 +1243,7 @@ public class PersistentIndexTest {
       // token before:  j
       // token after:           i
       token = new StoreFindToken();
-      finfo = index.findEntriesSince(token, 5 * entrySize);
+      info = index.findEntriesSince(token, 5 * entrySize);
 
       // Add more entries to the index to create 3 segments.
       index.addToIndex(entry11, new FileSpan(1000, 1100));
@@ -1256,9 +1254,9 @@ public class PersistentIndexTest {
       // journal:                        [9 7 10 12 11]
       // token before:          i
       // token after:                                j
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 7 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 7 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(7, mEntries.size());
 
       // Ensure the first 5 are ordered by keys
@@ -1286,9 +1284,9 @@ public class PersistentIndexTest {
       // journal:                                           [15   16 18 17]
       // token before:                               j
       // token after:                                                    j
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 100 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
       // This should get us all entries from the last but one segment ([11 - 15]) +
       // rest of the entries from the journal
       Assert.assertEquals(8, mEntries.size());
@@ -1311,10 +1309,10 @@ public class PersistentIndexTest {
       // token after:                                i
 
       token = new StoreFindToken();
-      finfo = index.findEntriesSince(token, 7 * entrySize);
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 5 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      info = index.findEntriesSince(token, 7 * entrySize);
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
       Assert.assertEquals(5, mEntries.size());
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId8);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId9);
@@ -1331,9 +1329,9 @@ public class PersistentIndexTest {
       journal.pause();
       index.addToIndex(entry19,
           new FileSpan(entry19.getValue().getOffset(), entry19.getValue().getOffset() + entry19.getValue().getSize()));
-      token = (StoreFindToken) finfo.getFindToken();
-      finfo = index.findEntriesSince(token, 100 * entrySize);
-      mEntries = finfo.getMessageEntries();
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
       journal.resume();
 
       // This should get us all entries from the last but one segment ([11 - 15]) +
