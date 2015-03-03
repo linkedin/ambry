@@ -111,7 +111,7 @@ class IndexSegment {
    * @throws StoreException
    */
   public IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config,
-      StoreMetrics metrics, InMemoryJournal journal)
+      StoreMetrics metrics, Journal journal)
       throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -536,7 +536,7 @@ class IndexSegment {
    * @throws StoreException
    * @throws IOException
    */
-  private void readFromFile(File fileToRead, InMemoryJournal journal)
+  private void readFromFile(File fileToRead, Journal journal)
       throws StoreException, IOException {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
@@ -618,11 +618,13 @@ class IndexSegment {
    * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @return true if any entries were added.
    * @throws IOException
    */
-  public void getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
+  public boolean getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes)
       throws IOException {
+    int entriesSizeAtStart = entries.size();
     if (mapped.get()) {
       int index = 0;
       if (key != null) {
@@ -667,6 +669,7 @@ class IndexSegment {
         }
       }
     }
+    return entries.size() > entriesSizeAtStart;
   }
 }
 

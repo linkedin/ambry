@@ -32,7 +32,7 @@ class JournalEntry {
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-class InMemoryJournal {
+class InMemoryJournal implements Journal {
 
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
@@ -61,6 +61,7 @@ class InMemoryJournal {
    *               increasing.
    * @param key The key that the entry in the journal refers to.
    */
+  @Override
   public void addEntry(long offset, StoreKey key) {
     if (key == null || offset < 0) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
@@ -83,32 +84,56 @@ class InMemoryJournal {
    * @return The entries in the journal starting from offset. If the offset is outside the range of the journal,
    *         it returns null.
    */
+  @Override
   public List<JournalEntry> getEntriesSince(long offset, boolean inclusive) {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
     // The offset may not be present in the journal as it could be removed.
 
-    if (!journal.containsKey(offset)) {
+    Map.Entry<Long, StoreKey> first = journal.firstEntry();
+    Map.Entry<Long, StoreKey> last = journal.lastEntry();
+
+    // check if the journal contains the offset.
+    if (first == null || offset < first.getKey() ||
+        last == null || offset > last.getKey() ||
+        !journal.containsKey(offset)) {
       return null;
     }
+
     ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
     int entriesAdded = 0;
-    for (Map.Entry<Long, StoreKey> entries : subsetMap.entrySet()) {
-      if (inclusive || entries.getKey() != offset) {
-        journalEntries.add(new JournalEntry(entries.getKey(), entries.getValue()));
+    for (Map.Entry<Long, StoreKey> entry : subsetMap.entrySet()) {
+      if (inclusive || entry.getKey() != offset) {
+        journalEntries.add(new JournalEntry(entry.getKey(), entry.getValue()));
         entriesAdded++;
         if (entriesAdded == entriesToReturn) {
           break;
         }
       }
     }
-    if (!journal.containsKey(offset)) {
+
+    // Ensure that the offset was not pushed out of the journal.
+    first = journal.firstEntry();
+    if (first == null || offset < first.getKey()) {
       return null;
     }
+
     logger.trace("Journal : " + dataDir + " entries returned " + journalEntries.size());
     return journalEntries;
+  }
+
+  @Override
+  public long getFirstOffset() {
+    Map.Entry<Long, StoreKey> first = journal.firstEntry();
+    return first == null ? -1 : first.getKey();
+  }
+
+  @Override
+  public long getLastOffset() {
+    Map.Entry<Long, StoreKey> last = journal.lastEntry();
+    return last == null ? -1 : last.getKey();
   }
 }
