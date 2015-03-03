@@ -1120,23 +1120,23 @@ public class PersistentIndexTest {
 
       byte flags = 0;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
-      IndexEntry entry2 = new IndexEntry(blobId3, new IndexValue(100, 100, flags, 12567));
-      IndexEntry entry3 = new IndexEntry(blobId2, new IndexValue(100, 200, flags, 12567));
-      IndexEntry entry4 = new IndexEntry(blobId5, new IndexValue(100, 300, flags, 12567));
-      IndexEntry entry5 = new IndexEntry(blobId4, new IndexValue(100, 400, flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, 100, flags, 12567));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, 200, flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, 300, flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, 400, flags, 12567));
       IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, 500, flags, 12567));
-      IndexEntry entry7 = new IndexEntry(blobId8, new IndexValue(100, 600, flags, 12567));
-      IndexEntry entry8 = new IndexEntry(blobId9, new IndexValue(100, 700, flags, 12567));
-      IndexEntry entry9 = new IndexEntry(blobId7, new IndexValue(100, 800, flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, 600, flags, 12567));
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, 700, flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, 800, flags, 12567));
       IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, 900, flags, 12567));
-      IndexEntry entry11 = new IndexEntry(blobId12, new IndexValue(100, 1000, flags, 12567));
-      IndexEntry entry12 = new IndexEntry(blobId11, new IndexValue(100, 1100, flags, 12567));
-      IndexEntry entry13 = new IndexEntry(blobId14, new IndexValue(100, 1200, flags, 12567));
-      IndexEntry entry14 = new IndexEntry(blobId13, new IndexValue(100, 1300, flags, 12567));
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, 1000, flags, 12567));
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, 1100, flags, 12567));
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, 1200, flags, 12567));
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, 1300, flags, 12567));
       IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, 1400, flags, 12567));
       IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, 1500, flags, 12567));
-      IndexEntry entry17 = new IndexEntry(blobId18, new IndexValue(100, 1600, flags, 12567));
-      IndexEntry entry18 = new IndexEntry(blobId17, new IndexValue(100, 1700, flags, 12567));
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, 1600, flags, 12567));
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, 1700, flags, 12567));
       IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 1800, flags, 12567));
 
       long entrySize = entry1.getValue().getSize();
@@ -1173,10 +1173,10 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.size(), 1);
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
 
-      index.addToIndex(entry2, new FileSpan(100, 200));
-      index.addToIndex(entry3, new FileSpan(200, 300));
-      index.addToIndex(entry4, new FileSpan(300, 400));
-      index.addToIndex(entry5, new FileSpan(400, 500));
+      index.addToIndex(entry3, new FileSpan(100, 200));
+      index.addToIndex(entry2, new FileSpan(200, 300));
+      index.addToIndex(entry5, new FileSpan(300, 400));
+      index.addToIndex(entry4, new FileSpan(400, 500));
 
       /* Ensure that a token from a previous session with a key that is beyond the logEndOffsetOnStartup gets reset
          correctly - meaning findEntriesSince gets keys starting and *including* the key at logEndOffsetOnStartup. */
@@ -1199,9 +1199,9 @@ public class PersistentIndexTest {
 
       // Add more entries to the index to create a new segment
       index.addToIndex(entry6, new FileSpan(500, 600));
-      index.addToIndex(entry7, new FileSpan(600, 700));
-      index.addToIndex(entry8, new FileSpan(700, 800));
-      index.addToIndex(entry9, new FileSpan(800, 900));
+      index.addToIndex(entry8, new FileSpan(600, 700));
+      index.addToIndex(entry9, new FileSpan(700, 800));
+      index.addToIndex(entry7, new FileSpan(800, 900));
       index.addToIndex(entry10, new FileSpan(900, 1000));
 
       // Get the next 5 entries. Tests the case where the token has a journal offset which is now no longer
@@ -1246,8 +1246,8 @@ public class PersistentIndexTest {
       info = index.findEntriesSince(token, 5 * entrySize);
 
       // Add more entries to the index to create 3 segments.
-      index.addToIndex(entry11, new FileSpan(1000, 1100));
-      index.addToIndex(entry12, new FileSpan(1100, 1200));
+      index.addToIndex(entry12, new FileSpan(1000, 1100));
+      index.addToIndex(entry11, new FileSpan(1100, 1200));
 
       // Get the next 7 entries. Tests the case where keys are read from a segment and then from the journal.
       // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12]
@@ -1270,14 +1270,14 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
 
       ArrayList indexEntries = new ArrayList<IndexEntry>();
-      indexEntries.add(entry13);
       indexEntries.add(entry14);
+      indexEntries.add(entry13);
       indexEntries.add(entry15);
       indexEntries.add(entry16);
-      indexEntries.add(entry17);
       indexEntries.add(entry18);
+      indexEntries.add(entry17);
       index.addToIndex(indexEntries,
-          new FileSpan(entry13.getValue().getOffset(), entry18.getValue().getOffset() + entry18.getValue().getSize()));
+          new FileSpan(entry13.getValue().getOffset(), entry17.getValue().getOffset() + entry17.getValue().getSize()));
 
       /* Test batched add, and that keys are read from the segment and then from the journal for the latest ones. */
       // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18]
