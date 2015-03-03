@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
