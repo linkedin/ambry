@@ -14,7 +14,7 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.util.ArrayList;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;

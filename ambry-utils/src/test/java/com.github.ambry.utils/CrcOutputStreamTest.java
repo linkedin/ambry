@@ -37,6 +37,18 @@ public class CrcOutputStreamTest {
     Assert.assertArrayEquals(buf, bufOutput);
     long value2 = crcStream.getValue();
     Assert.assertEquals(value1, value2);
+    bufOutput[0] = (byte) (~bufOutput[0]);
+    stream = new ByteBufferOutputStream(ByteBuffer.wrap(buf));
+    crcStream = new CrcOutputStream(stream);
+    try {
+      crcStream.write(bufOutput[0]);
+      crcStream.write(bufOutput, 1, 3999);
+    } catch (IOException e) {
+      Assert.assertTrue(false);
+    }
+    Assert.assertArrayEquals(buf, bufOutput);
+    long value3 = crcStream.getValue();
+    Assert.assertFalse(value2 == value3);
     crcStream.close();
   }
 }

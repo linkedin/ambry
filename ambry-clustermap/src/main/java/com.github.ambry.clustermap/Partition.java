@@ -69,7 +69,10 @@ public class Partition extends PartitionId {
   public static byte[] readPartitionBytesFromStream(DataInputStream stream)
       throws IOException {
     byte[] partitionBytes = new byte[Partition_Size_In_Bytes];
-    stream.read(partitionBytes);
+    int sizeRead = 0;
+    while (sizeRead < Partition_Size_In_Bytes) {
+      sizeRead += stream.read(partitionBytes, sizeRead, Partition_Size_In_Bytes - sizeRead);
+    }
     return partitionBytes;
   }
 

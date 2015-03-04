@@ -14,6 +14,7 @@ public class FileLockTest {
   public void testFileLock()
       throws IOException {
     File file = File.createTempFile("temp", "1");
+    file.deleteOnExit();
     FileLock lock = new FileLock(file);
     lock.lock();
     Assert.assertFalse(lock.tryLock());

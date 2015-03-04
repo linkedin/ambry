@@ -1,7 +1,7 @@
 package com.github.ambry.utils;
 
 import java.util.Random;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -20,5 +20,10 @@ public class Crc32Test {
     crc.update(buf, 0, 4000);
     long value2 = crc.getValue();
     Assert.assertEquals(value1, value2);
+    buf[3999] = (byte) (~buf[3999]);
+    crc = new Crc32();
+    crc.update(buf, 0, 4000);
+    long value3 = crc.getValue();
+    Assert.assertFalse(value1 == value3);
   }
 }

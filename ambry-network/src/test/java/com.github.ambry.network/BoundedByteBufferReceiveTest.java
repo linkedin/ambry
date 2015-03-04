@@ -1,7 +1,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;

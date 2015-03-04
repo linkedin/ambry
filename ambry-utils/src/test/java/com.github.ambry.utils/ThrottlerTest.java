@@ -26,6 +26,6 @@ public class ThrottlerTest {
     time.currentMilliseconds = 22;
     time.sleepTimeExpected = 4989;
     throttler.maybeThrottle(500);
-    System.out.println(time.currentMilliseconds);
+    Assert.assertEquals(time.currentMilliseconds, 5011);
   }
 }

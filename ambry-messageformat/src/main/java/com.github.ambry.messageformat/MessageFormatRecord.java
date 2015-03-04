@@ -402,7 +402,15 @@ public class MessageFormatRecord {
       DataInputStream dataStream = new DataInputStream(crcStream);
       int usermetadataSize = dataStream.readInt();
       byte[] userMetadaBuffer = new byte[usermetadataSize];
-      dataStream.read(userMetadaBuffer);
+      int read = 0;
+      while (read < usermetadataSize) {
+        int sizeRead = dataStream.read(userMetadaBuffer);
+        if (sizeRead == 0 || sizeRead == -1) {
+          throw new IOException("Total size read " + read + " is less than the size to be read " + usermetadataSize
+              + " for usermetadata");
+        }
+        read += sizeRead;
+      }
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {

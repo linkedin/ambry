@@ -501,7 +501,7 @@ public class PersistentIndex {
           // find index segment closest to the offset. get all entries after that
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
-          if (entry != null) {
+          if (entry != null && entry.getKey() != indexes.lastKey()) {
             newToken = findEntriesFromOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
             messageEntries = updateDeleteStateForMessages(messageEntries);
           } else {
