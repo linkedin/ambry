@@ -90,7 +90,11 @@ public class PersistentIndex {
       this.config = config;
       persistor = new IndexPersistor();
       storeJournalFactory = Utils.getObj(config.storeJournalFactory);
-      journal = storeJournalFactory.getJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
+      /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
+      whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
+      elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
+      segment can hold. */
+      journal = storeJournalFactory.getJournal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
           config.storeMaxNumberOfEntriesToReturnFromJournal);
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override

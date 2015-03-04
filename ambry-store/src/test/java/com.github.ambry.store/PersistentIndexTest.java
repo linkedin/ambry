@@ -74,6 +74,10 @@ public class PersistentIndexTest {
     public Journal getJournal() {
       return super.journal;
     }
+
+    public IndexSegment getLastSegment() {
+      return super.indexes.lastEntry().getValue();
+    }
   }
 
   @Test
@@ -1117,6 +1121,12 @@ public class PersistentIndexTest {
       MockId blobId17 = new MockId("id17");
       MockId blobId18 = new MockId("id18");
       MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+      MockId blobId21 = new MockId("id21");
+      MockId blobId22 = new MockId("id22");
+      MockId blobId23 = new MockId("id23");
+      MockId blobId24 = new MockId("id24");
+      MockId blobId25 = new MockId("id25");
 
       byte flags = 0;
       IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
@@ -1138,6 +1148,21 @@ public class PersistentIndexTest {
       IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, 1600, flags, 12567));
       IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, 1700, flags, 12567));
       IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 1800, flags, 12567));
+      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValue(100, 1900, flags, 12567));
+      IndexEntry entry21 = new IndexEntry(blobId21, new IndexValue(100, 2000, flags, 12567));
+      IndexEntry entry22 = new IndexEntry(blobId22, new IndexValue(100, 2100, flags, 12567));
+      IndexEntry entry24 = new IndexEntry(blobId24, new IndexValue(100, 2200, flags, 12567));
+      IndexEntry entry23 = new IndexEntry(blobId23, new IndexValue(100, 2300, flags, 12567));
+
+      // Add some delete entries
+      flags = 1;
+      IndexEntry entry21d = new IndexEntry(blobId21, new IndexValue(100, 2400, flags, 12567));
+      IndexEntry entry22d = new IndexEntry(blobId22, new IndexValue(100, 2500, flags, 12567));
+      IndexEntry entry24d = new IndexEntry(blobId24, new IndexValue(100, 2600, flags, 12567));
+      IndexEntry entry23d = new IndexEntry(blobId23, new IndexValue(100, 2700, flags, 12567));
+
+      flags = 0;
+      IndexEntry entry25 = new IndexEntry(blobId25, new IndexValue(100, 2800, flags, 12567));
 
       long entrySize = entry1.getValue().getSize();
 
@@ -1197,17 +1222,22 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId4);
 
-      // Add more entries to the index to create a new segment
+      // Add more entries to the index to create two new segments and push out the first 5 from the journal.
       index.addToIndex(entry6, new FileSpan(500, 600));
       index.addToIndex(entry8, new FileSpan(600, 700));
       index.addToIndex(entry9, new FileSpan(700, 800));
       index.addToIndex(entry7, new FileSpan(800, 900));
       index.addToIndex(entry10, new FileSpan(900, 1000));
+      index.addToIndex(entry12, new FileSpan(1000, 1100));
+      index.addToIndex(entry11, new FileSpan(1100, 1200));
+      index.addToIndex(entry14, new FileSpan(1200, 1300));
+      index.addToIndex(entry13, new FileSpan(1300, 1400));
+      index.addToIndex(entry15, new FileSpan(1400, 1500));
 
       // Get the next 5 entries. Tests the case where the token has a journal offset which is now no longer
       // present in the journal. The entries will be read from the corresponding index segment.
-      // Index:        [1 2 3 4 5] [6 7 8 9 10]
-      // journal:                  [6 8 9 7 10]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
       // token before:          j
       // token after:           i
       token = (StoreFindToken) info.getFindToken();
@@ -1222,8 +1252,8 @@ public class PersistentIndexTest {
 
       // Get the next 5 entries. Tests the case where the token is index based and has the last key of the last but one
       // segment. The entries will be read from the journal.
-      // Index:        [1 2 3 4 5] [6 7 8 9 10]
-      // journal:                  [6 8 9 7 10]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
       // token before:          i
       // token after:                        j
       token = (StoreFindToken) info.getFindToken();
@@ -1238,20 +1268,20 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
 
       // Create a token positioned at the last key in the last but one segment.
-      // Index:        [1 2 3 4 5] [6 7 8 9 10]
-      // journal:                  [6 8 9 7 10]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
       // token before:  j
       // token after:           i
       token = new StoreFindToken();
       info = index.findEntriesSince(token, 5 * entrySize);
 
-      // Add more entries to the index to create 3 segments.
-      index.addToIndex(entry12, new FileSpan(1000, 1100));
-      index.addToIndex(entry11, new FileSpan(1100, 1200));
+      // Add more entries to the index to create 4 segments.
+      index.addToIndex(entry16, new FileSpan(1500, 1600));
+      index.addToIndex(entry18, new FileSpan(1600, 1700));
 
       // Get the next 7 entries. Tests the case where keys are read from a segment and then from the journal.
-      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12]
-      // journal:                        [9 7 10 12 11]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 18]
+      // journal:                      [9 7 10   12 11 14 13 15   16 18]
       // token before:          i
       // token after:                                j
       token = (StoreFindToken) info.getFindToken();
@@ -1270,26 +1300,26 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
 
       ArrayList indexEntries = new ArrayList<IndexEntry>();
-      indexEntries.add(entry14);
-      indexEntries.add(entry13);
-      indexEntries.add(entry15);
-      indexEntries.add(entry16);
-      indexEntries.add(entry18);
       indexEntries.add(entry17);
+      indexEntries.add(entry19);
+      indexEntries.add(entry20);
+      indexEntries.add(entry21);
+      indexEntries.add(entry22);
+      indexEntries.add(entry24);
       index.addToIndex(indexEntries,
-          new FileSpan(entry13.getValue().getOffset(), entry17.getValue().getOffset() + entry17.getValue().getSize()));
+          new FileSpan(entry17.getValue().getOffset(), entry24.getValue().getOffset() + entry24.getValue().getSize()));
 
       /* Test batched add, and that keys are read from the segment and then from the journal for the latest ones. */
-      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18]
-      // journal:                                           [15   16 18 17]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
       // token before:                               j
       // token after:                                                    j
       token = (StoreFindToken) info.getFindToken();
       info = index.findEntriesSince(token, 100 * entrySize);
       mEntries = info.getMessageEntries();
-      // This should get us all entries from the last but one segment ([11 - 15]) +
+      // This should get us all entries from the segment not completely in journal, ([11 - 15]) +
       // rest of the entries from the journal
-      Assert.assertEquals(8, mEntries.size());
+      Assert.assertEquals(13, mEntries.size());
       // First 5 from the index
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId11);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId12);
@@ -1300,11 +1330,16 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId16);
       Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId18);
       Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId17);
+      Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId20);
+      Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(11).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(12).getStoreKey(), blobId24);
 
       /* Position the index at the middle of some segment. Ensure keys are read from multiple segments up to what is
          asked.*/
-      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18]
-      // journal:                                           [15   16 18 17]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
       // token before:                i
       // token after:                                i
 
@@ -1321,22 +1356,22 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId12);
 
       // Get the next entries. Ensure that the journal marks the end of the entries even if it is not up-to-date.
-      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19]
-      // journal:                                           [15   16 18 17]
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 23 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
       // token before:                               i
-      // token after:                                                    j
+      // token after:                                                                     j
 
       journal.pause();
-      index.addToIndex(entry19,
-          new FileSpan(entry19.getValue().getOffset(), entry19.getValue().getOffset() + entry19.getValue().getSize()));
+      index.addToIndex(entry23,
+          new FileSpan(entry23.getValue().getOffset(), entry23.getValue().getOffset() + entry23.getValue().getSize()));
       token = (StoreFindToken) info.getFindToken();
       info = index.findEntriesSince(token, 100 * entrySize);
       mEntries = info.getMessageEntries();
       journal.resume();
 
-      // This should get us all entries from the last but one segment ([11 - 15]) +
+      // This should get us entries from the last segment not in journal ([13 - 15]) +
       // rest of the entries from the journal
-      Assert.assertEquals(6, mEntries.size());
+      Assert.assertEquals(11, mEntries.size());
       // First 3 from the index
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId13);
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId14);
@@ -1345,6 +1380,49 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId16);
       Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId18);
       Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId17);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId20);
+      Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId24);
+
+      // Add more entries to test the case where deletes happen to keys in the latest segment.
+      // The journal keeps both entries, but the segment keeps only the delete entry.
+      indexEntries.clear();
+      indexEntries.add(entry21d);
+      indexEntries.add(entry22d);
+      indexEntries.add(entry24d);
+      indexEntries.add(entry23d);
+      indexEntries.add(entry25);
+      index.addToIndex(indexEntries,
+          new FileSpan(entry21d.getValue().getOffset(), entry25.getValue().getOffset() + entry25.getValue().getSize()));
+
+      // Ensure that the journal still contains the latest segment's start offset.
+      Assert.assertTrue(journal.getFirstOffset() <= index.getLastSegment().getStartOffset());
+
+      // Get the next entries. Ensure that entries for the last segment are obtained from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21d 22d 23d 24d 25]
+      // journal:                                                                 [21 22 24 23 21d 22d 24d 23d 25]
+      // token before:                                                i
+      // token after:                                                                                           j
+
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 17 * entrySize); // position in the middle of the last but one segment.
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(8, mEntries.size()); // All keys are deleted so shouldn't be returned.
+
+      // from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId20);
+      // from the journal
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId24);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId23);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId25);
 
       indexFile.delete();
       scheduler.shutdown();
