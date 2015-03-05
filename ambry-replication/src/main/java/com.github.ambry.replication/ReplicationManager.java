@@ -2,6 +2,7 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,18 +56,20 @@ final class RemoteReplicaInfo {
   private FindToken tokenSafeToPersist = null;
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
+  private Time time;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
-      long tokenPersistIntervalInMs) {
+      long tokenPersistIntervalInMs, Time time) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
     this.candidateTokenToPersist = token;
     this.tokenSafeToPersist = token;
-    this.timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
+    this.timeCandidateSetInMs = time.milliseconds();
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
+    this.time = time;
   }
 
   public ReplicaId getReplicaId() {
@@ -135,7 +138,7 @@ final class RemoteReplicaInfo {
    */
   public FindToken getTokenToPersist() {
     synchronized (lock) {
-      if (SystemTime.getInstance().milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
+      if (time.milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
         // candidateTokenToPersist is now safe to be persisted.
         tokenSafeToPersist = candidateTokenToPersist;
       }
@@ -145,8 +148,13 @@ final class RemoteReplicaInfo {
 
   public void onTokenPersisted() {
     synchronized (lock) {
-      this.candidateTokenToPersist = currentToken;
-      timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
+      /* Only update the candidate token if it qualified as the token safe to be persisted in the previous get call.
+       * If not, keep it as it is.
+       */
+      if (tokenSafeToPersist == candidateTokenToPersist) {
+        candidateTokenToPersist = currentToken;
+        timeCandidateSetInMs = time.milliseconds();
+      }
     }
   }
 
@@ -262,7 +270,7 @@ public final class ReplicationManager {
             RemoteReplicaInfo remoteReplicaInfo =
                 new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
-                    SystemTime.MsPerSec * Replication_Delay_Multiplier);
+                    SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance());
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
@@ -594,7 +602,7 @@ public final class ReplicationManager {
               writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
               writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
               writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
-              writer.write(remoteReplica.getTokenToPersist().toBytes());
+              writer.write(tokenToPersist.toBytes());
               remoteReplica.onTokenPersisted();
             }
           }

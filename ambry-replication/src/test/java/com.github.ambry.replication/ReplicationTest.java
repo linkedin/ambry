@@ -41,6 +41,7 @@ import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import java.util.EnumSet;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -550,7 +551,8 @@ public class ReplicationTest {
         for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
           RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
               new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
-                  bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000);
+                  bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
+              SystemTime.getInstance());
           remoteReplicas.add(remoteReplicaInfo);
         }
       }
