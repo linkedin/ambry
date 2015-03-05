@@ -159,7 +159,7 @@ public class AmbryRequests implements RequestAPI {
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
           notification
-              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().toString(),
+              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().getID(),
                   BlobReplicaSourceType.PRIMARY);
         }
       }
@@ -257,16 +257,18 @@ public class AmbryRequests implements RequestAPI {
               logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
                   "for partition " + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
+            } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
+                  "for partition " + partitionRequestInfo.getPartition(), e);
+              metrics.ttlExpiredError.inc();
+            } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
+                  "for partition " + partitionRequestInfo.getPartition(), e);
+              metrics.idDeletedError.inc();
             } else {
-              if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-                metrics.ttlExpiredError.inc();
-              } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-                metrics.idDeletedError.inc();
-              } else {
-                logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                    " for partition " + partitionRequestInfo.getPartition(), e);
-                metrics.unExpectedStoreGetError.inc();
-              }
+              logger.error("Store exception on a get with error code " + e.getErrorCode() +
+                  " for partition " + partitionRequestInfo.getPartition(), e);
+              metrics.unExpectedStoreGetError.inc();
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -336,20 +338,27 @@ public class AmbryRequests implements RequestAPI {
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
-              deleteRequest.getBlobId().toString(), BlobReplicaSourceType.PRIMARY);
+          notification
+              .onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), deleteRequest.getBlobId().getID(),
+                  BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a delete with error code " + e.getErrorCode() +
-          " for request " + deleteRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        logger.error("Store exception on a delete with error code " + e.getErrorCode() +
+            " for request " + deleteRequest, e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
+            " for request " + deleteRequest, e);
         metrics.ttlExpiredError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
+            " for request " + deleteRequest, e);
         metrics.idDeletedError.inc();
       } else {
+        logger.error("Store exception on a delete with error code " + e.getErrorCode() +
+            " for request " + deleteRequest, e);
         metrics.unExpectedStoreDeleteError.inc();
       }
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
@@ -411,7 +420,7 @@ public class AmbryRequests implements RequestAPI {
                     remoteReplicaLagInBytes);
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           } catch (StoreException e) {
-            logger.error("Store exception on a put with error code " + e.getErrorCode() +
+            logger.error("Store exception on a replica metadata request with error code " + e.getErrorCode() +
                 " for partition " + replicaMetadataRequestInfo.getPartitionId(), e);
             if (e.getErrorCode() == StoreErrorCodes.IOError) {
               metrics.storeIOError.inc();

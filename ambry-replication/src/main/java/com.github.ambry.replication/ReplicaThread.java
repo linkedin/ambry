@@ -411,7 +411,7 @@ class ReplicaThread implements Runnable {
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           if (notification != null) {
             notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
+                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
@@ -423,7 +423,7 @@ class ReplicaThread implements Runnable {
                   threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           if (notification != null) {
             notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
+                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
           }
         } else if (messageInfo.isExpired()) {
           // if the remote replica has an object that is expired, it is not considered missing locally
@@ -582,7 +582,7 @@ class ReplicaThread implements Runnable {
                     remoteReplicaInfo.getLocalReplicaId().getMountPath(), messageInfo.getSize());
                 if (notification != null) {
                   notification.onBlobReplicaCreated(dataNodeId.getHostname(), dataNodeId.getPort(),
-                      messageInfo.getStoreKey().toString(), BlobReplicaSourceType.REPAIRED);
+                      messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
                 }
               }
               totalBlobsFixed += messageInfoList.size();
