@@ -130,6 +130,8 @@ final class RemoteReplicaInfo {
    * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
    *
    * tokenSafeToPersist <= candidateTokenToPersist <= currentToken
+   * (Note: when a token gets reset by the remote, the above equation may not hold true immediately after, but it should
+   * eventually hold true.)
    */
 
   /**
