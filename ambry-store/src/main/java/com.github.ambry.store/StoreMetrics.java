@@ -27,6 +27,7 @@ public class StoreMetrics {
   public final Counter nonzeroMessageRecovery;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
+  public final Counter keySizeMismatchCount;
   public Gauge<Long> currentCapacityUsed;
   public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
@@ -55,6 +56,8 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
+    keySizeMismatchCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "-keySizeMismatchCount"));
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 

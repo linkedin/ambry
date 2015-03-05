@@ -148,7 +148,7 @@ public class DumpData {
                     + " size " + blobValue.getSize() + " Original Message Offset " + blobValue
                     .getOriginalMessageOffset() +
                     " Flag " + blobValue.getFlags();
-            if ((blobList == null) || blobs.contains(key.toString())) {
+            if ((blobList == null) || blobs.contains(key.getID())) {
               System.out.println(msg);
               if (keysize != key.sizeInBytes()) {
                 System.out.println("KeySize mismatch for this key " + key);
@@ -197,7 +197,7 @@ public class DumpData {
               // read blob id
               InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
               BlobId id = new BlobId(new DataInputStream(streamlog), map);
-              blobId = "Id - " + id.toString();
+              blobId = "Id - " + id.getID();
               boolean isDeleted = false;
               if (header.getBlobPropertiesRecordRelativeOffset()
                   != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
@@ -216,7 +216,7 @@ public class DumpData {
               lastBlobFailed = false;
               if (!isDeleted) {
                 if (filter) {
-                  if (blobs.contains(id.toString())) {
+                  if (blobs.contains(id.getID())) {
                     System.out.println(
                         messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
                   }
@@ -226,7 +226,7 @@ public class DumpData {
                 }
               } else {
                 if (filter) {
-                  if (blobs.contains(id.toString())) {
+                  if (blobs.contains(id.getID())) {
                     System.out.println(messageheader + "\n " + blobId + "\n" + deleteMsg);
                   }
                 } else {
@@ -322,7 +322,7 @@ public class DumpData {
             String msg = "key :" + key + ": value - offset " + blobValue.getOffset() + " size " +
                 blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
                 " Flag " + blobValue.getFlags() + "\n";
-            boolean success = dumpData.readFromLog(randomAccessFile, blobValue.getOffset(), map, key.toString());
+            boolean success = dumpData.readFromLog(randomAccessFile, blobValue.getOffset(), map, key.getID());
             if (!success) {
               System.out.println("Failed for Index Entry " + msg);
             }
@@ -364,11 +364,11 @@ public class DumpData {
         // read blob id
         InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
         BlobId id = new BlobId(new DataInputStream(streamlog), map);
-        if (id.toString().compareTo(blobId) != 0) {
+        if (id.getID().compareTo(blobId) != 0) {
           System.out.println(
-              "BlobId dint match the index value. BlodId from index " + blobId + ", blobid in log " + id.toString());
+              "BlobId did not match the index value. BlodId from index " + blobId + ", blobid in log " + id.getID());
         }
-        parsedBlobId = "Id - " + id.toString();
+        parsedBlobId = "Id - " + id.getID();
         boolean isDeleted = false;
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
