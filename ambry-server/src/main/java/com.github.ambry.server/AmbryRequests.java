@@ -254,7 +254,7 @@ public class AmbryRequests implements RequestAPI {
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {
             if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() + " " +
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
                   "for partition " + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
@@ -345,7 +345,7 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.error("Store exception on a delete with error code " + e.getErrorCode() +
+        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
             " for request " + deleteRequest, e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
