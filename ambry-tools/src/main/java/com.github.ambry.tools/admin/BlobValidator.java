@@ -96,7 +96,7 @@ public class BlobValidator {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("BlobInfoTool --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
+          System.out.println("BlobValidator --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
               "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/" +
               " -- ambryBlobId blobId --datacenter datacenter --replicaHost replicaHost " +
               "--replicaPort replicaPort --includeExpiredBlob true/false");
@@ -152,7 +152,7 @@ public class BlobValidator {
           System.out.println("Failed to read the blob");
         }
       } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_DATACENTER")) {
-        blobValidator.validate(new String[]{replicaHost, datacenter});
+        blobValidator.validate(new String[]{datacenter});
         blobValidator.validateBlobOnDatacenter(blobId, map, datacenter, expiredBlobs);
       } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_ALL_REPLICAS")) {
         blobValidator.validateBlobOnAllReplicas(blobId, map, expiredBlobs);
@@ -165,6 +165,10 @@ public class BlobValidator {
     }
   }
 
+  /**
+   * Validates that elements of values are not null
+   * @param values
+   */
   public void validate(String[] values) {
     for (String value : values) {
       if (value == null) {

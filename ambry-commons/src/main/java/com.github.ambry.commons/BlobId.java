@@ -36,7 +36,7 @@ public class BlobId extends StoreKey {
   /**
    * Re-constructs existing blobId by deserializing from BlobId "string"
    *
-   * @param id of Blob as output by BlobId.toString()
+   * @param id of Blob as output by BlobId.getID()
    * @param clusterMap of the cluster that the blob id belongs to
    * @throws IOException
    */
@@ -82,9 +82,14 @@ public class BlobId extends StoreKey {
   }
 
   @Override
+  public String getID() {
+    return Base64.encodeBase64URLSafeString(toBytes());
+  }
+
+  @Override
   public String toString() {
     // TODO Java 8 - Use Base64 Utils in java 8 and remove external dependencies
-    return Base64.encodeBase64URLSafeString(toBytes());
+    return "[" + getID() + ":" + version + ":" + partitionId + ":" + uuid + "]";
   }
 
   @Override

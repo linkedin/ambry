@@ -202,8 +202,8 @@ public class AmbryCoordinator implements Coordinator {
               operationTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
-      notificationSystem.onBlobCreated(blobId.toString(), blobProperties, userMetadata.array());
-      return blobId.toString();
+      notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
+      return blobId.getID();
     } catch (CoordinatorException e) {
       logger.trace("putBlob re-throwing CoordinatorException", e);
       coordinatorMetrics.countError(CoordinatorMetrics.CoordinatorOperationType.PutBlob, e.getErrorCode());
