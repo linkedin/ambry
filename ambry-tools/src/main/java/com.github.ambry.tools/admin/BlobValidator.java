@@ -232,8 +232,17 @@ public class BlobValidator {
       Map<BlobId, Map<String, ArrayList<ReplicaId>>> resultMap) {
     Map<String, ArrayList<ReplicaId>> responseMap = new HashMap<String, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      String response = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
-          replicaId.getDataNodeId().getPort(), expiredBlobs);
+      String response = null;
+      try {
+        response = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
+            replicaId.getDataNodeId().getPort(), expiredBlobs);
+      } catch (MessageFormatException e) {
+        response = "MessageFormatException";
+      } catch (IOException e) {
+        response = "IOException";
+      } catch (Exception e) {
+        response = "Exception";
+      }
       if (responseMap.containsKey(response)) {
         responseMap.get(response).add(replicaId);
       } else {
@@ -273,8 +282,18 @@ public class BlobValidator {
     Map<String, ArrayList<ReplicaId>> responseMap = new HashMap<String, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
       if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
-        String response = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
-            replicaId.getDataNodeId().getPort(), expiredBlobs);
+
+        String response = null;
+        try {
+          response = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
+              replicaId.getDataNodeId().getPort(), expiredBlobs);
+        } catch (MessageFormatException e) {
+          response = "MessageFormatException";
+        } catch (IOException e) {
+          response = "IOException";
+        } catch (Exception e) {
+          response = "Exception";
+        }
         if (responseMap.containsKey(response)) {
           responseMap.get(response).add(replicaId);
         } else {
@@ -306,7 +325,7 @@ public class BlobValidator {
         }
         resultMap.put(blobId, response);
       } catch (MessageFormatException e) {
-        resultMap.put(blobId, "MessageFormatException " + e.getErrorCode());
+        resultMap.put(blobId, "MessageFormatException " + e.getMessage());
       } catch (IOException e) {
         resultMap.put(blobId, "IOException " + e.getMessage());
       } catch (Exception e) {
