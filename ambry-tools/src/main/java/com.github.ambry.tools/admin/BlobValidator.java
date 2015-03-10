@@ -47,10 +47,10 @@ import joptsimple.OptionSpec;
  */
 public class BlobValidator {
 
-  ArrayList<String> invalidBlobs;
+  Map<String, Exception> invalidBlobs;
 
   public BlobValidator() {
-    invalidBlobs = new ArrayList<String>();
+    invalidBlobs = new HashMap<String, Exception>();
   }
 
   public static void main(String args[]) {
@@ -198,7 +198,10 @@ public class BlobValidator {
         blobIdList.add(blobId);
       } catch (IOException e) {
         System.out.println("IOException thrown for blobId " + blobIdStr);
-        invalidBlobs.add(blobIdStr);
+        invalidBlobs.put(blobIdStr, e);
+      } catch (IllegalArgumentException e) {
+        System.out.println("IllegalArgumentException thrown for blobId " + blobIdStr);
+        invalidBlobs.put(blobIdStr, e);
       }
     }
     return blobIdList;
