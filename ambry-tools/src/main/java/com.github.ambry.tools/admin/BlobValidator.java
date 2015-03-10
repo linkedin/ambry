@@ -296,13 +296,22 @@ public class BlobValidator {
     Map<BlobId, String> resultMap = new HashMap<BlobId, String>();
     for (BlobId blobId : blobIdList) {
       System.out.println("Validating blob " + blobId + " on all replica " + replicaHost + ":" + replicaPort + "\n");
-      String response = validateBlobOnReplica(blobId, clusterMap, replicaHost, replicaPort, expiredBlobs);
-      if (response == ServerErrorCode.No_Error.toString()) {
-        System.out.println("Successfully read the blob " + blobId);
-      } else {
-        System.out.println("Failed to read the blob " + blobId + " due to " + response);
+      String response = null;
+      try {
+        response = validateBlobOnReplica(blobId, clusterMap, replicaHost, replicaPort, expiredBlobs);
+        if (response == ServerErrorCode.No_Error.toString()) {
+          System.out.println("Successfully read the blob " + blobId);
+        } else {
+          System.out.println("Failed to read the blob " + blobId + " due to " + response);
+        }
+        resultMap.put(blobId, response);
+      } catch (MessageFormatException e) {
+        resultMap.put(blobId, "MessageFormatException " + e.getErrorCode());
+      } catch (IOException e) {
+        resultMap.put(blobId, "IOException " + e.getMessage());
+      } catch (Exception e) {
+        resultMap.put(blobId, "Exception " + e.getMessage());
       }
-      resultMap.put(blobId, response);
       System.out.println();
     }
     System.out.println("\nOverall Summary \n");
@@ -312,7 +321,8 @@ public class BlobValidator {
   }
 
   private String validateBlobOnReplica(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
-      boolean expiredBlobs) {
+      boolean expiredBlobs)
+      throws MessageFormatException, IOException {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
     BlockingChannel blockingChannel = null;
@@ -445,10 +455,10 @@ public class BlobValidator {
       return ServerErrorCode.No_Error.toString();
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
-      return "MessageFormatException";
+      throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
-      return "IOException";
+      throw e;
     } finally {
       if (blockingChannel != null) {
         blockingChannel.disconnect();
