@@ -142,10 +142,10 @@ public class BlobStore implements Store {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
       long logEndOffsetBeforeCheck = log.getLogEndOffset();
-      // if any of the keys alreadys exist in the store, we fail
+      // if any of the keys already exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-        if (index.exists(info.getStoreKey())) {
-          throw new StoreException("Key already exist in store", StoreErrorCodes.Already_Exist);
+        if (index.findKey(info.getStoreKey()) != null) {
+          throw new StoreException("Key already exists in store", StoreErrorCodes.Already_Exist);
         }
       }
 
@@ -156,8 +156,8 @@ public class BlobStore implements Store {
         if (logEndOffsetBeforeCheck != currentLogEndOffset) {
           FileSpan fileSpan = new FileSpan(logEndOffsetBeforeCheck, currentLogEndOffset);
           for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-            if (index.exists(info.getStoreKey(), fileSpan)) {
-              throw new StoreException("Key already exist on filespan check", StoreErrorCodes.Already_Exist);
+            if (index.findKey(info.getStoreKey(), fileSpan) != null) {
+              throw new StoreException("Key already exists on filespan check", StoreErrorCodes.Already_Exist);
             }
           }
         }

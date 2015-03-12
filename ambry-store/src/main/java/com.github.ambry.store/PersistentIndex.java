@@ -314,55 +314,15 @@ public class PersistentIndex {
   }
 
   /**
-   * Indicates if a key is present in the index. Searches through entire index
-   * @param key The key to do the exist check against
-   * @return True, if the key exist in the index. False, otherwise.
-   * @throws StoreException
-   */
-  public boolean exists(StoreKey key)
-      throws StoreException {
-    return findKey(key) != null;
-  }
-
-  /**
-   * Indicates if a key is present in the index within the passed in filespan. Filespan represents
-   * the start offset and end offset
-   * @param key The key to do the exist check against
-   * @param fileSpan FileSpan which specifies the range within which search should be made
-   * @return True, if the key exist in the index within the filespan. False, otherwise.
-   * @throws StoreException
-   */
-
-  public boolean exists(StoreKey key, FileSpan fileSpan)
-      throws StoreException {
-    return findKey(key, fileSpan) != null;
-  }
-
-  /**
    * Finds a key in the index and returns the blob index value associated with it. If not found,
    * returns null
    * @param key  The key to find in the index
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
    */
-  protected IndexValue findKey(StoreKey key)
+  public IndexValue findKey(StoreKey key)
       throws StoreException {
-    final Timer.Context context = metrics.findTime.time();
-    try {
-      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToFind = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToFind.entrySet()) {
-        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
-        IndexValue value = entry.getValue().find(key);
-        if (value != null) {
-          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
-              value.getTimeToLiveInMs());
-          return value;
-        }
-      }
-    } finally {
-      context.stop();
-    }
-    return null;
+    return findKey(key, null);
   }
 
   /**
@@ -376,15 +336,20 @@ public class PersistentIndex {
   public IndexValue findKey(StoreKey key, FileSpan fileSpan)
       throws StoreException {
     final Timer.Context context = metrics.findTime.time();
-    logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
-        " to " + fileSpan.getEndOffset());
     try {
-      Long floorIndexSegment = indexes.floorKey(fileSpan.getStartOffset());
-      Long ceilIndexSegment = indexes.floorKey(fileSpan.getEndOffset());
-      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
-          indexes.subMap(floorIndexSegment, true, ceilIndexSegment, true);
-      metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
-      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
+      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToSearch = null;
+      if (fileSpan == null) {
+        logger.trace("Searching for " + key + " in the entire index");
+        segmentsMapToSearch = indexes.descendingMap();
+      } else {
+        logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
+            " to " + fileSpan.getEndOffset());
+        segmentsMapToSearch = indexes
+            .subMap(indexes.floorKey(fileSpan.getStartOffset()), true, indexes.floorKey(fileSpan.getEndOffset()), true)
+            .descendingMap();
+      }
+      metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
+      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -453,7 +418,7 @@ public class PersistentIndex {
       throws StoreException {
     Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
-      if (!exists(key)) {
+      if (findKey(key) == null) {
         missingKeys.add(key);
       }
     }

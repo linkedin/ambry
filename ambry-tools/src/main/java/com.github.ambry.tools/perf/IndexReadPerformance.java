@@ -244,7 +244,7 @@ public class IndexReadPerformance {
             int idToUse = new Random().nextInt(index.getIds().size());
             String idToLookup = (String) index.getIds().toArray()[idToUse];
 
-            if (!index.getIndex().exists(new BlobId(idToLookup, map))) {
+            if (index.getIndex().findKey(new BlobId(idToLookup, map)) == null) {
               System.out.println("Error id not found in index " + idToLookup);
             } else {
               System.out.println("found id " + idToLookup);

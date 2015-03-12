@@ -106,7 +106,7 @@ class BlobIndexMetrics extends PersistentIndex {
       throws StoreException {
     System.out.println("data dir " + datadir + " searching id " + key);
     long startTimeMs = System.currentTimeMillis();
-    boolean exist = super.exists(key);
+    boolean exist = super.findKey(key) != null;
     long endTimeMs = System.currentTimeMillis();
     System.out.println("Time to find an entry exist - " + (endTimeMs - startTimeMs));
     totalTimeTaken.addAndGet(endTimeMs - startTimeMs);

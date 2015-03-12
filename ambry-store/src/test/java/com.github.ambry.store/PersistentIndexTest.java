@@ -803,7 +803,7 @@ public class PersistentIndexTest {
       }
       Scheduler scheduler = new Scheduler(1, false);
       scheduler.startup();
-      Log log = new Log(logFile, 2400, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 2700, new StoreMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
@@ -813,7 +813,7 @@ public class PersistentIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
-      ByteBuffer buffer = ByteBuffer.allocate(2400);
+      ByteBuffer buffer = ByteBuffer.allocate(2700);
       log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
       MockId blobId2 = new MockId("id02");
@@ -836,6 +836,7 @@ public class PersistentIndexTest {
       IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(300, 1500));
       IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(300, 1800));
       IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(300, 2100));
+      IndexEntry entry2d = new IndexEntry(blobId2, new IndexValue(100, 2400, (byte) 1, -1));
 
       ArrayList<IndexEntry> list = new ArrayList<IndexEntry>();
       list.add(entry1);
@@ -856,62 +857,72 @@ public class PersistentIndexTest {
       list.clear();
       list.add(entry9);
       list.add(entry10);
-      index.addToIndex(list, new FileSpan(1800, 2400));
+      list.add(entry2d);
+      index.addToIndex(list, new FileSpan(1800, 2700));
       list.clear();
 
-      Assert.assertTrue(index.exists(blobId1, new FileSpan(0, 200)));
-      Assert.assertTrue(index.exists(blobId1, new FileSpan(101, 500)));
-      Assert.assertTrue(index.exists(blobId1, new FileSpan(700, 1200)));
-      Assert.assertTrue(index.exists(blobId1, new FileSpan(1000, 1500)));
-      Assert.assertFalse(index.exists(blobId1, new FileSpan(1200, 2400)));
-      Assert.assertFalse(index.exists(blobId1, new FileSpan(1201, 2000)));
-      Assert.assertFalse(index.exists(blobId1, new FileSpan(1600, 2200)));
-      Assert.assertFalse(index.exists(blobId1, new FileSpan(3000, 4000)));
+      // Index looks as follows:
+      // offsets:  0               1200             2400
+      // segments: [1, 2, 3, 4, 5] [6, 7, 8, 9, 10] [2d]
 
-      Assert.assertTrue(index.exists(blobId2, new FileSpan(0, 200)));
-      Assert.assertTrue(index.exists(blobId2, new FileSpan(101, 500)));
-      Assert.assertTrue(index.exists(blobId2, new FileSpan(700, 1200)));
-      Assert.assertTrue(index.exists(blobId2, new FileSpan(1000, 1500)));
-      Assert.assertFalse(index.exists(blobId2, new FileSpan(1200, 2400)));
-      Assert.assertFalse(index.exists(blobId2, new FileSpan(1201, 2000)));
-      Assert.assertFalse(index.exists(blobId2, new FileSpan(1600, 2200)));
-      Assert.assertFalse(index.exists(blobId2, new FileSpan(3000, 4000)));
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(0, 200)) != null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(101, 500)) != null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(700, 1200)) != null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(1000, 1500)) != null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(1200, 2400)) == null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(1201, 2000)) == null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(1600, 2200)) == null);
+      Assert.assertTrue(index.findKey(blobId1, new FileSpan(3000, 4000)) == null);
 
-      Assert.assertTrue(index.exists(blobId5, new FileSpan(0, 200)));
-      Assert.assertTrue(index.exists(blobId5, new FileSpan(101, 500)));
-      Assert.assertTrue(index.exists(blobId5, new FileSpan(700, 1200)));
-      Assert.assertTrue(index.exists(blobId5, new FileSpan(1000, 1500)));
-      Assert.assertFalse(index.exists(blobId5, new FileSpan(1200, 2400)));
-      Assert.assertFalse(index.exists(blobId5, new FileSpan(1201, 2000)));
-      Assert.assertFalse(index.exists(blobId5, new FileSpan(1600, 2200)));
-      Assert.assertFalse(index.exists(blobId5, new FileSpan(3000, 4000)));
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(0, 200)) != null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(101, 500)) != null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(700, 1200)) != null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(1000, 1500)) != null);
+      Assert.assertTrue(!index.findKey(blobId2, new FileSpan(1000, 1500)).isFlagSet(IndexValue.Flags.Delete_Index));
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(1201, 2000)) == null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(1200, 2400)) != null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(1600, 2200)) == null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(2600, 2900)) != null);
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(2600, 2900)).isFlagSet(IndexValue.Flags.Delete_Index));
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(1600, 2900)).isFlagSet(IndexValue.Flags.Delete_Index));
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(600, 2900)).isFlagSet(IndexValue.Flags.Delete_Index));
+      Assert.assertTrue(index.findKey(blobId2, new FileSpan(3000, 4000)) != null);
 
-      Assert.assertFalse(index.exists(blobId6, new FileSpan(0, 200)));
-      Assert.assertFalse(index.exists(blobId6, new FileSpan(101, 500)));
-      Assert.assertFalse(index.exists(blobId6, new FileSpan(700, 1199)));
-      Assert.assertTrue(index.exists(blobId6, new FileSpan(1000, 1400)));
-      Assert.assertTrue(index.exists(blobId6, new FileSpan(500, 1600)));
-      Assert.assertTrue(index.exists(blobId6, new FileSpan(1200, 2400)));
-      Assert.assertTrue(index.exists(blobId6, new FileSpan(1600, 2200)));
-      Assert.assertTrue(index.exists(blobId6, new FileSpan(3000, 4000)));
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(0, 200)) != null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(101, 500)) != null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(700, 1200)) != null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(1000, 1500)) != null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(1200, 2400)) == null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(1201, 2000)) == null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(1600, 2200)) == null);
+      Assert.assertTrue(index.findKey(blobId5, new FileSpan(3000, 4000)) == null);
 
-      Assert.assertFalse(index.exists(blobId9, new FileSpan(0, 200)));
-      Assert.assertFalse(index.exists(blobId9, new FileSpan(101, 500)));
-      Assert.assertFalse(index.exists(blobId9, new FileSpan(700, 1199)));
-      Assert.assertTrue(index.exists(blobId9, new FileSpan(1000, 1400)));
-      Assert.assertTrue(index.exists(blobId9, new FileSpan(500, 1600)));
-      Assert.assertTrue(index.exists(blobId9, new FileSpan(1200, 2400)));
-      Assert.assertTrue(index.exists(blobId9, new FileSpan(1600, 2200)));
-      Assert.assertTrue(index.exists(blobId9, new FileSpan(3000, 4000)));
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(0, 200)) == null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(101, 500)) == null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(700, 1199)) == null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(1000, 1400)) != null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(500, 1600)) != null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(1200, 2400)) != null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(1600, 2200)) != null);
+      Assert.assertTrue(index.findKey(blobId6, new FileSpan(3000, 4000)) == null);
 
-      Assert.assertFalse(index.exists(blobId10, new FileSpan(0, 200)));
-      Assert.assertFalse(index.exists(blobId10, new FileSpan(101, 500)));
-      Assert.assertFalse(index.exists(blobId10, new FileSpan(700, 1199)));
-      Assert.assertTrue(index.exists(blobId10, new FileSpan(1000, 1400)));
-      Assert.assertTrue(index.exists(blobId10, new FileSpan(500, 1600)));
-      Assert.assertTrue(index.exists(blobId10, new FileSpan(1200, 2400)));
-      Assert.assertTrue(index.exists(blobId10, new FileSpan(1600, 2200)));
-      Assert.assertTrue(index.exists(blobId10, new FileSpan(3000, 4000)));
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(0, 200)) == null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(101, 500)) == null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(700, 1199)) == null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(1000, 1400)) != null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(500, 1600)) != null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(1200, 2400)) != null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(1600, 2200)) != null);
+      Assert.assertTrue(index.findKey(blobId9, new FileSpan(3000, 4000)) == null);
+
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(0, 200)) == null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(101, 500)) == null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(700, 1199)) == null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(1000, 1400)) != null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(500, 1600)) != null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(1200, 2400)) != null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(1600, 2200)) != null);
+      Assert.assertTrue(index.findKey(blobId10, new FileSpan(3000, 4000)) == null);
 
       index.close();
     } catch (Exception e) {
