@@ -208,14 +208,20 @@ public class PersistentIndex {
       }
       IndexValue value = findKey(info.getStoreKey());
       if (value != null) {
-        // if the key already exist in the index, update it if it is deleted
+        // if the key already exists in the index, update it if it is deleted
         logger.info("Index : {} msg already exist with key {}", dataDir, info.getStoreKey());
-        if (info.isDeleted()) {
+        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          // key already has a deleted entry in the index!
+          logger.error("Index: {} recovered msg {} is for a key that is already deleted in the index: "
+              + "index offset {} Original Offset {}", dataDir, info, value.getOffset(),
+              value.getOriginalMessageOffset());
+          throw new StoreException("Encountered a duplicate record for key", StoreErrorCodes.Initialization_Error);
+        } else if (info.isDeleted()) {
           value.setFlag(IndexValue.Flags.Delete_Index);
           value.setNewOffset(runningOffset);
           value.setNewSize(info.getSize());
         } else {
-          throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
+          throw new StoreException("Illegal message state during recovery. ", StoreErrorCodes.Initialization_Error);
         }
         validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
@@ -326,32 +332,10 @@ public class PersistentIndex {
    * @return True, if the key exist in the index within the filespan. False, otherwise.
    * @throws StoreException
    */
+
   public boolean exists(StoreKey key, FileSpan fileSpan)
       throws StoreException {
-    final Timer.Context context = metrics.findTime.time();
-    logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
-        " to " + fileSpan.getEndOffset());
-    try {
-      Long floorIndexSegment = indexes.floorKey(fileSpan.getStartOffset());
-      Long ceilIndexSegment = indexes.floorKey(fileSpan.getEndOffset());
-      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
-          indexes.subMap(floorIndexSegment, true, ceilIndexSegment, true);
-      metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
-      boolean foundValue = false;
-      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
-        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
-        IndexValue value = entry.getValue().find(key);
-        if (value != null) {
-          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
-              value.getTimeToLiveInMs());
-          foundValue = true;
-          break;
-        }
-      }
-      return foundValue;
-    } finally {
-      context.stop();
-    }
+    return findKey(key, fileSpan) != null;
   }
 
   /**
@@ -367,6 +351,40 @@ public class PersistentIndex {
     try {
       ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToFind = indexes.descendingMap();
       for (Map.Entry<Long, IndexSegment> entry : segmentsMapToFind.entrySet()) {
+        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
+        IndexValue value = entry.getValue().find(key);
+        if (value != null) {
+          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
+              value.getTimeToLiveInMs());
+          return value;
+        }
+      }
+    } finally {
+      context.stop();
+    }
+    return null;
+  }
+
+  /**
+   * Finds the value associated with a key if it is present in the index within the passed in filespan.
+   * Filespan represents the start offset and end offset in the log.
+   * @param key The key to do the exist check against
+   * @param fileSpan FileSpan which specifies the range within which search should be made
+   * @return The associated IndexValue if one exists within the fileSpan, null otherwise.
+   * @throws StoreException
+   */
+  public IndexValue findKey(StoreKey key, FileSpan fileSpan)
+      throws StoreException {
+    final Timer.Context context = metrics.findTime.time();
+    logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
+        " to " + fileSpan.getEndOffset());
+    try {
+      Long floorIndexSegment = indexes.floorKey(fileSpan.getStartOffset());
+      Long ceilIndexSegment = indexes.floorKey(fileSpan.getEndOffset());
+      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
+          indexes.subMap(floorIndexSegment, true, ceilIndexSegment, true);
+      metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
+      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {

@@ -141,7 +141,6 @@ public class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
-      long indexOffsetBeforeCheck = index.getCurrentEndOffset();
       long logEndOffsetBeforeCheck = log.getLogEndOffset();
       // if any of the keys alreadys exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
@@ -196,6 +195,7 @@ public class BlobStore implements Store {
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
+      long logEndOffsetBeforeCheck = log.getLogEndOffset();
       for (MessageInfo info : infoList) {
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
@@ -208,13 +208,24 @@ public class BlobStore implements Store {
         }
       }
       synchronized (lock) {
-        long logCurrentEndOffset = log.getLogEndOffset();
+        long currentLogEndOffset = log.getLogEndOffset();
+        if (logEndOffsetBeforeCheck != currentLogEndOffset) {
+          FileSpan fileSpan = new FileSpan(logEndOffsetBeforeCheck, currentLogEndOffset);
+          for (MessageInfo info : infoList) {
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              throw new StoreException(
+                  "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                  StoreErrorCodes.ID_Deleted);
+            }
+          }
+        }
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(logCurrentEndOffset, logCurrentEndOffset + info.getSize());
+          FileSpan fileSpan = new FileSpan(currentLogEndOffset, currentLogEndOffset + info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          logCurrentEndOffset += info.getSize();
+          currentLogEndOffset += info.getSize();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
