@@ -56,7 +56,7 @@ public class AdminTool {
           parser.accepts("ambryBlobId", "The blob id to execute get on").withRequiredArg().describedAs("The blob id")
               .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> expiredBlobsOpt =
+      ArgumentAcceptingOptionSpec<String> includeExpiredBlobsOpt =
           parser.accepts("includeExpiredBlob", "Included expired blobs too").withRequiredArg()
               .describedAs("Whether to include expired blobs while querying or not").defaultsTo("false")
               .ofType(String.class);
@@ -87,18 +87,18 @@ public class AdminTool {
       AdminTool adminTool = new AdminTool();
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
-      boolean expiredBlobs = Boolean.parseBoolean(options.valueOf(expiredBlobsOpt));
+      boolean includeExpiredBlobs = Boolean.parseBoolean(options.valueOf(includeExpiredBlobsOpt));
       if (typeOfOperation.equalsIgnoreCase("LIST_REPLICAS")) {
         List<ReplicaId> replicaIdList = adminTool.getReplicas(blobId);
         for (ReplicaId replicaId : replicaIdList) {
           System.out.println(replicaId);
         }
       } else if (typeOfOperation.equalsIgnoreCase("GET_BLOB")) {
-        adminTool.getBlob(blobId, map, expiredBlobs);
+        adminTool.getBlob(blobId, map, includeExpiredBlobs);
       } else if (typeOfOperation.equalsIgnoreCase("GET_BLOB_PROPERTIES")) {
-        adminTool.getBlobProperties(blobId, map, expiredBlobs);
+        adminTool.getBlobProperties(blobId, map, includeExpiredBlobs);
       } else if (typeOfOperation.equalsIgnoreCase("GET_USERMETADATA")) {
-        adminTool.getUserMetadata(blobId, map, expiredBlobs);
+        adminTool.getUserMetadata(blobId, map, includeExpiredBlobs);
       } else {
         System.out.println("Invalid Type of Operation ");
         System.exit(1);
@@ -121,8 +121,8 @@ public class AdminTool {
             getBlobProperties(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                 expiredBlobs);
         break;
-      } catch (MessageFormatException e) { }
-      catch (IOException e) { }
+      } catch (Exception e) {
+      }
     }
     return blobProperties;
   }
@@ -203,8 +203,8 @@ public class AdminTool {
         blobOutput = getBlob(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
             expiredBlobs);
         break;
-      } catch (MessageFormatException e) { }
-      catch (IOException e) { }
+      } catch (Exception e) {
+      }
     }
     return blobOutput;
   }
@@ -286,8 +286,8 @@ public class AdminTool {
             getUserMetadata(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                 expiredBlobs);
         break;
-      } catch (MessageFormatException e) { }
-      catch (IOException e) { }
+      } catch (Exception e) {
+      }
     }
     return userMetadata;
   }
