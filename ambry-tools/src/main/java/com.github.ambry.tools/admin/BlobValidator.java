@@ -496,7 +496,7 @@ public class BlobValidator {
    * @param clusterMap
    * @return
    */
-  private static GetResponse getGetResponseFromStream(ConnectedChannel blockingChannel, GetRequest getRequest,
+  public static GetResponse getGetResponseFromStream(ConnectedChannel blockingChannel, GetRequest getRequest,
       ClusterMap clusterMap) {
     GetResponse getResponse = null;
     try {
