@@ -254,13 +254,6 @@ public class AdminTool {
         }
       } else {
         BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
-        byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
-        int blobSizeToRead = (int) blobOutput.getSize();
-        int blobSizeRead = 0;
-        while (blobSizeRead < blobSizeToRead) {
-          blobSizeRead += blobOutput.getStream().read(blobFromAmbry, blobSizeRead, blobSizeToRead - blobSizeRead);
-        }
-        System.out.println("BlobContent deserialized. Size " + blobOutput.getSize());
         return blobOutput;
       }
     } catch (MessageFormatException mfe) {
