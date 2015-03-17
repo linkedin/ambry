@@ -121,8 +121,10 @@ turn contains all index files] --outFile [outFile]
 ```
 Root Directory for Partition should contains N sub-directories pertaining to N replicas. Each sub-directory's name
 should be the same as name of the replica. Each sub directory(replica) in turn should have all the index segments within it.
+
 A sample structure of a root Directory:
-rootDir:
+
+rootDir
   ela4-app8763.prod.linkedin.com
     0_index
     10264262199_index
