@@ -257,9 +257,11 @@ public class AdminTool {
         byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
         int blobSizeToRead = (int) blobOutput.getSize();
         int blobSizeRead = 0;
+        blobOutput.getStream().mark(blobSizeToRead);
         while (blobSizeRead < blobSizeToRead) {
           blobSizeRead += blobOutput.getStream().read(blobFromAmbry, blobSizeRead, blobSizeToRead - blobSizeRead);
         }
+        blobOutput.getStream().reset();
         System.out.println("BlobContent deserialized. Size " + blobOutput.getSize());
         return blobOutput;
       }
