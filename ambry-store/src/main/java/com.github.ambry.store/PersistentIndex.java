@@ -307,8 +307,8 @@ public class PersistentIndex {
         metrics.keySizeMismatchCount.inc(1);
         throw new IllegalArgumentException(
             "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
-                + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
-                + firstKey);
+                + entry.getKey().getLongForm() + " is different from size of first key: " + firstKey.sizeInBytes()
+                + " key: " + firstKey.getLongForm());
       }
     }
   }
@@ -925,16 +925,17 @@ class StoreFindToken implements FindToken {
 
   @Override
   public String toString() {
-    String tokenStringFormat = "version: " + version;
+    StringBuilder sb = new StringBuilder();
+    sb.append("version: ").append(version);
     if (sessionId != null) {
-      tokenStringFormat += " sessionId " + sessionId;
+      sb.append(" sessionId ").append(sessionId);
     }
     if (storeKey != null) {
-      tokenStringFormat += " indexStartOffset " + indexStartOffset + " storeKey " + storeKey;
+      sb.append(" indexStartOffset ").append(indexStartOffset).append(" storeKey ").append(storeKey);
     } else {
-      tokenStringFormat += " offset " + offset;
+      sb.append(" offset ").append(offset);
     }
-    tokenStringFormat += " bytesRead " + bytesRead;
-    return tokenStringFormat;
+    sb.append(" bytesRead ").append(bytesRead);
+    return sb.toString();
   }
 }
