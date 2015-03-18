@@ -89,15 +89,10 @@ public class BlobId extends StoreKey {
   @Override
   public String getLongForm() {
     StringBuilder sb = new StringBuilder();
-    sb.append("[");
-    sb.append(getID());
-    sb.append(":");
-    sb.append(version);
-    sb.append(":");
-    sb.append(partitionId);
-    sb.append(":");
-    sb.append(uuid);
-    sb.append("]");
+    sb.append("[").append(getID());
+    sb.append(":").append(version);
+    sb.append(":").append(partitionId);
+    sb.append(":").append(uuid).append("]");
     return sb.toString();
   }
 
