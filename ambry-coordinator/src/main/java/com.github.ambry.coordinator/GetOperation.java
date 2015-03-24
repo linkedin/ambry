@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,10 +55,11 @@ public abstract class GetOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags,
+      AtomicInteger downReplicaCount)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        getOperationPolicy(datacenterName, blobId.getPartition(), oc));
+        getOperationPolicy(datacenterName, blobId.getPartition(), oc, downReplicaCount));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -75,14 +77,16 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
 
-  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
+  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
+      AtomicInteger downReplicaCount)
       throws CoordinatorException {
     OperationPolicy getOperationPolicy = null;
     if (oc.isCrossDCProxyCallEnabled()) {
       getOperationPolicy =
-          new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc);
+          new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc,
+              downReplicaCount);
     } else {
-      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc);
+      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc, downReplicaCount);
     }
     return getOperationPolicy;
   }

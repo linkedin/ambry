@@ -8,6 +8,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,11 +59,14 @@ public class CoordinatorMetrics {
 
   public final Gauge<Integer> crossColoCallsEnabled;
 
+  public final Gauge<Integer> downReplicaCount;
+
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled,
+      final AtomicInteger downReplicaCount) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -114,6 +118,13 @@ public class CoordinatorMetrics {
       @Override
       public Integer getValue() {
         return (crossDCProxyCallsEnabled == true ? 1 : 0);
+      }
+    };
+
+    this.downReplicaCount = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return downReplicaCount.get();
       }
     };
 
@@ -181,7 +192,7 @@ public class CoordinatorMetrics {
     }
   }
 
-  private void updateOperationMetric(CoordinatorOperationType operation){
+  private void updateOperationMetric(CoordinatorOperationType operation) {
     switch (operation) {
       case PutBlob:
         putBlobError.inc();

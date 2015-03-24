@@ -11,6 +11,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,10 +40,10 @@ final public class PutOperation extends Operation {
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream)
+      ByteBuffer userMetadata, InputStream blobStream, AtomicInteger downReplicaCount)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
+        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc, downReplicaCount));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 

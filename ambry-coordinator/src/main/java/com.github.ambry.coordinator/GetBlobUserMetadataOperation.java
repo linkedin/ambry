@@ -8,6 +8,7 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,10 +27,11 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobUserMetadataOperation(String datacenterName, ConnectionPool connectionPool,
-      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
+      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap,
+      AtomicInteger downReplicaCount)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobUserMetadata);
+        MessageFormatFlags.BlobUserMetadata, downReplicaCount);
     this.userMetadata = null;
   }
 

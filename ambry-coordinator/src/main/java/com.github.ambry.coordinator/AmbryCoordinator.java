@@ -17,6 +17,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +54,7 @@ public class AmbryCoordinator implements Coordinator {
   private ConnectionPool connectionPool;
   private final Random randomForPartitionSelection;
   private AtomicBoolean crossDCProxyCallsEnabled;
+  private AtomicInteger downReplicaCount;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -82,7 +84,8 @@ public class AmbryCoordinator implements Coordinator {
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
       this.crossDCProxyCallsEnabled = new AtomicBoolean(coordinatorConfig.crossDCProxyCallEnable);
-      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled.get());
+      this.downReplicaCount = new AtomicInteger(0);
+      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled.get(), downReplicaCount);
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
@@ -141,8 +144,8 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(), coordinatorMetrics,
-        responseHandler);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
+        coordinatorMetrics, responseHandler);
   }
 
   private PartitionId getPartitionForPut()
@@ -199,7 +202,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
           new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, blobProperties, userMetadata, blobStream);
+              operationTimeoutMs, blobProperties, userMetadata, blobStream, downReplicaCount);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
@@ -223,7 +226,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
           new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs);
+              operationTimeoutMs, downReplicaCount);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
     } catch (CoordinatorException e) {
@@ -247,7 +250,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
           new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, downReplicaCount);
       gbpo.execute();
       return gbpo.getBlobProperties();
     } catch (CoordinatorException e) {
@@ -270,7 +273,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
           new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, downReplicaCount);
       gumo.execute();
       return gumo.getUserMetadata();
     } catch (CoordinatorException e) {
@@ -294,7 +297,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
           new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, downReplicaCount);
       gbdo.execute();
 
       return gbdo.getBlobOutput();
