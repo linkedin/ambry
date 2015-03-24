@@ -17,7 +17,6 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
-import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -185,7 +184,7 @@ public class DumpData {
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
-      ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyCheckerResultMap) {
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap) {
     long numberOfKeysProcessed = 0;
     try {
       DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
@@ -213,13 +212,13 @@ public class DumpData {
                   " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
-          if (consistencyCheckerResultMap == null) {
+          if (blobIdToStatusMap == null) {
             if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
               logOutput(msg);
             }
           } else {
-            if (consistencyCheckerResultMap.containsKey(key.toString())) {
-              ConsistencyCheckerMapValue mapValue = consistencyCheckerResultMap.get(key.toString());
+            if (blobIdToStatusMap.containsKey(key.toString())) {
+              BlobStatus mapValue = blobIdToStatusMap.get(key.toString());
               if (isDeleted) {
                 if (mapValue.getAvailable().contains(key.toString())) {
                   mapValue.getAvailable().remove(key.toString());
@@ -232,8 +231,8 @@ public class DumpData {
                 }
               }
             } else {
-              ConsistencyCheckerMapValue mapValue = new ConsistencyCheckerMapValue(replica, isDeleted, replicaList);
-              consistencyCheckerResultMap.put(key.toString(), mapValue);
+              BlobStatus mapValue = new BlobStatus(replica, isDeleted, replicaList);
+              blobIdToStatusMap.put(key.toString(), mapValue);
             }
           }
           if (keysize != key.sizeInBytes()) {

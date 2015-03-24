@@ -9,9 +9,6 @@ import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -100,11 +97,11 @@ public class ConsistencyCheckerTool {
     File rootDir = new File(directoryForConsistencyCheck);
     ArrayList<String> replicaList = populateReplicaList(rootDir);
     logOutput("Replica List " + replicaList);
-    ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyResultMap = new ConcurrentHashMap<String, ConsistencyCheckerMapValue>();
+    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
     AtomicLong totalKeysProcessed = new AtomicLong(0);
     int replicaCount = replicaList.size();
-    checkForConsistency(rootDir.listFiles(), map, replicaList, consistencyResultMap, totalKeysProcessed);
-    populateOutput(totalKeysProcessed, consistencyResultMap, replicaCount);
+    checkForConsistency(rootDir.listFiles(), map, replicaList, blobIdToStatusMap, totalKeysProcessed);
+    populateOutput(totalKeysProcessed, blobIdToStatusMap, replicaCount);
   }
 
   private ArrayList<String> populateReplicaList(File rootDir){
@@ -118,12 +115,12 @@ public class ConsistencyCheckerTool {
   }
 
   private void checkForConsistency(File[] replicas, ClusterMap map, ArrayList<String> replicasList,
-      ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyResultMap, AtomicLong totalKeysProcessed) throws IOException, InterruptedException{
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed) throws IOException, InterruptedException{
     DumpData dumpData = new DumpData(outFile, fileWriter, map);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
     for (File replica : replicas) {
       new Thread(
-          new ReplicaProcessorThread(map, replica, replicasList, consistencyResultMap, totalKeysProcessed, dumpData, countDownLatch)).start();
+          new ReplicaProcessorThread(map, replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData, countDownLatch)).start();
     }
     countDownLatch.await();
   }
@@ -140,14 +137,14 @@ public class ConsistencyCheckerTool {
     }
   }
 
-  private void populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyResultMap, int replicaCount){
+  private void populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, int replicaCount){
     logOutput("Total keys processed " + totalKeysProcessed.get());
-    logOutput("\nTotal Blobs Found " + consistencyResultMap.size());
+    logOutput("\nTotal Blobs Found " + blobIdToStatusMap.size());
     long inconsistentBlobs = 0;
     long realInconsistentBlobs = 0;
     long acceptableInconsistentBlobs = 0;
-    for (String blobId : consistencyResultMap.keySet()) {
-      ConsistencyCheckerMapValue consistencyBlobResult = consistencyResultMap.get(blobId);
+    for (String blobId : blobIdToStatusMap.keySet()) {
+      BlobStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       boolean isValid = consistencyBlobResult.getAvailable().size() == replicaCount
           || consistencyBlobResult.getDeletedOrExpired().size() == replicaCount;
       if (!isValid) {
@@ -185,18 +182,18 @@ public class ConsistencyCheckerTool {
     ClusterMap map;
     File rootDirectory ;
     ArrayList<String> replicaList ;
-    ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyResultMap;
+    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap;
     AtomicLong totalKeysProcessed ;
     DumpData dumpData ;
     CountDownLatch countDownLatch;
 
     public ReplicaProcessorThread(ClusterMap map, File rootDirectory, ArrayList<String> replicaList,
-        ConcurrentHashMap<String, ConsistencyCheckerMapValue> consistencyResultMap, AtomicLong totalKeysProcessed, DumpData dumpData,
+        ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
         CountDownLatch countDownLatch){
       this.map = map;
       this.rootDirectory = rootDirectory;
       this.replicaList = replicaList;
-      this.consistencyResultMap = consistencyResultMap;
+      this.blobIdToStatusMap = blobIdToStatusMap;
       this.totalKeysProcessed = totalKeysProcessed;
       this.dumpData = dumpData;
       this.countDownLatch = countDownLatch;
@@ -208,7 +205,7 @@ public class ConsistencyCheckerTool {
       for (File indexFile : indexFiles) {
         keysProcessedforReplica +=
             dumpData.dumpIndex(indexFile, rootDirectory.getName(), replicaList,
-                new ArrayList<String>(), consistencyResultMap);
+                new ArrayList<String>(), blobIdToStatusMap);
       }
       logOutput("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
       totalKeysProcessed.addAndGet(keysProcessedforReplica);
