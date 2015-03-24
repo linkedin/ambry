@@ -3,13 +3,13 @@ package com.github.ambry.tools.admin;
 import java.util.ArrayList;
 
 
-public class ConsistencyCheckerMapValue {
+public class BlobStatus {
   ArrayList<String> available;
   ArrayList<String> deletedOrExpired;
   ArrayList<String> unavailable;
   boolean isDeletedOrExpired;
 
-  public ConsistencyCheckerMapValue(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
+  public BlobStatus(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
     available = new ArrayList<String>();
     deletedOrExpired = new ArrayList<String>();
     unavailable = new ArrayList<String>();
