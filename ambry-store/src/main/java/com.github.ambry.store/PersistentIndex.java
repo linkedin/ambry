@@ -208,14 +208,20 @@ public class PersistentIndex {
       }
       IndexValue value = findKey(info.getStoreKey());
       if (value != null) {
-        // if the key already exist in the index, update it if it is deleted
+        // if the key already exists in the index, update it if it is deleted
         logger.info("Index : {} msg already exist with key {}", dataDir, info.getStoreKey());
-        if (info.isDeleted()) {
+        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          // key already has a deleted entry in the index!
+          logger.error("Index: {} recovered msg {} is for a key that is already deleted in the index: "
+              + "index offset {} Original Offset {}", dataDir, info, value.getOffset(),
+              value.getOriginalMessageOffset());
+          throw new StoreException("Encountered a duplicate record for key", StoreErrorCodes.Initialization_Error);
+        } else if (info.isDeleted()) {
           value.setFlag(IndexValue.Flags.Delete_Index);
           value.setNewOffset(runningOffset);
           value.setNewSize(info.getSize());
         } else {
-          throw new StoreException("Illegal message state during restore. ", StoreErrorCodes.Initialization_Error);
+          throw new StoreException("Illegal message state during recovery. ", StoreErrorCodes.Initialization_Error);
         }
         validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
@@ -301,56 +307,9 @@ public class PersistentIndex {
         metrics.keySizeMismatchCount.inc(1);
         throw new IllegalArgumentException(
             "Key sizes in the entries list are not the same, key size: " + entry.getKey().sizeInBytes() + " key: "
-                + entry.getKey() + " is different from size of first key: " + firstKey.sizeInBytes() + " key: "
-                + firstKey);
+                + entry.getKey().getLongForm() + " is different from size of first key: " + firstKey.sizeInBytes()
+                + " key: " + firstKey.getLongForm());
       }
-    }
-  }
-
-  /**
-   * Indicates if a key is present in the index. Searches through entire index
-   * @param key The key to do the exist check against
-   * @return True, if the key exist in the index. False, otherwise.
-   * @throws StoreException
-   */
-  public boolean exists(StoreKey key)
-      throws StoreException {
-    return findKey(key) != null;
-  }
-
-  /**
-   * Indicates if a key is present in the index within the passed in filespan. Filespan represents
-   * the start offset and end offset
-   * @param key The key to do the exist check against
-   * @param fileSpan FileSpan which specifies the range within which search should be made
-   * @return True, if the key exist in the index within the filespan. False, otherwise.
-   * @throws StoreException
-   */
-  public boolean exists(StoreKey key, FileSpan fileSpan)
-      throws StoreException {
-    final Timer.Context context = metrics.findTime.time();
-    logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
-        " to " + fileSpan.getEndOffset());
-    try {
-      Long floorIndexSegment = indexes.floorKey(fileSpan.getStartOffset());
-      Long ceilIndexSegment = indexes.floorKey(fileSpan.getEndOffset());
-      ConcurrentNavigableMap<Long, IndexSegment> interestedSegmentsMap =
-          indexes.subMap(floorIndexSegment, true, ceilIndexSegment, true);
-      metrics.segmentSizeForExists.update(interestedSegmentsMap.size());
-      boolean foundValue = false;
-      for (Map.Entry<Long, IndexSegment> entry : interestedSegmentsMap.entrySet()) {
-        logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
-        IndexValue value = entry.getValue().find(key);
-        if (value != null) {
-          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
-              value.getTimeToLiveInMs());
-          foundValue = true;
-          break;
-        }
-      }
-      return foundValue;
-    } finally {
-      context.stop();
     }
   }
 
@@ -361,12 +320,36 @@ public class PersistentIndex {
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
    */
-  protected IndexValue findKey(StoreKey key)
+  public IndexValue findKey(StoreKey key)
+      throws StoreException {
+    return findKey(key, null);
+  }
+
+  /**
+   * Finds the value associated with a key if it is present in the index within the passed in filespan.
+   * Filespan represents the start offset and end offset in the log.
+   * @param key The key to do the exist check against
+   * @param fileSpan FileSpan which specifies the range within which search should be made
+   * @return The associated IndexValue if one exists within the fileSpan, null otherwise.
+   * @throws StoreException
+   */
+  public IndexValue findKey(StoreKey key, FileSpan fileSpan)
       throws StoreException {
     final Timer.Context context = metrics.findTime.time();
     try {
-      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToFind = indexes.descendingMap();
-      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToFind.entrySet()) {
+      ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToSearch = null;
+      if (fileSpan == null) {
+        logger.trace("Searching for " + key + " in the entire index");
+        segmentsMapToSearch = indexes.descendingMap();
+      } else {
+        logger.trace("Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() +
+            " to " + fileSpan.getEndOffset());
+        segmentsMapToSearch = indexes
+            .subMap(indexes.floorKey(fileSpan.getStartOffset()), true, indexes.floorKey(fileSpan.getEndOffset()), true)
+            .descendingMap();
+      }
+      metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
+      for (Map.Entry<Long, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -435,7 +418,7 @@ public class PersistentIndex {
       throws StoreException {
     Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
-      if (!exists(key)) {
+      if (findKey(key) == null) {
         missingKeys.add(key);
       }
     }
@@ -942,16 +925,17 @@ class StoreFindToken implements FindToken {
 
   @Override
   public String toString() {
-    String tokenStringFormat = "version: " + version;
+    StringBuilder sb = new StringBuilder();
+    sb.append("version: ").append(version);
     if (sessionId != null) {
-      tokenStringFormat += " sessionId " + sessionId;
+      sb.append(" sessionId ").append(sessionId);
     }
     if (storeKey != null) {
-      tokenStringFormat += " indexStartOffset " + indexStartOffset + " storeKey " + storeKey;
+      sb.append(" indexStartOffset ").append(indexStartOffset).append(" storeKey ").append(storeKey);
     } else {
-      tokenStringFormat += " offset " + offset;
+      sb.append(" offset ").append(offset);
     }
-    tokenStringFormat += " bytesRead " + bytesRead;
-    return tokenStringFormat;
+    sb.append(" bytesRead ").append(bytesRead);
+    return sb.toString();
   }
 }
