@@ -114,12 +114,10 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
   List<ReplicaId> corruptRequests;
   List<ReplicaId> failedRequests;
   List<ReplicaId> successfulRequests;
-  AtomicInteger downReplicaCount;
 
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled,
-      AtomicInteger downReplicaCount)
+  ProbeLocalFirstOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
     this.orderedReplicaIds = orderReplicaIds(datacenterName, partitionId.getReplicaIds(), crossDCProxyCallEnabled);
     this.replicaIdCount = this.orderedReplicaIds.size();
@@ -132,7 +130,6 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     this.corruptRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.failedRequests = new ArrayList<ReplicaId>(replicaIdCount);
     this.successfulRequests = new ArrayList<ReplicaId>(replicaIdCount);
-    this.downReplicaCount = downReplicaCount;
   }
 
   Queue<ReplicaId> orderReplicaIds(String datacenterName, List<ReplicaId> replicaIds, boolean crossDCProxyCallEnabled) {
@@ -232,10 +229,9 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
  * Serially probes data nodes until blob is retrieved.
  */
 class SerialOperationPolicy extends ProbeLocalFirstOperationPolicy {
-  public SerialOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
-      AtomicInteger downReplicaCount)
+  public SerialOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled(), downReplicaCount);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
   }
 
   @Override
@@ -265,10 +261,9 @@ abstract class ParallelOperationPolicy extends ProbeLocalFirstOperationPolicy {
   int successTarget;
   int requestParallelism;
 
-  ParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled,
-      AtomicInteger downReplicaCount)
+  ParallelOperationPolicy(String datacenterName, PartitionId partitionId, boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId, crossDCProxyCallEnabled, downReplicaCount);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
   }
 
   @Override
@@ -315,9 +310,9 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
   private final CoordinatorMetrics coordinatorMetrics;
 
   public GetCrossColoParallelOperationPolicy(String datacenterName, PartitionId partitionId, int parallelism,
-      OperationContext oc, AtomicInteger downReplicaCount)
+      OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, true, downReplicaCount);
+    super(datacenterName, partitionId, true);
     super.successTarget = 1;
     super.requestParallelism = parallelism;
     this.localDataCenterName = datacenterName;
@@ -326,8 +321,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
     Map<String, Integer> availableReplicasCountPerDatacenter = new HashMap<String, Integer>();
-    populateReplicaListPerDatacenter(partitionId.getReplicaIds(), availableReplicasCountPerDatacenter,
-        downReplicaCount);
+    populateReplicaListPerDatacenter(partitionId.getReplicaIds(), availableReplicasCountPerDatacenter);
     remoteDataCenterCount = replicaListPerDatacenter.size() - 1;
     shuffleAndPopulate(availableReplicasCountPerDatacenter);
   }
@@ -337,11 +331,9 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * and availableReplicaCountPerDatacenter (Map of datacenter to count of available replicas)
    * @param replicaIds ReplicaIds which are to be added to the interested data structure
    * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
-   * @param downReplicaCount Total number of down replicas
    */
   private void populateReplicaListPerDatacenter(List<ReplicaId> replicaIds,
-      Map<String, Integer> availableReplicaCountPerDatacenter, AtomicInteger downReplicaCount) {
-    int totalDownReplicas = 0;
+      Map<String, Integer> availableReplicaCountPerDatacenter) {
     for (ReplicaId replicaId : replicaIds) {
       String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
       if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
@@ -352,11 +344,8 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
         replicaListPerDatacenter.get(dataCenterName).add(replicaId);
         availableReplicaCountPerDatacenter
             .put(dataCenterName, availableReplicaCountPerDatacenter.get(dataCenterName) + 1);
-      } else {
-        totalDownReplicas++;
       }
     }
-    downReplicaCount.set(totalDownReplicas);
   }
 
   /**
@@ -503,9 +492,9 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
  */
 class GetTwoInParallelOperationPolicy extends ParallelOperationPolicy {
   public GetTwoInParallelOperationPolicy(String datacenterName, PartitionId partitionId,
-      boolean crossDCProxyCallEnabled, AtomicInteger downReplicaCount)
+      boolean crossDCProxyCallEnabled)
       throws CoordinatorException {
-    super(datacenterName, partitionId, crossDCProxyCallEnabled, downReplicaCount);
+    super(datacenterName, partitionId, crossDCProxyCallEnabled);
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
@@ -529,10 +518,9 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
 
    (2) sending additional put requests (increasing the requestParallelism) after a short timeout.
   */
-  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
-      AtomicInteger downReplicaCount)
+  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled(), downReplicaCount);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;
@@ -551,10 +539,9 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
  * the partition. Policy is used for delete
  */
 class AllInParallelOperationPolicy extends ParallelOperationPolicy {
-  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
-      AtomicInteger downReplicaCount)
+  public AllInParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
-    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled(), downReplicaCount);
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
     if (replicaIdCount == 1) {
       super.successTarget = 1;
       super.requestParallelism = 1;

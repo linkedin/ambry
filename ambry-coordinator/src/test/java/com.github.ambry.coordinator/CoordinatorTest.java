@@ -973,36 +973,6 @@ public class CoordinatorTest {
     }
   }
 
-  void putExceptionOnUnavailability(ClusterMap clusterMap)
-      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-
-    for (ServerErrorCode putErrorCode : putErrorMappings.keySet()) {
-      if (putErrorCode.equals(ServerErrorCode.Disk_Unavailable) ||
-          putErrorCode.equals(ServerErrorCode.Partition_ReadOnly) ||
-          putErrorCode.equals(ServerErrorCode.IO_Error)) {
-        // Considering only those error codes which would cause the replica to be down which in turn will affect the
-        // replicas to be considered for put policy
-        MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-        inducePutFailure(TOTAL_HOST_COUNT, putErrorCode);
-        AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
-        for (int i = 0; i < 20; ++i) {
-          BlobProperties putBlobProperties =
-              new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-          ByteBuffer putUserMetadata = getByteBuffer(10, false);
-          ByteBuffer putContent = getByteBuffer(100, true);
-          String blobId = null;
-          try {
-            blobId = putBlob(ac, putBlobProperties, putUserMetadata, putContent);
-            fail("Put should have failed for " + putErrorCode);
-          } catch (CoordinatorException e) {
-            assertEquals(e.getErrorCode(), CoordinatorError.UnexpectedInternalError);
-          }
-        }
-        ac.close();
-      }
-    }
-  }
-
   void simpleGetNonExistantBlob(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
@@ -1040,12 +1010,6 @@ public class CoordinatorTest {
   public void simpleOneDCThreeNodeOneDiskOnePartitionForPutException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
-  }
-
-  @Test
-  public void simpleOneDCThreeNodeOneDiskOnePartitionForPutExceptionOnUnavailability()
-      throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    putExceptionOnUnavailability(getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test

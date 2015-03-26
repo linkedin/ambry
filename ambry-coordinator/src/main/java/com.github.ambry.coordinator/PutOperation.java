@@ -40,10 +40,10 @@ final public class PutOperation extends Operation {
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream, AtomicInteger downReplicaCount)
+      ByteBuffer userMetadata, InputStream blobStream)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc, downReplicaCount));
+        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 

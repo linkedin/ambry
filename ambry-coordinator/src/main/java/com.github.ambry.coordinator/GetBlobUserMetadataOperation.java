@@ -27,11 +27,10 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobUserMetadataOperation(String datacenterName, ConnectionPool connectionPool,
-      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap,
-      AtomicInteger downReplicaCount)
+      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobUserMetadata, downReplicaCount);
+        MessageFormatFlags.BlobUserMetadata);
     this.userMetadata = null;
   }
 

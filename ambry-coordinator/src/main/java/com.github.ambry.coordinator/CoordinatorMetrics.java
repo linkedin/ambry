@@ -59,14 +59,11 @@ public class CoordinatorMetrics {
 
   public final Gauge<Integer> crossColoCallsEnabled;
 
-  public final Gauge<Integer> downReplicaCount;
-
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled,
-      final AtomicInteger downReplicaCount) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -118,13 +115,6 @@ public class CoordinatorMetrics {
       @Override
       public Integer getValue() {
         return (crossDCProxyCallsEnabled == true ? 1 : 0);
-      }
-    };
-
-    this.downReplicaCount = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return downReplicaCount.get();
       }
     };
 

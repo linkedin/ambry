@@ -27,11 +27,10 @@ final public class GetBlobPropertiesOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap,
-      AtomicInteger downReplicaCount)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobProperties, downReplicaCount);
+        MessageFormatFlags.BlobProperties);
     this.blobProperties = null;
   }
 

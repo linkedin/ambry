@@ -55,11 +55,10 @@ public abstract class GetOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags,
-      AtomicInteger downReplicaCount)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        getOperationPolicy(datacenterName, blobId.getPartition(), oc, downReplicaCount));
+        getOperationPolicy(datacenterName, blobId.getPartition(), oc));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -77,16 +76,14 @@ public abstract class GetOperation extends Operation {
     precedenceLevels.put(CoordinatorError.BlobDoesNotExist, 5);
   }
 
-  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
-      AtomicInteger downReplicaCount)
+  private static OperationPolicy getOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc)
       throws CoordinatorException {
     OperationPolicy getOperationPolicy = null;
     if (oc.isCrossDCProxyCallEnabled()) {
       getOperationPolicy =
-          new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc,
-              downReplicaCount);
+          new GetCrossColoParallelOperationPolicy(datacenterName, partitionId, OPERATION_PARALLELISM, oc);
     } else {
-      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc, downReplicaCount);
+      getOperationPolicy = new SerialOperationPolicy(datacenterName, partitionId, oc);
     }
     return getOperationPolicy;
   }

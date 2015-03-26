@@ -54,7 +54,6 @@ public class AmbryCoordinator implements Coordinator {
   private ConnectionPool connectionPool;
   private final Random randomForPartitionSelection;
   private AtomicBoolean crossDCProxyCallsEnabled;
-  private AtomicInteger downReplicaCount;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -84,8 +83,7 @@ public class AmbryCoordinator implements Coordinator {
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
       this.clientId = coordinatorConfig.hostname;
       this.crossDCProxyCallsEnabled = new AtomicBoolean(coordinatorConfig.crossDCProxyCallEnable);
-      this.downReplicaCount = new AtomicInteger(0);
-      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled.get(), downReplicaCount);
+      this.coordinatorMetrics = new CoordinatorMetrics(clusterMap, crossDCProxyCallsEnabled.get());
       this.datacenterName = coordinatorConfig.datacenterName;
       if (!clusterMap.hasDatacenter(datacenterName)) {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
@@ -202,7 +200,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
           new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, blobProperties, userMetadata, blobStream, downReplicaCount);
+              operationTimeoutMs, blobProperties, userMetadata, blobStream);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
@@ -226,7 +224,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
           new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, downReplicaCount);
+              operationTimeoutMs);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
     } catch (CoordinatorException e) {
@@ -250,7 +248,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
           new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap, downReplicaCount);
+              operationTimeoutMs, clusterMap);
       gbpo.execute();
       return gbpo.getBlobProperties();
     } catch (CoordinatorException e) {
@@ -273,7 +271,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
           new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap, downReplicaCount);
+              operationTimeoutMs, clusterMap);
       gumo.execute();
       return gumo.getUserMetadata();
     } catch (CoordinatorException e) {
@@ -297,7 +295,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
           new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap, downReplicaCount);
+              operationTimeoutMs, clusterMap);
       gbdo.execute();
 
       return gbdo.getBlobOutput();
