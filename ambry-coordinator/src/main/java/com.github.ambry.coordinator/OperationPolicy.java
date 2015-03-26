@@ -136,14 +136,13 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
 
     List<ReplicaId> localReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     List<ReplicaId> remoteReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
-    List<ReplicaId> downReplicaIds = new ArrayList<ReplicaId>(replicaIdCount);
     for (ReplicaId replicaId : replicaIds) {
-      if (replicaId.isDown()) {
-        downReplicaIds.add(replicaId);
-      } else if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
-        localReplicaIds.add(replicaId);
-      } else if (crossDCProxyCallEnabled) {
-        remoteReplicaIds.add(replicaId);
+      if (!replicaId.isDown()) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
+          localReplicaIds.add(replicaId);
+        } else if (crossDCProxyCallEnabled) {
+          remoteReplicaIds.add(replicaId);
+        }
       }
     }
 
@@ -151,8 +150,6 @@ abstract class ProbeLocalFirstOperationPolicy implements OperationPolicy {
     orderedReplicaIds.addAll(localReplicaIds);
     Collections.shuffle(remoteReplicaIds);
     orderedReplicaIds.addAll(remoteReplicaIds);
-    Collections.shuffle(downReplicaIds);
-    orderedReplicaIds.addAll(downReplicaIds);
 
     return orderedReplicaIds;
   }
@@ -322,60 +319,33 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     this.remainingReplicaCount = replicaIdCount;
     replicaListPerDatacenter = new HashMap<String, List<ReplicaId>>();
     replicasInFlightPerDatacenter = new HashMap<String, List<ReplicaId>>();
-    Map<String, Integer> availableReplicasCountPerDatacenter = new HashMap<String, Integer>();
-    populateReplicaListPerDatacenter(partitionId.getReplicaIds(), availableReplicasCountPerDatacenter);
+    populateReplicaListPerDatacenter(partitionId.getReplicaIds());
     remoteDataCenterCount = replicaListPerDatacenter.size() - 1;
-    shuffleAndPopulate(availableReplicasCountPerDatacenter);
+    shuffleAndPopulate();
   }
 
   /**
    * Adds replicas to replicasPerDatacenter (Map of datacenter to List of replicas)
-   * and availableReplicaCountPerDatacenter (Map of datacenter to count of available replicas)
    * @param replicaIds ReplicaIds which are to be added to the interested data structure
-   * @param availableReplicaCountPerDatacenter Map of datacenter to count of available replicas
    */
-  private void populateReplicaListPerDatacenter(List<ReplicaId> replicaIds,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
+  private void populateReplicaListPerDatacenter(List<ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
       String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
       if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
         replicaListPerDatacenter.put(dataCenterName, new ArrayList<ReplicaId>());
-        availableReplicaCountPerDatacenter.put(dataCenterName, 0);
       }
-      if (replicaId.isDown()) {
-        replicaListPerDatacenter.get(dataCenterName).add(replicaId);
-      } else {
-        replicaListPerDatacenter.get(dataCenterName).add(0, replicaId);
-        availableReplicaCountPerDatacenter
-            .put(dataCenterName, availableReplicaCountPerDatacenter.get(dataCenterName) + 1);
-      }
+      replicaListPerDatacenter.get(dataCenterName).add(replicaId);
     }
   }
 
   /**
-   * To shuffle the replicas for all datacenters
-   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
+   * To shuffle the replicas for each datacenter
    */
-  private void shuffleAndPopulate(Map<String, Integer> availableReplicaCountPerDatacenter) {
+  private void shuffleAndPopulate() {
     for (String dataCenter : replicaListPerDatacenter.keySet()) {
-      shuffleReplicasForDataCenter(dataCenter, availableReplicaCountPerDatacenter);
+      Collections.shuffle(replicaListPerDatacenter.get(dataCenter));
       replicasInFlightPerDatacenter.put(dataCenter, new ArrayList<ReplicaId>());
     }
-  }
-
-  /**
-   * To shuffle replicas for a particular datacenter with down replicas pushed to end
-   * @param dataCenter Datacenter for which the replicas has to be shuffled
-   * @param availableReplicaCountPerDatacenter Map of datacenter to size of available replicas
-   */
-  private void shuffleReplicasForDataCenter(String dataCenter,
-      Map<String, Integer> availableReplicaCountPerDatacenter) {
-    List<ReplicaId> replicaList = replicaListPerDatacenter.get(dataCenter);
-    List<ReplicaId> availableReplicas = replicaList.subList(0, availableReplicaCountPerDatacenter.get(dataCenter));
-    Collections.shuffle(availableReplicas);
-    List<ReplicaId> downReplicas =
-        replicaList.subList(availableReplicaCountPerDatacenter.get(dataCenter), replicaList.size());
-    Collections.shuffle(downReplicas);
   }
 
   @Override
