@@ -72,7 +72,6 @@ public class ConsistencyCheckerTool {
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
       listOpt.add(rootDirectoryForPartitionOpt);
-      listOpt.add(outFileOpt);
 
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
@@ -165,8 +164,8 @@ public class ConsistencyCheckerTool {
         if ((consistencyBlobResult.getDeletedOrExpired().size() + consistencyBlobResult.getUnavailableList().size()
             == replicaCount)) {
           if (includeAcceptableInconsistentBlobs) {
-            logOutput("Partially deleted (acceptable inconsistency) blob " + blobId + " isDeletedOrExpired " + consistencyBlobResult
-                .getIsDeletedOrExpired() + "\n" + consistencyBlobResult);
+            logOutput("Partially deleted (acceptable inconsistency) blob " + blobId + " isDeletedOrExpired "
+                + consistencyBlobResult.getIsDeletedOrExpired() + "\n" + consistencyBlobResult);
           }
           acceptableInconsistentBlobs++;
         } else {
