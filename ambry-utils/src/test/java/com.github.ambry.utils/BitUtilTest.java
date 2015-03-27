@@ -10,7 +10,7 @@ import org.junit.Test;
 public class BitUtilTest {
   @Test
   public void testBitUtil() {
-    Assert.assertTrue(BitUtil.isPowerOfTwo(36));
+    Assert.assertTrue(BitUtil.isPowerOfTwo(32));
     Assert.assertFalse(BitUtil.isPowerOfTwo(37));
     Assert.assertTrue(BitUtil.isPowerOfTwo(4096L));
     Assert.assertFalse(BitUtil.isPowerOfTwo(4097L));

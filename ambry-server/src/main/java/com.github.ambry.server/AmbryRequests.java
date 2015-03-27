@@ -441,7 +441,7 @@ public class AmbryRequests implements RequestAPI {
               ServerErrorCode.Unknown_Error);
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      startTime += processingTime;
+      totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
