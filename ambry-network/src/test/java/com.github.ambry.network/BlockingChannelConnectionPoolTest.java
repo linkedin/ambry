@@ -200,7 +200,7 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   @Test
-  public void testBlockingChannelConnectionPool() throws InterruptedException {
+  public void testBlockingChannelConnectionPool() throws Exception {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.host", "5");
     ConnectionPool connectionPool =
@@ -209,6 +209,9 @@ public class BlockingChannelConnectionPoolTest {
 
     CountDownLatch releaseConnection = new CountDownLatch(1);
     Map<String, AtomicInteger> channelCount = new HashMap<String, AtomicInteger>();
+    channelCount.put("localhost" + 6667, new AtomicInteger(0));
+    channelCount.put("localhost" + 6668, new AtomicInteger(0));
+    channelCount.put("localhost" + 6669, new AtomicInteger(0));
     for (int i = 0; i < 10; i++) {
       ConnectionPoolThread connectionPoolThread =
           new ConnectionPoolThread(channelCount, connectionPool, false, releaseConnection);
@@ -235,8 +238,5 @@ public class BlockingChannelConnectionPoolTest {
       Thread.sleep(2);
     }
     connectionPool.shutdown();
-
-    channelCount = new HashMap<String, AtomicInteger>();
-    releaseConnection = new CountDownLatch(1);
   }
 }

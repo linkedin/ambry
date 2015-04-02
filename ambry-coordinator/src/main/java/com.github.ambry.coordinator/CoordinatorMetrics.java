@@ -135,7 +135,53 @@ public class CoordinatorMetrics {
 
   public void countError(CoordinatorOperationType operation, CoordinatorError error) {
     operationExceptionRate.mark();
+    switch (error) {
+      case UnexpectedInternalError:
+        updateOperationMetric(operation);
+        unexpectedInternalError.inc();
+        break;
+      case AmbryUnavailable:
+        updateOperationMetric(operation);
+        ambryUnavailableError.inc();
+        break;
+      case OperationTimedOut:
+        updateOperationMetric(operation);
+        operationTimedOutError.inc();
+        break;
+      case InvalidBlobId:
+        updateOperationMetric(operation);
+        invalidBlobIdError.inc();
+        break;
+      case InvalidPutArgument:
+        updateOperationMetric(operation);
+        invalidPutArgumentError.inc();
+        break;
+      case InsufficientCapacity:
+        updateOperationMetric(operation);
+        insufficientCapacityError.inc();
+        break;
+      case BlobTooLarge:
+        updateOperationMetric(operation);
+        blobTooLargeError.inc();
+        break;
+      case BlobDoesNotExist:
+        blobDoesNotExistError.inc();
+        break;
+      case BlobDeleted:
+        blobDeletedError.inc();
+        break;
+      case BlobExpired:
+        blobExpiredError.inc();
+        break;
+      default:
+        updateOperationMetric(operation);
+        logger.warn("Unknown CoordinatorError being counted: " + error);
+        unknownError.inc();
+        break;
+    }
+  }
 
+  private void updateOperationMetric(CoordinatorOperationType operation) {
     switch (operation) {
       case PutBlob:
         putBlobError.inc();
@@ -154,43 +200,6 @@ public class CoordinatorMetrics {
         break;
       default:
         logger.warn("Error for unknown CoordinatorOperationType being counted: " + operation);
-        unknownError.inc();
-        break;
-    }
-
-    switch (error) {
-      case UnexpectedInternalError:
-        unexpectedInternalError.inc();
-        break;
-      case AmbryUnavailable:
-        ambryUnavailableError.inc();
-        break;
-      case OperationTimedOut:
-        operationTimedOutError.inc();
-        break;
-      case InvalidBlobId:
-        invalidBlobIdError.inc();
-        break;
-      case InvalidPutArgument:
-        invalidPutArgumentError.inc();
-        break;
-      case InsufficientCapacity:
-        insufficientCapacityError.inc();
-        break;
-      case BlobTooLarge:
-        blobTooLargeError.inc();
-        break;
-      case BlobDoesNotExist:
-        blobDoesNotExistError.inc();
-        break;
-      case BlobDeleted:
-        blobDeletedError.inc();
-        break;
-      case BlobExpired:
-        blobExpiredError.inc();
-        break;
-      default:
-        logger.warn("Unknown CoordinatorError being counted: " + error);
         unknownError.inc();
         break;
     }

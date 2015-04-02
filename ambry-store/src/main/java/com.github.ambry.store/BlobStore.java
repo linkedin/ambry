@@ -141,24 +141,23 @@ public class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
-      long indexOffsetBeforeCheck = index.getCurrentEndOffset();
-      long logEndOffsetBeforeCheck = log.getLogEndOffset();
-      // if any of the keys alreadys exist in the store, we fail
+      long indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      // if any of the keys already exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-        if (index.exists(info.getStoreKey())) {
-          throw new StoreException("Key already exist in store", StoreErrorCodes.Already_Exist);
+        if (index.findKey(info.getStoreKey()) != null) {
+          throw new StoreException("Key already exists in store", StoreErrorCodes.Already_Exist);
         }
       }
 
       synchronized (lock) {
         // Validate that log end offset was not changed. If changed, check once again for existing
         // keys in store
-        long currentLogEndOffset = log.getLogEndOffset();
-        if (logEndOffsetBeforeCheck != currentLogEndOffset) {
-          FileSpan fileSpan = new FileSpan(logEndOffsetBeforeCheck, currentLogEndOffset);
+        long currentIndexEndOffset = index.getCurrentEndOffset();
+        if (currentIndexEndOffset != indexEndOffsetBeforeCheck) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-            if (index.exists(info.getStoreKey(), fileSpan)) {
-              throw new StoreException("Key already exist on filespan check", StoreErrorCodes.Already_Exist);
+            if (index.findKey(info.getStoreKey(), fileSpan) != null) {
+              throw new StoreException("Key already exists on filespan check", StoreErrorCodes.Already_Exist);
             }
           }
         }
@@ -196,6 +195,7 @@ public class BlobStore implements Store {
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
+      long indexEndOffsetBeforeCheck   = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
@@ -208,13 +208,25 @@ public class BlobStore implements Store {
         }
       }
       synchronized (lock) {
-        long logCurrentEndOffset = log.getLogEndOffset();
+        long currentIndexEndOffset = index.getCurrentEndOffset();
+        if (indexEndOffsetBeforeCheck != currentIndexEndOffset) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infoList) {
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              throw new StoreException(
+                  "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                  StoreErrorCodes.ID_Deleted);
+            }
+          }
+        }
+        long writeStartOffset = log.getLogEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(logCurrentEndOffset, logCurrentEndOffset + info.getSize());
+          FileSpan fileSpan = new FileSpan(writeStartOffset, writeStartOffset + info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          logCurrentEndOffset += info.getSize();
+          writeStartOffset += info.getSize();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }

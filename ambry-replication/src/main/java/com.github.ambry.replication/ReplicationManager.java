@@ -2,6 +2,7 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,18 +56,20 @@ final class RemoteReplicaInfo {
   private FindToken tokenSafeToPersist = null;
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
+  private Time time;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
-      long tokenPersistIntervalInMs) {
+      long tokenPersistIntervalInMs, Time time) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
     this.candidateTokenToPersist = token;
     this.tokenSafeToPersist = token;
-    this.timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
+    this.timeCandidateSetInMs = time.milliseconds();
     this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
+    this.time = time;
   }
 
   public ReplicaId getReplicaId() {
@@ -127,6 +130,8 @@ final class RemoteReplicaInfo {
    * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
    *
    * tokenSafeToPersist <= candidateTokenToPersist <= currentToken
+   * (Note: when a token gets reset by the remote, the above equation may not hold true immediately after, but it should
+   * eventually hold true.)
    */
 
   /**
@@ -135,7 +140,7 @@ final class RemoteReplicaInfo {
    */
   public FindToken getTokenToPersist() {
     synchronized (lock) {
-      if (SystemTime.getInstance().milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
+      if (time.milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
         // candidateTokenToPersist is now safe to be persisted.
         tokenSafeToPersist = candidateTokenToPersist;
       }
@@ -145,8 +150,13 @@ final class RemoteReplicaInfo {
 
   public void onTokenPersisted() {
     synchronized (lock) {
-      this.candidateTokenToPersist = currentToken;
-      timeCandidateSetInMs = SystemTime.getInstance().milliseconds();
+      /* Only update the candidate token if it qualified as the token safe to be persisted in the previous get call.
+       * If not, keep it as it is.
+       */
+      if (tokenSafeToPersist == candidateTokenToPersist) {
+        candidateTokenToPersist = currentToken;
+        timeCandidateSetInMs = time.milliseconds();
+      }
     }
   }
 
@@ -262,7 +272,7 @@ public final class ReplicationManager {
             RemoteReplicaInfo remoteReplicaInfo =
                 new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
-                    SystemTime.MsPerSec * Replication_Delay_Multiplier);
+                    SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance());
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
@@ -404,7 +414,7 @@ public final class ReplicationManager {
         replicaThread.shutdown();
       }
       // persist replica tokens
-      persistor.write();
+      persistor.write(true);
     } catch (Exception e) {
       logger.error("Error shutting down replica manager {}", e);
       throw new ReplicationException("Error shutting down replica manager");
@@ -562,7 +572,7 @@ public final class ReplicationManager {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
-      persistor.write(mountPath);
+      persistor.write(mountPath, false);
     }
   }
 
@@ -571,7 +581,7 @@ public final class ReplicationManager {
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
 
-    private void write(String mountPath)
+    private void write(String mountPath, boolean shuttingDown)
         throws IOException, ReplicationException {
       long writeStartTimeMs = SystemTime.getInstance().milliseconds();
       File temp = new File(mountPath, replicaTokenFileName + ".tmp");
@@ -594,8 +604,11 @@ public final class ReplicationManager {
               writer.write(remoteReplica.getReplicaId().getReplicaPath().getBytes());
               writer.writeInt(remoteReplica.getReplicaId().getDataNodeId().getPort());
               writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
-              writer.write(remoteReplica.getTokenToPersist().toBytes());
+              writer.write(tokenToPersist.toBytes());
               remoteReplica.onTokenPersisted();
+              if (shuttingDown) {
+                logger.info("Persisting token {}", tokenToPersist);
+              }
             }
           }
         }
@@ -620,20 +633,21 @@ public final class ReplicationManager {
     /**
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
      * path to a file. The file is saved on the corresponding mount path
+     * @param shuttingDown indicates whether this is being called as part of shut down
      */
 
-    private void write()
+    private void write(boolean shuttingDown)
         throws IOException, ReplicationException {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        write(mountPath);
+        write(mountPath, shuttingDown);
       }
     }
 
     public void run() {
       try {
-        write();
+        write(false);
       } catch (Exception e) {
-        logger.info("Error while persisting the replica tokens {}", e);
+        logger.error("Error while persisting the replica tokens {}", e);
       }
     }
   }

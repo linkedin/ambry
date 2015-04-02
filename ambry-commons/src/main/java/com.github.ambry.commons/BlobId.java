@@ -87,9 +87,18 @@ public class BlobId extends StoreKey {
   }
 
   @Override
+  public String getLongForm() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("[").append(getID());
+    sb.append(":").append(version);
+    sb.append(":").append(partitionId);
+    sb.append(":").append(uuid).append("]");
+    return sb.toString();
+  }
+
+  @Override
   public String toString() {
-    // TODO Java 8 - Use Base64 Utils in java 8 and remove external dependencies
-    return "[" + getID() + ":" + version + ":" + partitionId + ":" + uuid + "]";
+    return getID();
   }
 
   @Override

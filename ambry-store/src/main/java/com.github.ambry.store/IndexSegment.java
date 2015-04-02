@@ -322,16 +322,17 @@ class IndexSegment {
           + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
           entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getTimeToLiveInMs(),
           entry.getValue().getOriginalMessageOffset(), fileEndOffset);
-      index.put(entry.getKey(), entry.getValue());
+      if (index.put(entry.getKey(), entry.getValue()) == null) {
+        numberOfItems.incrementAndGet();
+      }
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getSize());
-      numberOfItems.incrementAndGet();
       bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
         logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), key.sizeInBytes(), key, startOffset);
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key.getLongForm(), startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entry.getValue().getBytes().capacity();
@@ -366,9 +367,10 @@ class IndexSegment {
             + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
             entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getTimeToLiveInMs(),
             entry.getValue().getOriginalMessageOffset(), fileEndOffset);
-        index.put(entry.getKey(), entry.getValue());
+        if (index.put(entry.getKey(), entry.getValue()) == null) {
+          numberOfItems.incrementAndGet();
+        }
         sizeWritten.addAndGet(entry.getKey().sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
-        numberOfItems.incrementAndGet();
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       endOffset.set(fileEndOffset);
@@ -376,7 +378,7 @@ class IndexSegment {
         StoreKey key = entries.get(0).getKey();
         keySize = key.sizeInBytes();
         logger.info("IndexSegment : {} setting key size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), key.sizeInBytes(), key, startOffset);
+            indexFile.getAbsolutePath(), key.sizeInBytes(), key.getLongForm(), startOffset);
       }
       if (valueSize == Value_Size_Invalid_Value) {
         valueSize = entries.get(0).getValue().getBytes().capacity();

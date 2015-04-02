@@ -22,4 +22,6 @@ public interface MessageStoreRecovery {
    */
   List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
       throws IOException;
+
+  void hardDelete(MessageReadSet readSet, Write write);
 }
