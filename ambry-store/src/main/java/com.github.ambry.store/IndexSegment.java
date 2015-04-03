@@ -324,9 +324,9 @@ class IndexSegment {
           entry.getValue().getOriginalMessageOffset(), fileEndOffset);
       if (index.put(entry.getKey(), entry.getValue()) == null) {
         numberOfItems.incrementAndGet();
+        sizeWritten.addAndGet(entry.getKey().sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
+        bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
-      sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getSize());
-      bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
         StoreKey key = entry.getKey();
@@ -369,9 +369,9 @@ class IndexSegment {
             entry.getValue().getOriginalMessageOffset(), fileEndOffset);
         if (index.put(entry.getKey(), entry.getValue()) == null) {
           numberOfItems.incrementAndGet();
+          sizeWritten.addAndGet(entry.getKey().sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
+          bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
         }
-        sizeWritten.addAndGet(entry.getKey().sizeInBytes() + IndexValue.Index_Value_Size_In_Bytes);
-        bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       endOffset.set(fileEndOffset);
       if (keySize == Key_Size_Invalid_Value) {
