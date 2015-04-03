@@ -181,7 +181,7 @@ public class CoordinatorMetrics {
     }
   }
 
-  private void updateOperationMetric(CoordinatorOperationType operation){
+  private void updateOperationMetric(CoordinatorOperationType operation) {
     switch (operation) {
       case PutBlob:
         putBlobError.inc();

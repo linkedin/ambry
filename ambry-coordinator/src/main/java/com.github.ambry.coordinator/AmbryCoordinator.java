@@ -141,8 +141,8 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(), coordinatorMetrics,
-        responseHandler);
+    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
+        coordinatorMetrics, responseHandler);
   }
 
   private PartitionId getPartitionForPut()
