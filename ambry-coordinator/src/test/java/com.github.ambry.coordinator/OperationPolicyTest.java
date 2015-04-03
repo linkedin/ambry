@@ -13,12 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Assert;
-=======
-import junit.framework.Assert;
->>>>>>> upstream/master
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
