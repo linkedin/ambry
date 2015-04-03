@@ -287,11 +287,33 @@ public class PersistentIndex {
    * @return True, if segment needs to roll over. False, otherwise
    */
   private boolean needToRollOverIndex(IndexEntry entry) {
-    return indexes.size() == 0 ||
-        indexes.lastEntry().getValue().getSizeWritten() >= maxInMemoryIndexSizeInBytes ||
-        indexes.lastEntry().getValue().getNumberOfItems() >= maxInMemoryNumElements ||
-        indexes.lastEntry().getValue().getKeySize() != entry.getKey().sizeInBytes() ||
-        indexes.lastEntry().getValue().getValueSize() != IndexValue.Index_Value_Size_In_Bytes;
+    if (indexes.size() == 0) {
+      logger.info("Creating first segment");
+      return true;
+    }
+
+    IndexSegment lastSegment = indexes.lastEntry().getValue();
+
+    if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
+      logger.info("Rolling over because the size written {} >= maxInMemoryIndexSizeInBytes {}",
+          lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
+      return true;
+    }
+    if (lastSegment.getNumberOfItems() >= maxInMemoryNumElements) {
+      logger.info("Rolling over because the number of items in the last segment: {} >= maxInMemoryNumElements {}",
+          lastSegment.getNumberOfItems(), maxInMemoryNumElements);
+      return true;
+    }
+    if (lastSegment.getKeySize() != entry.getKey().sizeInBytes()) {
+      logger.info("Rolling over because the segment keySize: {} != entry's keysize {}",
+          lastSegment.getKeySize(), entry.getKey().sizeInBytes());
+      return true;
+    }
+    if (lastSegment.getValueSize() != IndexValue.Index_Value_Size_In_Bytes) {
+      logger.info("Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}", IndexValue.Index_Value_Size_In_Bytes);
+      return true;
+    }
+    return false;
   }
 
   /**
