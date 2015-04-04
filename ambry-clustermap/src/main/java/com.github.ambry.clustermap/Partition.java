@@ -1,5 +1,6 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.utils.Utils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -68,11 +69,7 @@ public class Partition extends PartitionId {
 
   public static byte[] readPartitionBytesFromStream(DataInputStream stream)
       throws IOException {
-    byte[] partitionBytes = new byte[Partition_Size_In_Bytes];
-    int sizeRead = 0;
-    while (sizeRead < Partition_Size_In_Bytes) {
-      sizeRead += stream.read(partitionBytes, sizeRead, Partition_Size_In_Bytes - sizeRead);
-    }
+    byte[] partitionBytes = Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
     return partitionBytes;
   }
 

@@ -3,6 +3,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -401,16 +402,7 @@ public class MessageFormatRecord {
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       int usermetadataSize = dataStream.readInt();
-      byte[] userMetadaBuffer = new byte[usermetadataSize];
-      int read = 0;
-      while (read < usermetadataSize) {
-        int sizeRead = dataStream.read(userMetadaBuffer);
-        if (sizeRead == 0 || sizeRead == -1) {
-          throw new IOException("Total size read " + read + " is less than the size to be read " + usermetadataSize
-              + " for usermetadata");
-        }
-        read += sizeRead;
-      }
+      byte[] userMetadaBuffer = Utils.readBytesFromStream(dataStream, usermetadataSize);
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {

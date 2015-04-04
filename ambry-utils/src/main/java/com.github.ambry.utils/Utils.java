@@ -519,4 +519,18 @@ public class Utils {
     }
     return epochTimeInMs + (deltaTimeInSeconds * Time.MsPerSec);
   }
+
+  public static byte[] readBytesFromStream(DataInputStream stream, int size) throws IOException {
+    int read = 0;
+    byte[] outputBytes = new byte[size];
+    while (read < size) {
+      int sizeRead = stream.read(outputBytes);
+      if (sizeRead == 0 || sizeRead == -1) {
+        throw new IOException("Total size read " + read + " is less than the size to be read " + size
+            + " for readBytesFromStream");
+      }
+      read += sizeRead;
+    }
+    return outputBytes;
+  }
 }
