@@ -3,7 +3,7 @@ package com.github.ambry.metrics;
 import com.github.ambry.config.MetricsConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;

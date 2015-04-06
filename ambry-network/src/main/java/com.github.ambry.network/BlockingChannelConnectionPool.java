@@ -32,8 +32,6 @@ class BlockingChannelInfo {
   private Gauge<Integer> activeConnections;
   private Gauge<Integer> totalNumberOfConnections;
 
-  private final String name;
-
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry) {
     this.config = config;
     this.blockingChannelAvailableConnections =
@@ -45,7 +43,6 @@ class BlockingChannelInfo {
     this.lock = new Object();
     this.host = host;
     this.port = port;
-    this.name = host + ":" + port;
 
     availableConnections = new Gauge<Integer>() {
       @Override

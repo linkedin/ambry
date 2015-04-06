@@ -5,6 +5,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -15,6 +16,8 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -22,6 +25,7 @@ import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import java.rmi.UnexpectedException;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -43,6 +47,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ServerReadPerformance {
   public static void main(String args[]) {
+    ConnectionPool connectionPool = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
@@ -65,17 +70,12 @@ public class ServerReadPerformance {
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
-      ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
-          parser.accepts("coordinatorConfigPath", "The config for the coordinator").withRequiredArg()
-              .describedAs("coordinator_config_path").ofType(String.class);
-
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(logToReadOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
-      listOpt.add(coordinatorConfigPathOpt);
 
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
@@ -86,7 +86,6 @@ public class ServerReadPerformance {
       }
 
       String logToRead = options.valueOf(logToReadOpt);
-      String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
@@ -120,7 +119,7 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       long maxLatencyForGetBlobs = 0;
@@ -204,6 +203,14 @@ public class ServerReadPerformance {
             ByteBuffer userMetadata =
                 MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
+            // delete the blob
+            DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);
+            channel.send(deleteRequest);
+            DeleteResponse deleteResponse =
+                DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+            if (deleteResponse.getError() != ServerErrorCode.No_Error) {
+              throw new UnexpectedException("error " + deleteResponse.getError());
+            }
             throttler.maybeThrottle(1);
           } finally {
             if (channel != null) {
@@ -214,7 +221,12 @@ public class ServerReadPerformance {
         }
       }
     } catch (Exception e) {
+      e.printStackTrace();
       System.out.println("Error in server read performance " + e);
+    } finally {
+      if (connectionPool != null) {
+        connectionPool.shutdown();
+      }
     }
   }
 }

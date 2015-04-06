@@ -7,7 +7,6 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.config.ServerConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -81,12 +80,11 @@ public class AmbryRequests implements RequestAPI {
   private final FindTokenFactory findTokenFactory;
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
-  private final ServerConfig serverConfig;
   private final StoreKeyFactory storeKeyFactory;
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-      NotificationSystem operationNotification, ReplicationManager replicationManager, ServerConfig serverConfig,
+      NotificationSystem operationNotification, ReplicationManager replicationManager,
       StoreKeyFactory storeKeyFactory) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
@@ -97,7 +95,6 @@ public class AmbryRequests implements RequestAPI {
     this.findTokenFactory = findTokenFactory;
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
-    this.serverConfig = serverConfig;
     this.storeKeyFactory = storeKeyFactory;
   }
 

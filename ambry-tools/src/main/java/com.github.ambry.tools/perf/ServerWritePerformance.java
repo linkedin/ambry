@@ -9,13 +9,10 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.protocol.DeleteRequest;
-import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -48,7 +45,7 @@ import static com.github.ambry.utils.Utils.getRandomLong;
 public class ServerWritePerformance {
   public static void main(String args[]) {
     FileWriter writer = null;
-    AmbryCoordinator coordinator = null;
+    ConnectionPool connectionPool = null;
     try {
       OptionParser parser = new OptionParser();
 
@@ -80,16 +77,11 @@ public class ServerWritePerformance {
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
-      ArgumentAcceptingOptionSpec<String> coordinatorConfigPathOpt =
-          parser.accepts("coordinatorConfigPath", "The config for the coordinator").withRequiredArg()
-              .describedAs("coordinator_config_path").ofType(String.class);
-
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
-      listOpt.add(coordinatorConfigPathOpt);
 
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
@@ -102,7 +94,6 @@ public class ServerWritePerformance {
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
-      String coordinatorConfigPath = options.valueOf(coordinatorConfigPathOpt);
       int minBlobSize = options.valueOf(minBlobSizeOpt);
       int maxBlobSize = options.valueOf(maxBlobSizeOpt);
       if (enableVerboseLogging) {
@@ -139,7 +130,8 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      ConnectionPool connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      connectionPool.start();
 
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
@@ -153,15 +145,15 @@ public class ServerWritePerformance {
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {
-      if (coordinator != null) {
-        coordinator.close();
-      }
       if (writer != null) {
         try {
           writer.close();
         } catch (Exception e) {
           System.out.println("Error when closing the writer");
         }
+      }
+      if (connectionPool != null) {
+        connectionPool.shutdown();
       }
     }
   }
@@ -258,15 +250,6 @@ public class ServerWritePerformance {
               totalLatencyInNanoSeconds = 0;
             }
             totalTimeTaken.addAndGet(endTime - startTime);
-
-            // delete the blob
-            DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);
-            channel.send(deleteRequest);
-            DeleteResponse deleteResponse =
-                DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
-            if (deleteResponse.getError() != ServerErrorCode.No_Error) {
-              throw new UnexpectedException("error " + deleteResponse.getError());
-            }
             throttler.maybeThrottle(1);
           } catch (Exception e) {
             System.out.println("Exception when putting blob " + e);

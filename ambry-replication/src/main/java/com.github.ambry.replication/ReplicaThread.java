@@ -460,7 +460,7 @@ class ReplicaThread implements Runnable {
     if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag
         && !remoteColo) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
-              + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
+          + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
           replicationConfig.replicationMaxLagForWaitTimeInBytes, replicationConfig.replicaWaitTimeBetweenReplicasMs);
       // We apply the wait time between replication from remote replicas here. Any new objects that get written
@@ -565,7 +565,7 @@ class ReplicaThread implements Runnable {
             try {
               List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
-                      + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                  + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
@@ -576,9 +576,8 @@ class ReplicaThread implements Runnable {
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
                 logger.trace("Remote node: {} Thread name: {} Remote replica: {} Message replicated: {} Partition: {} "
-                        + "Local mount path: {} Message size: {}", remoteNode, threadName,
-                    remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(),
-                    remoteReplicaInfo.getReplicaId().getPartitionId(),
+                    + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                    messageInfo.getStoreKey(), remoteReplicaInfo.getReplicaId().getPartitionId(),
                     remoteReplicaInfo.getLocalReplicaId().getMountPath(), messageInfo.getSize());
                 if (notification != null) {
                   notification.onBlobReplicaCreated(dataNodeId.getHostname(), dataNodeId.getPort(),

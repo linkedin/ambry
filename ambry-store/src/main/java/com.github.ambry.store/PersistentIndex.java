@@ -795,7 +795,7 @@ public class PersistentIndex {
                   " greater than the log end offset " + currentLogEndPointer;
               throw new StoreException(message, StoreErrorCodes.IOError);
             }
-            logger.info("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
+            logger.trace("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
             prevInfo.writeIndexToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
             Map.Entry<Long, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());

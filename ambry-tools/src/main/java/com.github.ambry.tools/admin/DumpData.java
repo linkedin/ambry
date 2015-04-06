@@ -73,8 +73,8 @@ public class DumpData {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> logFileToCompareOpt =
-          parser.accepts("logFileToDump", "Log file that needs to be dumped for Operation \"CompareIndexToLog\" ").withRequiredArg()
-              .describedAs("log_file_to_dump").ofType(String.class);
+          parser.accepts("logFileToDump", "Log file that needs to be dumped for Operation \"CompareIndexToLog\" ")
+              .withRequiredArg().describedAs("log_file_to_dump").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
