@@ -524,7 +524,7 @@ public class Utils {
     int read = 0;
     byte[] outputBytes = new byte[size];
     while (read < size) {
-      int sizeRead = stream.read(outputBytes);
+      int sizeRead = stream.read(outputBytes, read, size - read);
       if (sizeRead == 0 || sizeRead == -1) {
         throw new IOException("Total size read " + read + " is less than the size to be read " + size
             + " for readBytesFromStream");
