@@ -124,6 +124,7 @@ class ReplicaThread implements Runnable {
             context = replicationMetrics.intraColoReplicationLatency.time();
           }
           ConnectedChannel connectedChannel = null;
+          long replicationStartTimeInMs = SystemTime.getInstance().milliseconds();
           try {
             connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(),
                 replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
@@ -132,17 +133,10 @@ class ReplicaThread implements Runnable {
                 exchangeMetadata(connectedChannel, replicasToReplicatePerNode, remoteColo);
             fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, remoteColo, exchangeMetadataResponseList);
           } catch (Exception e) {
-            if (logger.isTraceEnabled()) {
-              logger.error("Remote node: " + remoteNode +
-                  " Thread name: " + threadName +
-                  " Remote replicas: " + replicasToReplicatePerNode +
-                  " Error while replicating with remote replica ", e);
-            } else {
-              logger.error("Remote node: " + remoteNode +
-                  " Thread name: " + threadName +
-                  " Remote replicas: " + replicasToReplicatePerNode +
-                  " Error while replicating with remote replica " + e);
-            }
+            logger.error("Remote node: " + remoteNode +
+                " Thread name: " + threadName +
+                " Remote replicas: " + replicasToReplicatePerNode +
+                " Error while replicating with remote replica ", e);
             replicationMetrics.replicationErrors.inc();
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
@@ -159,6 +153,14 @@ class ReplicaThread implements Runnable {
               connectedChannel = null;
             }
           } finally {
+            if (remoteColo) {
+              replicationMetrics.interColoTotalReplicationTime
+                  .update(SystemTime.getInstance().milliseconds() - replicationStartTimeInMs);
+            } else {
+              replicationMetrics.intraColoTotalReplicationTime
+                  .update(SystemTime.getInstance().milliseconds() - replicationStartTimeInMs);
+            }
+
             if (connectedChannel != null) {
               connectionPool.checkInConnection(connectedChannel);
             }
