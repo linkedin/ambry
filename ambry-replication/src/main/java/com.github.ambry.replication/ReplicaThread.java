@@ -196,51 +196,49 @@ class ReplicaThread implements Runnable {
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<ExchangeMetadataResponse>();
     if (replicasToReplicatePerNode.size() > 0) {
-      DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-      ReplicaMetadataResponse response =
-          getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
-      needToWaitForReplicaLag = true;
-      for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
-        RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
-        ReplicaMetadataResponseInfo replicaMetadataResponseInfo = response.getReplicaMetadataResponseInfoList().get(i);
-        if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
-          try {
-            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
-                replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-            checkNeedWaitTime(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
-            Set<StoreKey> missingStoreKeys =
-                getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
-            processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo, remoteNode,
-                remoteColo);
-            ExchangeMetadataResponse exchangeMetadataResponse =
-                new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
-            exchangeMetadataResponseList.add(exchangeMetadataResponse);
-          } catch (Exception e) {
-            replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
-            logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
-                " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
-            ExchangeMetadataResponse exchangeMetadataResponse =
-                new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
+      try {
+        DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
+        ReplicaMetadataResponse response = getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
+        needToWaitForReplicaLag = true;
+        for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
+          RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo = response.getReplicaMetadataResponseInfoList().get(i);
+          if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
+            try {
+              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
+                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
+                  replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
+              checkNeedWaitTime(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
+              Set<StoreKey> missingStoreKeys = getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
+              processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
+                  remoteNode, remoteColo);
+              ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
+              exchangeMetadataResponseList.add(exchangeMetadataResponse);
+            } catch (Exception e) {
+              replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
+              logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
+                  " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
+              ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
+              exchangeMetadataResponseList.add(exchangeMetadataResponse);
+            }
+          } else {
+            replicationMetrics.updateMetadataRequestError(remoteReplicaInfo);
+            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
+                remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+            ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
             exchangeMetadataResponseList.add(exchangeMetadataResponse);
           }
-        } else {
-          replicationMetrics.updateMetadataRequestError(remoteReplicaInfo);
-          logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
-              remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
-          ExchangeMetadataResponse exchangeMetadataResponse =
-              new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
-          exchangeMetadataResponseList.add(exchangeMetadataResponse);
         }
-      }
-      if (remoteColo) {
-        replicationMetrics.interColoMetadataExchangeCount.inc();
-        replicationMetrics.interColoExchangeMetadataTime
-            .update(SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs);
-      } else {
-        replicationMetrics.intraColoMetadataExchangeCount.inc();
-        replicationMetrics.intraColoExchangeMetadataTime
-            .update(SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs);
+      } finally {
+        if (remoteColo) {
+          replicationMetrics.interColoMetadataExchangeCount.inc();
+          replicationMetrics.interColoExchangeMetadataTime
+              .update(SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs);
+        } else {
+          replicationMetrics.intraColoMetadataExchangeCount.inc();
+          replicationMetrics.intraColoExchangeMetadataTime
+              .update(SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs);
+        }
       }
     }
     return exchangeMetadataResponseList;
@@ -263,24 +261,26 @@ class ReplicaThread implements Runnable {
       List<ExchangeMetadataResponse> exchangeMetadataResponseList)
       throws IOException, StoreException, MessageFormatException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
-    if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
-        || replicasToReplicatePerNode.size() == 0) {
-      throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size() +
-          " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size() +
-          " should be the same and greater than zero");
-    }
-    DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-    GetResponse getResponse =
-        getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
-            remoteNode, remoteColo);
-    writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode,
-        remoteColo);
-    if (remoteColo) {
-      replicationMetrics.interColoFixMissingKeysTime
-          .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
-    } else {
-      replicationMetrics.intraColoFixMissingKeysTime
-          .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
+    try {
+      if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size() || replicasToReplicatePerNode.size() == 0) {
+        throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size() +
+            " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size() +
+            " should be the same and greater than zero");
+      }
+      DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
+      GetResponse getResponse =
+          getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
+              remoteNode, remoteColo);
+      writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode,
+          remoteColo);
+    } finally {
+      if (remoteColo) {
+        replicationMetrics.interColoFixMissingKeysTime
+            .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
+      } else {
+        replicationMetrics.intraColoFixMissingKeysTime
+            .update(SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs);
+      }
     }
   }
 
