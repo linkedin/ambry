@@ -133,10 +133,17 @@ class ReplicaThread implements Runnable {
                 exchangeMetadata(connectedChannel, replicasToReplicatePerNode, remoteColo);
             fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, remoteColo, exchangeMetadataResponseList);
           } catch (Exception e) {
-            logger.error("Remote node: " + remoteNode +
-                " Thread name: " + threadName +
-                " Remote replicas: " + replicasToReplicatePerNode +
-                " Error while replicating with remote replica ", e);
+            if (logger.isTraceEnabled()) {
+              logger.error("Remote node: " + remoteNode +
+                  " Thread name: " + threadName +
+                  " Remote replicas: " + replicasToReplicatePerNode +
+                  " Error (In Trace Level) while replicating with remote replica ", e);
+            } else {
+              logger.error("Remote node: " + remoteNode +
+                  " Thread name: " + threadName +
+                  " Remote replicas: " + replicasToReplicatePerNode +
+                  " Error while replicating with remote replica " + e);
+            }
             replicationMetrics.replicationErrors.inc();
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
