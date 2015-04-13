@@ -109,7 +109,33 @@ java -cp "*" com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLa
 --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
 ```
 
+### ConsistencyCheckerTool
 
+#### Check for consistency among replicas for a partition
+```java
+java -cp "*" com.github.ambry.tools.admin.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
+turn contains all index files] --outFile [outFile]
+```
 
+```
+Root Directory for Partition should contains N sub-directories pertaining to N replicas. Each sub-directory's name
+should be the same as name of the replica. Each sub directory(replica) in turn should have all the index segments within it.
 
+A sample structure of a root Directory:
+
+rootDir
+  ela4-app8763.prod.linkedin.com
+    0_index
+    10264262199_index
+    10821344563_index
+  lva1-app6774.prod.linkedin.com
+    0_index
+    10267816698_index
+    10892574781_index
+  lva1-app6775.prod.linkedin.com
+    0_index
+    10266323380_index
+    10888037904_index
+```
 
