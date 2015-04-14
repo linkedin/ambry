@@ -330,11 +330,13 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    */
   private void populateReplicaListPerDatacenter(List<ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
-      String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
-      if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
-        replicaListPerDatacenter.put(dataCenterName, new ArrayList<ReplicaId>());
+      if (!replicaId.isDown()) {
+        String dataCenterName = replicaId.getDataNodeId().getDatacenterName();
+        if (!replicaListPerDatacenter.containsKey(dataCenterName)) {
+          replicaListPerDatacenter.put(dataCenterName, new ArrayList<ReplicaId>());
+        }
+        replicaListPerDatacenter.get(dataCenterName).add(replicaId);
       }
-      replicaListPerDatacenter.get(dataCenterName).add(replicaId);
     }
   }
 
