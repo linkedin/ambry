@@ -718,6 +718,8 @@ public class PersistentIndex {
         MessageInfo newMessageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
             indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
         newMessageEntries.add(newMessageInfo);
+      } else {
+        newMessageEntries.add(messageInfo);
       }
     }
     return newMessageEntries;
