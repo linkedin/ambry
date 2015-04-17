@@ -387,14 +387,17 @@ public class AmbryRequests implements RequestAPI {
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
     metrics.replicaMetadataRequestRate.mark();
-    HashMap<PartitionId, Long> findEntriesTimeMap = new HashMap<PartitionId, Long>();
+
+    List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList =
+        replicaMetadataRequest.getReplicaMetadataRequestInfoList();
+    int partitionCnt = replicaMetadataRequestInfoList.size();
+    ArrayList<Long> findEntriesTimeList = new ArrayList<Long>(partitionCnt);
     long startTimeInMs = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
     try {
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
-          new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataRequest.getReplicaMetadataRequestInfoList().size());
-      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequest
-          .getReplicaMetadataRequestInfoList()) {
+          new ArrayList<ReplicaMetadataResponseInfo>(partitionCnt);
+      for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         ServerErrorCode error = validateRequest(replicaMetadataRequestInfo.getPartitionId(), false);
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating replica metadata request failed with error {} for partition {}", error,
@@ -402,7 +405,7 @@ public class AmbryRequests implements RequestAPI {
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(), error);
           replicaMetadataResponseList.add(replicaMetadataResponseInfo);
-          findEntriesTimeMap.put(replicaMetadataRequestInfo.getPartitionId(), (long) -1);
+          findEntriesTimeList.add((long) -1);
         } else {
           try {
             PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
@@ -414,8 +417,7 @@ public class AmbryRequests implements RequestAPI {
             long findEntriesStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
                 store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-            findEntriesTimeMap.put(replicaMetadataRequestInfo.getPartitionId(),
-                SystemTime.getInstance().milliseconds() - findEntriesStartTimeInMs);
+            findEntriesTimeList.add(SystemTime.getInstance().milliseconds() - findEntriesStartTimeInMs);
 
             replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
                 findInfo.getFindToken().getBytesRead());
@@ -437,6 +439,7 @@ public class AmbryRequests implements RequestAPI {
                 new ReplicaMetadataResponseInfo(replicaMetadataRequestInfo.getPartitionId(),
                     ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+            findEntriesTimeList.add((long) -1);
           }
         }
       }
@@ -451,15 +454,18 @@ public class AmbryRequests implements RequestAPI {
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
+
       StringBuilder strBuilder = new StringBuilder();
-      strBuilder.append("findEntriesTimeMap[");
-      for (Map.Entry<PartitionId, Long> entry : findEntriesTimeMap.entrySet()) {
-        strBuilder.append(entry.getKey().toString()).append(": ");
-        strBuilder.append(entry.getValue().toString()).append(", ");
+      strBuilder.append("Time consumed for handling replica metadata request, findEntriesTimeList[");
+      for (int i = 0; i < partitionCnt; ++i) {
+        strBuilder.append(replicaMetadataRequestInfoList.get(i).getPartitionId()).append(": ");
+        strBuilder.append(findEntriesTimeList.get(i)).append(", ");
       }
       strBuilder.append("]");
-      publicAccessLogger.info("{} {} processingTime {} " + strBuilder.toString(),
-          replicaMetadataRequest, response, processingTime);
+      strBuilder.append(" processingTime ").append(processingTime);
+      logger.trace(strBuilder.toString());
+
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
 
