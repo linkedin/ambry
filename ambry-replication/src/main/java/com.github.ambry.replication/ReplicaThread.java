@@ -124,25 +124,48 @@ class ReplicaThread implements Runnable {
             context = replicationMetrics.intraColoReplicationLatency.time();
           }
           ConnectedChannel connectedChannel = null;
+          long checkoutConnectionTimeInMs = -1;
+          long exchangeMetadataTimeInMs = -1;
+          long fixMissingStoreKeysTimeInMs = -1;
           long replicationStartTimeInMs = SystemTime.getInstance().milliseconds();
+          long startTimeInMs = replicationStartTimeInMs;
           try {
             connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(),
                 replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+            checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
 
+            startTimeInMs = SystemTime.getInstance().milliseconds();
             List<ExchangeMetadataResponse> exchangeMetadataResponseList =
                 exchangeMetadata(connectedChannel, replicasToReplicatePerNode, remoteColo);
+            exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+
+            startTimeInMs = SystemTime.getInstance().milliseconds();
             fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, remoteColo, exchangeMetadataResponseList);
+            fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
           } catch (Exception e) {
+            if (checkoutConnectionTimeInMs == -1) {
+              // exception happened in checkout connection phase
+              checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            } else if (exchangeMetadataTimeInMs == -1) {
+              // exception happened in exchange metadata phase
+              exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            } else if (fixMissingStoreKeysTimeInMs == -1) {
+              // exception happened in fix missing store phase
+              fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            }
+            StringBuilder strBuilder = new StringBuilder();
+            strBuilder.append("Remote node: ").append(remoteNode);
+            strBuilder.append(" Thread name: ").append(threadName);
+            strBuilder.append(" Remote replicas: ").append(replicasToReplicatePerNode);
+            strBuilder.append(" Error while replicating with remote replica ");
+            strBuilder.append(" Checkout connection time: ").append(checkoutConnectionTimeInMs);
+            strBuilder.append(" Exchange metadata time: ").append(exchangeMetadataTimeInMs);
+            strBuilder.append(" Fix missing store key time: ").append(fixMissingStoreKeysTimeInMs);
+
             if (logger.isTraceEnabled()) {
-              logger.error("Remote node: " + remoteNode +
-                  " Thread name: " + threadName +
-                  " Remote replicas: " + replicasToReplicatePerNode +
-                  " Error (In Trace Level) while replicating with remote replica ", e);
+              logger.trace(strBuilder.toString(), e);
             } else {
-              logger.error("Remote node: " + remoteNode +
-                  " Thread name: " + threadName +
-                  " Remote replicas: " + replicasToReplicatePerNode +
-                  " Error while replicating with remote replica " + e);
+              logger.error(strBuilder.toString() + e);
             }
             replicationMetrics.replicationErrors.inc();
             if (connectedChannel != null) {
