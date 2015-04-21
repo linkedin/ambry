@@ -38,6 +38,13 @@ public class MessageFormatWriteSetTest {
       channel.read(buf);
     }
 
+    @Override
+    public void writeFrom(ReadableByteChannel channel, long offset, long size)
+        throws IOException {
+      buf.position((int)offset);
+      channel.read(buf);
+    }
+
     public ByteBuffer getBuffer() {
       buf.flip();
       return buf;

@@ -85,10 +85,11 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
-    logger.trace("Blob Message Read Set position {} count {}", startOffset,
-        Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
+    long sizeInBlobReadOptions = readOptions.get(index).getSize();
+    long size = sizeInBlobReadOptions == -1 ? maxSize : Math.min(sizeInBlobReadOptions - relativeOffset, maxSize);
+    logger.trace("Blob Message Read Set position {} count {}", startOffset, size);
     long written = fileChannel
-        .transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
+        .transferTo(startOffset, size, channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, file.getAbsolutePath());
     return written;
   }

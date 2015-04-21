@@ -44,14 +44,15 @@ public class PersistentIndexTest {
   class MockIndex extends PersistentIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreCleanup(),
           new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-        MessageStoreRecovery recovery)
+        MessageStoreRecovery recovery, MessageStoreCleanup cleanup)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, recovery, new StoreMetrics(datadir, new MetricRegistry()));
+      super(datadir, scheduler, log, config, factory, recovery, cleanup,
+          new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     IndexValue getValue(StoreKey key)
@@ -137,17 +138,18 @@ public class PersistentIndexTest {
       Assert.assertEquals(info.find(blobId8).getSize(), 1000);
       Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
 
+      byte flags = 0;
       // test getEntriesSince
       List<MessageInfo> entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 4000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId6, 4000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(null, 5000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -193,15 +195,15 @@ public class PersistentIndexTest {
 
       // test getEntriesSince
       entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId6, 5000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(null, 5000, entries, new AtomicLong(0), flags);
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -349,7 +351,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId7, 1000, 12657));
           return infos;
         }
-      });
+      }, new DummyMessageStoreCleanup()); //@TODO
       IndexValue value6 = indexNew.getValue(blobId6);
       IndexValue value7 = indexNew.getValue(blobId7);
       Assert.assertEquals(value6.getSize(), 1000);
@@ -371,7 +373,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId7, 100, true));
           return infos;
         }
-      });
+      }, new DummyMessageStoreCleanup()); //@TODO
       value6 = indexNew.getValue(blobId6);
       value7 = indexNew.getValue(blobId7);
       Assert.assertEquals(value6.isFlagSet(IndexValue.Flags.Delete_Index), true);
@@ -433,7 +435,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId2, 1000, 12657));
           return infos;
         }
-      });
+      }, new DummyMessageStoreCleanup()); // @TODO
       value4 = indexNew.getValue(blobId1);
       value5 = indexNew.getValue(blobId2);
       Assert.assertEquals(value4.getSize(), 1000);
@@ -453,7 +455,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
           return infos;
         }
-      });
+      }, new DummyMessageStoreCleanup()); // @TODO
 
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
@@ -1446,5 +1448,396 @@ public class PersistentIndexTest {
         map.cleanup();
       }
     }
+  }
+
+  @Test
+  public void testFindDeletedEntries() {
+    // provide empty token and ensure we get everything till max
+    StoreFindToken token = new StoreFindToken();
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      StoreMetrics metrics = new StoreMetrics(tempFile().getParent(), new MetricRegistry());
+      Log log = new Log(logFile, 10000, metrics);
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      FindInfo infoempty = index.findDeletedEntriesSince(token, 1000);
+      Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+      MockId blobId6 = new MockId("id06");
+      MockId blobId7 = new MockId("id07");
+      MockId blobId8 = new MockId("id08");
+      MockId blobId9 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
+      MockId blobId16 = new MockId("id16");
+      MockId blobId17 = new MockId("id17");
+      MockId blobId18 = new MockId("id18");
+      MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, 0, flags, 12345));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, 100, flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, 200, flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, 300, flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, 400, flags, 12567));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, 600, flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, 700, flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, 800, flags, 12567));
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, 900, flags, 12567));
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, 1100, flags, 12567));
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, 1200, flags, 12567));
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, 1500, flags, 12567));
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, 1600, flags, 12567));
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, 1700, flags, 12567));
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, 1900, flags, 12567));
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, 2300, flags, 12567));
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, 2400, flags, 12567));
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, 2500, flags, 12567));
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 2600, flags, 12567));
+      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValue(100, 2700, flags, 12567));
+
+      //segment 1
+      index.addToIndex(entry1, new FileSpan(0, 100));
+      index.addToIndex(entry2, new FileSpan(100, 200));
+      index.addToIndex(entry3, new FileSpan(200, 300));
+      index.addToIndex(entry4, new FileSpan(300, 400));
+      index.addToIndex(entry5, new FileSpan(400, 500));
+      index.markAsDeleted(blobId2, new FileSpan(500, 600));
+
+      //segment 2
+      index.addToIndex(entry6, new FileSpan(600, 700));
+      index.addToIndex(entry7, new FileSpan(700, 800));
+      index.addToIndex(entry8, new FileSpan(800, 900));
+      index.addToIndex(entry9, new FileSpan(900, 1000));
+      index.markAsDeleted(blobId1, new FileSpan(1000, 1100));
+
+      //segment 3
+      index.addToIndex(entry10, new FileSpan(1100, 1200));
+      index.addToIndex(entry11, new FileSpan(1200, 1300));
+      index.markAsDeleted(blobId10, new FileSpan(1300, 1400));
+      index.markAsDeleted(blobId6, new FileSpan(1400, 1500));
+      index.addToIndex(entry12, new FileSpan(1500, 1600));
+      index.addToIndex(entry13, new FileSpan(1600, 1700));
+
+      //segment 4
+      index.addToIndex(entry14, new FileSpan(1700, 1800));
+      index.markAsDeleted(blobId4, new FileSpan(1800, 1900)); // <- earliest journal entry.
+      index.addToIndex(entry15, new FileSpan(1900, 2000));
+      index.markAsDeleted(blobId12, new FileSpan(2000, 2100));
+      index.markAsDeleted(blobId7, new FileSpan(2100, 2200));
+      index.markAsDeleted(blobId15, new FileSpan(2200, 2300));
+
+      //segment 5
+      index.addToIndex(entry16, new FileSpan(2300, 2400));
+      index.addToIndex(entry17, new FileSpan(2400, 2500));
+      index.addToIndex(entry18, new FileSpan(2500, 2600));
+      index.addToIndex(entry20, new FileSpan(2600, 2700));
+      index.addToIndex(entry19, new FileSpan(2700, 2800));
+      index.markAsDeleted(blobId19, new FileSpan(2800, 2900));
+      index.markAsDeleted(blobId20, new FileSpan(2900, 3000));
+
+      IndexValue value1 = index.getValue(blobId1);
+      IndexValue value2 = index.getValue(blobId2);
+      IndexValue value3 = index.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), 1000);
+      Assert.assertEquals(value1.getOriginalMessageOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 500);
+      Assert.assertEquals(value2.getOriginalMessageOffset(), 100);
+      Assert.assertEquals(value3.getOffset(), 200);
+      Assert.assertEquals(value3.getOriginalMessageOffset(), 200);
+
+      ByteBuffer buffer = ByteBuffer.allocate(3000);
+      log.appendFrom(buffer);
+      index.close();
+      index = new MockIndex(logFile, scheduler, log, config, factory);
+      FindInfo info = index.findDeletedEntriesSince(token, 500);
+      List<MessageInfo> messageEntries = info.getMessageEntries();
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId2);
+      Assert.assertEquals(messageEntries.get(0).getSize(), 100);
+      Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12567);
+      Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
+      Assert.assertEquals(messageEntries.size(), 5);
+
+      // in the order in the segment
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
+      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId10);
+
+      // this comes from the next segment
+      Assert.assertEquals(messageEntries.get(4).getStoreKey(), blobId4);
+
+      FindInfo info1 = index.findDeletedEntriesSince(info.getFindToken(), 600);
+      messageEntries = info1.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 5);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId12);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
+
+      // This last one comes from the journal, so they are in the order of when the key first
+      // entered the journal (regardless of when they were deleted).
+      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId20);
+      Assert.assertEquals(messageEntries.get(4).getStoreKey(), blobId19);
+
+      index.close();
+      indexFile.delete();
+      scheduler.shutdown();
+      log.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      org.junit.Assert.assertEquals(false, true);
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+  }
+
+  /* Tests for cleanup of deleted objects */
+  //@Test
+  public void testHardDeletes() {
+    // index.performHardDelete();
+    // get(deleted)
+    // check the content - all zeroed
+
+
+    // In end to end test, run and compare the blob
+    // c store to put some
+    // read them and verify content.
+    // hard delete
+    // read them and verify they are zero.
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      final MockId blobId1 = new MockId("id1");
+      final MockId blobId2 = new MockId("id2");
+      final MockId blobId3 = new MockId("id3");
+      final MockId blobId4 = new MockId("id4");
+      final MockId blobId5 = new MockId("id5");
+      final MockId blobId6 = new MockId("id6");
+      final MockId blobId7 = new MockId("id7");
+
+      ByteBuffer buffer = ByteBuffer.allocate(7000);
+      log.appendFrom(buffer);
+      byte flags = 3;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(3000, 0, flags, 12345));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(1000, 3000, flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(1000, 4000, flags, 12567));
+      index.addToIndex(entry1, new FileSpan(0, 3000));
+      index.addToIndex(entry2, new FileSpan(3000, 4000));
+      index.addToIndex(entry3, new FileSpan(4000, 5000));
+      index.close();
+
+      // create a new index and ensure the index is restored
+      MockIndex indexNew = new MockIndex(logFile, scheduler, log, config, factory);
+
+      IndexValue value1 = indexNew.getValue(blobId1);
+      IndexValue value2 = indexNew.getValue(blobId2);
+      IndexValue value3 = indexNew.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
+      indexNew.close();
+
+      // create a new index, persist, add more entries and fail. ensure new index restore
+      // removes extra rows
+      Properties props = new Properties();
+      props.put("store.data.flush.delay.seconds", "999999");
+      config = new StoreConfig(new VerifiableProperties(props));
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory);
+      indexNew.addToIndex(new IndexEntry(blobId4, new IndexValue(1000, 5000, 12657)), new FileSpan(5000, 6000));
+      indexNew.addToIndex(new IndexEntry(blobId5, new IndexValue(1000, 6000, 12657)), new FileSpan(6000, 7000));
+      try {
+        indexNew.close();
+        Assert.assertFalse("Should have thrown StoreException since index has new entires compared to log", true);
+      } catch (StoreException e) {
+        Assert.assertTrue("StoreException thrown as expected ", true);
+      }
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory);
+      value1 = indexNew.getValue(blobId1);
+      value2 = indexNew.getValue(blobId2);
+      value3 = indexNew.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), 0);
+      Assert.assertEquals(value2.getOffset(), 3000);
+      Assert.assertEquals(value3.getOffset(), 4000);
+      IndexValue value4 = indexNew.getValue(blobId4);
+      IndexValue value5 = indexNew.getValue(blobId5);
+      Assert.assertNull(value4);
+      Assert.assertNull(value5);
+      indexNew.close();
+
+      buffer = ByteBuffer.allocate(2000);
+      log.appendFrom(buffer);
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId6, 1000));
+          infos.add(new MessageInfo(blobId7, 1000, 12657));
+          return infos;
+        }
+      }, new DummyMessageStoreCleanup()); //@TODO
+      IndexValue value6 = indexNew.getValue(blobId6);
+      IndexValue value7 = indexNew.getValue(blobId7);
+      Assert.assertEquals(value6.getSize(), 1000);
+      Assert.assertEquals(value6.getOffset(), 5000);
+      Assert.assertEquals(value7.getSize(), 1000);
+      Assert.assertEquals(value7.getOffset(), 6000);
+      Assert.assertEquals(value7.getTimeToLiveInMs(), 12657);
+      Assert.assertEquals(log.getLogEndOffset(), 7000);
+      indexNew.close();
+
+      buffer = ByteBuffer.allocate(1000);
+      log.appendFrom(buffer);
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId6, 100, true));
+          infos.add(new MessageInfo(blobId7, 100, true));
+          return infos;
+        }
+      }, new DummyMessageStoreCleanup()); //@TODO
+      value6 = indexNew.getValue(blobId6);
+      value7 = indexNew.getValue(blobId7);
+      Assert.assertEquals(value6.isFlagSet(IndexValue.Flags.Delete_Index), true);
+      Assert.assertEquals(value7.getTimeToLiveInMs(), 12657);
+      Assert.assertEquals(value6.getSize(), 100);
+      Assert.assertEquals(value6.getOriginalMessageOffset(), 5000);
+      Assert.assertEquals(value6.getOffset(), 7000);
+      Assert.assertEquals(value7.getSize(), 100);
+      Assert.assertEquals(value7.getOriginalMessageOffset(), 6000);
+      Assert.assertEquals(value7.getOffset(), 7100);
+      indexNew.stopScheduler();
+      indexNew.deleteAll();
+      indexNew.close();
+
+      File toModify = new File(logFile, "0_index");
+      FileChannel channelToModify = Utils.openChannel(toModify, true);
+      channelToModify.truncate(0);
+      channelToModify.force(true);
+      scheduler.startup();
+
+      try {
+        MockIndex indexFail = new MockIndex(logFile, scheduler, log, config, factory);
+        Assert.assertFalse(true);
+      } catch (StoreException e) {
+        Assert.assertTrue(true);
+      }
+
+      byte[] salt = new byte[1];
+      salt[0] = 1;
+      channelToModify.write(ByteBuffer.wrap(salt));  // write version 1
+
+      try {
+        MockIndex indexReadFail = new MockIndex(logFile, scheduler, log, config, factory);
+        Assert.assertFalse(true);
+      } catch (StoreException e) {
+        Assert.assertTrue(true);
+      }
+
+      channelToModify.truncate(0);
+      byte[] addOnlyVersion = new byte[1];
+      addOnlyVersion[0] = 0;
+      channelToModify.write(ByteBuffer.wrap(addOnlyVersion));
+
+      try {
+        MockIndex indexEmptyLine = new MockIndex(logFile, scheduler, log, config, factory);
+        Assert.assertTrue(false);
+      } catch (StoreException e) {
+        Assert.assertTrue(true);
+      }
+
+      toModify.delete();
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId1, 1000));
+          infos.add(new MessageInfo(blobId2, 1000, 12657));
+          return infos;
+        }
+      }, new DummyMessageStoreCleanup()); // @TODO
+      value4 = indexNew.getValue(blobId1);
+      value5 = indexNew.getValue(blobId2);
+      Assert.assertEquals(value4.getSize(), 1000);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 1000);
+      Assert.assertEquals(value5.getOffset(), 1000);
+      Assert.assertEquals(value5.getTimeToLiveInMs(), 12657);
+
+      // check error state. this scenario would populate the index but the contents would fail to be parsed
+
+      indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
+        @Override
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            throws IOException {
+          List<MessageInfo> infos = new ArrayList<MessageInfo>();
+          infos.add(new MessageInfo(blobId4, 100, true));
+          infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
+          return infos;
+        }
+      }, new DummyMessageStoreCleanup()); // @TODO
+
+      value4 = indexNew.getValue(blobId4);
+      value5 = indexNew.getValue(blobId5);
+      Assert.assertEquals(value4.getSize(), 100);
+      Assert.assertEquals(value4.getOffset(), 0);
+      Assert.assertEquals(value5.getSize(), 100);
+      Assert.assertEquals(value5.getOffset(), 100);
+
+      log.close();
+      scheduler.shutdown();
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertEquals(false, true);
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+  }
+
+  @Test
+  public void testCleanupRecovery() {
+    // put some
+    // read them and verify content.
+    // hard delete
+    // read them and verify they are zero.
   }
 }

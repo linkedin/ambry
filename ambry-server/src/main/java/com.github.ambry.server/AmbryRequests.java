@@ -238,8 +238,16 @@ public class AmbryRequests implements RequestAPI {
           try {
             Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
             EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
+            // Currently only one option is supported.
             if (getRequest.getGetOptions() == GetOptions.Include_Expired_Blobs) {
               storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
+            }
+            if (getRequest.getGetOptions() == GetOptions.Include_Deleted_Blobs) {
+              storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
+            }
+            if (getRequest.getGetOptions() == GetOptions.Include_All) {
+              storeGetOptions =
+                  EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
             MessageFormatSend blobsToSend =

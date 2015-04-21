@@ -6,6 +6,7 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
 import com.github.ambry.utils.IFilter;
+import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +68,7 @@ class IndexSegment {
   private int valueSize;
   private File bloomFile;
   private int prevNumOfEntriesWritten = 0;
+  private long lastModified = 0; // an approximation of the last modified time.
   private AtomicInteger numberOfItems;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
   private final StoreMetrics metrics;
@@ -423,6 +425,14 @@ class IndexSegment {
   }
 
   /**
+   * The approximate lastModifiedTime
+   * This is only useful for unmapped segments
+   */
+  public long getLastModifiedTimeMs() {
+    return lastModified;
+  }
+
+  /**
    * Writes the index to a persistent file. Writes the data in the following format
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * | version | keysize | valuesize | fileendpointer |   key 1  | value 1  |  ...  |   key n   | value n   | crc      |
@@ -480,6 +490,7 @@ class IndexSegment {
         fileStream.getChannel().force(true);
         // swap temp file with the original file
         temp.renameTo(getFile());
+        lastModified = SystemTime.getInstance().milliseconds();
       } catch (IOException e) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
             " IO error while persisting index to disk", e, StoreErrorCodes.IOError);
@@ -620,11 +631,12 @@ class IndexSegment {
    * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @param flags If -1, returns all values. Otherwise, only entries that have the same flags will be returned.
    * @return true if any entries were added.
    * @throws IOException
    */
   public boolean getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes)
+      AtomicLong currentTotalSizeOfEntriesInBytes, byte flags)
       throws IOException {
     int entriesSizeAtStart = entries.size();
     if (mapped.get()) {
@@ -639,9 +651,9 @@ class IndexSegment {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
+          IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
           // we include the key in the final list if it is not the initial key or if the initial key was null
-          if (key == null || newKey.compareTo(key) != 0) {
-            IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
+          if ((key == null || newKey.compareTo(key) != 0) && (flags == -1 || flags == newValue.getFlags())) {
             MessageInfo info =
                 new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
                     newValue.getTimeToLiveInMs());
@@ -660,7 +672,8 @@ class IndexSegment {
         tempMap = index.tailMap(key, true);
       }
       for (Map.Entry<StoreKey, IndexValue> entry : tempMap.entrySet()) {
-        if (key == null || entry.getKey().compareTo(key) != 0) {
+        if ((key == null || entry.getKey().compareTo(key) != 0) && (flags == -1
+            || entry.getValue().getFlags() == flags)) {
           MessageInfo info = new MessageInfo(entry.getKey(), entry.getValue().getSize(),
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs());
           entries.add(info);
