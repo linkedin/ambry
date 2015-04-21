@@ -379,7 +379,6 @@ public class AmbryRequests implements RequestAPI {
 
   public void handleReplicaMetadataRequest(Request request)
       throws IOException, InterruptedException {
-    String threadName = Thread.currentThread().getName();
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -399,7 +398,7 @@ public class AmbryRequests implements RequestAPI {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
         ServerErrorCode error = validateRequest(partitionId, false);
-        logger.trace("Thread name: {} {} Time used to validate metadata request: {}", threadName, partitionId,
+        logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
         if (error != ServerErrorCode.No_Error) {
@@ -418,19 +417,19 @@ public class AmbryRequests implements RequestAPI {
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
                 store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
-            logger.trace("Thread name: {} {} Time used to find entry since: {}", threadName, partitionId,
+            logger.trace("{} Time used to find entry since: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
                 findInfo.getFindToken().getBytesRead());
-            logger.trace("Thread name: {} {} Time used to update total bytes read: {}", threadName, partitionId,
+            logger.trace("{} Time used to update total bytes read: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             long remoteReplicaLagInBytes =
                 replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
-            logger.trace("Thread name: {} {} Time used to get remote replica lag in bytes: {}", threadName, partitionId,
+            logger.trace("{} Time used to get remote replica lag in bytes: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
@@ -438,8 +437,7 @@ public class AmbryRequests implements RequestAPI {
                     remoteReplicaLagInBytes);
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           } catch (StoreException e) {
-            logger.error(threadName + " " + partitionId +
-                " Store exception on a replica metadata request with error code " + e.getErrorCode() +
+            logger.error("Store exception on a replica metadata request with error code " + e.getErrorCode() +
                 " for partition " + partitionId, e);
             if (e.getErrorCode() == StoreErrorCodes.IOError) {
               metrics.storeIOError.inc();
@@ -457,7 +455,7 @@ public class AmbryRequests implements RequestAPI {
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.No_Error, replicaMetadataResponseList);
     } catch (Exception e) {
-      logger.error("Thread name: " + threadName + " Unknown exception for request " + replicaMetadataRequest, e);
+      logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
               ServerErrorCode.Unknown_Error);
@@ -465,7 +463,7 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
-      logger.trace("{} {} {} processingTime {}", threadName, replicaMetadataRequest, response, processingTime);
+      logger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
 

@@ -457,7 +457,6 @@ public class PersistentIndex {
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
-    String threadName = Thread.currentThread().getName();
     long startTimeInMs = SystemTime.getInstance().milliseconds();
     try {
       boolean tokenWasReset = false;
@@ -485,8 +484,7 @@ public class PersistentIndex {
               "Invalid token. Provided offset is outside the log range after clean shutdown");
         }
       }
-      logger.trace("Thread name: {} Time used to validate token: {}", threadName,
-          (SystemTime.getInstance().milliseconds() - startTimeInMs));
+      logger.trace("Time used to validate token: {}", (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
@@ -503,7 +501,7 @@ public class PersistentIndex {
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
-        logger.trace("Thread name: {} Journal based token, Time used to get entries: {}", threadName,
+        logger.trace("Journal based token, Time used to get entries: {}",
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
         if (entries != null) {
@@ -525,13 +523,13 @@ public class PersistentIndex {
               break;
             }
           }
-          logger.trace("Thread name: {} Journal based token, Time used to generate message entries: {}", threadName,
+          logger.trace("Journal based token, Time used to generate message entries: {}",
               (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
           startTimeInMs = SystemTime.getInstance().milliseconds();
           logger.trace("Index : " + dataDir + " new offset from find info " + offsetEnd);
           eliminateDuplicates(messageEntries);
-          logger.trace("Thread name: {} Journal based token, Time used to eliminate duplicates: {}", threadName,
+          logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
           StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
@@ -546,22 +544,26 @@ public class PersistentIndex {
         } else {
           // Find index segment closest to the token offset.
           // Get entries starting from the first key in this offset.
-          startTimeInMs = SystemTime.getInstance().milliseconds();
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
           if (entry != null && entry.getKey() != indexes.lastKey()) {
+            startTimeInMs = SystemTime.getInstance().milliseconds();
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
+            logger.trace("Journal based to segment based token, Time used to find entries: {}",
+                (SystemTime.getInstance().milliseconds() - startTimeInMs));
+
+            startTimeInMs = SystemTime.getInstance().milliseconds();
             messageEntries = updateDeleteStateForMessages(messageEntries);
+            logger.trace("Journal based to segment based token, Time used to update delete state: {}",
+                (SystemTime.getInstance().milliseconds() - startTimeInMs));
           } else {
             newToken = storeToken;
           }
-          logger.trace("Thread name: {} Journal based to segment based token, Time used to generate message entries: {}",
-              threadName, (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
           startTimeInMs = SystemTime.getInstance().milliseconds();
           eliminateDuplicates(messageEntries);
-          logger.trace("Thread name: {} Journal based to segment based token, Time used to eliminate duplicates: {}",
-              threadName, (SystemTime.getInstance().milliseconds() - startTimeInMs));
+          logger.trace("Journal based to segment based token, Time used to eliminate duplicates: {}",
+              (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
           logger.trace("Index : " + dataDir +
               " new offset from find info" +
@@ -578,14 +580,18 @@ public class PersistentIndex {
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
                 messageEntries, maxTotalSizeOfEntries);
+        logger.trace("Segment based token, Time used to find entries: {}",
+            (SystemTime.getInstance().milliseconds() - startTimeInMs));
+
+        startTimeInMs = SystemTime.getInstance().milliseconds();
         messageEntries = updateDeleteStateForMessages(messageEntries);
-        logger.trace("Thread name: {} Segment based token, Time used to generate message entries: {}",
-            threadName, (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to update delete state: {}",
+            (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
         startTimeInMs = SystemTime.getInstance().milliseconds();
         eliminateDuplicates(messageEntries);
-        logger.trace("Thread name: {} Segment based token, Time used to eliminate duplicates: {}",
-            threadName, (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to eliminate duplicates: {}",
+            (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
         newToken.setBytesRead(totalBytesRead);
