@@ -66,7 +66,7 @@ class IndexSegment {
   private int keySize;
   private int valueSize;
   private File bloomFile;
-  private int prevNumOfEntriesWritten = 0;
+  private long prevSegmentEndOffset = 0;
   private AtomicInteger numberOfItems;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
   private final StoreMetrics metrics;
@@ -441,7 +441,7 @@ class IndexSegment {
    */
   public void writeIndexToFile(long safeEndPoint)
       throws IOException, StoreException {
-    if (prevNumOfEntriesWritten != index.size()) {
+    if (prevSegmentEndOffset != safeEndPoint) {
       if (safeEndPoint > getEndOffset()) {
         throw new StoreException("SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " +
             "index segment " + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
@@ -460,7 +460,6 @@ class IndexSegment {
         writer.writeInt(this.valueSize);
         writer.writeLong(safeEndPoint);
 
-        int numOfEntries = 0;
         // write the entries
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           if (entry.getValue().getOffset() + entry.getValue().getSize() <= safeEndPoint) {
@@ -469,10 +468,9 @@ class IndexSegment {
             logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
                 getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(), entry.getValue().getSize(),
                 safeEndPoint);
-            numOfEntries++;
           }
         }
-        prevNumOfEntriesWritten = numOfEntries;
+        prevSegmentEndOffset = safeEndPoint;
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
 
