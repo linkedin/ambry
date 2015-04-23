@@ -363,6 +363,7 @@ public class BlobValidator {
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
               partitionRequestInfos, getOptions);
+      System.out.println("----- Contacting " + replicaHost + ":" + replicaPort + " -------");
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 

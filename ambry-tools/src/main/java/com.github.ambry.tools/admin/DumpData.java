@@ -208,8 +208,8 @@ public class DumpData {
           String msg =
               "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
                   + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
-                  +
-                  " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
+                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index)
+                  + " LiveUntil " + blobValue.getTimeToLiveInMs();
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
           if (blobIdToStatusMap == null) {
@@ -219,7 +219,7 @@ public class DumpData {
           } else {
             if (blobIdToStatusMap.containsKey(key.toString())) {
               BlobStatus mapValue = blobIdToStatusMap.get(key.toString());
-              if (isDeleted) {
+              if (isDeleted || blobValue.isExpired()) {
                 if (mapValue.getAvailable().contains(key.toString())) {
                   mapValue.getAvailable().remove(key.toString());
                 }
@@ -231,7 +231,7 @@ public class DumpData {
                 }
               }
             } else {
-              BlobStatus mapValue = new BlobStatus(replica, isDeleted, replicaList);
+              BlobStatus mapValue = new BlobStatus(replica, isDeleted || blobValue.isExpired(), replicaList);
               blobIdToStatusMap.put(key.toString(), mapValue);
             }
           }

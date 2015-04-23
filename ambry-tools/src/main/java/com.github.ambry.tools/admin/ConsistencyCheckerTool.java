@@ -127,8 +127,10 @@ public class ConsistencyCheckerTool {
     DumpData dumpData = new DumpData(outFile, fileWriter, map);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
     for (File replica : replicas) {
-      new Thread(new ReplicaProcessorThread(map, replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
-          countDownLatch)).start();
+      Thread thread = new Thread(new ReplicaProcessorThread(map, replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
+          countDownLatch));
+      thread.start();
+      thread.join();
     }
     countDownLatch.await();
   }
