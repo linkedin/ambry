@@ -21,7 +21,7 @@ public class ByteBufferInputStream extends InputStream {
   /**
    * Reads 'size' amount of bytes from the stream into the buffer.
    * @param stream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
-   *               to be blocking
+   *               to be blocking.
    * @param size The size that needs to be read from the stream
    * @throws IOException
    */

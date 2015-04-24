@@ -19,6 +19,20 @@ public interface MessageWriteSet {
       throws IOException;
 
   /**
+   * Write the messages in this set to the given write channel at the given offset
+   * @param writeChannel The write interface to write the messages to
+   * @param offset The offset in the write interface at which to write
+   * @return The size in bytes that was written to the write interface
+   *
+  public long writeTo(Write writeChannel, long offset)
+      throws IOException;
+  */
+
+  /**
+   * Get the stream
+   */
+
+  /**
    * Returns info about the messages contained in this write set. The messages
    * need not be ordered in any specific format
    * @return The list of message info about the message set

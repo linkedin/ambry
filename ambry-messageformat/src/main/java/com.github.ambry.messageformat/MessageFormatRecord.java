@@ -398,7 +398,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static ByteBuffer deserializeUserMetadataRecord(CrcInputStream crcStream)
+    private static ByteBuffer deserializeUserMetadataRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       int usermetadataSize = dataStream.readInt();
