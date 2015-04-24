@@ -51,10 +51,6 @@ public class MessageInfo {
     return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
 
-  public void setDeleted(boolean isDeleted) {
-    this.isDeleted = isDeleted;
-  }
-
   @Override
   public String toString() {
     StringBuilder stringBuilder = new StringBuilder();

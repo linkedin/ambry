@@ -749,10 +749,14 @@ public class PersistentIndex {
    */
   private void updateDeleteStateForMessages(List<MessageInfo> messageEntries)
       throws StoreException {
-    for (MessageInfo messageInfo : messageEntries) {
+    ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator();
+    while (messageEntriesIterator.hasNext()) {
+      MessageInfo messageInfo = messageEntriesIterator.next();
       if (!messageInfo.isDeleted()) {
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
-        messageInfo.setDeleted(indexValue.isFlagSet(IndexValue.Flags.Delete_Index));
+        messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
+            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
+        messageEntriesIterator.set(messageInfo);
       }
     }
   }
