@@ -745,12 +745,11 @@ public class PersistentIndex {
    * Updates the messages with their deleted state. This method can be used when
    * the messages have been retrieved from an old index segment and needs to be updated with the deleted state
    * from the new index segment
-   * @param currentMessageEntries The message entries that needs to be updated with the delete state
-   * @return The new list of message entries with the updated state
+   * @param messageEntries The message entries that needs to be updated with the delete state
    */
-  private void updateDeleteStateForMessages(List<MessageInfo> currentMessageEntries)
+  private void updateDeleteStateForMessages(List<MessageInfo> messageEntries)
       throws StoreException {
-    for (MessageInfo messageInfo : currentMessageEntries) {
+    for (MessageInfo messageInfo : messageEntries) {
       if (!messageInfo.isDeleted()) {
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
         messageInfo.setDeleted(indexValue.isFlagSet(IndexValue.Flags.Delete_Index));
