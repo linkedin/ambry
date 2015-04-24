@@ -554,7 +554,7 @@ public class PersistentIndex {
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
             startTimeInMs = SystemTime.getInstance().milliseconds();
-            messageEntries = updateDeleteStateForMessages(messageEntries);
+            updateDeleteStateForMessages(messageEntries);
             logger.trace("Journal based to segment based token, Time used to update delete state: {}",
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
           } else {
@@ -585,7 +585,7 @@ public class PersistentIndex {
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
         startTimeInMs = SystemTime.getInstance().milliseconds();
-        messageEntries = updateDeleteStateForMessages(messageEntries);
+        updateDeleteStateForMessages(messageEntries);
         logger.trace("Segment based token, Time used to update delete state: {}",
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -748,20 +748,14 @@ public class PersistentIndex {
    * @param currentMessageEntries The message entries that needs to be updated with the delete state
    * @return The new list of message entries with the updated state
    */
-  private List<MessageInfo> updateDeleteStateForMessages(List<MessageInfo> currentMessageEntries)
+  private void updateDeleteStateForMessages(List<MessageInfo> currentMessageEntries)
       throws StoreException {
-    List<MessageInfo> newMessageEntries = new ArrayList<MessageInfo>(currentMessageEntries.size());
     for (MessageInfo messageInfo : currentMessageEntries) {
       if (!messageInfo.isDeleted()) {
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
-        MessageInfo newMessageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
-        newMessageEntries.add(newMessageInfo);
-      } else {
-        newMessageEntries.add(messageInfo);
+        messageInfo.setDeleted(indexValue.isFlagSet(IndexValue.Flags.Delete_Index));
       }
     }
-    return newMessageEntries;
   }
 
   /**
