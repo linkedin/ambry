@@ -404,59 +404,6 @@ public class ServerTest {
       // @TODO add an await mechanism to ensure that hard delete has passed these offsets instead of sleeping here.
       Thread.sleep(10000);
 
-      /* persist stop and start and make sure recovery covers this.
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 64422);
-      List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
-      for (String mountPath : mountPaths) {
-        File replicaTokenFile = new File(mountPath, "replicaTokens");
-        if (replicaTokenFile.exists()) {
-          CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
-          DataInputStream dataInputStream = new DataInputStream(crcStream);
-          try {
-            short version = dataInputStream.readShort();
-            Assert.assertEquals(version, 0);
-            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-            FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
-
-            System.out.println("setToCheck" + setToCheck.size());
-            while (dataInputStream.available() > 8) {
-              // read partition id
-              PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
-              // read remote node host name
-              String hostname = Utils.readIntString(dataInputStream);
-              // read remote replica path
-              Utils.readIntString(dataInputStream);
-
-              // read remote port
-              int port = dataInputStream.readInt();
-              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
-              setToCheck.remove(partitionId.toString() + hostname + port);
-              // read total bytes read from local store
-              dataInputStream.readLong();
-              // read replica token
-              FindToken token = factory.getFindToken(dataInputStream);
-              System.out.println(
-                  "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
-              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
-              Assert.assertEquals(bytebufferToken.getShort(), 0);
-              int size = bytebufferToken.getInt();
-              bytebufferToken.position(bytebufferToken.position() + size);
-              long parsedToken = bytebufferToken.getLong();
-              System.out.println("The parsed token is " + parsedToken);
-              Assert.assertTrue(parsedToken == -1 || parsedToken == 13062);
-            }
-            long crc = crcStream.getValue();
-            Assert.assertEquals(crc, dataInputStream.readLong());
-          } catch (IOException e) {
-            Assert.assertTrue(false);
-          } finally {
-            dataInputStream.close();
-          }
-        } else {
-          Assert.assertTrue(false);
-        }
-      }*/
-
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
@@ -626,6 +573,10 @@ public class ServerTest {
       e.printStackTrace();
       Assert.assertEquals(true, false);
     }
+  }
+
+  public void endToEndTestHardDeletesWithRecovery() {
+
   }
 
   @Test

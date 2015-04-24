@@ -47,15 +47,6 @@ public class MessageFormatWriteSet implements MessageWriteSet {
     return sizeToWrite;
   }
 
-/*  @Override
-  public long writeTo(Write writeChannel, long offset)
-      throws IOException {
-    ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
-    writeChannel.writeFrom(readableByteChannel, offset, sizeToWrite);
-    return sizeToWrite;
-  }
-  */
-
   @Override
   public List<MessageInfo> getMessageSetInfo() {
     return streamInfo;

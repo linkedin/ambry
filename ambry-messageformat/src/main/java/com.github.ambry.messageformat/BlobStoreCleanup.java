@@ -19,11 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-/* Cleans up the ids in the storeInfo by
-   1. Reading each entry
-   2. Ensuring they are deleted entries
-   3. Writing alternate records with content zeroed out.
- */
 public class BlobStoreCleanup implements MessageStoreCleanup {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -31,15 +26,10 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
   public List<ReplaceInfo> getReplacementInfo(MessageReadSet readSet, StoreKeyFactory storeKeyfactory)
       throws IOException {
 
-    //MessageReadSet readSet = storeInfo.getMessageReadSet();
-    //List<MessageInfo> messageInfoList = storeInfo.getMessageReadSetInfo();
-
-    //int messageCount = readSet.count();
-
     /*for each message:
-      1. Read the whole blob and do a crc check.
-      2. Add to a hard delete write set.
-      3. Return the hard delete set.
+      1. Read the whole blob and do a crc check. TODO: Make this optional for recovery.
+      2. Add to a hard delete replacement write set.
+      3. Return the replacement info.
      */
     List<ReplaceInfo> replaceInfoList = new ArrayList<ReplaceInfo>();
 
