@@ -305,12 +305,13 @@ public class PersistentIndex {
       return true;
     }
     if (lastSegment.getKeySize() != entry.getKey().sizeInBytes()) {
-      logger.info("Rolling over because the segment keySize: {} != entry's keysize {}",
-          lastSegment.getKeySize(), entry.getKey().sizeInBytes());
+      logger.info("Rolling over because the segment keySize: {} != entry's keysize {}", lastSegment.getKeySize(),
+          entry.getKey().sizeInBytes());
       return true;
     }
     if (lastSegment.getValueSize() != IndexValue.Index_Value_Size_In_Bytes) {
-      logger.info("Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}", IndexValue.Index_Value_Size_In_Bytes);
+      logger.info("Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
+          IndexValue.Index_Value_Size_In_Bytes);
       return true;
     }
     return false;
@@ -369,8 +370,8 @@ public class PersistentIndex {
         segmentsMapToSearch = indexes
             .subMap(indexes.floorKey(fileSpan.getStartOffset()), true, indexes.floorKey(fileSpan.getEndOffset()), true)
             .descendingMap();
+        metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
-      metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       for (Map.Entry<Long, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
@@ -553,7 +554,7 @@ public class PersistentIndex {
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
             startTimeInMs = SystemTime.getInstance().milliseconds();
-            messageEntries = updateDeleteStateForMessages(messageEntries);
+            updateDeleteStateForMessages(messageEntries);
             logger.trace("Journal based to segment based token, Time used to update delete state: {}",
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
           } else {
@@ -584,7 +585,7 @@ public class PersistentIndex {
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
         startTimeInMs = SystemTime.getInstance().milliseconds();
-        messageEntries = updateDeleteStateForMessages(messageEntries);
+        updateDeleteStateForMessages(messageEntries);
         logger.trace("Segment based token, Time used to update delete state: {}",
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -742,21 +743,22 @@ public class PersistentIndex {
 
   /**
    * Updates the messages with their deleted state. This method can be used when
-   * the messages have been retrieved from an old index segment and needs to be updates with the deleted state
+   * the messages have been retrieved from an old index segment and needs to be updated with the deleted state
    * from the new index segment
-   * @param currentMessageEntries The message entries that needs to be updated with the delete state
-   * @return The new list of message entries with the updated state
+   * @param messageEntries The message entries that needs to be updated with the delete state
    */
-  private List<MessageInfo> updateDeleteStateForMessages(List<MessageInfo> currentMessageEntries)
+  private void updateDeleteStateForMessages(List<MessageInfo> messageEntries)
       throws StoreException {
-    List<MessageInfo> newMessageEntries = new ArrayList<MessageInfo>(currentMessageEntries.size());
-    for (MessageInfo messageInfo : currentMessageEntries) {
-      IndexValue indexValue = findKey(messageInfo.getStoreKey());
-      MessageInfo newMessageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-          indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
-      newMessageEntries.add(newMessageInfo);
+    ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator();
+    while (messageEntriesIterator.hasNext()) {
+      MessageInfo messageInfo = messageEntriesIterator.next();
+      if (!messageInfo.isDeleted()) {
+        IndexValue indexValue = findKey(messageInfo.getStoreKey());
+        messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
+            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
+        messageEntriesIterator.set(messageInfo);
+      }
     }
-    return newMessageEntries;
   }
 
   /**
