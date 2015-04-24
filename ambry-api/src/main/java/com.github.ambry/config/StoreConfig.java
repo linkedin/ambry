@@ -63,13 +63,6 @@ public class StoreConfig {
   public final double storeIndexBloomMaxFalsePositiveProbability;
 
   /**
-   * The frequency at which the store cleanup thread runs
-   */
-  @Config("store.data.cleanup.interval.seconds")
-  @Default("60")
-  public final long storeDataCleanupIntervalSeconds;
-
-  /**
    * The delay after which the data cleanup thread starts on startup
    */
   @Config("store.data.cleanup.delay.seconds")
@@ -103,7 +96,6 @@ public class StoreConfig {
     storeJournalFactory = verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
-    storeDataCleanupIntervalSeconds = verifiableProperties.getLong("store.data.cleanup.interval.seconds", 60);
     storeDataCleanupDelaySeconds = verifiableProperties.getInt("store.data.cleanup.delay.seconds", 10);
     storeDataCleanupAgeDays = verifiableProperties.getInt("store.data.cleanup.age.days", 7);
     storeDataCleanupBatchSize = verifiableProperties.getInt("store.data.cleanup.batch.size", 10 * 1024 * 1024);
