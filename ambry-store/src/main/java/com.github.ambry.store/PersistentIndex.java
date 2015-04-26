@@ -1006,7 +1006,7 @@ public class PersistentIndex {
             endToken = new StoreFindToken();
           }
         } catch (IOException e) {
-          throw new StoreException("Failed to read cleanup token", e, StoreErrorCodes.Initialization_Error);
+          throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.Initialization_Error);
         } finally {
           stream.close();
         }
@@ -1110,6 +1110,9 @@ public class PersistentIndex {
      */
     private void hardDelete(FindToken untilToken)
         throws IOException, StoreException {
+      if (indexes.size() == 0) {
+        return;
+      }
 
       StoreFindToken storeUntilToken = (StoreFindToken) untilToken;
       if (storeUntilToken != null && storeUntilToken.isUninitialized()) {
@@ -1149,7 +1152,7 @@ public class PersistentIndex {
           return 0;
         } else {
           long startOffset =
-              start.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset ? start.getIndexStartOffset() : 0;
+              start.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset ? 0 : start.getIndexStartOffset();
           return end.getIndexStartOffset() - startOffset;
         }
       } else {
@@ -1166,10 +1169,6 @@ public class PersistentIndex {
 
     public void run() {
       try {
-        if (indexes.size() == 0) {
-          return;
-        }
-
         //TODO: throttling logic needs some work.
 
         /*IndexSegment lastSegment = indexes.lastEntry().getValue();

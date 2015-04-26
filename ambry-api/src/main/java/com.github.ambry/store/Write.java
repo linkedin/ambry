@@ -25,7 +25,6 @@ public interface Write {
    * to the interface and returns the number of bytes written successfully
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
-   * @return The number of bytes written to the write interface
    * @throws IOException
    */
   void appendFrom(ReadableByteChannel channel, long size)
@@ -38,7 +37,6 @@ public interface Write {
    * @param channel The channel from which data needs to be written from.
    * @param offset The offset at which to write in the underlying write interface.
    * @param size The amount of data in bytes to be written from the channel.
-   * @return The number of bytes written to the write interface
    * @throws IOException
    */
   void writeFrom(ReadableByteChannel channel, long offset, long size)

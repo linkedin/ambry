@@ -137,12 +137,7 @@ public class ReplicationTest {
       @Override
       public void writeFrom(ReadableByteChannel channel, long offset, long size)
           throws IOException {
-        int sizeRead = 0;
-        ByteBuffer buffer = buflist.get(index);
-        while (sizeRead < size) {
-          sizeRead += channel.read(buffer);
-        }
-        index++;
+        throw new IllegalArgumentException("Not implemented");
       }
     }
 

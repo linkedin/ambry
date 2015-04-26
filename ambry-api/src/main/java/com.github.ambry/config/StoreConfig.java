@@ -77,7 +77,7 @@ public class StoreConfig {
   public final int storeDataCleanupAgeDays;
 
   /**
-   * Cleanup batch size. The size of entreis processed in every iteration
+   * Cleanup batch size. The size of entries processed in every iteration
    */
   @Config("store.data.cleanup.batch.size")
   @Default("10 * 1024 * 1024")
