@@ -8,9 +8,9 @@ import java.util.List;
 public class DummyMessageStoreCleanup implements MessageStoreCleanup {
 
   @Override
-  public List<ReplaceInfo> getReplacementInfo(MessageReadSet readSet, StoreKeyFactory factory)
+  public ReplaceInfo getReplacementInfo(MessageReadSet readSet, int readSetIndex, StoreKeyFactory factory)
       throws IOException  {
-    return new ArrayList<ReplaceInfo>();
+    return null;
   }
 }
 

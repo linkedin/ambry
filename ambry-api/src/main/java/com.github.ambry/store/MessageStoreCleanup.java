@@ -11,10 +11,11 @@ public interface MessageStoreCleanup {
   /**
    * Gets a replacement MessageWriteSet for cleaning up a message in a MessageReadSet.
    * @param readSet The set of messages to be replaced.
+   * @param readSetIndex The index of the message in the readSet for which the replacement write set is to be obtained.
    * @param factory the store key factory.
-   * @return list of ReplaceInfo with the readable byte channel containing the replacement message
+   * @return ReplaceInfo with the readable byte channel containing the replacement message
    * @throws IOException
    */
-  List<ReplaceInfo> getReplacementInfo(MessageReadSet readSet, StoreKeyFactory factory)
+  ReplaceInfo getReplacementInfo(MessageReadSet readSet, int readSetIndex, StoreKeyFactory factory)
       throws IOException;
 }

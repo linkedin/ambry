@@ -120,7 +120,7 @@ public class Log implements Read, Write {
     while (bytesWritten < size) {
       bytesWritten += fileChannel.transferFrom(channel, offset + bytesWritten, size - bytesWritten);
     }
-    logger.trace("Log : {} bytes appended to the log from read channel at {}, bytesWritten: {}", file.getAbsolutePath(),
+    logger.trace("Log : {} bytes written to the log from read channel at {}, bytesWritten: {}", file.getAbsolutePath(),
         offset, bytesWritten);
   }
 

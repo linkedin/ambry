@@ -12,9 +12,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,18 +21,18 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public List<ReplaceInfo> getReplacementInfo(MessageReadSet readSet, StoreKeyFactory storeKeyfactory)
+  public ReplaceInfo getReplacementInfo(MessageReadSet readSet, int readSetIndex, StoreKeyFactory storeKeyfactory)
       throws IOException {
 
-    /*for each message:
-      1. Read the whole blob and do a crc check. TODO: Make this optional for recovery.
+    /*for the message at readSetIndex, do the following:
+      1. Read the whole blob and do a crc check. If the crc check fails, return - this means that the record
+         is not retrievable anyway.
       2. Add to a hard delete replacement write set.
       3. Return the replacement info.
      */
-    List<ReplaceInfo> replaceInfoList = new ArrayList<ReplaceInfo>();
+    ReplaceInfo replaceInfo;
 
     try {
-      for (int readSetIndex = 0; readSetIndex < readSet.count(); readSetIndex++) {
         /* Read the version field in the header */
         ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
         readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
@@ -86,32 +84,35 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
                   new PutMessageFormatInputStream(storeKey, blobProperties, userMetadata, blobOutput.getStream(),
                       blobOutput.getSize(), MessageFormatRecord.Message_Header_Version_V1);
 
-              replaceInfoList.add(new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize()));
+              replaceInfo = new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
             }
             break;
           default:
             throw new IOException("Unknown header version " + version + "storeKey " + readSet.getKeyAt(readSetIndex));
         }
-      }
     } catch (MessageFormatException e) {
+      if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
+        logger.error("Message is corrupt in the log.");
+        return null;
+      }
       logger.error("Message format exception, error: {} + cause: {}", e.getErrorCode(), e.getCause());
       throw new IOException("Message format exception");
     }
 
-    return replaceInfoList;
+    return replaceInfo;
   }
 
   private BlobProperties getReplacementBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex,
       long relativeOffset, long blobPropertiesSize)
       throws MessageFormatException, IOException {
+
     /* Read the field from the channel */
     ByteBuffer blobProperties = ByteBuffer.allocate((int) blobPropertiesSize);
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobProperties)), relativeOffset,
         blobPropertiesSize);
     blobProperties.flip();
 
-    // verify correctness.
-    //@TODO this should be optional as in the case of recovery crc may not match.
+    // deserialize just to verify if it can be read.
     return MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
   }
 
@@ -125,9 +126,6 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
         userMetadataSize);
     userMetaData.flip();
 
-    // deserialize and get the replacement record serialized
-    // @todo: crc check should be optional during recovery. Rather, fail with a warning (no need to overwrite as the field
-    // can't be retrieved. If outside of recovery, fail and throw.
     userMetaData = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData));
     // Zero out userMetadata
     Arrays.fill(userMetaData.array(), (byte) 0);
@@ -137,13 +135,13 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
   private BlobOutput getDeserializedBlobRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
       long blobRecordSize)
       throws MessageFormatException, IOException {
+
     /* Read the field from the channel */
     ByteBuffer blobRecord = ByteBuffer.allocate((int) blobRecordSize);
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobRecord)), relativeOffset,
         blobRecordSize);
     blobRecord.flip();
     // verifies crc among other things by deserializing
-    //@TODO this should be optional as in the case of recovery crc may not match.
     BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blobRecord));
     return new BlobOutput(blobOutput.getSize(), new ZeroBytesInputStream((int) blobOutput.getSize()));
   }

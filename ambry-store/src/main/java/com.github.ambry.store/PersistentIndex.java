@@ -435,8 +435,9 @@ public class PersistentIndex {
   }
 
   /**
-   * Returns the blob read info for a given key that is not deleted or expired ttl
+   * Returns the blob read info for a given key
    * @param id The id of the entry whose info is required
+   * @param getOptions the get options that indicate whether blob read info for deleted/expired blobs are to be returned.
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
    */
@@ -1083,12 +1084,11 @@ public class PersistentIndex {
         }
 
         StoreMessageReadSet readSet = log.getView(readOptions);
-
-        List<ReplaceInfo> replicaInfoList = cleanup.getReplacementInfo(readSet, factory);
-
         for (int i = 0; i < readSet.count(); i++) {
-          ReplaceInfo replaceInfo = replicaInfoList.get(i);
-          log.writeFrom(replaceInfo.getChannel(), readOptions.get(i).getOffset(), replaceInfo.getSize());
+          ReplaceInfo replaceInfo = cleanup.getReplacementInfo(readSet, i, factory);
+          if (replaceInfo != null) {
+            log.writeFrom(replaceInfo.getChannel(), readOptions.get(i).getOffset(), replaceInfo.getSize());
+          }
         }
       } catch (IOException e) {
         throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
@@ -1097,6 +1097,7 @@ public class PersistentIndex {
 
     /**
      * Finds deleted entries from the index calls performHardDelete to delete the corresponding put records in the log.
+     * Note: At this time, expired blobs are not hard deleted.
      * The algorithm is as follows:
      * 1. Start at the current token S.
      * 2. (E, entries) = findDeletedEntriesSince(S).
@@ -1127,10 +1128,9 @@ public class PersistentIndex {
         persistCleanupToken(); // this is to persist the end token without which we can't move ahead.
         if (!info.getMessageEntries().isEmpty()) {
           performHardDeletes(info.getMessageEntries());
-          //persistCleanupToken(); // this is not really necessary, but we have it just in case hardDelete() doesn't get
-          // scheduled again.
+          // only move forward if performHardDeletes completed successfully.
+          startToken = endToken;
         }
-        startToken = endToken;
 
         if (untilToken == null) {
           break;
