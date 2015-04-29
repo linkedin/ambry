@@ -10,6 +10,10 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -493,7 +497,9 @@ public class ReplicationTest {
   public void replicaThreadTest()
       throws InterruptedException, IOException {
     try {
+      Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
+
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422));
 
       Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
@@ -515,29 +521,29 @@ public class ReplicationTest {
 
         for (int j = 0; j < 10; j++) {
           BlobId id = new BlobId(partitionIds.get(i));
-          messageInfoListLocalReplica.add(new MessageInfo(id, 1000));
-          messageInfoListRemoteReplica2.add(new MessageInfo(id, 1000));
-          byte[] bytes = new byte[1000];
-          new Random().nextBytes(bytes);
-          messageBufferListLocalReplica.add(ByteBuffer.wrap(bytes));
-          messageBufferListLocalReplica2.add(ByteBuffer.wrap(bytes));
+          ByteBuffer byteBuffer = constructEntireMessageForTestBlob(id, 1000, random);
+          long streamSize = byteBuffer.limit();
+          messageInfoListLocalReplica.add(new MessageInfo(id, streamSize));
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListLocalReplica.add(byteBuffer);
+          messageBufferListLocalReplica2.add(byteBuffer);
         }
 
         // add additional messages to replica 2
         for (int j = 10; j < 15; j++) {
           BlobId id = new BlobId(partitionIds.get(i));
-          messageInfoListRemoteReplica2.add(new MessageInfo(id, 1000));
-          byte[] bytes = new byte[1000];
-          new Random().nextBytes(bytes);
-          messageBufferListLocalReplica2.add(ByteBuffer.wrap(bytes));
+          ByteBuffer byteBuffer = constructEntireMessageForTestBlob(id, 1000, random);
+          long streamSize = byteBuffer.limit();
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListLocalReplica2.add(byteBuffer);
         }
 
         // add an expired message to replica 2
         BlobId idExpired = new BlobId(partitionIds.get(i));
-        messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, 1000, 1));
-        byte[] bytesExpired = new byte[1000];
-        new Random().nextBytes(bytesExpired);
-        messageBufferListLocalReplica2.add(ByteBuffer.wrap(bytesExpired));
+        ByteBuffer byteBuffer = constructEntireMessageForTestBlob(idExpired, 1000, random);
+        long streamSize = byteBuffer.limit();
+        messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, streamSize, 1));
+        messageBufferListLocalReplica2.add(byteBuffer);
         messageInfoNode1.put(partitionIds.get(i), messageInfoListLocalReplica);
         bufferListNode1.put(partitionIds.get(i), messageBufferListLocalReplica);
         messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
@@ -671,4 +677,40 @@ public class ReplicationTest {
       Assert.assertTrue(false);
     }
   }
+
+  private ByteBuffer constructEntireMessageForTestBlob(BlobId id, long blobSize, Random random)
+      throws MessageFormatException, IOException {
+      return constructEntireMessageForTestBlob(id, blobSize, random, "test");
+  }
+
+  /**
+   * To construct an entire message with header, blob property, usermeta data and blob content
+   * @param id Blob id for which the message has to be constructed
+   * @param blobSize the size of the blob
+   * @param random Random object used to generated usermetadata size
+   * @param serviceId SerivceId used in blob properties
+   * @return ByteBuffer representing the entire message
+   * @throws MessageFormatException
+   * @throws IOException
+   */
+
+  private ByteBuffer constructEntireMessageForTestBlob(BlobId id, long blobSize, Random random, String serviceId)
+      throws MessageFormatException, IOException {
+
+    int userMetadataSize = random.nextInt((int) blobSize / 2);
+    byte[] usermetadata = new byte[userMetadataSize];
+    byte[] blob = new byte[(int) blobSize];
+    new Random().nextBytes(usermetadata);
+    new Random().nextBytes(blob);
+    BlobProperties blobProperties = new BlobProperties(blobSize, serviceId);
+
+    MessageFormatInputStream inputStream =
+        new PutMessageFormatInputStream(id, blobProperties, ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), (int) blobSize);
+    int streamSize = (int) inputStream.getSize();
+    byte[] entireBlob = new byte[streamSize];
+    inputStream.read(entireBlob, 0, streamSize);
+    return ByteBuffer.wrap(entireBlob);
+  }
 }
+

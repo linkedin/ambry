@@ -53,12 +53,18 @@ public class MessageFormatWriteSetTest {
     List<MessageInfo> infoList = new ArrayList<MessageInfo>();
     infoList.add(info1);
     infoList.add(info2);
+    long sizeToWrite = 0;
+    for (MessageInfo info : infoList) {
+      sizeToWrite += info.getSize();
+    }
+    ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
     MessageFormatWriteSet set =
-        new MessageFormatWriteSet(new ByteBufferInputStream(ByteBuffer.wrap(buf)), infoList, false);
+        new MessageFormatWriteSet(byteBufferInputStream, infoList, sizeToWrite);
     MockWrite write = new MockWrite(2000);
     long written = set.writeTo(write);
     Assert.assertEquals(written, 2000);
     Assert.assertEquals(write.getBuffer().limit(), 2000);
     Assert.assertArrayEquals(write.getBuffer().array(), buf);
   }
+
 }

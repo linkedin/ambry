@@ -24,19 +24,12 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private List<MessageInfo> streamInfo;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public MessageFormatWriteSet(InputStream stream, List<MessageInfo> streamInfo, boolean materializeStream)
+  public MessageFormatWriteSet(InputStream inputStream, List<MessageInfo> streamInfo,
+      long sizeToWrite)
       throws IOException {
-    sizeToWrite = 0;
-    for (MessageInfo info : streamInfo) {
-      sizeToWrite += info.getSize();
-    }
+    this.sizeToWrite = sizeToWrite;
     this.streamInfo = streamInfo;
-    if (materializeStream) {
-      ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(stream, (int) sizeToWrite);
-      streamToWrite = byteBufferInputStream;
-    } else {
-      streamToWrite = stream;
-    }
+    this.streamToWrite = inputStream;
   }
 
   @Override
