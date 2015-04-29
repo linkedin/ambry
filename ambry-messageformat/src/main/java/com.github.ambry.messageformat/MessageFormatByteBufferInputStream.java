@@ -121,7 +121,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
       return -1;
     }
     if ((currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() == (position))) {
-      moveToNextNonCorruptMsg();
+      iterateToNextNonCorruptMsg();
       byteBuffer.position(position);
     }
     position++;
@@ -149,14 +149,14 @@ public class MessageFormatByteBufferInputStream extends InputStream {
       int currentMsgSizeYetToBeRead =
           (int) (currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() - position);
       if (sizeRead + currentMsgSizeYetToBeRead < count) { // current msg has less bytes than required
-        readNBytes(currentMsgSizeYetToBeRead, bytes, offset);
+        readBytesFromBuffer(bytes, offset, currentMsgSizeYetToBeRead);
         sizeRead += currentMsgSizeYetToBeRead;
         offset += currentMsgSizeYetToBeRead;
-        moveToNextNonCorruptMsg();
+        iterateToNextNonCorruptMsg();
         byteBuffer.position(position);
       } else {
         //current msg has more byes than required
-        readNBytes(count - sizeRead, bytes, offset);
+        readBytesFromBuffer(bytes, offset, count - sizeRead);
         offset += count - sizeRead;
         sizeRead += (count - sizeRead);
         break;
@@ -173,7 +173,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     }
   }
 
-  private void moveToNextNonCorruptMsg()
+  private void iterateToNextNonCorruptMsg()
       throws IllegalArgumentException {
     if (sizeLeftToRead == 0) {
       throw new IllegalArgumentException("No more bytes to read ");
@@ -188,7 +188,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     }
   }
 
-  private void readNBytes(int length, byte[] bytes, int offset) {
+  private void readBytesFromBuffer(byte[] bytes, int offset, int length) {
     byteBuffer.get(bytes, offset, length);
     position = byteBuffer.position();
     sizeLeftToRead -= length;
@@ -232,6 +232,15 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     return new MessageFormatByteBufferInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, clusterMap);
   }
 
+  /**
+   * To check if the Inputstream contains an entire blob in proper message format
+   * @param inputStream InputStream for which the check is to be done
+   * @param size total size of the message expected
+   * @param currentOffset Current offset at which the stream was read from the buffer
+   * @param storeKeyFactory StoreKeyFactory used to get store key
+   * @return true if message was corrupt and false otherwise
+   * @throws IOException
+   */
   private boolean isCorrupt(InputStream inputStream, long size, int currentOffset, StoreKeyFactory storeKeyFactory)
       throws IOException {
     String messageheader = null;
