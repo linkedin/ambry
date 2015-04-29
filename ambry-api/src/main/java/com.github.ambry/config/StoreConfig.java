@@ -79,9 +79,9 @@ public class StoreConfig {
   /**
    * Cleanup batch size. The size of entries processed in every iteration
    */
-  @Config("store.data.cleanup.batch.size")
+  @Config("store.data.cleanup.batch.size.in.bytes")
   @Default("10 * 1024 * 1024")
-  public final int storeDataCleanupBatchSize;
+  public final int storeDataCleanupBatchSizeInBytes;
 
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
@@ -98,7 +98,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDataCleanupDelaySeconds = verifiableProperties.getInt("store.data.cleanup.delay.seconds", 10);
     storeDataCleanupAgeDays = verifiableProperties.getInt("store.data.cleanup.age.days", 7);
-    storeDataCleanupBatchSize = verifiableProperties.getInt("store.data.cleanup.batch.size", 10 * 1024 * 1024);
+    storeDataCleanupBatchSizeInBytes = verifiableProperties.getInt("store.data.cleanup.batch.size.in.bytes", 10 * 1024 * 1024);
   }
 }
 

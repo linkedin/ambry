@@ -74,7 +74,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreCleanup());
+          new DummyMessageStoreHardDelete());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -148,7 +148,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreCleanup());
+          new DummyMessageStoreHardDelete());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -209,7 +209,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreCleanup());
+          new DummyMessageStoreHardDelete());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -290,7 +290,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreCleanup());
+          new DummyMessageStoreHardDelete());
       store.start();
       byte[] bufToWrite = new byte[5000];
       new Random().nextBytes(bufToWrite);
@@ -425,7 +425,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreCleanup());
+          new DummyMessageStoreHardDelete());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);

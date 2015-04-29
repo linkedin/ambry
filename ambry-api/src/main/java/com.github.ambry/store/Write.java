@@ -22,7 +22,7 @@ public interface Write {
 
   /**
    * Appends the channel to the underlying write interface. Writes "size" number of bytes
-   * to the interface and returns the number of bytes written successfully
+   * to the interface.
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
    * @throws IOException
@@ -32,8 +32,7 @@ public interface Write {
 
   /**
    * Writes the channel to the underlying write interface at the given offset.
-   * Writes "size" number of bytes to the interface at the offset and returns the number
-   * of bytes written successfully
+   * Writes "size" number of bytes to the interface at the offset.
    * @param channel The channel from which data needs to be written from.
    * @param offset The offset at which to write in the underlying write interface.
    * @param size The amount of data in bytes to be written from the channel.

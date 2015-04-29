@@ -11,7 +11,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobStoreCleanup;
+import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.SocketServer;
@@ -97,7 +97,7 @@ public class AmbryServer {
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storeManager =
           new StoreManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
-              new BlobStoreRecovery(), new BlobStoreCleanup());
+              new BlobStoreRecovery(), new BlobStoreHardDelete());
       storeManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);

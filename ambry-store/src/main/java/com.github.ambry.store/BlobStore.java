@@ -38,11 +38,11 @@ public class BlobStore implements Store {
   private FileLock fileLock;
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
-  private MessageStoreCleanup cleanup;
+  private MessageStoreHardDelete hardDelete;
   private StoreMetrics metrics;
 
   public BlobStore(StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
-      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreCleanup cleanup) {
+      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete) {
     this.metrics = new StoreMetrics(dataDir, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
@@ -50,7 +50,7 @@ public class BlobStore implements Store {
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
     this.recovery = recovery;
-    this.cleanup = cleanup;
+    this.hardDelete = hardDelete;
   }
 
   @Override
@@ -84,7 +84,7 @@ public class BlobStore implements Store {
               ". Another process or thread is using this directory.", StoreErrorCodes.Initialization_Error);
         }
         log = new Log(dataDir, capacityInBytes, metrics);
-        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, cleanup, metrics);
+        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);

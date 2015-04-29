@@ -44,12 +44,12 @@ public class PersistentIndexTest {
   class MockIndex extends PersistentIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreCleanup(),
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
           new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-        MessageStoreRecovery recovery, MessageStoreCleanup cleanup)
+        MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, recovery, cleanup,
           new StoreMetrics(datadir, new MetricRegistry()));
@@ -351,7 +351,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId7, 1000, 12657));
           return infos;
         }
-      }, new DummyMessageStoreCleanup());
+      }, new DummyMessageStoreHardDelete());
       IndexValue value6 = indexNew.getValue(blobId6);
       IndexValue value7 = indexNew.getValue(blobId7);
       Assert.assertEquals(value6.getSize(), 1000);
@@ -373,7 +373,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId7, 100, true));
           return infos;
         }
-      }, new DummyMessageStoreCleanup());
+      }, new DummyMessageStoreHardDelete());
       value6 = indexNew.getValue(blobId6);
       value7 = indexNew.getValue(blobId7);
       Assert.assertEquals(value6.isFlagSet(IndexValue.Flags.Delete_Index), true);
@@ -435,7 +435,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId2, 1000, 12657));
           return infos;
         }
-      }, new DummyMessageStoreCleanup());
+      }, new DummyMessageStoreHardDelete());
       value4 = indexNew.getValue(blobId1);
       value5 = indexNew.getValue(blobId2);
       Assert.assertEquals(value4.getSize(), 1000);
@@ -455,7 +455,7 @@ public class PersistentIndexTest {
           infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
           return infos;
         }
-      }, new DummyMessageStoreCleanup());
+      }, new DummyMessageStoreHardDelete());
 
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);

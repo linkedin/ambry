@@ -28,7 +28,7 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
-import com.github.ambry.store.MessageStoreCleanup;
+import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
@@ -305,8 +305,8 @@ public class ReplicationTest {
     Map<PartitionId, MockStore> stores;
 
     public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-        StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreCleanup cleanup, Map<PartitionId, MockStore> stores) {
-      super(config, scheduler, registry, replicas, factory, recovery, cleanup);
+        StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Map<PartitionId, MockStore> stores) {
+      super(config, scheduler, registry, replicas, factory, recovery, hardDelete);
       this.stores = stores;
     }
 

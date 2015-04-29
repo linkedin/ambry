@@ -1,7 +1,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageReadSet;
-import com.github.ambry.store.MessageStoreCleanup;
+import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.ReplaceInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -13,16 +13,47 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+public class BlobStoreHardDelete implements MessageStoreHardDelete {
+  public Iterator<ReplaceInfo> replacementIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
+    return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
+  }
+}
 
-public class BlobStoreCleanup implements MessageStoreCleanup {
+class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private int readSetIndex = 0;
+  private final MessageReadSet readSet;
+  private final StoreKeyFactory storeKeyFactory;
+
+  public BlobStoreHardDeleteIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
+    this.readSet = readSet;
+    this.storeKeyFactory = storeKeyFactory;
+  }
 
   @Override
-  public ReplaceInfo getReplacementInfo(MessageReadSet readSet, int readSetIndex, StoreKeyFactory storeKeyfactory)
-      throws IOException {
+  public boolean hasNext() {
+    return readSetIndex != readSet.count();
+  }
+
+  @Override
+  public ReplaceInfo next() {
+    if (!hasNext()) {
+      throw new NoSuchElementException();
+    }
+    return getReplacementInfo(readSetIndex++);
+  }
+
+  @Override
+  public void remove() {
+    throw new UnsupportedOperationException();
+  }
+
+  private ReplaceInfo getReplacementInfo(int readSetIndex) {
 
     /*for the message at readSetIndex, do the following:
       1. Read the whole blob and do a crc check. If the crc check fails, return - this means that the record
@@ -30,7 +61,7 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
       2. Add to a hard delete replacement write set.
       3. Return the replacement info.
      */
-    ReplaceInfo replaceInfo;
+    ReplaceInfo replaceInfo = null;
 
     try {
         /* Read the version field in the header */
@@ -43,8 +74,7 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
           case MessageFormatRecord.Message_Header_Version_V1:
             /* Read the rest of the header */
             ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-            headerVersion.clear(); //clear? perhaps rewind?
-            header.putShort(headerVersion.getShort());
+            header.putShort(version);
             readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
                 MessageFormatRecord.Version_Field_Size_In_Bytes,
                 MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
@@ -53,7 +83,7 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
             MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
                 new MessageFormatRecord.MessageHeader_Format_V1(header);
             headerFormat.verifyHeader();
-            StoreKey storeKey = storeKeyfactory.getStoreKey(
+            StoreKey storeKey = storeKeyFactory.getStoreKey(
                 new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));
             if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
               throw new MessageFormatException(
@@ -88,15 +118,10 @@ public class BlobStoreCleanup implements MessageStoreCleanup {
             }
             break;
           default:
-            throw new IOException("Unknown header version " + version + "storeKey " + readSet.getKeyAt(readSetIndex));
+            logger.error("Unknown header version " + version + "storeKey " + readSet.getKeyAt(readSetIndex));
         }
-    } catch (MessageFormatException e) {
-      if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
-        logger.error("Message is corrupt in the log.");
-        return null;
-      }
-      logger.error("Message format exception, error: {} + cause: {}", e.getErrorCode(), e.getCause());
-      throw new IOException("Message format exception");
+    } catch (Exception e) {
+      logger.error("Exception, cause: {}", e.getCause());
     }
 
     return replaceInfo;

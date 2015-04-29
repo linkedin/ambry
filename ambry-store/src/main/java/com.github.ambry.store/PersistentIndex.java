@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.concurrent.RejectedExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,8 +62,8 @@ public class PersistentIndex {
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
-  private CleanupThread cleanupThread;
-  private MessageStoreCleanup cleanup;
+  private HardDeleteThread hardDeleter;
+  private MessageStoreHardDelete hardDelete;
   private StoreKeyFactory factory;
   private StoreConfig config;
   private JournalFactory storeJournalFactory;
@@ -89,7 +90,7 @@ public class PersistentIndex {
    * @throws StoreException
    */
   public PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreCleanup cleanup, StoreMetrics metrics)
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics)
       throws StoreException {
     try {
       this.scheduler = scheduler;
@@ -100,8 +101,8 @@ public class PersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      cleanupThread = new CleanupThread();
-      this.cleanup = cleanup;
+      hardDeleter = new HardDeleteThread();
+      this.hardDelete = hardDelete;
       storeJournalFactory = Utils.getObj(config.storeJournalFactory);
       /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
       whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
@@ -166,8 +167,8 @@ public class PersistentIndex {
       log.setLogEndOffset(getCurrentEndOffset());
       logEndOffsetOnStartup = log.getLogEndOffset();
 
-      // After recovering the last messages, and the log end offset is set, let the cleanup thread do its recovery.
-      cleanupThread.performRecovery();
+      // After recovering the last messages, and the log end offset is set, let the hard delete thread do its recovery.
+      hardDeleter.performRecovery();
 
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
@@ -179,14 +180,14 @@ public class PersistentIndex {
         cleanShutdownFile.delete();
       }
 
-      // start scheduler thread to persist index in the background and to perform cleanup of deleted records.
+      // start scheduler thread to persist index in the background and to perform hard delete of deleted records.
       this.scheduler = scheduler;
       this.scheduler.schedule("index persistor", persistor,
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
-      // schedule the cleanup thread via the thread pool, but not as a periodic task.
-      this.scheduler.schedule("cleanup thread" + dataDir, cleanupThread, config.storeDataCleanupDelaySeconds, -1,
+      // schedule the hard delete thread via the thread pool, but not as a periodic task.
+      this.scheduler.schedule("hard delete thread" + dataDir, hardDeleter, config.storeDataCleanupDelaySeconds, -1,
           TimeUnit.SECONDS);
     } catch (StoreException e) {
       throw e;
@@ -804,7 +805,7 @@ public class PersistentIndex {
       throws StoreException, InterruptedException {
     persistor.write();
     try {
-      cleanupThread.persistCleanupToken();
+      hardDeleter.persistCleanupToken();
     } catch (IOException e) {
       logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
     }
@@ -931,12 +932,12 @@ public class PersistentIndex {
                 "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
 
-          cleanupThread.preLogFlush();
+          hardDeleter.preLogFlush();
 
           // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
-          cleanupThread.postLogFlush();
+          hardDeleter.postLogFlush();
 
           long lastOffset = lastEntry.getKey();
           IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
@@ -971,7 +972,7 @@ public class PersistentIndex {
     }
   }
 
-  class CleanupThread implements Runnable {
+  class HardDeleteThread implements Runnable {
     FindToken startToken;
     FindToken startTokenBeforeLogFlush;
     FindToken startTokenSafeToPersist;
@@ -1084,10 +1085,18 @@ public class PersistentIndex {
         }
 
         StoreMessageReadSet readSet = log.getView(readOptions);
-        for (int i = 0; i < readSet.count(); i++) {
-          ReplaceInfo replaceInfo = cleanup.getReplacementInfo(readSet, i, factory);
+
+        Iterator<ReplaceInfo> hardDeleteIterator = hardDelete.replacementIterator(readSet, factory);
+        Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
+
+        while (hardDeleteIterator.hasNext()) {
+          ReplaceInfo replaceInfo = hardDeleteIterator.next();
+          long offsetToWriteAt = readOptionsIterator.next().getOffset();
           if (replaceInfo != null) {
-            log.writeFrom(replaceInfo.getChannel(), readOptions.get(i).getOffset(), replaceInfo.getSize());
+            log.writeFrom(replaceInfo.getChannel(), offsetToWriteAt, replaceInfo.getSize());
+            metrics.cleanupDoneCount.inc(1);
+          } else {
+            metrics.cleanupFailedCount.inc(1);
           }
         }
       } catch (IOException e) {
@@ -1122,7 +1131,7 @@ public class PersistentIndex {
       // @TODO : the while condition should be based on the approximate time of the last delete processed
       //         and if it has been long enough (based on config.storeCleanupAgeDays) to continue processing.
       while (true) {
-        int maxTotalSizeOfEntries = config.storeDataCleanupBatchSize;
+        int maxTotalSizeOfEntries = config.storeDataCleanupBatchSizeInBytes; //@todo this size is not a good estimate
         FindInfo info = findDeletedEntriesSince(startToken, maxTotalSizeOfEntries);
         endToken = info.getFindToken();
         persistCleanupToken(); // this is to persist the end token without which we can't move ahead.
@@ -1189,9 +1198,10 @@ public class PersistentIndex {
 
         // Hard coding how often cleanup thread will run for now, until the throttling logic is correctly implemented.
         // Also check why not going through the scheduler wasn't working.
-        scheduler.schedule("cleanup thread" + dataDir, this, config.storeDataCleanupDelaySeconds, -1, TimeUnit.SECONDS);
+        scheduler
+            .schedule("hard delete thread" + dataDir, this, config.storeDataCleanupDelaySeconds, -1, TimeUnit.SECONDS);
       } catch (RejectedExecutionException r) {
-        logger.info("Index : " + dataDir + " cannot schedule cleanup thread", r);
+        logger.info("Index : " + dataDir + " cannot schedule hard delete thread", r);
       } catch (Exception e) {
         logger.error("Index : " + dataDir + " error while performing hard deletes ", e);
       }
