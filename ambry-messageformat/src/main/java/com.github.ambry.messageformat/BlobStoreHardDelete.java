@@ -18,6 +18,7 @@ import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
   public Iterator<ReplaceInfo> replacementIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
@@ -65,61 +66,61 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
 
     try {
         /* Read the version field in the header */
-        ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
-        readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
-            MessageFormatRecord.Version_Field_Size_In_Bytes);
-        headerVersion.flip();
-        short version = headerVersion.getShort();
-        switch (version) {
-          case MessageFormatRecord.Message_Header_Version_V1:
+      ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
+      readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
+          MessageFormatRecord.Version_Field_Size_In_Bytes);
+      headerVersion.flip();
+      short version = headerVersion.getShort();
+      switch (version) {
+        case MessageFormatRecord.Message_Header_Version_V1:
             /* Read the rest of the header */
-            ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-            header.putShort(version);
-            readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
-                MessageFormatRecord.Version_Field_Size_In_Bytes,
-                MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
-                    - MessageFormatRecord.Version_Field_Size_In_Bytes);
-            header.flip();
-            MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
-                new MessageFormatRecord.MessageHeader_Format_V1(header);
-            headerFormat.verifyHeader();
-            StoreKey storeKey = storeKeyFactory.getStoreKey(
-                new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));
-            if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
-              throw new MessageFormatException(
-                  "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(readSetIndex) + " storeId "
-                      + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
-            }
+          ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+          header.putShort(version);
+          readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
+              MessageFormatRecord.Version_Field_Size_In_Bytes,
+              MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+                  - MessageFormatRecord.Version_Field_Size_In_Bytes);
+          header.flip();
+          MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
+              new MessageFormatRecord.MessageHeader_Format_V1(header);
+          headerFormat.verifyHeader();
+          StoreKey storeKey = storeKeyFactory.getStoreKey(
+              new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));
+          if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
+            throw new MessageFormatException(
+                "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(readSetIndex) + " storeId "
+                    + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+          }
 
-            if (headerFormat.getBlobPropertiesRecordRelativeOffset()
-                == MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
-                  MessageFormatErrorCodes.IO_Error);
-            } else {
-              BlobProperties blobProperties = getReplacementBlobPropertiesRecord(readSet, readSetIndex,
-                  headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                  headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                      .getBlobPropertiesRecordRelativeOffset());
+          if (headerFormat.getBlobPropertiesRecordRelativeOffset()
+              == MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+            throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
+                MessageFormatErrorCodes.IO_Error);
+          } else {
+            BlobProperties blobProperties = getReplacementBlobPropertiesRecord(readSet, readSetIndex,
+                headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
+                    .getBlobPropertiesRecordRelativeOffset());
 
-              ByteBuffer userMetadata = getReplacementUserMetadataRecord(readSet, readSetIndex,
-                  headerFormat.getUserMetadataRecordRelativeOffset(),
-                  headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
+            ByteBuffer userMetadata = getReplacementUserMetadataRecord(readSet, readSetIndex,
+                headerFormat.getUserMetadataRecordRelativeOffset(),
+                headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
 
-              BlobOutput blobOutput =
-                  getDeserializedBlobRecord(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
-                      headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
-                          .getBlobPropertiesRecordRelativeOffset()));
+            BlobOutput blobOutput =
+                getDeserializedBlobRecord(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
+                    headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
+                        .getBlobPropertiesRecordRelativeOffset()));
 
-              MessageFormatInputStream replaceStream =
-                  new PutMessageFormatInputStream(storeKey, blobProperties, userMetadata, blobOutput.getStream(),
-                      blobOutput.getSize(), MessageFormatRecord.Message_Header_Version_V1);
+            MessageFormatInputStream replaceStream =
+                new HardDeleteMessageFormatInputStream(storeKey, blobProperties, userMetadata, blobOutput.getStream(),
+                    blobOutput.getSize());
 
-              replaceInfo = new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
-            }
-            break;
-          default:
-            logger.error("Unknown header version " + version + "storeKey " + readSet.getKeyAt(readSetIndex));
-        }
+            replaceInfo = new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
+          }
+          break;
+        default:
+          logger.error("Unknown header version " + version + "storeKey " + readSet.getKeyAt(readSetIndex));
+      }
     } catch (Exception e) {
       logger.error("Exception, cause: {}", e.getCause());
     }
