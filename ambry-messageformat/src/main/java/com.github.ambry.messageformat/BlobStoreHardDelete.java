@@ -7,12 +7,10 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.ZeroBytesInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import org.slf4j.Logger;
@@ -97,23 +95,22 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
             throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
                 MessageFormatErrorCodes.IO_Error);
           } else {
-            BlobProperties blobProperties = getReplacementBlobPropertiesRecord(readSet, readSetIndex,
+            BlobProperties blobProperties = getBlobPropertiesRecord(readSet, readSetIndex,
                 headerFormat.getBlobPropertiesRecordRelativeOffset(),
                 headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
                     .getBlobPropertiesRecordRelativeOffset());
 
-            ByteBuffer userMetadata = getReplacementUserMetadataRecord(readSet, readSetIndex,
+            long userMetadataSize = readAndDeserializeUserMetadataRecord(readSet, readSetIndex,
                 headerFormat.getUserMetadataRecordRelativeOffset(),
                 headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
 
-            BlobOutput blobOutput =
-                getDeserializedBlobRecord(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
+            long blobStreamSize =
+                readAndDeserializeBlobRecord(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
                     headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
                         .getBlobPropertiesRecordRelativeOffset()));
 
             MessageFormatInputStream replaceStream =
-                new HardDeleteMessageFormatInputStream(storeKey, blobProperties, userMetadata, blobOutput.getStream(),
-                    blobOutput.getSize());
+                new HardDeleteMessageFormatInputStream(storeKey, blobProperties, (int) userMetadataSize, (int) blobStreamSize);
 
             replaceInfo = new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
           }
@@ -128,7 +125,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
     return replaceInfo;
   }
 
-  private BlobProperties getReplacementBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex,
+  private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex,
       long relativeOffset, long blobPropertiesSize)
       throws MessageFormatException, IOException {
 
@@ -138,11 +135,10 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
         blobPropertiesSize);
     blobProperties.flip();
 
-    // deserialize just to verify if it can be read.
     return MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
   }
 
-  private ByteBuffer getReplacementUserMetadataRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
+  private long readAndDeserializeUserMetadataRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
       long userMetadataSize)
       throws MessageFormatException, IOException {
 
@@ -151,14 +147,10 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(userMetaData)), relativeOffset,
         userMetadataSize);
     userMetaData.flip();
-
-    userMetaData = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData));
-    // Zero out userMetadata
-    Arrays.fill(userMetaData.array(), (byte) 0);
-    return userMetaData;
+    return MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData)).capacity();
   }
 
-  private BlobOutput getDeserializedBlobRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
+  private long readAndDeserializeBlobRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
       long blobRecordSize)
       throws MessageFormatException, IOException {
 
@@ -167,8 +159,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobRecord)), relativeOffset,
         blobRecordSize);
     blobRecord.flip();
-    // verifies crc among other things by deserializing
     BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blobRecord));
-    return new BlobOutput(blobOutput.getSize(), new ZeroBytesInputStream((int) blobOutput.getSize()));
+    return blobOutput.getSize();
   }
 }

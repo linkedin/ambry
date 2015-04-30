@@ -1,7 +1,8 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-import java.io.InputStream;
+import com.github.ambry.utils.ZeroBytesInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
@@ -24,9 +25,10 @@ import java.nio.ByteBuffer;
  */
 public class HardDeleteMessageFormatInputStream extends PutMessageFormatInputStream {
 
-  public HardDeleteMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
-      InputStream data, long streamSize)
-      throws MessageFormatException {
-    super(key, blobProperties, userMetadata, data, streamSize);
+  public HardDeleteMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, int userMetadataSize,
+      int blobStreamSize)
+      throws MessageFormatException, IOException {
+    super(key, blobProperties, ByteBuffer.allocate(userMetadataSize),
+        new ZeroBytesInputStream(blobStreamSize), blobStreamSize);
   }
 }
