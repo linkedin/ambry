@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
-  public Iterator<ReplaceInfo> replacementIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
+  public Iterator<ReplaceInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
   }
 }

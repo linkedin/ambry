@@ -63,26 +63,25 @@ public class StoreConfig {
   public final double storeIndexBloomMaxFalsePositiveProbability;
 
   /**
-   * The delay after which the data cleanup thread starts on startup
+   * The delay after which the hard delete thread starts on startup
    */
-  @Config("store.data.cleanup.delay.seconds")
+  @Config("store.hard.delete.thread.delay.seconds")
   @Default("10")
-  public final int storeDataCleanupDelaySeconds;
+  public final int storeHardDeleteThreadDelaySeconds;
 
   /**
    * How long a key must be in deleted state before it is considered for cleanup.
    */
-  @Config("store.data.cleanup.age.days")
+  @Config("store.deleted.message.hard.delete.age.days")
   @Default("7")
-  public final int storeDataCleanupAgeDays;
+  public final int storeDeletedMessageHardDeleteAgeDays;
 
   /**
    * Cleanup batch size. The size of entries processed in every iteration
    */
-  @Config("store.data.cleanup.batch.size.in.bytes")
+  @Config("store.hard.delete.batch.size.in.bytes")
   @Default("10 * 1024 * 1024")
-  public final int storeDataCleanupBatchSizeInBytes;
-
+  public final int storeHardDeleteBatchSizeInBytes;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -93,12 +92,14 @@ public class StoreConfig {
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability =
         verifiableProperties.getDoubleInRange("store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
-    storeJournalFactory = verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
+    storeJournalFactory =
+        verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
-    storeDataCleanupDelaySeconds = verifiableProperties.getInt("store.data.cleanup.delay.seconds", 10);
-    storeDataCleanupAgeDays = verifiableProperties.getInt("store.data.cleanup.age.days", 7);
-    storeDataCleanupBatchSizeInBytes = verifiableProperties.getInt("store.data.cleanup.batch.size.in.bytes", 10 * 1024 * 1024);
+    storeHardDeleteThreadDelaySeconds = verifiableProperties.getInt("store.hard.delete.thread.delay.seconds", 10);
+    storeDeletedMessageHardDeleteAgeDays = verifiableProperties.getInt("store.deleted.message.hard.delete.age.days", 7);
+    storeHardDeleteBatchSizeInBytes =
+        verifiableProperties.getInt("store.hard.delete.batch.size.in.bytes", 10 * 1024 * 1024);
   }
 }
 

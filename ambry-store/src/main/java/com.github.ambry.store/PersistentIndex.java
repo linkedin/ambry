@@ -187,7 +187,7 @@ public class PersistentIndex {
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
       // schedule the hard delete thread via the thread pool, but not as a periodic task.
-      this.scheduler.schedule("hard delete thread" + dataDir, hardDeleter, config.storeDataCleanupDelaySeconds, -1,
+      this.scheduler.schedule("hard delete thread" + dataDir, hardDeleter, config.storeHardDeleteThreadDelaySeconds, -1,
           TimeUnit.SECONDS);
     } catch (StoreException e) {
       throw e;
@@ -1086,7 +1086,7 @@ public class PersistentIndex {
 
         StoreMessageReadSet readSet = log.getView(readOptions);
 
-        Iterator<ReplaceInfo> hardDeleteIterator = hardDelete.replacementIterator(readSet, factory);
+        Iterator<ReplaceInfo> hardDeleteIterator = hardDelete.getHardDeletedMessages(readSet, factory);
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
         while (hardDeleteIterator.hasNext()) {
@@ -1129,9 +1129,9 @@ public class PersistentIndex {
         return;
       }
       // @TODO : the while condition should be based on the approximate time of the last delete processed
-      //         and if it has been long enough (based on config.storeCleanupAgeDays) to continue processing.
+      //         and if it has been long enough to continue processing.
       while (true) {
-        int maxTotalSizeOfEntries = config.storeDataCleanupBatchSizeInBytes; //@todo this size is not a good estimate
+        int maxTotalSizeOfEntries = config.storeHardDeleteBatchSizeInBytes; //@todo this size is not a good estimate
         FindInfo info = findDeletedEntriesSince(startToken, maxTotalSizeOfEntries);
         endToken = info.getFindToken();
         persistCleanupToken(); // this is to persist the end token without which we can't move ahead.
@@ -1199,7 +1199,7 @@ public class PersistentIndex {
         // Hard coding how often cleanup thread will run for now, until the throttling logic is correctly implemented.
         // Also check why not going through the scheduler wasn't working.
         scheduler
-            .schedule("hard delete thread" + dataDir, this, config.storeDataCleanupDelaySeconds, -1, TimeUnit.SECONDS);
+            .schedule("hard delete thread" + dataDir, this, config.storeHardDeleteThreadDelaySeconds, -1, TimeUnit.SECONDS);
       } catch (RejectedExecutionException r) {
         logger.info("Index : " + dataDir + " cannot schedule hard delete thread", r);
       } catch (Exception e) {

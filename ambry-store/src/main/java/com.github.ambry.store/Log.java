@@ -109,8 +109,8 @@ public class Log implements Read, Write {
   @Override
   public void writeFrom(ReadableByteChannel channel, long offset, long size)
       throws IOException {
-    logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {} offset {}", file.getAbsolutePath(),
-        currentWriteOffset, capacityInBytes, size, offset);
+    logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {} offset to append at {}",
+        file.getAbsolutePath(), currentWriteOffset, capacityInBytes, size, offset);
     if (offset < 0 || offset + size > currentWriteOffset.get()) {
       metrics.overflowWriteError.inc(1);
       throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to write to log " +
