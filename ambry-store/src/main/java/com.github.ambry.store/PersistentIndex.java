@@ -1086,14 +1086,14 @@ public class PersistentIndex {
 
         StoreMessageReadSet readSet = log.getView(readOptions);
 
-        Iterator<ReplaceInfo> hardDeleteIterator = hardDelete.getHardDeletedMessages(readSet, factory);
+        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeletedMessages(readSet, factory);
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
         while (hardDeleteIterator.hasNext()) {
-          ReplaceInfo replaceInfo = hardDeleteIterator.next();
+          HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           long offsetToWriteAt = readOptionsIterator.next().getOffset();
-          if (replaceInfo != null) {
-            log.writeFrom(replaceInfo.getChannel(), offsetToWriteAt, replaceInfo.getSize());
+          if (hardDeleteInfo != null) {
+            log.writeFrom(hardDeleteInfo.getChannel(), offsetToWriteAt, hardDeleteInfo.getSize());
             metrics.cleanupDoneCount.inc(1);
           } else {
             metrics.cleanupFailedCount.inc(1);

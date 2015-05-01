@@ -2,7 +2,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
-import com.github.ambry.store.ReplaceInfo;
+import com.github.ambry.store.HardDeleteInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -18,12 +18,12 @@ import org.slf4j.LoggerFactory;
 
 
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
-  public Iterator<ReplaceInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
+  public Iterator<HardDeleteInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
   }
 }
 
-class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
+class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private int readSetIndex = 0;
   private final MessageReadSet readSet;
@@ -40,7 +40,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
   }
 
   @Override
-  public ReplaceInfo next() {
+  public HardDeleteInfo next() {
     if (!hasNext()) {
       throw new NoSuchElementException();
     }
@@ -52,7 +52,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
     throw new UnsupportedOperationException();
   }
 
-  private ReplaceInfo getReplacementInfo(int readSetIndex) {
+  private HardDeleteInfo getReplacementInfo(int readSetIndex) {
 
     /*for the message at readSetIndex, do the following:
       1. Read the whole blob and do a crc check. If the crc check fails, return - this means that the record
@@ -60,7 +60,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
       2. Add to a hard delete replacement write set.
       3. Return the replacement info.
      */
-    ReplaceInfo replaceInfo = null;
+    HardDeleteInfo hardDeleteInfo = null;
 
     try {
         /* Read the version field in the header */
@@ -112,7 +112,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
             MessageFormatInputStream replaceStream =
                 new HardDeleteMessageFormatInputStream(storeKey, blobProperties, (int) userMetadataSize, (int) blobStreamSize);
 
-            replaceInfo = new ReplaceInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
+            hardDeleteInfo = new HardDeleteInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
           }
           break;
         default:
@@ -122,7 +122,7 @@ class BlobStoreHardDeleteIterator implements Iterator<ReplaceInfo> {
       logger.error("Exception, cause: {}", e.getCause());
     }
 
-    return replaceInfo;
+    return hardDeleteInfo;
   }
 
   private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex,
