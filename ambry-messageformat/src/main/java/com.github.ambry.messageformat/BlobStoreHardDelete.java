@@ -16,7 +16,10 @@ import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * This class takes a read set for blobs that are to be hard deleted and provides corresponding
+ * replacement messages, that can then be written back by the caller to hard delete those blobs.
+ */
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
   public Iterator<HardDeleteInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
@@ -44,7 +47,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     if (!hasNext()) {
       throw new NoSuchElementException();
     }
-    return getReplacementInfo(readSetIndex++);
+    return getHardDeleteInfo(readSetIndex++);
   }
 
   @Override
@@ -52,14 +55,15 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     throw new UnsupportedOperationException();
   }
 
-  private HardDeleteInfo getReplacementInfo(int readSetIndex) {
+  /**
+   * For the message at readSetIndex, does the following:
+    1. Reads the whole blob and does a crc check. If the crc check fails, returns null - this means that the record
+       is not retrievable anyway.
+    2. Adds to a hard delete replacement write set.
+    3. Returns the hard delete info.
+   */
+  private HardDeleteInfo getHardDeleteInfo(int readSetIndex) {
 
-    /*for the message at readSetIndex, do the following:
-      1. Read the whole blob and do a crc check. If the crc check fails, return - this means that the record
-         is not retrievable anyway.
-      2. Add to a hard delete replacement write set.
-      3. Return the replacement info.
-     */
     HardDeleteInfo hardDeleteInfo = null;
 
     try {
