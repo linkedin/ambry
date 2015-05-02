@@ -246,7 +246,8 @@ public final class ReplicationManager {
       this.replicationInterDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfInterDCReplicaThreads);
       this.replicationMetrics =
-          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads);
+          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads,
+              clusterMap.getReplicaIds(dataNode));
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;

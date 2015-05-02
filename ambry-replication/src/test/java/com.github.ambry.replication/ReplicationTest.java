@@ -582,7 +582,8 @@ public class ReplicationTest {
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>());
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+              replicaIds);
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),

@@ -30,6 +30,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   private int validSize;
   private int position;
   private int sizeLeftToRead;
+  private int validMessageInfoCount;
   private List<MessageInfoStatus> msgInfoStatusList;
   private Iterator<MessageInfoStatus> iterator;
   private MessageInfoStatus currentMsgInfoStatus;
@@ -37,7 +38,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   private Logger logger;
 
   public MessageFormatByteBufferInputStream(ByteBuffer byteBuffer, List<MessageInfoStatus> msgInfoStatusList,
-      int validSize, ClusterMap clusterMap) {
+      int validSize, ClusterMap clusterMap, Logger logger) {
     this.byteBuffer = byteBuffer;
     this.mark = -1;
     this.readLimit = -1;
@@ -47,6 +48,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     this.validSize = validSize;
     this.sizeLeftToRead = validSize;
     this.position = 0;
+    this.logger = logger;
   }
 
   /**
@@ -101,7 +103,11 @@ public class MessageFormatByteBufferInputStream extends InputStream {
       MessageInfoStatus messageInfoStatus = new MessageInfoStatus(messageInfo, isCorrupt, currentOffset);
       msgInfoStatusList.add(messageInfoStatus);
       if (!isCorrupt) {
+        validMessageInfoCount++;
         validSize += messageInfo.getSize();
+      }
+      else{
+        logger.error("Corrupt blob reported for blob with messageInfo " + messageInfo);
       }
       currentOffset += messageInfo.getSize();
     }
@@ -229,7 +235,12 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   }
 
   public MessageFormatByteBufferInputStream duplicate() {
-    return new MessageFormatByteBufferInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, clusterMap);
+    return new MessageFormatByteBufferInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, clusterMap,
+        logger);
+  }
+
+  public int getTotalValidMessageInfos(){
+    return validMessageInfoCount;
   }
 
   /**

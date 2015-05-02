@@ -618,8 +618,11 @@ class ReplicaThread implements Runnable {
               long sizeToWrite = getTotalSize(messageInfoList);
 
               MessageFormatByteBufferInputStream messageFormatByteBufferInputStream =
-                  new MessageFormatByteBufferInputStream(getResponse.getInputStream(), (int)sizeToWrite, messageInfoList,
-                      clusterMap, logger);
+                  new MessageFormatByteBufferInputStream(getResponse.getInputStream(), (int) sizeToWrite,
+                      messageInfoList, clusterMap, logger);
+              if (messageInfoList.size() != messageFormatByteBufferInputStream.getTotalValidMessageInfos()) {
+                replicationMetrics.incrementCorruptionErrorCount(partitionResponseInfo.getPartition());
+              }
               MessageFormatWriteSet writeset =
                   new MessageFormatWriteSet(messageFormatByteBufferInputStream, messageInfoList, sizeToWrite);
               remoteReplicaInfo.getLocalStore().put(writeset);
@@ -670,7 +673,7 @@ class ReplicaThread implements Runnable {
     }
   }
 
-  private long getTotalSize(List<MessageInfo> messageInfoList){
+  private long getTotalSize(List<MessageInfo> messageInfoList) {
     long sizeToWrite = 0;
     for (MessageInfo info : messageInfoList) {
       sizeToWrite += info.getSize();

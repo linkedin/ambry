@@ -6,6 +6,10 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.DataNode;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +30,7 @@ public class ReplicationMetrics {
   public final Counter unknownRemoteReplicaRequestCount;
   public final Counter replicationErrors;
   public final Counter replicationTokenResetCount;
+  public final Counter corruptBlobsDuringReplicationCount;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
@@ -56,12 +61,14 @@ public class ReplicationMetrics {
   private Map<String, Counter> metadataRequestErrorMap;
   private Map<String, Counter> getRequestErrorMap;
   private Map<String, Counter> localStoreErrorMap;
+  private Map<PartitionId, Counter> partitionIdMetricMap;
 
   public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
-      final List<ReplicaThread> replicaInterDCThreads) {
+      final List<ReplicaThread> replicaInterDCThreads, List<ReplicaId> replicaIds) {
     metadataRequestErrorMap = new HashMap<String, Counter>();
     getRequestErrorMap = new HashMap<String, Counter>();
     localStoreErrorMap = new HashMap<String, Counter>();
+    partitionIdMetricMap = new HashMap<PartitionId, Counter>();
     interColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
@@ -80,6 +87,8 @@ public class ReplicationMetrics {
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
     replicationTokenResetCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
+    corruptBlobsDuringReplicationCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "CorruptBlobsDuringReplicationCount"));
     interColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =
@@ -142,6 +151,7 @@ public class ReplicationMetrics {
     registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInterDCReplicaThreads"),
         numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
+    populatePartitionBasedCorruptionMetrics(replicaIds);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {
@@ -155,7 +165,7 @@ public class ReplicationMetrics {
   }
 
   public void addRemoteReplicaToLagMetrics(final RemoteReplicaInfo remoteReplicaInfo) {
-    final String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+    String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
         remoteReplicaInfo.getReplicaId().getReplicaPath() + "-replicaLagInBytes";
     Gauge<Long> replicaLag = new Gauge<Long>() {
@@ -166,6 +176,24 @@ public class ReplicationMetrics {
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
+  }
+
+  public void populatePartitionBasedCorruptionMetrics(List<ReplicaId> replicaIds) {
+    for (ReplicaId replicaId : replicaIds) {
+      PartitionId partitionId = replicaId.getPartitionId();
+      if (!partitionIdMetricMap.containsKey(partitionId)) {
+        Counter partitionBasedCorruptionErrorCount =
+            registry.counter(MetricRegistry.name(ReplicaThread.class, partitionId + "-CorruptionErrorCount"));
+        partitionIdMetricMap.put(partitionId, partitionBasedCorruptionErrorCount);
+      }
+    }
+  }
+
+  public void incrementCorruptionErrorCount(PartitionId partitionId) {
+    corruptBlobsDuringReplicationCount.inc();
+    if (partitionIdMetricMap.containsKey(partitionId)) {
+      partitionIdMetricMap.get(partitionId).inc();
+    }
   }
 
   public void createRemoteReplicaErrorMetrics(RemoteReplicaInfo remoteReplicaInfo) {
