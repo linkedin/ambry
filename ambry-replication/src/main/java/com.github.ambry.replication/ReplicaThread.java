@@ -224,11 +224,14 @@ class ReplicaThread implements Runnable {
       throws IOException, ReplicationException, InterruptedException {
 
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
+    long processMetadataResponseTimeInMs = -1;
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<ExchangeMetadataResponse>();
     if (replicasToReplicatePerNode.size() > 0) {
+      DataNodeId remoteNode = null;
       try {
-        DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
+        remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
         ReplicaMetadataResponse response = getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
+        long startTimeInMs = SystemTime.getInstance().milliseconds();
         needToWaitForReplicaLag = true;
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -259,7 +262,11 @@ class ReplicaThread implements Runnable {
             exchangeMetadataResponseList.add(exchangeMetadataResponse);
           }
         }
+        processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
       } finally {
+        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}",
+            remoteNode, threadName, processMetadataResponseTimeInMs);
+
         if (remoteColo) {
           replicationMetrics.interColoMetadataExchangeCount.inc();
           replicationMetrics.interColoExchangeMetadataTime
@@ -327,6 +334,7 @@ class ReplicaThread implements Runnable {
   private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode, boolean remoteColo)
       throws ReplicationException, IOException {
+    long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -341,7 +349,6 @@ class ReplicaThread implements Runnable {
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,
         replicationConfig.replicationFetchSizeInBytes);
-    long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     connectedChannel.send(request);
     ChannelOutput channelOutput = connectedChannel.receive();
     ByteBufferInputStream byteBufferInputStream =
