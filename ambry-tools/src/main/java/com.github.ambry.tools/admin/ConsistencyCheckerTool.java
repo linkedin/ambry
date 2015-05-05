@@ -244,7 +244,6 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
     if(realInconsistentBlobs > 0) {
       return false;
     }
-
     return true;
   }
 
