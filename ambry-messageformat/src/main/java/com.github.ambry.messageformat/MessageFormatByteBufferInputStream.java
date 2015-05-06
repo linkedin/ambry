@@ -34,17 +34,17 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   private List<MessageInfoStatus> msgInfoStatusList;
   private Iterator<MessageInfoStatus> iterator;
   private MessageInfoStatus currentMsgInfoStatus;
-  private ClusterMap clusterMap;
   private Logger logger;
+  private StoreKeyFactory storeKeyFactory;
 
   public MessageFormatByteBufferInputStream(ByteBuffer byteBuffer, List<MessageInfoStatus> msgInfoStatusList,
-      int validSize, ClusterMap clusterMap, Logger logger) {
+      int validSize, StoreKeyFactory storeKeyFactory, Logger logger) {
     this.byteBuffer = byteBuffer;
     this.mark = -1;
     this.readLimit = -1;
     this.msgInfoStatusList = msgInfoStatusList;
     this.iterator = msgInfoStatusList.iterator();
-    this.clusterMap = clusterMap;
+    this.storeKeyFactory = storeKeyFactory;
     this.validSize = validSize;
     this.sizeLeftToRead = validSize;
     this.position = 0;
@@ -61,10 +61,37 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   public MessageFormatByteBufferInputStream(InputStream stream, int size, List<MessageInfo> messageInfoList,
       ClusterMap clusterMap, Logger logger)
       throws IOException {
-    if (messageInfoList.size() < 1) {
-      // TODO:
+    setStoreKeyFactory(clusterMap);
+    init(messageInfoList, size, stream, logger);
+    validateMessageStream(messageInfoList);
+  }
+
+  public MessageFormatByteBufferInputStream(InputStream stream, int size, List<MessageInfo> messageInfoList,
+      StoreKeyFactory storeKeyFactory, Logger logger)
+      throws IOException {
+    this.storeKeyFactory = storeKeyFactory;
+    init(messageInfoList, size, stream, logger);
+    validateMessageStream(messageInfoList);
+  }
+
+  private void setStoreKeyFactory(ClusterMap clusterMap)
+      throws IOException {
+    try {
+      this.storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    } catch (Exception e) {
+      logger.error("Error creating StoreKeyFactory ");
+      throw new IOException("Error creating StoreKeyFactory " + e);
     }
-    this.clusterMap = clusterMap;
+  }
+
+  private void init(List<MessageInfo> messageInfoList, int size, InputStream stream, Logger logger)
+      throws IOException {
+    if (messageInfoList.size() == 0) {
+      position = sizeLeftToRead = validSize = 0;
+      this.mark = -1;
+      this.readLimit = -1;
+      return;
+    }
     this.byteBuffer = ByteBuffer.allocate(size);
     this.logger = logger;
     int read = 0;
@@ -77,19 +104,10 @@ public class MessageFormatByteBufferInputStream extends InputStream {
       read += sizeRead;
     }
     byteBuffer.flip();
-    init(messageInfoList);
   }
 
-  private void init(List<MessageInfo> messageInfoList)
+  private void validateMessageStream(List<MessageInfo> messageInfoList)
       throws IOException {
-
-    StoreKeyFactory storeKeyFactory = null;
-    try {
-      storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-    } catch (Exception e) {
-      logger.error("Error creating StoreKeyFactory ");
-      throw new IOException("Error creating StoreKeyFactory " + e);
-    }
 
     msgInfoStatusList = new ArrayList<MessageInfoStatus>(messageInfoList.size());
     int currentOffset = 0;
@@ -105,8 +123,7 @@ public class MessageFormatByteBufferInputStream extends InputStream {
       if (!isCorrupt) {
         validMessageInfoCount++;
         validSize += messageInfo.getSize();
-      }
-      else{
+      } else {
         logger.error("Corrupt blob reported for blob with messageInfo " + messageInfo);
       }
       currentOffset += messageInfo.getSize();
@@ -118,6 +135,10 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     this.readLimit = -1;
     iterator = msgInfoStatusList.iterator();
     this.currentMsgInfoStatus = iterator.next();
+  }
+
+  public int getSize() {
+    return validSize;
   }
 
   @Override
@@ -154,6 +175,12 @@ public class MessageFormatByteBufferInputStream extends InputStream {
     while (sizeRead < count) {
       int currentMsgSizeYetToBeRead =
           (int) (currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() - position);
+      if (currentMsgSizeYetToBeRead == 0) {
+        iterateToNextNonCorruptMsg();
+        byteBuffer.position(position);
+        currentMsgSizeYetToBeRead =
+            (int) (currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() - position);
+      }
       if (sizeRead + currentMsgSizeYetToBeRead < count) { // current msg has less bytes than required
         readBytesFromBuffer(bytes, offset, currentMsgSizeYetToBeRead);
         sizeRead += currentMsgSizeYetToBeRead;
@@ -235,11 +262,11 @@ public class MessageFormatByteBufferInputStream extends InputStream {
   }
 
   public MessageFormatByteBufferInputStream duplicate() {
-    return new MessageFormatByteBufferInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, clusterMap,
+    return new MessageFormatByteBufferInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, storeKeyFactory,
         logger);
   }
 
-  public int getTotalValidMessageInfos(){
+  public int getTotalValidMessageInfos() {
     return validMessageInfoCount;
   }
 
@@ -297,22 +324,24 @@ public class MessageFormatByteBufferInputStream extends InputStream {
         }
         if (!isDeleted) {
           logger.trace(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+          if (availableBeforeParsing - inputStream.available() != size) {
+            logger.error(
+                "Parsed message size " + (inputStream.available() - availableBeforeParsing) + " is not equivalent " +
+                    "to the size in message info " + size);
+            return true;
+          }
+          logger.trace(
+              "Message successfully read : " + messageheader + " " + blobId + " " + blobProperty + " " + usermetadata
+                  + " " + blobOutput);
           return false;
         }
-        if (inputStream.available() - availableBeforeParsing != size) {
-          logger.error(
-              "Parsed message size " + (inputStream.available() - availableBeforeParsing) + " is not equivalent " +
-                  "to the size in message info " + size);
-          return false;
-        }
-        logger.trace(
-            "Message successfully read : " + messageheader + " " + blobId + " " + blobProperty + " " + usermetadata
-                + " " + blobOutput);
       } else {
         throw new IllegalStateException("Header version not supported " + version);
       }
     } catch (IllegalArgumentException e) {
       logger.error("Illegal arg exception thrown at " + currentOffset + " and exception: " + e);
+    } catch (IllegalStateException e) {
+      logger.error("Illegal state exception thrown at " + currentOffset + " and exception: " + e);
     } catch (MessageFormatException e) {
       logger.error("MessageFormat exception thrown at " + currentOffset + " and exception: " + e);
     } catch (EOFException e) {
