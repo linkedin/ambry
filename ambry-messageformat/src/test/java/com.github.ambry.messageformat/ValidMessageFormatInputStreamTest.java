@@ -18,7 +18,7 @@ import java.util.Random;
 import org.slf4j.LoggerFactory;
 
 
-public class MessageFormatByteBufferInputStreamTest {
+public class ValidMessageFormatInputStreamTest {
 
   @Test
   public void messageFormatByteBufferInputStreamValidBlobsTest()
