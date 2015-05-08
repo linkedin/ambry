@@ -55,11 +55,11 @@ public class ValidMessageFormatInputStream extends InputStream {
   }
 
   /**
-   * Reads 'size' amount of bytes from the stream into the buffer.
    * @param stream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
    *               to be blocking
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
    * @param storeKeyFactory factory which is used to read the key from the stream
+   * @param logger used for logging
    * @throws java.io.IOException
    */
   public ValidMessageFormatInputStream(InputStream stream, List<MessageInfo> messageInfoList,
