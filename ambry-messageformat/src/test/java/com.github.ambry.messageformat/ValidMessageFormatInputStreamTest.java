@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public class ValidMessageFormatInputStreamTest {
 
   @Test
-  public void messageFormatByteBufferInputStreamValidBlobsTest()
+  public void validMessageFormatInputStreamTestForValidBlobs()
       throws IOException, MessageFormatException {
 
     // messageformatbytebufferinputstream contains put records for 3 valid blobs
@@ -86,7 +86,7 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+    ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
@@ -102,27 +102,27 @@ public class ValidMessageFormatInputStreamTest {
     int totalBlobSize = 3 * (int) blobSize;
     int totalKeySize = key1.sizeInBytes() + key2.sizeInBytes() + key3.sizeInBytes();
 
-    Assert.assertEquals(messageFormatByteBufferInputStream.getSize(),
+    Assert.assertEquals(validMessageFormatInputStream.getSize(),
         totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize);
 
-    Assert.assertEquals(messageFormatByteBufferInputStream.getSize(),
+    Assert.assertEquals(validMessageFormatInputStream.getSize(),
         messageFormatStream1.getSize() + messageFormatStream2.getSize() + messageFormatStream3.getSize());
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key1, 10, "servid1", usermetadata1, data1));
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key2, 10, "servid2", usermetadata2, data2));
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key3, 10, "servid3", usermetadata3, data3));
   }
 
   @Test
-  public void messageFormatByteBufferInputStreamCorruptBlobsTest()
+  public void validMessageFormatInputStreamTestForInValidBlobs()
       throws IOException, MessageFormatException {
 
     // messageformatbytebufferinputstream contains put records for 2 valid blobs and 1 corrupt blob
@@ -193,7 +193,7 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+    ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
@@ -209,23 +209,23 @@ public class ValidMessageFormatInputStreamTest {
     int totalBlobSize = 2 * (int) blobSize;
     int totalKeySize = key1.sizeInBytes() + key3.sizeInBytes();
 
-    Assert.assertEquals(messageFormatByteBufferInputStream.getSize(),
+    Assert.assertEquals(validMessageFormatInputStream.getSize(),
         totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize);
 
-    Assert.assertEquals(messageFormatByteBufferInputStream.getSize(),
+    Assert.assertEquals(validMessageFormatInputStream.getSize(),
         messageFormatStream1.getSize() + messageFormatStream3.getSize());
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key1, 10, "servid1", usermetadata1, data1));
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key3, 10, "servid3", usermetadata3, data3));
   }
 
   @Test
-  public void messageFormatByteBufferInputStreamDeletedBlobTest()
+  public void validMessageFormatInputStreamTestForDeletedBlobs()
       throws IOException, MessageFormatException {
 
     // messageformatbytebufferinputstream contains put records for 2 valid blobs and 1 deleted blob
@@ -281,7 +281,7 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+    ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
@@ -297,15 +297,15 @@ public class ValidMessageFormatInputStreamTest {
     int totalBlobSize = 2 * (int) blobSize;
     int totalKeySize = key1.sizeInBytes() + key3.sizeInBytes();
 
-    Assert.assertEquals(messageFormatByteBufferInputStream.getSize(),
+    Assert.assertEquals(validMessageFormatInputStream.getSize(),
         totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize);
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key1, 10, "servid1", usermetadata1, data1));
 
     Assert.assertEquals(true,
-        verifyBlob(messageFormatByteBufferInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
+        verifyBlob(validMessageFormatInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
             (int) blobSize, key3, 10, "servid3", usermetadata3, data3));
   }
 
