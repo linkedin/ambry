@@ -68,7 +68,7 @@ class IndexSegment {
   private int valueSize;
   private File bloomFile;
   private long prevSegmentEndOffset = 0;
-  private long lastModified = 0; // an approximation of the last modified time.
+  private AtomicLong lastModifiedSec; // an approximation of the last modified time.
   private AtomicInteger numberOfItems;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
   private final StoreMetrics metrics;
@@ -100,6 +100,7 @@ class IndexSegment {
         .getFilter(config.storeIndexMaxNumberOfInmemElements, config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
     this.metrics = metrics;
+    this.lastModifiedSec = new AtomicLong(0);
   }
 
   /**
@@ -121,6 +122,7 @@ class IndexSegment {
       startOffset = new AtomicLong(Long.parseLong(startOffsetValue));
       endOffset = new AtomicLong(-1);
       this.indexFile = indexFile;
+      this.lastModifiedSec = new AtomicLong(indexFile.lastModified()/1000);
       this.rwLock = new ReentrantReadWriteLock();
       this.factory = factory;
       sizeWritten = new AtomicLong(0);
@@ -216,6 +218,14 @@ class IndexSegment {
    */
   public int getValueSize() {
     return valueSize;
+  }
+
+  /**
+   * The time of last modification of this segment
+   * @return The time in seconds of the last modification of this segment.
+   */
+  public long getLastModified() {
+    return lastModifiedSec.get();
   }
 
   /**
@@ -330,6 +340,7 @@ class IndexSegment {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       endOffset.set(fileEndOffset);
+      lastModifiedSec.set(SystemTime.getInstance().milliseconds()/1000);
       if (keySize == Key_Size_Invalid_Value) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
@@ -425,14 +436,6 @@ class IndexSegment {
   }
 
   /**
-   * The approximate lastModifiedTime
-   * This is only useful for unmapped segments
-   */
-  public long getLastModifiedTimeMs() {
-    return lastModified;
-  }
-
-  /**
    * Writes the index to a persistent file. Writes the data in the following format
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * | version | keysize | valuesize | fileendpointer |   key 1  | value 1  |  ...  |   key n   | value n   | crc      |
@@ -488,7 +491,6 @@ class IndexSegment {
         fileStream.getChannel().force(true);
         // swap temp file with the original file
         temp.renameTo(getFile());
-        lastModified = SystemTime.getInstance().milliseconds();
       } catch (IOException e) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
             " IO error while persisting index to disk", e, StoreErrorCodes.IOError);
@@ -628,15 +630,17 @@ class IndexSegment {
    *            If the key is null, all entries are retrieved upto maxentries
    * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
-   * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @param currentTotalSizeOfEntriesScannedInBytes The current total size in bytes of the entries that are scanned.
+   *                                                Note that these are not necessarily part of the entries returned.
    * @param flags If -1, returns all values. Otherwise, only entries that have the same flags will be returned.
-   * @return true if any entries were added.
+   * @return the last store key scanned. If flags==0, this will be the key added to entries. If none were scanned,
+   *         null is returned.
    * @throws IOException
    */
-  public boolean getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes, byte flags)
+  public StoreKey getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
+      AtomicLong currentTotalSizeOfEntriesScannedInBytes, byte flags)
       throws IOException {
-    int entriesSizeAtStart = entries.size();
+    StoreKey returnKey = key;
     if (mapped.get()) {
       int index = 0;
       if (key != null) {
@@ -645,18 +649,21 @@ class IndexSegment {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (currentTotalSizeOfEntriesInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
+        while (currentTotalSizeOfEntriesScannedInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
           IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
           // we include the key in the final list if it is not the initial key or if the initial key was null
-          if ((key == null || newKey.compareTo(key) != 0) && (flags == -1 || flags == newValue.getFlags())) {
-            MessageInfo info =
-                new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
-                    newValue.getTimeToLiveInMs());
-            entries.add(info);
-            currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
+          if ((key == null || newKey.compareTo(key) != 0)) {
+            if ((flags == -1 || flags == newValue.getFlags())) {
+              MessageInfo info =
+                  new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
+                      newValue.getTimeToLiveInMs());
+              entries.add(info);
+            }
+            currentTotalSizeOfEntriesScannedInBytes.addAndGet(newValue.getSize());
+            returnKey = newKey;
           }
           index++;
         }
@@ -670,19 +677,21 @@ class IndexSegment {
         tempMap = index.tailMap(key, true);
       }
       for (Map.Entry<StoreKey, IndexValue> entry : tempMap.entrySet()) {
-        if ((key == null || entry.getKey().compareTo(key) != 0) && (flags == -1
-            || entry.getValue().getFlags() == flags)) {
-          MessageInfo info = new MessageInfo(entry.getKey(), entry.getValue().getSize(),
-              entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs());
-          entries.add(info);
-          currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
-          if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
+        if ((key == null || entry.getKey().compareTo(key) != 0)) {
+          if (flags == -1 || flags == entry.getValue().getFlags()) {
+            MessageInfo info = new MessageInfo(entry.getKey(), entry.getValue().getSize(),
+                entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs());
+            entries.add(info);
+          }
+          currentTotalSizeOfEntriesScannedInBytes.addAndGet(entry.getValue().getSize());
+          returnKey = entry.getKey();
+          if (currentTotalSizeOfEntriesScannedInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
             break;
           }
         }
       }
     }
-    return entries.size() > entriesSizeAtStart;
+    return returnKey;
   }
 }
 

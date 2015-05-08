@@ -65,9 +65,9 @@ public class StoreConfig {
   /**
    * The delay after which the hard delete thread starts on startup
    */
-  @Config("store.hard.delete.thread.delay.seconds")
+  @Config("store.hard.delete.thread.startup.delay.seconds")
   @Default("10")
-  public final int storeHardDeleteThreadDelaySeconds;
+  public final int storeHardDeleteThreadStartupDelaySeconds;
 
   /**
    * How long a key must be in deleted state before it is considered for cleanup.
@@ -77,11 +77,25 @@ public class StoreConfig {
   public final int storeDeletedMessageHardDeleteAgeDays;
 
   /**
-   * Cleanup batch size. The size of entries processed in every iteration
+   * Cleanup scan size. The total size of entries in the log that will be scanned in every iteration.
    */
-  @Config("store.hard.delete.batch.size.in.bytes")
+  @Config("store.hard.delete.scan.size.in.bytes")
   @Default("10 * 1024 * 1024")
-  public final int storeHardDeleteBatchSizeInBytes;
+  public final int storeHardDeleteScanSizeInBytes;
+
+  /**
+   * Delay between subsequent invocations of the hard delete thread.
+   */
+  @Config("store.hard.delete.thread.interval.seconds")
+  @Default("60")
+  public final int storeHardDeleteThreadIntervalSeconds;
+
+  /**
+   * Max delay between subsequent invocations of the hard delete thread.
+   */
+  @Config("store.hard.delete.thread.max.interval.seconds")
+  @Default("30*60")
+  public final int storeHardDeleteThreadMaxIntervalSeconds;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -96,10 +110,14 @@ public class StoreConfig {
         verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
-    storeHardDeleteThreadDelaySeconds = verifiableProperties.getInt("store.hard.delete.thread.delay.seconds", 10);
+    storeHardDeleteThreadStartupDelaySeconds = verifiableProperties.getInt("store.hard.delete.thread.startup.delay.seconds", 10);
     storeDeletedMessageHardDeleteAgeDays = verifiableProperties.getInt("store.deleted.message.hard.delete.age.days", 7);
-    storeHardDeleteBatchSizeInBytes =
-        verifiableProperties.getInt("store.hard.delete.batch.size.in.bytes", 10 * 1024 * 1024);
+    storeHardDeleteScanSizeInBytes =
+        verifiableProperties.getInt("store.hard.delete.scan.size.in.bytes", 10 * 1024 * 1024);
+    storeHardDeleteThreadIntervalSeconds =
+        verifiableProperties.getInt("store.hard.delete.thread.interval.seconds", 60);
+    storeHardDeleteThreadMaxIntervalSeconds =
+        verifiableProperties.getInt("store.hard.delete.thread.max.interval.seconds", 30 * 60);
   }
 }
 

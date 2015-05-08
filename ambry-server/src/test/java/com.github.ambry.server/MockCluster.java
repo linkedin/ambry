@@ -54,6 +54,10 @@ public class MockCluster {
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
+    props.setProperty("store.hard.delete.thread.startup.delay.seconds", "2");
+    props.setProperty("store.hard.delete.thread.interval.seconds", "1");
+    props.setProperty("store.hard.delete.thread.max.interval.seconds", "2");
+    props.setProperty("store.deleted.message.hard.delete.age.days", "0");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     VerifiableProperties propverify = new VerifiableProperties(props);
