@@ -19,10 +19,10 @@ import org.slf4j.Logger;
 
 
 /**
- * Class represents Inputstream containing blobs in its entirety(one complete message stream with header, blobId,
- * (blob properties + user metadata + blob) / delete record.
- * Blobs are skipped based on certain criteria. For now Corrupt blobs are skipped when read from the stream
- * This class is similar to ByteBufferInputStream which MessageFormatWriteSetUses, just that some blobs are skipped
+ * Class represents an Inputstream containing blobs
+ * Invalid blobs are are skipped based on validation criteria. For now Corrupt blobs are skipped when read from the stream
+ * Non-corrupt blobs should have the format:  | header | blobId | blob properties | user metadata | blob |
+ * This class is similar to ByteBufferInputStream which MessageFormatWriteSet uses, just that invalid blobs are skipped
  * during read
  */
 public class ValidMessageFormatInputStream extends InputStream {
