@@ -228,6 +228,7 @@ public final class ReplicationManager {
   private final NotificationSystem notification;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateIntraDC;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
+  private final StoreKeyFactory storeKeyFactory;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -240,6 +241,7 @@ public final class ReplicationManager {
 
     try {
       this.replicationConfig = replicationConfig;
+      this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicationIntraDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfIntraDCReplicaThreads);
@@ -481,7 +483,8 @@ public final class ReplicationManager {
       }
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
-              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
+              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
+              storeKeyFactory);
       replicaThreadList.add(replicaThread);
     }
   }

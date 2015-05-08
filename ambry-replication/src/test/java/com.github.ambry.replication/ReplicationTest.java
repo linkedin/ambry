@@ -46,6 +46,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.util.EnumSet;
 import org.junit.Assert;
 import org.junit.Test;
@@ -584,10 +585,18 @@ public class ReplicationTest {
       ReplicationMetrics replicationMetrics =
           new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
               replicaIds);
+      StoreKeyFactory storeKeyFactory = null;
+      try {
+        storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+      } catch (Exception e) {
+        System.out.println("Error creating StoreKeyFactory ");
+        throw new IOException("Error creating StoreKeyFactory " + e);
+      }
+
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
-              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null);
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory);
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
               replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);

@@ -86,13 +86,8 @@ public class MessageFormatByteBufferInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    int sizeToRead = 0;
-    for (MessageInfo msgInfo : msgInfoList) {
-      sizeToRead += msgInfo.getSize();
-    }
-
-    MessageFormatByteBufferInputStream messageFormatByteBufferInputStream =
-        new MessageFormatByteBufferInputStream(inputStream, sizeToRead, msgInfoList, new MockIdFactory(),
+    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -198,13 +193,8 @@ public class MessageFormatByteBufferInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    int sizeToRead = 0;
-    for (MessageInfo msgInfo : msgInfoList) {
-      sizeToRead += msgInfo.getSize();
-    }
-
-    MessageFormatByteBufferInputStream messageFormatByteBufferInputStream =
-        new MessageFormatByteBufferInputStream(inputStream, sizeToRead, msgInfoList, new MockIdFactory(),
+    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -291,13 +281,8 @@ public class MessageFormatByteBufferInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    int sizeToRead = 0;
-    for (MessageInfo msgInfo : msgInfoList) {
-      sizeToRead += msgInfo.getSize();
-    }
-
-    MessageFormatByteBufferInputStream messageFormatByteBufferInputStream =
-        new MessageFormatByteBufferInputStream(inputStream, sizeToRead, msgInfoList, new MockIdFactory(),
+    ValidMessageFormatInputStream messageFormatByteBufferInputStream =
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
             LoggerFactory.getLogger(getClass()));
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -324,7 +309,7 @@ public class MessageFormatByteBufferInputStreamTest {
             (int) blobSize, key3, 10, "servid3", usermetadata3, data3));
   }
 
-  private boolean verifyBlob(MessageFormatByteBufferInputStream messageFormatByteBufferInputStream, int headerSize,
+  private boolean verifyBlob(ValidMessageFormatInputStream messageFormatByteBufferInputStream, int headerSize,
       int blobPropertiesRecordSize, int userMetadataSize, int blobSize, StoreKey key, int blobPropertiesSize,
       String serviceId, byte[] usermetadata, byte[] data)
       throws IOException {

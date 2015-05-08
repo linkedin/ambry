@@ -5,7 +5,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
-import com.github.ambry.messageformat.MessageFormatByteBufferInputStream;
+import com.github.ambry.messageformat.ValidMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -32,6 +32,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
@@ -67,11 +68,12 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final StoreKeyFactory storeKeyFactory;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
-      ReplicationMetrics replicationMetrics, NotificationSystem notification) {
+      ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -84,6 +86,7 @@ class ReplicaThread implements Runnable {
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
     this.needToWaitForReplicaLag = true;
+    this.storeKeyFactory = storeKeyFactory;
   }
 
   public String getName() {
@@ -445,11 +448,7 @@ class ReplicaThread implements Runnable {
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
-          long sizeToWrite = 0;
-          for (MessageInfo msgInfo : infoList) {
-            sizeToWrite += msgInfo.getSize();
-          }
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, sizeToWrite);
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           remoteReplicaInfo.getLocalStore().delete(writeset);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -615,16 +614,14 @@ class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              long sizeToWrite = getTotalSize(messageInfoList);
-
-              MessageFormatByteBufferInputStream messageFormatByteBufferInputStream =
-                  new MessageFormatByteBufferInputStream(getResponse.getInputStream(), (int) sizeToWrite,
-                      messageInfoList, clusterMap, logger);
-              if (messageInfoList.size() != messageFormatByteBufferInputStream.getTotalValidMessageInfos()) {
+              ValidMessageFormatInputStream validMessageFormatInputStream =
+                  new ValidMessageFormatInputStream(getResponse.getInputStream(),
+                      messageInfoList, storeKeyFactory, logger);
+              if (validMessageFormatInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementCorruptionErrorCount(partitionResponseInfo.getPartition());
               }
               MessageFormatWriteSet writeset =
-                  new MessageFormatWriteSet(messageFormatByteBufferInputStream, messageInfoList, sizeToWrite);
+                  new MessageFormatWriteSet(validMessageFormatInputStream, messageInfoList, true);
               remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {
