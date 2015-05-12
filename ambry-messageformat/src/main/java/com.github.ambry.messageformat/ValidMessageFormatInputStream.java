@@ -29,16 +29,16 @@ public class ValidMessageFormatInputStream extends InputStream {
   private int readLimit;
   private int validSize;
   private int sizeLeftToRead;
-  private Iterator<MessageInfoByteBuffer> messageInfoByteBufferIterator;
-  private MessageInfoByteBuffer currentMessageInfoByteBuffer;
+  private Iterator<MessageInfoByteBufferPair> messageInfoByteBufferPairIterator;
+  private MessageInfoByteBufferPair currentMessageInfoByteBufferPair;
   private Logger logger;
   private StoreKeyFactory storeKeyFactory;
   private List<MessageInfo> messageInfoList;
-  private List<MessageInfoByteBuffer> messageInfoByteBufferList;
+  private List<MessageInfoByteBufferPair> messageInfoByteBufferPairList;
   private int validMessageInfoCount;
   private final boolean validateMessageStream;
 
-  public ValidMessageFormatInputStream(List<MessageInfoByteBuffer> messageInfoByteBufferList,
+  public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferList,
       List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory, Logger logger,
       final boolean validateMessageStream) {
     this.mark = -1;
@@ -48,9 +48,9 @@ public class ValidMessageFormatInputStream extends InputStream {
     this.sizeLeftToRead = validSize;
     this.messageInfoList = messageInfoList;
     this.logger = logger;
-    this.messageInfoByteBufferList = messageInfoByteBufferList;
-    this.messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
-    this.currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+    this.messageInfoByteBufferPairList = messageInfoByteBufferList;
+    this.messageInfoByteBufferPairIterator = messageInfoByteBufferList.iterator();
+    this.currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     this.validateMessageStream = validateMessageStream;
   }
 
@@ -84,7 +84,7 @@ public class ValidMessageFormatInputStream extends InputStream {
       size += info.getSize();
     }
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
-    messageInfoByteBufferList = new ArrayList<MessageInfoByteBuffer>();
+    messageInfoByteBufferPairList = new ArrayList<MessageInfoByteBufferPair>();
     int totalRead = 0;
     int absoluteStartOffset = 0;
     for (int i = 0; i < messageInfoList.size(); i++) {
@@ -103,15 +103,15 @@ public class ValidMessageFormatInputStream extends InputStream {
       if (!validateMessageStream || isValid(new ByteBufferInputStream(byteBufferCurrentMessage), sizeToBeRead,
           totalRead - sizeToBeRead, storeKeyFactory)) {
         byteBufferCurrentMessage.flip();
-        messageInfoByteBufferList
-            .add(new MessageInfoByteBuffer(messageInfoList.get(i), byteBufferCurrentMessage, absoluteStartOffset));
+        messageInfoByteBufferPairList
+            .add(new MessageInfoByteBufferPair(messageInfoList.get(i), byteBufferCurrentMessage, absoluteStartOffset));
         validSize += sizeToBeRead;
         validMessageInfoCount++;
       }
       absoluteStartOffset += sizeToBeRead;
     }
-    messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
-    currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+    messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
+    currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     sizeLeftToRead = validSize;
   }
 
@@ -128,16 +128,16 @@ public class ValidMessageFormatInputStream extends InputStream {
   @Override
   public int read()
       throws IOException {
-    if (currentMessageInfoByteBuffer.getByteBuffer().position() == currentMessageInfoByteBuffer.getMsgInfo()
+    if (currentMessageInfoByteBufferPair.getByteBuffer().position() == currentMessageInfoByteBufferPair.getMsgInfo()
         .getSize()) {
-      if (!messageInfoByteBufferIterator.hasNext()) {
+      if (!messageInfoByteBufferPairIterator.hasNext()) {
         return -1;
       } else {
-        currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+        currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
       }
     }
     sizeLeftToRead--;
-    return currentMessageInfoByteBuffer.getByteBuffer().get() & 0xFF;
+    return currentMessageInfoByteBufferPair.getByteBuffer().get() & 0xFF;
   }
 
   @Override
@@ -162,12 +162,12 @@ public class ValidMessageFormatInputStream extends InputStream {
     int sizeYetToRead = count;
 
     do {
-      if (currentMessageInfoByteBuffer.getByteBuffer().remaining() == 0) {
-        currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+      if (currentMessageInfoByteBufferPair.getByteBuffer().remaining() == 0) {
+        currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
       }
       int sizeToReadFromCurrentBuffer =
-          Math.min(currentMessageInfoByteBuffer.getByteBuffer().remaining(), sizeYetToRead);
-      currentMessageInfoByteBuffer.getByteBuffer().get(bytes, offset, sizeToReadFromCurrentBuffer);
+          Math.min(currentMessageInfoByteBufferPair.getByteBuffer().remaining(), sizeYetToRead);
+      currentMessageInfoByteBufferPair.getByteBuffer().get(bytes, offset, sizeToReadFromCurrentBuffer);
       read += sizeToReadFromCurrentBuffer;
       sizeYetToRead -= sizeToReadFromCurrentBuffer;
       offset += sizeToReadFromCurrentBuffer;
@@ -187,14 +187,14 @@ public class ValidMessageFormatInputStream extends InputStream {
     if (readLimit == -1 || mark == -1) {
       throw new IOException("Mark not set before reset invoked.");
     }
-    if (currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getByteBuffer().position()
-        - mark > readLimit) {
+    if (currentMessageInfoByteBufferPair.getAbsoluteStartOffset() + currentMessageInfoByteBufferPair.getByteBuffer()
+        .position() - mark > readLimit) {
       throw new IOException("Read limit exceeded before reset invoked.");
     }
     // walk until you reach the marked bytebuffer
-    Iterator<MessageInfoByteBuffer> tempIterator = messageInfoByteBufferList.iterator();
+    Iterator<MessageInfoByteBufferPair> tempIterator = messageInfoByteBufferPairList.iterator();
     while (tempIterator.hasNext()) {
-      MessageInfoByteBuffer messageInfoByteBuffer = tempIterator.next();
+      MessageInfoByteBufferPair messageInfoByteBuffer = tempIterator.next();
       if (messageInfoByteBuffer.getAbsoluteStartOffset() + messageInfoByteBuffer.getMsgInfo().getSize() > mark) {
         messageInfoByteBuffer.getByteBuffer().reset();
         break;
@@ -202,8 +202,8 @@ public class ValidMessageFormatInputStream extends InputStream {
     }
     // reset/flip all bytebuffers until current bytebuffer where reset is called
     while (tempIterator.hasNext()) {
-      MessageInfoByteBuffer messageInfoByteBuffer = tempIterator.next();
-      if (messageInfoByteBuffer.getAbsoluteStartOffset() == currentMessageInfoByteBuffer.getAbsoluteStartOffset()) {
+      MessageInfoByteBufferPair messageInfoByteBuffer = tempIterator.next();
+      if (messageInfoByteBuffer.getAbsoluteStartOffset() == currentMessageInfoByteBufferPair.getAbsoluteStartOffset()) {
         messageInfoByteBuffer.getByteBuffer().flip();
         break;
       } else {
@@ -212,15 +212,15 @@ public class ValidMessageFormatInputStream extends InputStream {
     }
 
     sizeLeftToRead = validSize;
-    messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
-    // make currentMessageInfoByteBuffer refer to the msginfobytebuffer when mark was called
-    while (messageInfoByteBufferIterator.hasNext()) {
-      currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
-      if (currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getMsgInfo().getSize()
-          > mark) {
+    messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
+    // make currentMessageInfoByteBufferPair refer to the msginfobytebuffer when mark was called
+    while (messageInfoByteBufferPairIterator.hasNext()) {
+      currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
+      if (currentMessageInfoByteBufferPair.getAbsoluteStartOffset() + currentMessageInfoByteBufferPair.getMsgInfo()
+          .getSize() > mark) {
         break;
       } else {
-        sizeLeftToRead -= currentMessageInfoByteBuffer.getMsgInfo().getSize();
+        sizeLeftToRead -= currentMessageInfoByteBufferPair.getMsgInfo().getSize();
       }
     }
   }
@@ -228,9 +228,10 @@ public class ValidMessageFormatInputStream extends InputStream {
   @Override
   public synchronized void mark(int readLimit) {
     this.mark =
-        currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getByteBuffer().position();
+        currentMessageInfoByteBufferPair.getAbsoluteStartOffset() + currentMessageInfoByteBufferPair.getByteBuffer()
+            .position();
     this.readLimit = readLimit;
-    currentMessageInfoByteBuffer.getByteBuffer().mark();
+    currentMessageInfoByteBufferPair.getByteBuffer().mark();
   }
 
   @Override
@@ -239,7 +240,7 @@ public class ValidMessageFormatInputStream extends InputStream {
   }
 
   public ValidMessageFormatInputStream duplicate() {
-    return new ValidMessageFormatInputStream(messageInfoByteBufferList, messageInfoList, validSize, storeKeyFactory,
+    return new ValidMessageFormatInputStream(messageInfoByteBufferPairList, messageInfoList, validSize, storeKeyFactory,
         logger, validateMessageStream);
   }
 
@@ -324,12 +325,12 @@ public class ValidMessageFormatInputStream extends InputStream {
     return isValid;
   }
 
-  class MessageInfoByteBuffer {
+  class MessageInfoByteBufferPair {
     private MessageInfo msgInfo;
     private ByteBuffer byteBuffer;
     private int absoluteStartOffset;
 
-    public MessageInfoByteBuffer(MessageInfo msgInfo, ByteBuffer byteBuffer, int absoluteStartOffset) {
+    public MessageInfoByteBufferPair(MessageInfo msgInfo, ByteBuffer byteBuffer, int absoluteStartOffset) {
       this.msgInfo = msgInfo;
       this.byteBuffer = byteBuffer;
       this.absoluteStartOffset = absoluteStartOffset;
