@@ -88,7 +88,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()));
+            LoggerFactory.getLogger(getClass()), true);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -195,7 +195,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()));
+            LoggerFactory.getLogger(getClass()), true);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -283,7 +283,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()));
+            LoggerFactory.getLogger(getClass()), true);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);

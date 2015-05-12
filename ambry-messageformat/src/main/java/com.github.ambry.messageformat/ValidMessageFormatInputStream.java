@@ -4,7 +4,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -26,32 +25,33 @@ import org.slf4j.Logger;
  * during read
  */
 public class ValidMessageFormatInputStream extends InputStream {
-  private ByteBuffer byteBuffer;
   private int mark;
   private int readLimit;
   private int validSize;
-  private int position;
   private int sizeLeftToRead;
-  private int validMessageInfoCount;
-  private List<MessageInfoStatus> msgInfoStatusList;
-  private Iterator<MessageInfoStatus> iterator;
-  private MessageInfoStatus currentMsgInfoStatus;
+  private Iterator<MessageInfoByteBuffer> messageInfoByteBufferIterator;
+  private MessageInfoByteBuffer currentMessageInfoByteBuffer;
   private Logger logger;
   private StoreKeyFactory storeKeyFactory;
   private List<MessageInfo> messageInfoList;
+  private List<MessageInfoByteBuffer> messageInfoByteBufferList;
+  private int validMessageInfoCount;
+  private final boolean validateMessageStream;
 
-  public ValidMessageFormatInputStream(ByteBuffer byteBuffer, List<MessageInfoStatus> msgInfoStatusList, int validSize,
-      StoreKeyFactory storeKeyFactory, Logger logger) {
-    this.byteBuffer = byteBuffer;
+  public ValidMessageFormatInputStream(List<MessageInfoByteBuffer> messageInfoByteBufferList,
+      List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory, Logger logger,
+      final boolean validateMessageStream) {
     this.mark = -1;
     this.readLimit = -1;
-    this.msgInfoStatusList = msgInfoStatusList;
-    this.iterator = msgInfoStatusList.iterator();
     this.storeKeyFactory = storeKeyFactory;
     this.validSize = validSize;
     this.sizeLeftToRead = validSize;
-    this.position = 0;
+    this.messageInfoList = messageInfoList;
     this.logger = logger;
+    this.messageInfoByteBufferList = messageInfoByteBufferList;
+    this.messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
+    this.currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+    this.validateMessageStream = validateMessageStream;
   }
 
   /**
@@ -60,69 +60,59 @@ public class ValidMessageFormatInputStream extends InputStream {
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
    * @param storeKeyFactory factory which is used to read the key from the stream
    * @param logger used for logging
+   * @param validateMessageStream whether the stream should be checked for validity or not
    * @throws java.io.IOException
    */
   public ValidMessageFormatInputStream(InputStream stream, List<MessageInfo> messageInfoList,
-      StoreKeyFactory storeKeyFactory, Logger logger)
+      StoreKeyFactory storeKeyFactory, Logger logger, final boolean validateMessageStream)
       throws IOException {
-    int size = 0;
-    for (MessageInfo info : messageInfoList) {
-      size += info.getSize();
-    }
     this.messageInfoList = messageInfoList;
     this.storeKeyFactory = storeKeyFactory;
-    // read the entire stream to bytebuffer
+    this.logger = logger;
+    this.validateMessageStream = validateMessageStream;
+
+    // check for empty list
     if (messageInfoList.size() == 0) {
-      position = sizeLeftToRead = validSize = 0;
+      sizeLeftToRead = validSize = 0;
       this.mark = -1;
       this.readLimit = -1;
       return;
     }
-    this.byteBuffer = ByteBuffer.allocate(size);
-    this.logger = logger;
-    int read = 0;
-    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
-    while (read < size) {
-      int sizeRead = readableByteChannel.read(byteBuffer);
-      if (sizeRead == 0 || sizeRead == -1) {
-        throw new IOException("Total size read " + read + " is less than the size to be read " + size);
-      }
-      read += sizeRead;
-    }
-    byteBuffer.flip();
-    // validate message stream and generate metadata about each blob
-    validateMessageStream();
-  }
 
-  private void validateMessageStream()
-      throws IOException {
-    msgInfoStatusList = new ArrayList<MessageInfoStatus>(messageInfoList.size());
-    int currentOffset = 0;
-    byteBuffer.mark();
-    ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(byteBuffer);
-    for (MessageInfo messageInfo : messageInfoList) {
-      byte[] bytes = new byte[(int) messageInfo.getSize()];
-      byteBuffer.position(currentOffset);
-      byteBuffer.get(bytes, 0, (int) messageInfo.getSize());
-      ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
-      boolean isValid = isValid(byteArrayInputStream, messageInfo.getSize(), currentOffset, storeKeyFactory);
-      MessageInfoStatus messageInfoStatus = new MessageInfoStatus(messageInfo, isValid, currentOffset);
-      msgInfoStatusList.add(messageInfoStatus);
-      if (isValid) {
-        validMessageInfoCount++;
-        validSize += messageInfo.getSize();
-      } else {
-        logger.error("Corrupt blob reported for blob with messageInfo " + messageInfo);
-      }
-      currentOffset += messageInfo.getSize();
+    int size = 0;
+    for (MessageInfo info : messageInfoList) {
+      size += info.getSize();
     }
+    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
+    messageInfoByteBufferList = new ArrayList<MessageInfoByteBuffer>();
+    int totalRead = 0;
+    int absoluteStartOffset = 0;
+    for (int i = 0; i < messageInfoList.size(); i++) {
+      int read = 0;
+      int sizeToBeRead = (int) messageInfoList.get(i).getSize();
+      ByteBuffer byteBufferCurrentMessage = ByteBuffer.allocate(sizeToBeRead);
+      while (read < sizeToBeRead) {
+        int sizeRead = readableByteChannel.read(byteBufferCurrentMessage);
+        if (sizeRead == 0 || sizeRead == -1) {
+          throw new IOException("Total size read " + (totalRead + read) + " is less than the size to be read " + size);
+        }
+        read += sizeRead;
+      }
+      totalRead += sizeToBeRead;
+      byteBufferCurrentMessage.flip();
+      if (!validateMessageStream || isValid(new ByteBufferInputStream(byteBufferCurrentMessage), sizeToBeRead,
+          totalRead - sizeToBeRead, storeKeyFactory)) {
+        byteBufferCurrentMessage.flip();
+        messageInfoByteBufferList
+            .add(new MessageInfoByteBuffer(messageInfoList.get(i), byteBufferCurrentMessage, absoluteStartOffset));
+        validSize += sizeToBeRead;
+        validMessageInfoCount++;
+      }
+      absoluteStartOffset += sizeToBeRead;
+    }
+    messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
+    currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
     sizeLeftToRead = validSize;
-    byteBuffer.flip();
-    position = 0;
-    this.mark = -1;
-    this.readLimit = -1;
-    iterator = msgInfoStatusList.iterator();
-    this.currentMsgInfoStatus = iterator.next();
   }
 
   /**
@@ -138,16 +128,16 @@ public class ValidMessageFormatInputStream extends InputStream {
   @Override
   public int read()
       throws IOException {
-    if (!byteBuffer.hasRemaining() || sizeLeftToRead == 0) {
-      return -1;
+    if (currentMessageInfoByteBuffer.getByteBuffer().position() == currentMessageInfoByteBuffer.getMsgInfo()
+        .getSize()) {
+      if (!messageInfoByteBufferIterator.hasNext()) {
+        return -1;
+      } else {
+        currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+      }
     }
-    if ((currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() == (position))) {
-      iterateToNextValidMsg();
-      byteBuffer.position(position);
-    }
-    position++;
     sizeLeftToRead--;
-    return byteBuffer.get() & 0xFF;
+    return currentMessageInfoByteBuffer.getByteBuffer().get() & 0xFF;
   }
 
   @Override
@@ -167,46 +157,22 @@ public class ValidMessageFormatInputStream extends InputStream {
     if (count == 0) {
       return -1;
     }
-    int sizeRead = 0;
-    while (sizeRead < count) {
-      int currentMsgSizeYetToBeRead =
-          (int) (currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() - position);
-      if (currentMsgSizeYetToBeRead == 0) {
-        iterateToNextValidMsg();
-        byteBuffer.position(position);
-        currentMsgSizeYetToBeRead =
-            (int) (currentMsgInfoStatus.getStartOffset() + currentMsgInfoStatus.getMsgInfo().getSize() - position);
-      }
-      if (sizeRead + currentMsgSizeYetToBeRead < count) { // current msg has less bytes than required
-        readBytesFromBuffer(bytes, offset, currentMsgSizeYetToBeRead);
-        sizeRead += currentMsgSizeYetToBeRead;
-        offset += currentMsgSizeYetToBeRead;
-        iterateToNextValidMsg();
-        byteBuffer.position(position);
-      } else {
-        //current msg has more byes than required
-        readBytesFromBuffer(bytes, offset, count - sizeRead);
-        offset += count - sizeRead;
-        sizeRead += (count - sizeRead);
-        break;
-      }
-    }
-    return sizeRead;
-  }
 
-  private void iterateToNextValidMsg()
-      throws IllegalArgumentException {
-    currentMsgInfoStatus = null;
+    int read = 0;
+    int sizeYetToRead = count;
+
     do {
-      currentMsgInfoStatus = iterator.next();
-    } while (!currentMsgInfoStatus.isValid());
-    position = currentMsgInfoStatus.getStartOffset();
-  }
-
-  private void readBytesFromBuffer(byte[] bytes, int offset, int length) {
-    byteBuffer.get(bytes, offset, length);
-    position = byteBuffer.position();
-    sizeLeftToRead -= length;
+      if (currentMessageInfoByteBuffer.getByteBuffer().remaining() == 0) {
+        currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+      }
+      int sizeToReadFromCurrentBuffer =
+          Math.min(currentMessageInfoByteBuffer.getByteBuffer().remaining(), sizeYetToRead);
+      currentMessageInfoByteBuffer.getByteBuffer().get(bytes, offset, sizeToReadFromCurrentBuffer);
+      read += sizeToReadFromCurrentBuffer;
+      sizeYetToRead -= sizeToReadFromCurrentBuffer;
+      offset += sizeToReadFromCurrentBuffer;
+    } while (read < count);
+    return count;
   }
 
   @Override
@@ -221,21 +187,50 @@ public class ValidMessageFormatInputStream extends InputStream {
     if (readLimit == -1 || mark == -1) {
       throw new IOException("Mark not set before reset invoked.");
     }
-    if (byteBuffer.position() - mark > readLimit) {
+    if (currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getByteBuffer().position()
+        - mark > readLimit) {
       throw new IOException("Read limit exceeded before reset invoked.");
     }
-    position = 0;
+    // walk until you reach the marked bytebuffer
+    Iterator<MessageInfoByteBuffer> tempIterator = messageInfoByteBufferList.iterator();
+    while (tempIterator.hasNext()) {
+      MessageInfoByteBuffer messageInfoByteBuffer = tempIterator.next();
+      if (messageInfoByteBuffer.getAbsoluteStartOffset() + messageInfoByteBuffer.getMsgInfo().getSize() > mark) {
+        messageInfoByteBuffer.getByteBuffer().reset();
+        break;
+      }
+    }
+    // reset/flip all bytebuffers until current bytebuffer where reset is called
+    while (tempIterator.hasNext()) {
+      MessageInfoByteBuffer messageInfoByteBuffer = tempIterator.next();
+      if (messageInfoByteBuffer.getAbsoluteStartOffset() == currentMessageInfoByteBuffer.getAbsoluteStartOffset()) {
+        messageInfoByteBuffer.getByteBuffer().flip();
+        break;
+      } else {
+        messageInfoByteBuffer.getByteBuffer().flip();
+      }
+    }
+
     sizeLeftToRead = validSize;
-    iterator = msgInfoStatusList.iterator();
-    currentMsgInfoStatus = iterator.next();
-    byteBuffer.reset();
+    messageInfoByteBufferIterator = messageInfoByteBufferList.iterator();
+    // make currentMessageInfoByteBuffer refer to the msginfobytebuffer when mark was called
+    while (messageInfoByteBufferIterator.hasNext()) {
+      currentMessageInfoByteBuffer = messageInfoByteBufferIterator.next();
+      if (currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getMsgInfo().getSize()
+          > mark) {
+        break;
+      } else {
+        sizeLeftToRead -= currentMessageInfoByteBuffer.getMsgInfo().getSize();
+      }
+    }
   }
 
   @Override
   public synchronized void mark(int readLimit) {
-    this.mark = byteBuffer.position();
+    this.mark =
+        currentMessageInfoByteBuffer.getAbsoluteStartOffset() + currentMessageInfoByteBuffer.getByteBuffer().position();
     this.readLimit = readLimit;
-    byteBuffer.mark();
+    currentMessageInfoByteBuffer.getByteBuffer().mark();
   }
 
   @Override
@@ -244,8 +239,8 @@ public class ValidMessageFormatInputStream extends InputStream {
   }
 
   public ValidMessageFormatInputStream duplicate() {
-    return new ValidMessageFormatInputStream(byteBuffer.duplicate(), msgInfoStatusList, validSize, storeKeyFactory,
-        logger);
+    return new ValidMessageFormatInputStream(messageInfoByteBufferList, messageInfoList, validSize, storeKeyFactory,
+        logger, validateMessageStream);
   }
 
   public boolean hasInvalidMessages() {
@@ -329,27 +324,27 @@ public class ValidMessageFormatInputStream extends InputStream {
     return isValid;
   }
 
-  class MessageInfoStatus {
+  class MessageInfoByteBuffer {
     private MessageInfo msgInfo;
-    private boolean isValid;
-    private int startOffset;
+    private ByteBuffer byteBuffer;
+    private int absoluteStartOffset;
 
-    public MessageInfoStatus(MessageInfo msgInfo, boolean isValid, int startOffset) {
+    public MessageInfoByteBuffer(MessageInfo msgInfo, ByteBuffer byteBuffer, int absoluteStartOffset) {
       this.msgInfo = msgInfo;
-      this.isValid = isValid;
-      this.startOffset = startOffset;
+      this.byteBuffer = byteBuffer;
+      this.absoluteStartOffset = absoluteStartOffset;
     }
 
     MessageInfo getMsgInfo() {
       return msgInfo;
     }
 
-    boolean isValid() {
-      return isValid;
+    ByteBuffer getByteBuffer() {
+      return byteBuffer;
     }
 
-    int getStartOffset() {
-      return startOffset;
+    int getAbsoluteStartOffset() {
+      return absoluteStartOffset;
     }
   }
 }

@@ -3,8 +3,6 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Write;
-
-import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;

@@ -5,11 +5,11 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
-import com.github.ambry.messageformat.ValidMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.ValidMessageFormatInputStream;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.commons.BlobId;
@@ -69,11 +69,13 @@ class ReplicaThread implements Runnable {
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final StoreKeyFactory storeKeyFactory;
+  private final boolean validateMessageStream;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
-      ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory) {
+      ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
+      boolean validateMessageStream) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -87,6 +89,7 @@ class ReplicaThread implements Runnable {
     this.notification = notification;
     this.needToWaitForReplicaLag = true;
     this.storeKeyFactory = storeKeyFactory;
+    this.validateMessageStream = validateMessageStream;
   }
 
   public String getName() {
@@ -616,7 +619,7 @@ class ReplicaThread implements Runnable {
 
               ValidMessageFormatInputStream validMessageFormatInputStream =
                   new ValidMessageFormatInputStream(getResponse.getInputStream(),
-                      messageInfoList, storeKeyFactory, logger);
+                      messageInfoList, storeKeyFactory, logger, validateMessageStream);
               if (validMessageFormatInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementCorruptionErrorCount(partitionResponseInfo.getPartition());
               }

@@ -53,6 +53,8 @@ public class ReplicationMetrics {
   public final Histogram intraColoBatchStoreWriteTime;
   public final Histogram interColoTotalReplicationTime;
   public final Histogram intraColoTotalReplicationTime;
+  public final Histogram messageFormatValidationTime;
+  public final Histogram messageFormatGlobalValidationTime;
 
   public Gauge<Integer> numberOfIntraDCReplicaThreads;
   public Gauge<Integer> numberOfInterDCReplicaThreads;
@@ -131,6 +133,10 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoTotalReplicationTime"));
     intraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
+    messageFormatValidationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "MessageFormatValidationTime"));
+    messageFormatGlobalValidationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "MessageFormatGlobalValidationTime"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {

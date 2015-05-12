@@ -596,7 +596,8 @@ public class ReplicationTest {
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
-              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory);
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
+              true);
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
               replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
