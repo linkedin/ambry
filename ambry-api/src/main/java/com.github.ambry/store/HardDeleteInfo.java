@@ -3,6 +3,9 @@ package com.github.ambry.store;
 import java.nio.channels.ReadableByteChannel;
 
 
+/**
+ * A class that contains the info about the hard delete messages.
+ */
 public class HardDeleteInfo {
   ReadableByteChannel channel;
   long streamSize;

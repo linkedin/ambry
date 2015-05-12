@@ -41,7 +41,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -383,7 +382,7 @@ public class ServerTest {
       data.set(4, zeroedData);
 
       // Sleep long enough so that the hard deletes complete for the deleted blobs.
-      Thread.sleep(5000);
+      Thread.sleep(10000);
 
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -502,7 +501,7 @@ public class ServerTest {
       data.set(6, zeroedData);
 
       // Sleep long enough so that the hard deletes complete for the deleted blobs.
-      Thread.sleep(5000);
+      Thread.sleep(10000);
 
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);

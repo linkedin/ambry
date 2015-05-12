@@ -139,18 +139,17 @@ public class PersistentIndexTest {
       Assert.assertEquals(info.find(blobId8).getSize(), 1000);
       Assert.assertEquals(info.find(blobId8).getOffset(), 7000);
 
-      byte flags = 0;
       // test getEntriesSince
       List<MessageInfo> entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 4000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(blobId6, 4000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -196,15 +195,15 @@ public class PersistentIndexTest {
 
       // test getEntriesSince
       entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 5000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(blobId6, 5000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0), flags);
+      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -1636,14 +1635,16 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d *7d* 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d
+      //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d. In messageEntries, 19 comes before 20
+      // as we would have ...19 20 20d 20... from the journal, and then we lookup keys in that order when filtering
+      // out non-delete entries.
       info = index.findDeletedEntriesSince(info.getFindToken(), 800, SystemTime.getInstance().milliseconds()/1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 4);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId12);
       Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId15);
-      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId20);
-      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId19);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId19);
+      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId20);
 
       //Test end time
 
