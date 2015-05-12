@@ -86,28 +86,28 @@ public class ValidMessageFormatInputStream extends InputStream {
     for (MessageInfo info : messageInfoList) {
       size += info.getSize();
     }
-    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
 
+    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
     int totalRead = 0;
     int absoluteStartOffset = 0;
     for (int i = 0; i < messageInfoList.size(); i++) {
       int read = 0;
       int sizeToBeRead = (int) messageInfoList.get(i).getSize();
-      ByteBuffer byteBufferCurrentMessage = ByteBuffer.allocate(sizeToBeRead);
+      ByteBuffer byteBuffer = ByteBuffer.allocate(sizeToBeRead);
       while (read < sizeToBeRead) {
-        int sizeRead = readableByteChannel.read(byteBufferCurrentMessage);
+        int sizeRead = readableByteChannel.read(byteBuffer);
         if (sizeRead == 0 || sizeRead == -1) {
           throw new IOException("Total size read " + (totalRead + read) + " is less than the size to be read " + size);
         }
         read += sizeRead;
       }
       totalRead += sizeToBeRead;
-      byteBufferCurrentMessage.flip();
-      if (!validateMessageStream || isValid(new ByteBufferInputStream(byteBufferCurrentMessage), sizeToBeRead,
+      byteBuffer.flip();
+      if (!validateMessageStream || isValid(new ByteBufferInputStream(byteBuffer), sizeToBeRead,
           totalRead - sizeToBeRead, storeKeyFactory)) {
-        byteBufferCurrentMessage.flip();
+        byteBuffer.flip();
         messageInfoByteBufferPairList
-            .add(new MessageInfoByteBufferPair(messageInfoList.get(i), byteBufferCurrentMessage, absoluteStartOffset));
+            .add(new MessageInfoByteBufferPair(messageInfoList.get(i), byteBuffer, absoluteStartOffset));
         validSize += sizeToBeRead;
         validMessageInfoCount++;
       }
