@@ -4,7 +4,7 @@ import java.util.Iterator;
 
 public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   @Override
-  public Iterator<HardDeleteInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory factory) {
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory) {
     return new Iterator<HardDeleteInfo>() {
       @Override
       public boolean hasNext() {

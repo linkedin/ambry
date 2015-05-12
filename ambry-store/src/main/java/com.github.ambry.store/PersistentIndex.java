@@ -6,7 +6,6 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -801,8 +800,7 @@ public class PersistentIndex {
               + initialSegmentStartOffset + ", key: " + key + ", max total size of entries to return: "
               + maxTotalSizeOfEntries);
     } else {
-      return new StoreFindToken(newTokenSegmentKey, newTokenSegmentStartOffset,
-          sessionId);
+      return new StoreFindToken(newTokenSegmentKey, newTokenSegmentStartOffset, sessionId);
     }
   }
 
@@ -1052,6 +1050,7 @@ public class PersistentIndex {
      */
     private void performRecovery()
         throws IOException, StoreException {
+      StoreFindToken endTokenForRecovery;
       File cleanupTokenFile = new File(dataDir, Cleanup_Token_Filename);
       if (cleanupTokenFile.exists()) {
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
@@ -1061,7 +1060,7 @@ public class PersistentIndex {
           switch (version) {
             case 0:
               startToken = StoreFindToken.fromBytes(stream, factory);
-              endToken = StoreFindToken.fromBytes(stream, factory);
+              endTokenForRecovery = StoreFindToken.fromBytes(stream, factory);
               break;
             default:
               throw new StoreException("Invalid version in cleanup token " + dataDir,
@@ -1072,7 +1071,7 @@ public class PersistentIndex {
             logger.error("Crc check does not match for cleanup token file for dataDir {}, creating a clean one ",
                 dataDir);
             startToken = new StoreFindToken();
-            endToken = new StoreFindToken();
+            endTokenForRecovery = new StoreFindToken();
           }
         } catch (IOException e) {
           throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.Initialization_Error);
@@ -1081,11 +1080,26 @@ public class PersistentIndex {
         }
       } else {
         startToken = new StoreFindToken();
-        endToken = new StoreFindToken();
+        endTokenForRecovery = new StoreFindToken();
       }
       startTokenBeforeLogFlush = startTokenSafeToPersist = startToken;
-      // perform recovery
-      hardDelete();
+
+      /* perform hard deletes. startToken and endToken could be more than one scan size apart as they get persisted at different
+         frequencies (endToken during hardDelete() and startToken during index persist). Therefore, continue with hard
+         deletes until we reach endTokenForRecovery.*/
+      if (!endTokenForRecovery.isUninitialized()) {
+        logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
+            endTokenForRecovery);
+        do {
+          if (!hardDelete()) {
+            logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
+                dataDir, endToken);
+            break;
+          } else {
+            logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
+          }
+        } while (((StoreFindToken) endToken).getAppropriateOffset() <= endTokenForRecovery.getAppropriateOffset());
+      }
     }
 
     /**
@@ -1106,7 +1120,7 @@ public class PersistentIndex {
 
     private void persistCleanupToken()
         throws IOException, StoreException {
-      if (((StoreFindToken)endToken).isUninitialized()) {
+      if (endToken == null || ((StoreFindToken) endToken).isUninitialized()) {
         return;
       }
       final Timer.Context context = metrics.cleanupTokenFlushTime.time();
@@ -1157,7 +1171,7 @@ public class PersistentIndex {
 
         StoreMessageReadSet readSet = log.getView(readOptions);
 
-        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeletedMessages(readSet, factory);
+        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
         while (hardDeleteIterator.hasNext()) {
@@ -1200,7 +1214,8 @@ public class PersistentIndex {
       if (indexes.size() > 0) {
         int maxTotalSizeOfEntries = config.storeHardDeleteScanSizeInBytes;
         FindInfo info = findDeletedEntriesSince(startToken, maxTotalSizeOfEntries,
-            SystemTime.getInstance().milliseconds()/1000 - config.storeDeletedMessageHardDeleteAgeDays*24*60*60);
+            SystemTime.getInstance().milliseconds() / 1000
+                - config.storeDeletedMessageHardDeleteAgeDays * 24 * 60 * 60);
         endToken = info.getFindToken();
         if (!endToken.equals(startToken)) {
           persistCleanupToken(); // this is to persist the end token before performing the writes to the log.
@@ -1220,38 +1235,18 @@ public class PersistentIndex {
      @param end the end token.
      */
     long getBytesProcessed(StoreFindToken start, StoreFindToken end) {
-      if (end.getOffset() == StoreFindToken.Uninitialized_Offset) {
-        if (end.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset) {
-          return 0;
-        } else {
-          long startOffset =
-              start.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset ? 0 : start.getIndexStartOffset();
-          return end.getIndexStartOffset() - startOffset;
-        }
-      } else {
-        long startOffset = start.getOffset() == StoreFindToken.Uninitialized_Offset ? (
-            start.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset ? 0 : start.getIndexStartOffset())
-            : start.getOffset();
-        return end.getOffset() - startOffset;
-      }
+      return end.getAppropriateOffset() - start.getAppropriateOffset();
     }
 
+    /**
+     * Gets the number of bytes processed so far
+     * @return the number of bytes processed so far as represented by the start token.
+     */
     public long getProgress() {
-      return 0; //@todo: get what point in the log we are.
+      return ((StoreFindToken) startToken).getAppropriateOffset();
     }
 
     public void run() {
-      //TODO: throttling logic needs some work.
-
-        /*IndexSegment lastSegment = indexes.lastEntry().getValue();
-        long bytesProcessedSoFar = getBytesProcessedSoFar();
-        long lastOffsetToConsider =
-            SystemTime.getInstance().milliseconds() - config.storeDataCleanupAgeDays * 24 * 60 * 60 * 1000 > lastSegment
-                .getLastModifiedTimeMs() ? lastSegment.getStartOffset() : lastSegment.getEndOffset();
-        long bytesToProcessPerSec = lastOffsetToConsider - bytesProcessedSoFar;
-        Throttler throttler = new Throttler(bytesToProcessPerSec, 0, true, SystemTime.getInstance());
-        StoreFindToken beforeToken = (StoreFindToken) endToken; */
-
       final Timer.Context context = metrics.hardDeleteTime.time();
       try {
         if (hardDelete()) {
@@ -1262,14 +1257,6 @@ public class PersistentIndex {
           scheduler.schedule("hard delete thread" + dataDir, this, config.storeHardDeleteThreadMaxIntervalSeconds, -1,
               TimeUnit.SECONDS);
         }
-
-        /*StoreFindToken afterToken = (StoreFindToken) endToken;
-        long bytesProcessed = getBytesProcessed(beforeToken, afterToken);
-        throttler.maybeThrottle(bytesProcessed);
-        scheduler.schedule("cleanup thread" + dataDir, this, 1, -1, TimeUnit.SECONDS); */
-
-        // Hard coding how often cleanup thread will run for now, until the throttling logic is correctly implemented.
-        // Also check why not going through the scheduler wasn't working.
       } catch (RejectedExecutionException r) {
         logger.info("Index : " + dataDir + " cannot schedule hard delete thread", r);
       } catch (Exception e) {
@@ -1428,6 +1415,16 @@ class StoreFindToken implements FindToken {
 
   public boolean isUninitialized() {
     return this.getOffset() == Uninitialized_Offset && this.getIndexStartOffset() == Uninitialized_Offset;
+  }
+
+  public long getAppropriateOffset() {
+    if (isUninitialized()) {
+      return 0;
+    } else if (offset == Uninitialized_Offset) {
+      return indexStartOffset;
+    } else {
+      return offset;
+    }
   }
 
   @Override

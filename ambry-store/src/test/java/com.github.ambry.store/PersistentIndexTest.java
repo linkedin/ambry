@@ -1691,12 +1691,4 @@ public class PersistentIndexTest {
       }
     }
   }
-
-  @Test
-  public void testCleanupRecovery() {
-    // put some
-    // read them and verify content.
-    // hard delete
-    // read them and verify they are zero.
-  }
 }

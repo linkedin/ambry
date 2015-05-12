@@ -13,5 +13,5 @@ public interface MessageStoreHardDelete {
    * @param factory the store key factory.
    * @return iterator over the HardDeleteInfo for the messages in the readSet.
    */
-  public Iterator<HardDeleteInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory factory);
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory);
 }

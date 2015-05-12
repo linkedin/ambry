@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
  * replacement messages, that can then be written back by the caller to hard delete those blobs.
  */
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
-  public Iterator<HardDeleteInfo> getHardDeletedMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
   }
 }
