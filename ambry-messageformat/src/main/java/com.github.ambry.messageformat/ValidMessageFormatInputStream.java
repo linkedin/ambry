@@ -40,7 +40,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
   public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferList,
       List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory, Logger logger,
-      final boolean validateMessageStream) {
+      final boolean validateMessageStream, int validMessageInfoCount) {
     this.mark = -1;
     this.readLimit = -1;
     this.storeKeyFactory = storeKeyFactory;
@@ -52,6 +52,7 @@ public class ValidMessageFormatInputStream extends InputStream {
     this.messageInfoByteBufferPairIterator = messageInfoByteBufferList.iterator();
     this.currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     this.validateMessageStream = validateMessageStream;
+    this.validMessageInfoCount = validMessageInfoCount;
   }
 
   /**
@@ -70,12 +71,14 @@ public class ValidMessageFormatInputStream extends InputStream {
     this.storeKeyFactory = storeKeyFactory;
     this.logger = logger;
     this.validateMessageStream = validateMessageStream;
+    messageInfoByteBufferPairList = new ArrayList<MessageInfoByteBufferPair>();
 
     // check for empty list
     if (messageInfoList.size() == 0) {
       sizeLeftToRead = validSize = 0;
       this.mark = -1;
       this.readLimit = -1;
+      validMessageInfoCount = 0;
       return;
     }
 
@@ -84,7 +87,7 @@ public class ValidMessageFormatInputStream extends InputStream {
       size += info.getSize();
     }
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
-    messageInfoByteBufferPairList = new ArrayList<MessageInfoByteBufferPair>();
+
     int totalRead = 0;
     int absoluteStartOffset = 0;
     for (int i = 0; i < messageInfoList.size(); i++) {
@@ -128,6 +131,9 @@ public class ValidMessageFormatInputStream extends InputStream {
   @Override
   public int read()
       throws IOException {
+    if(sizeLeftToRead == 0){
+      return -1;
+    }
     if (currentMessageInfoByteBufferPair.getByteBuffer().position() == currentMessageInfoByteBufferPair.getMsgInfo()
         .getSize()) {
       if (!messageInfoByteBufferPairIterator.hasNext()) {
@@ -241,7 +247,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
   public ValidMessageFormatInputStream duplicate() {
     return new ValidMessageFormatInputStream(messageInfoByteBufferPairList, messageInfoList, validSize, storeKeyFactory,
-        logger, validateMessageStream);
+        logger, validateMessageStream, validMessageInfoCount);
   }
 
   public boolean hasInvalidMessages() {
