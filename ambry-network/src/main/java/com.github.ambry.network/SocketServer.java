@@ -332,12 +332,13 @@ class Processor extends AbstractServerThread {
         processNewResponses();
         long startSelectTime = SystemTime.getInstance().milliseconds();
         int ready = selector.select(300);
-        logger.trace("Processor id {} selection time = {} ms", id,
-            (SystemTime.getInstance().milliseconds() - startSelectTime));
+        logger.trace("Processor id {} selection time = {} ms number of ready channels = {}", id,
+            (SystemTime.getInstance().milliseconds() - startSelectTime), ready);
 
         if (ready > 0) {
           Set<SelectionKey> keys = selector.selectedKeys();
           Iterator<SelectionKey> iter = keys.iterator();
+          long startTimeInMs = SystemTime.getInstance().milliseconds();
           while (iter.hasNext() && isRunning()) {
             SelectionKey key = null;
             try {
@@ -362,6 +363,8 @@ class Processor extends AbstractServerThread {
               close(key);
             }
           }
+          long roundTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          logger.trace("Processor id {} one round of processing time = {}", id, roundTime);
         }
       }
       logger.debug("Closing server socket and selector.");
@@ -449,39 +452,45 @@ class Processor extends AbstractServerThread {
    */
   private void read(SelectionKey key)
       throws InterruptedException, IOException {
-    SocketChannel socketChannel = (SocketChannel) key.channel();
-    BoundedByteBufferReceive input = null;
-    if (key.attachment() == null) {
-      input = new BoundedByteBufferReceive();
-      key.attach(input);
-    } else {
-      input = (BoundedByteBufferReceive) key.attachment();
-    }
-    long bytesRead = input.readFrom(socketChannel);
-
-    if (bytesRead == -1) {
-      close(key);
-      return;
-    }
-
-    logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
-
-    if (input.isReadComplete()) {
-      SocketServerRequest req = new SocketServerRequest(id, key, new ByteBufferInputStream(input.getPayload()));
-      channel.sendRequest(req);
-      key.attach(null);
-      // explicitly reset interest ops to not READ, no need to wake up the selector just yet
-      key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
-      logger.trace("resetting read interest for key for {}",
-          ((SocketChannel) key.channel()).socket().getRemoteSocketAddress());
-    } else {
-      // more reading to be done
-      if (logger.isTraceEnabled()) {
-        logger.trace("Did not finish reading, registering for read again on connection {}",
-            socketChannel.socket().getRemoteSocketAddress());
+    long startTimeInMs = SystemTime.getInstance().milliseconds();
+    try {
+      SocketChannel socketChannel = (SocketChannel) key.channel();
+      BoundedByteBufferReceive input = null;
+      if (key.attachment() == null) {
+        input = new BoundedByteBufferReceive();
+        key.attach(input);
+      } else {
+        input = (BoundedByteBufferReceive) key.attachment();
       }
-      key.interestOps(SelectionKey.OP_READ);
-      wakeup();
+      long bytesRead = input.readFrom(socketChannel);
+
+      if (bytesRead == -1) {
+        close(key);
+        return;
+      }
+
+      logger.trace("bytes read from {}", socketChannel.socket().getRemoteSocketAddress());
+
+      if (input.isReadComplete()) {
+        SocketServerRequest req = new SocketServerRequest(id, key, new ByteBufferInputStream(input.getPayload()));
+        channel.sendRequest(req);
+        key.attach(null);
+        // explicitly reset interest ops to not READ, no need to wake up the selector just yet
+        key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
+        logger.trace("resetting read interest for key for {}",
+            ((SocketChannel) key.channel()).socket().getRemoteSocketAddress());
+      } else {
+        // more reading to be done
+        if (logger.isTraceEnabled()) {
+          logger.trace("Did not finish reading, registering for read again on connection {}",
+              socketChannel.socket().getRemoteSocketAddress());
+        }
+        key.interestOps(SelectionKey.OP_READ);
+        wakeup();
+      }
+    } finally {
+      long readTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
+      logger.trace("SocketServer read piece of data from channel time = {}", readTime);
     }
   }
 
@@ -490,34 +499,40 @@ class Processor extends AbstractServerThread {
    */
   private void write(SelectionKey key)
       throws IOException {
-    SocketChannel socketChannel = (SocketChannel) key.channel();
-    SocketServerResponse response = (SocketServerResponse) key.attachment();
-    Send responseSend = response.getPayload();
-    if (responseSend == null) {
-      throw new IllegalStateException("Registered for write interest but no response attached to key.");
-    }
-    responseSend.writeTo(socketChannel);
-    if (logger.isTraceEnabled()) {
-      logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
-    }
+    long startTimeInMs = SystemTime.getInstance().milliseconds();
+    try {
+      SocketChannel socketChannel = (SocketChannel) key.channel();
+      SocketServerResponse response = (SocketServerResponse) key.attachment();
+      Send responseSend = response.getPayload();
+      if (responseSend == null) {
+        throw new IllegalStateException("Registered for write interest but no response attached to key.");
+      }
+      responseSend.writeTo(socketChannel);
+      if (logger.isTraceEnabled()) {
+        logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
+      }
 
-    if (responseSend.isSendComplete()) {
-      if (logger.isTraceEnabled()) {
-        logger.trace("Finished writing, registering for read on connection {}",
-            socketChannel.socket().getRemoteSocketAddress());
+      if (responseSend.isSendComplete()) {
+        if (logger.isTraceEnabled()) {
+          logger.trace("Finished writing, registering for read on connection {}",
+              socketChannel.socket().getRemoteSocketAddress());
+        }
+        response.onSendComplete();
+        metrics.sendInFlight.dec();
+        key.attach(null);
+        // log trace
+        key.interestOps(SelectionKey.OP_READ);
+      } else {
+        if (logger.isTraceEnabled()) {
+          logger.trace("Did not finish writing, registering for write again on connection {}",
+              socketChannel.socket().getRemoteSocketAddress());
+        }
+        key.interestOps(SelectionKey.OP_WRITE);
+        wakeup();
       }
-      response.onSendComplete();
-      metrics.sendInFlight.dec();
-      key.attach(null);
-      // log trace
-      key.interestOps(SelectionKey.OP_READ);
-    } else {
-      if (logger.isTraceEnabled()) {
-        logger.trace("Did not finish writing, registering for write again on connection {}",
-            socketChannel.socket().getRemoteSocketAddress());
-      }
-      key.interestOps(SelectionKey.OP_WRITE);
-      wakeup();
+    } finally {
+      long writeTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
+      logger.trace("SocketServer write piece of data to channel time = {}", writeTime);
     }
   }
 }

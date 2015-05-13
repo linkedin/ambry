@@ -224,12 +224,10 @@ class ReplicaThread implements Runnable {
       throws IOException, ReplicationException, InterruptedException {
 
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
-    long processMetadataResponseTimeInMs = -1;
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<ExchangeMetadataResponse>();
     if (replicasToReplicatePerNode.size() > 0) {
-      DataNodeId remoteNode = null;
       try {
-        remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
+        DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
         ReplicaMetadataResponse response = getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
         needToWaitForReplicaLag = true;
@@ -262,11 +260,10 @@ class ReplicaThread implements Runnable {
             exchangeMetadataResponseList.add(exchangeMetadataResponse);
           }
         }
-        processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-      } finally {
+        long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
         logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}",
             remoteNode, threadName, processMetadataResponseTimeInMs);
-
+      } finally {
         if (remoteColo) {
           replicationMetrics.interColoMetadataExchangeCount.inc();
           replicationMetrics.interColoExchangeMetadataTime
