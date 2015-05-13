@@ -1,6 +1,5 @@
 package com.github.ambry.server;
 
-import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
