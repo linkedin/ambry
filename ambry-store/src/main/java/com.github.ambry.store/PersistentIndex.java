@@ -189,8 +189,10 @@ public class PersistentIndex {
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
-      logger.info("Index : " + datadir + " Starting hard delete thread ");
-      Utils.newThread("hard delete thread " + datadir, hardDeleteThread, false).start();
+      if (config.storeEnableHardDelete) {
+        logger.info("Index : " + datadir + " Starting hard delete thread ");
+        Utils.newThread("hard delete thread " + datadir, hardDeleteThread, false).start();
+      }
     } catch (StoreException e) {
       throw e;
     } catch (Exception e) {
@@ -1284,21 +1286,6 @@ public class PersistentIndex {
       shutdownLatch.await();
       persistCleanupToken();
     }
-
-    /*public void run() {
-      try {
-        if (hardDelete()) {
-          scheduler.schedule("hard delete thread " + dataDir, this, config.storeHardDeleteThreadIntervalSeconds, -1,
-              TimeUnit.SECONDS);
-        } else {
-          // we did not find any entries to delete. Wait for the max time before scheduling the thread again.
-          scheduler.schedule("hard delete thread " + dataDir, this, config.storeHardDeleteThreadMaxIntervalSeconds, -1,
-              TimeUnit.SECONDS);
-        }
-      } catch (RejectedExecutionException r) {
-        logger.info("Index : " + dataDir + " cannot schedule hard delete thread", r);
-      } catch (Exception e) {
-    }*/
   }
 
   public long getHardDeleteProgress() {
