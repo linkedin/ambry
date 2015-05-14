@@ -23,7 +23,8 @@ public class ValidMessageFormatInputStreamTest {
 
   MockClusterMap clusterMap;
 
-  public ValidMessageFormatInputStreamTest() throws IOException{
+  public ValidMessageFormatInputStreamTest()
+      throws IOException {
     clusterMap = new MockClusterMap();
   }
 
@@ -78,8 +79,9 @@ public class ValidMessageFormatInputStreamTest {
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
 
     //create input stream for all blob messages together
-    byte[] totalMessageStreamContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-        + (int) messageFormatStream3.getSize()];
+    byte[] totalMessageStreamContent =
+        new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
     messageFormatStream2
         .read(totalMessageStreamContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
@@ -95,8 +97,8 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
-        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(), true,
+            clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -164,7 +166,6 @@ public class ValidMessageFormatInputStreamTest {
 
     MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), false, -1);
 
-
     // corrupt the message stream
     byte[] corruptMessageStream = new byte[(int) messageFormatStream2.getSize()];
     new Random().nextBytes(corruptMessageStream);
@@ -186,10 +187,12 @@ public class ValidMessageFormatInputStreamTest {
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
 
     //create input stream for all blob messages together
-    byte[] totalMessageStreamContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-        + (int) messageFormatStream3.getSize()];
+    byte[] totalMessageStreamContent =
+        new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
-    corruptStream.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
+    corruptStream
+        .read(totalMessageStreamContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
     messageFormatStream3
         .read(totalMessageStreamContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
             (int) messageFormatStream3.getSize());
@@ -202,8 +205,8 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
-        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(), true,
+            clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -277,7 +280,8 @@ public class ValidMessageFormatInputStreamTest {
     byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
         + (int) messageFormatStream3.getSize()];
     messageFormatStream1.read(totalMessageContent, 0, (int) messageFormatStream1.getSize());
-    messageFormatStream2.read(totalMessageContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
+    messageFormatStream2
+        .read(totalMessageContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
     messageFormatStream3
         .read(totalMessageContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
             (int) messageFormatStream3.getSize());
@@ -290,8 +294,8 @@ public class ValidMessageFormatInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
-        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
+        new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(), true,
+            clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);

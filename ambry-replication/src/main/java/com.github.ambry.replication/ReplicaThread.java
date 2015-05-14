@@ -622,7 +622,7 @@ class ReplicaThread implements Runnable {
 
               ValidMessageFormatInputStream validMessageFormatInputStream =
                   new ValidMessageFormatInputStream(getResponse.getInputStream(),
-                      messageInfoList, storeKeyFactory, logger, validateMessageStream, metricRegistry);
+                      messageInfoList, storeKeyFactory, validateMessageStream, metricRegistry);
               if (validMessageFormatInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementCorruptionErrorCount(partitionResponseInfo.getPartition());
               }
@@ -674,14 +674,6 @@ class ReplicaThread implements Runnable {
       replicationMetrics.intraColoBlobsReplicatedCount.inc(totalBlobsFixed);
       replicationMetrics.intraColoBatchStoreWriteTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
-  }
-
-  private long getTotalSize(List<MessageInfo> messageInfoList) {
-    long sizeToWrite = 0;
-    for (MessageInfo info : messageInfoList) {
-      sizeToWrite += info.getSize();
-    }
-    return sizeToWrite;
   }
 
   class ExchangeMetadataResponse {

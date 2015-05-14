@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -47,7 +48,7 @@ public class ValidMessageFormatInputStream extends InputStream {
   public Histogram messageFormatGlobalValidationTime;
 
   public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferPairList,
-      List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory, Logger logger,
+      List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory,
       final boolean validateMessageStream, int validMessageInfoCount, MetricRegistry metricRegistry) {
     this.mark = -1;
     this.readLimit = -1;
@@ -55,13 +56,13 @@ public class ValidMessageFormatInputStream extends InputStream {
     this.validSize = validSize;
     this.sizeLeftToRead = validSize;
     this.messageInfoList = messageInfoList;
-    this.logger = logger;
     this.messageInfoByteBufferPairList = messageInfoByteBufferPairList;
     this.messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
     this.currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     this.validateMessageStream = validateMessageStream;
     this.validMessageInfoCount = validMessageInfoCount;
     this.metricRegistry = metricRegistry;
+    this.logger = LoggerFactory.getLogger(getClass());
     initializeMetrics();
   }
 
@@ -70,17 +71,16 @@ public class ValidMessageFormatInputStream extends InputStream {
    *               to be blocking
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
    * @param storeKeyFactory factory which is used to read the key from the stream
-   * @param logger used for logging
    * @param validateMessageStream whether the stream should be checked for validity or not
    * @param metricRegistry Metric register to register metrics
    * @throws java.io.IOException
    */
   public ValidMessageFormatInputStream(InputStream stream, List<MessageInfo> messageInfoList,
-      StoreKeyFactory storeKeyFactory, Logger logger, final boolean validateMessageStream, MetricRegistry metricRegistry)
+      StoreKeyFactory storeKeyFactory, final boolean validateMessageStream, MetricRegistry metricRegistry)
       throws IOException {
     this.messageInfoList = messageInfoList;
     this.storeKeyFactory = storeKeyFactory;
-    this.logger = logger;
+    this.logger = LoggerFactory.getLogger(getClass());
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
     messageInfoByteBufferPairList = new ArrayList<MessageInfoByteBufferPair>();
@@ -133,13 +133,11 @@ public class ValidMessageFormatInputStream extends InputStream {
     sizeLeftToRead = validSize;
   }
 
-
-  public void initializeMetrics(){
-    messageFormatValidationTime =
-        metricRegistry.histogram(
-            MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatValidationTime"));
-    messageFormatGlobalValidationTime =
-        metricRegistry.histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatGlobalValidationTime"));
+  public void initializeMetrics() {
+    messageFormatValidationTime = metricRegistry
+        .histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatValidationTime"));
+    messageFormatGlobalValidationTime = metricRegistry
+        .histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatGlobalValidationTime"));
   }
 
   /**
@@ -155,7 +153,7 @@ public class ValidMessageFormatInputStream extends InputStream {
   @Override
   public int read()
       throws IOException {
-    if(sizeLeftToRead == 0){
+    if (sizeLeftToRead == 0) {
       return -1;
     }
     if (currentMessageInfoByteBufferPair.getByteBuffer().position() == currentMessageInfoByteBufferPair.getMsgInfo()
@@ -271,7 +269,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
   public ValidMessageFormatInputStream duplicate() {
     return new ValidMessageFormatInputStream(messageInfoByteBufferPairList, messageInfoList, validSize, storeKeyFactory,
-        logger, validateMessageStream, validMessageInfoCount, metricRegistry);
+        validateMessageStream, validMessageInfoCount, metricRegistry);
   }
 
   public boolean hasInvalidMessages() {
@@ -352,8 +350,7 @@ public class ValidMessageFormatInputStream extends InputStream {
     } catch (EOFException e) {
       logger.error("EOFException thrown at " + currentOffset, e);
       throw e;
-    }
-    finally{
+    } finally {
       messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     return isValid;
