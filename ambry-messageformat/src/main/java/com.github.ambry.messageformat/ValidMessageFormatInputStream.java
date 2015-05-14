@@ -1,9 +1,12 @@
 package com.github.ambry.messageformat;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -37,10 +40,15 @@ public class ValidMessageFormatInputStream extends InputStream {
   private List<MessageInfoByteBufferPair> messageInfoByteBufferPairList;
   private int validMessageInfoCount;
   private final boolean validateMessageStream;
+  private MetricRegistry metricRegistry;
 
-  public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferList,
+  //metrics
+  public Histogram messageFormatValidationTime;
+  public Histogram messageFormatGlobalValidationTime;
+
+  public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferPairList,
       List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory, Logger logger,
-      final boolean validateMessageStream, int validMessageInfoCount) {
+      final boolean validateMessageStream, int validMessageInfoCount, MetricRegistry metricRegistry) {
     this.mark = -1;
     this.readLimit = -1;
     this.storeKeyFactory = storeKeyFactory;
@@ -48,11 +56,13 @@ public class ValidMessageFormatInputStream extends InputStream {
     this.sizeLeftToRead = validSize;
     this.messageInfoList = messageInfoList;
     this.logger = logger;
-    this.messageInfoByteBufferPairList = messageInfoByteBufferList;
-    this.messageInfoByteBufferPairIterator = messageInfoByteBufferList.iterator();
+    this.messageInfoByteBufferPairList = messageInfoByteBufferPairList;
+    this.messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
     this.currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     this.validateMessageStream = validateMessageStream;
     this.validMessageInfoCount = validMessageInfoCount;
+    this.metricRegistry = metricRegistry;
+    initializeMetrics();
   }
 
   /**
@@ -62,16 +72,19 @@ public class ValidMessageFormatInputStream extends InputStream {
    * @param storeKeyFactory factory which is used to read the key from the stream
    * @param logger used for logging
    * @param validateMessageStream whether the stream should be checked for validity or not
+   * @param metricRegistry Metric register to register metrics
    * @throws java.io.IOException
    */
   public ValidMessageFormatInputStream(InputStream stream, List<MessageInfo> messageInfoList,
-      StoreKeyFactory storeKeyFactory, Logger logger, final boolean validateMessageStream)
+      StoreKeyFactory storeKeyFactory, Logger logger, final boolean validateMessageStream, MetricRegistry metricRegistry)
       throws IOException {
     this.messageInfoList = messageInfoList;
     this.storeKeyFactory = storeKeyFactory;
     this.logger = logger;
     this.validateMessageStream = validateMessageStream;
+    this.metricRegistry = metricRegistry;
     messageInfoByteBufferPairList = new ArrayList<MessageInfoByteBufferPair>();
+    this.initializeMetrics();
 
     // check for empty list
     if (messageInfoList.size() == 0) {
@@ -90,6 +103,7 @@ public class ValidMessageFormatInputStream extends InputStream {
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
     int totalRead = 0;
     int absoluteStartOffset = 0;
+    long startTime = SystemTime.getInstance().milliseconds();
     for (int i = 0; i < messageInfoList.size(); i++) {
       int read = 0;
       int sizeToBeRead = (int) messageInfoList.get(i).getSize();
@@ -113,9 +127,19 @@ public class ValidMessageFormatInputStream extends InputStream {
       }
       absoluteStartOffset += sizeToBeRead;
     }
+    messageFormatGlobalValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
     currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     sizeLeftToRead = validSize;
+  }
+
+
+  public void initializeMetrics(){
+    messageFormatValidationTime =
+        metricRegistry.histogram(
+            MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatValidationTime"));
+    messageFormatGlobalValidationTime =
+        metricRegistry.histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatGlobalValidationTime"));
   }
 
   /**
@@ -206,7 +230,7 @@ public class ValidMessageFormatInputStream extends InputStream {
         break;
       }
     }
-    // reset/flip all bytebuffers until current bytebuffer where reset is called
+    // reset/flip all bytebuffers until current bytebuffer (where reset is called) is reached
     while (tempIterator.hasNext()) {
       MessageInfoByteBufferPair messageInfoByteBuffer = tempIterator.next();
       if (messageInfoByteBuffer.getAbsoluteStartOffset() == currentMessageInfoByteBufferPair.getAbsoluteStartOffset()) {
@@ -219,7 +243,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
     sizeLeftToRead = validSize;
     messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
-    // make currentMessageInfoByteBufferPair refer to the msginfobytebuffer when mark was called
+    // make currentMessageInfoByteBufferPair refer to the msginfobytebufferpair when mark was called
     while (messageInfoByteBufferPairIterator.hasNext()) {
       currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
       if (currentMessageInfoByteBufferPair.getAbsoluteStartOffset() + currentMessageInfoByteBufferPair.getMsgInfo()
@@ -247,7 +271,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
   public ValidMessageFormatInputStream duplicate() {
     return new ValidMessageFormatInputStream(messageInfoByteBufferPairList, messageInfoList, validSize, storeKeyFactory,
-        logger, validateMessageStream, validMessageInfoCount);
+        logger, validateMessageStream, validMessageInfoCount, metricRegistry);
   }
 
   public boolean hasInvalidMessages() {
@@ -272,6 +296,7 @@ public class ValidMessageFormatInputStream extends InputStream {
       throws IOException {
     StringBuilder strBuilder = new StringBuilder();
     boolean isValid = false;
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       int availableBeforeParsing = inputStream.available();
       byte[] headerVersionInBytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes];
@@ -327,6 +352,9 @@ public class ValidMessageFormatInputStream extends InputStream {
     } catch (EOFException e) {
       logger.error("EOFException thrown at " + currentOffset, e);
       throw e;
+    }
+    finally{
+      messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     return isValid;
   }

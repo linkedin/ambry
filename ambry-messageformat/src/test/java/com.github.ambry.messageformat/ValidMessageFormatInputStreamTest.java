@@ -1,5 +1,6 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -20,10 +21,17 @@ import org.slf4j.LoggerFactory;
 
 public class ValidMessageFormatInputStreamTest {
 
+  MockClusterMap clusterMap;
+
+  public ValidMessageFormatInputStreamTest() throws IOException{
+    clusterMap = new MockClusterMap();
+  }
+
   @Test
   public void validMessageFormatInputStreamTestForValidBlobs()
       throws IOException, MessageFormatException {
 
+    MockClusterMap clusterMap = new MockClusterMap();
     // ValidMessageFormatInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
 
@@ -88,7 +96,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true);
+            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -195,7 +203,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true);
+            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -283,7 +291,7 @@ public class ValidMessageFormatInputStreamTest {
 
     ValidMessageFormatInputStream validMessageFormatInputStream =
         new ValidMessageFormatInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            LoggerFactory.getLogger(getClass()), true);
+            LoggerFactory.getLogger(getClass()), true, clusterMap.getMetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);

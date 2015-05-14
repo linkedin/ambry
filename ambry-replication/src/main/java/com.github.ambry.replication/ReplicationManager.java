@@ -229,6 +229,7 @@ public final class ReplicationManager {
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateIntraDC;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
   private final StoreKeyFactory storeKeyFactory;
+  private final MetricRegistry metricRegistry;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -260,6 +261,7 @@ public final class ReplicationManager {
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
+      this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
 
@@ -484,7 +486,7 @@ public final class ReplicationManager {
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.validateMessageStream);
+              storeKeyFactory, replicationConfig.validateMessageStream, metricRegistry);
       replicaThreadList.add(replicaThread);
     }
   }

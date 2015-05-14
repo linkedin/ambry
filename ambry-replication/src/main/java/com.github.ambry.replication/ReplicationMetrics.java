@@ -6,8 +6,6 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.github.ambry.clustermap.DataNode;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
@@ -30,7 +28,7 @@ public class ReplicationMetrics {
   public final Counter unknownRemoteReplicaRequestCount;
   public final Counter replicationErrors;
   public final Counter replicationTokenResetCount;
-  public final Counter corruptBlobsDuringReplicationCount;
+  public final Counter corruptBlobsOccurenceDuringReplicationCount;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
@@ -89,8 +87,8 @@ public class ReplicationMetrics {
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
     replicationTokenResetCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
-    corruptBlobsDuringReplicationCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, "CorruptBlobsDuringReplicationCount"));
+    corruptBlobsOccurenceDuringReplicationCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "CorruptBlobsOccurenceDuringReplicationCount"));
     interColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =
@@ -196,7 +194,7 @@ public class ReplicationMetrics {
   }
 
   public void incrementCorruptionErrorCount(PartitionId partitionId) {
-    corruptBlobsDuringReplicationCount.inc();
+    corruptBlobsOccurenceDuringReplicationCount.inc();
     if (partitionIdMetricMap.containsKey(partitionId)) {
       partitionIdMetricMap.get(partitionId).inc();
     }
