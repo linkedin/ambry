@@ -41,14 +41,14 @@ project(':ambry-utils') {
 }
 
 project(':ambry-api') {
-   dependencies {
+    dependencies {
         compile project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
     }
 }
 
 project(':ambry-clustermap') {
-   dependencies {
+    dependencies {
         compile project(':ambry-api'),
                 project(':ambry-metrics'),
                 project(':ambry-utils')
@@ -93,7 +93,7 @@ project(':ambry-server') {
 }
 
 project(':ambry-store') {
-   dependencies {
+    dependencies {
         compile project(':ambry-api'),
                 project(':ambry-clustermap'),
                 project(':ambry-metrics'),
@@ -138,7 +138,7 @@ project(':ambry-coordinator') {
 }
 
 project(':ambry-tools') {
-   dependencies {
+    dependencies {
         compile project(':ambry-api'),
                 project(':ambry-store'),
                 project(':ambry-coordinator')
@@ -164,7 +164,7 @@ project(':ambry-protocol') {
 }
 
 project(':ambry-rest') {
-    dependencies{
+    dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons')
@@ -174,7 +174,7 @@ project(':ambry-rest') {
 }
 
 project(':ambry-admin') {
-    dependencies{
+    dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
