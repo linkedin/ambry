@@ -54,7 +54,7 @@ public interface RestResponseHandler {
    * Called by the RestMessageHandler when it detects/catches an error
    * @throws Exception
    */
-  public void onError(Exception e);
+  public void onError(Throwable cause);
 
   /**
    * Called by the rest server when the request is complete and the connection is inactive

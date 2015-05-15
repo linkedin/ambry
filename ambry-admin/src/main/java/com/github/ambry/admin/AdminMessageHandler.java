@@ -34,6 +34,7 @@ public class AdminMessageHandler extends RestMessageHandler {
             + " The connection to the client might still be open");
       }
     } catch (Exception ee) {
+      //TODO: metric
       logger.error("Caught exception while trying to handle an error - " + ee);
     }
   }

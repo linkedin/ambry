@@ -101,7 +101,20 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
-    onError(ctx, cause, logger, nettyMetrics);
+    try {
+      if(responseHandler != null) {
+        responseHandler.onError(cause);
+      } else {
+        //TODO: metric
+        logger.error("No response handler found while trying to relay error message. Reporting "
+            + HttpResponseStatus.INTERNAL_SERVER_ERROR);
+        sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      }
+    } catch(Exception e) {
+      //TODO: metric
+      logger.error("Caught exception while trying to handle an error - " + e);
+      sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   @Override
@@ -153,43 +166,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     }
   }
 
-  public static void onError(ChannelHandlerContext ctx, Throwable cause, Logger logger, NettyMetrics nettyMetrics) {
-    nettyMetrics.errorStateCount.inc();
-    HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-    String msg = "";
-    if (cause instanceof RestException) {
-      RestErrorCode errorCodeGroup = RestErrorCode.getErrorGroup(((RestException) cause).getErrorCode());
-      switch (errorCodeGroup) {
-        case BadRequest:
-          status = HttpResponseStatus.BAD_REQUEST;
-          msg = cause.getMessage();
-          nettyMetrics.badRequestErrorCount.inc();
-          break;
-        case InternalServerError:
-          nettyMetrics.internalServerErrorCount.inc();
-          break;
-        default:
-          nettyMetrics.unknownRestExceptionCount.inc();
-      }
-    } else {
-      nettyMetrics.unknownExceptionCount.inc();
-      logger.error("Unknown exception received while processing error response - " + cause.getCause() + " - " + cause
-          .getMessage());
-    }
-    if (ctx.channel().isActive()) {
-      sendError(ctx, status, msg);
-    }
-  }
-
-  public static void sendError(ChannelHandlerContext ctx, HttpResponseStatus status, String msg) {
-    String fullMsg = "Failure: " + status;
-    if (msg != null && !msg.isEmpty()) {
-      fullMsg += ". Reason - " + msg;
-    }
-    fullMsg += "\r\n";
-
+  public void sendError(HttpResponseStatus status) {
+    String msg = "Failure: " + status + "\r\n";
     FullHttpResponse response =
-        new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(fullMsg, CharsetUtil.UTF_8));
+        new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
 
     ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);

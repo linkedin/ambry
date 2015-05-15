@@ -5,16 +5,21 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 
 /**
@@ -118,13 +123,55 @@ public class NettyResponseHandler implements RestResponseHandler {
     channelClosed = true;
   }
 
-  public void onError(Exception e) {
+  public void onError(Throwable cause) {
     // no locking needed here (for errorSent) since exactly one message handler thread has a
     // reference to this response handler.
     if (!errorSent) {
       errorSent = true;
-      NettyMessageProcessor.onError(ctx, e, logger, nettyMetrics);
+      buildAndSendError(cause);
     }
+  }
+
+  public void buildAndSendError(Throwable cause) {
+    nettyMetrics.errorStateCount.inc();
+    HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+    String msg = "";
+    if (cause instanceof RestException) {
+      RestErrorCode errorCodeGroup = RestErrorCode.getErrorGroup(((RestException) cause).getErrorCode());
+      switch (errorCodeGroup) {
+        case BadRequest:
+          status = HttpResponseStatus.BAD_REQUEST;
+          msg = cause.getMessage();
+          nettyMetrics.badRequestErrorCount.inc();
+          break;
+        case InternalServerError:
+          nettyMetrics.internalServerErrorCount.inc();
+          break;
+        default:
+          nettyMetrics.unknownRestExceptionCount.inc();
+      }
+    } else {
+      nettyMetrics.unknownExceptionCount.inc();
+      logger.error("Unknown exception received while processing error response - " + cause.getCause() + " - " + cause
+          .getMessage());
+    }
+    if (ctx.channel().isActive()) {
+      sendError(status, msg);
+    }
+  }
+
+  public void sendError(HttpResponseStatus status, String msg) {
+    String fullMsg = "Failure: " + status;
+    if (msg != null && !msg.isEmpty()) {
+      fullMsg += ". Reason - " + msg;
+    }
+    fullMsg += "\r\n";
+
+    FullHttpResponse response =
+        new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(fullMsg, CharsetUtil.UTF_8));
+    response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+
+    ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
   }
 
   public void onRequestComplete()
