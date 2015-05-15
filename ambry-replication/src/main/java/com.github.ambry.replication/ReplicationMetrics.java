@@ -28,7 +28,7 @@ public class ReplicationMetrics {
   public final Counter unknownRemoteReplicaRequestCount;
   public final Counter replicationErrors;
   public final Counter replicationTokenResetCount;
-  public final Counter corruptBlobsOccurenceDuringReplicationCount;
+  public final Counter replicationInvalidMessageStreamErrorCount;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
@@ -51,8 +51,6 @@ public class ReplicationMetrics {
   public final Histogram intraColoBatchStoreWriteTime;
   public final Histogram interColoTotalReplicationTime;
   public final Histogram intraColoTotalReplicationTime;
-  public final Histogram messageFormatValidationTime;
-  public final Histogram messageFormatGlobalValidationTime;
 
   public Gauge<Integer> numberOfIntraDCReplicaThreads;
   public Gauge<Integer> numberOfInterDCReplicaThreads;
@@ -87,8 +85,8 @@ public class ReplicationMetrics {
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
     replicationTokenResetCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
-    corruptBlobsOccurenceDuringReplicationCount =
-        registry.counter(MetricRegistry.name(ReplicaThread.class, "CorruptBlobsOccurenceDuringReplicationCount"));
+    replicationInvalidMessageStreamErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationInvalidMessageStreamErrorCount"));
     interColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =
@@ -131,10 +129,6 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoTotalReplicationTime"));
     intraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
-    messageFormatValidationTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "MessageFormatValidationTime"));
-    messageFormatGlobalValidationTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "MessageFormatGlobalValidationTime"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {
@@ -155,7 +149,7 @@ public class ReplicationMetrics {
     registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInterDCReplicaThreads"),
         numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
-    populatePartitionBasedCorruptionMetrics(replicaIds);
+    populateInvalidMessageStreamMetricForPartitions(replicaIds);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {
@@ -169,7 +163,7 @@ public class ReplicationMetrics {
   }
 
   public void addRemoteReplicaToLagMetrics(final RemoteReplicaInfo remoteReplicaInfo) {
-    String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
+    final String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
         remoteReplicaInfo.getReplicaId().getReplicaPath() + "-replicaLagInBytes";
     Gauge<Long> replicaLag = new Gauge<Long>() {
@@ -182,7 +176,7 @@ public class ReplicationMetrics {
     replicaLagInBytes.add(replicaLag);
   }
 
-  public void populatePartitionBasedCorruptionMetrics(List<ReplicaId> replicaIds) {
+  public void populateInvalidMessageStreamMetricForPartitions(List<ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partitionId = replicaId.getPartitionId();
       if (!partitionIdMetricMap.containsKey(partitionId)) {
@@ -193,8 +187,8 @@ public class ReplicationMetrics {
     }
   }
 
-  public void incrementCorruptionErrorCount(PartitionId partitionId) {
-    corruptBlobsOccurenceDuringReplicationCount.inc();
+  public void incrementInvalidMessageStreamErrorCount(PartitionId partitionId) {
+    replicationInvalidMessageStreamErrorCount.inc();
     if (partitionIdMetricMap.containsKey(partitionId)) {
       partitionIdMetricMap.get(partitionId).inc();
     }

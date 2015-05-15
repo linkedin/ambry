@@ -624,10 +624,12 @@ class ReplicaThread implements Runnable {
                   new ValidMessageFormatInputStream(getResponse.getInputStream(),
                       messageInfoList, storeKeyFactory, validateMessageStream, metricRegistry);
               if (validMessageFormatInputStream.hasInvalidMessages()) {
-                replicationMetrics.incrementCorruptionErrorCount(partitionResponseInfo.getPartition());
+                replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
               }
+
               MessageFormatWriteSet writeset =
                   new MessageFormatWriteSet(validMessageFormatInputStream, messageInfoList, true);
+              writeset.setSizeToWrite(validMessageFormatInputStream.getSize());
               remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {

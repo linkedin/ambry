@@ -32,7 +32,6 @@ public class ValidMessageFormatInputStreamTest {
   public void validMessageFormatInputStreamTestForValidBlobs()
       throws IOException, MessageFormatException {
 
-    MockClusterMap clusterMap = new MockClusterMap();
     // ValidMessageFormatInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
 

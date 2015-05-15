@@ -22,11 +22,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Class represents an Inputstream containing blobs
- * Invalid blobs are are skipped based on validation criteria. For now Corrupt blobs are skipped when read from the stream
+ * InputStream that skips invalid blobs based on a validation criteria
+ * For now Corrupt blobs are skipped when read from the stream
  * Non-corrupt blobs should have the format:  | header | blobId | blob properties | user metadata | blob |
- * This class is similar to ByteBufferInputStream which MessageFormatWriteSet uses, just that invalid blobs are skipped
- * during read
  */
 public class ValidMessageFormatInputStream extends InputStream {
   private int mark;
@@ -45,7 +43,7 @@ public class ValidMessageFormatInputStream extends InputStream {
 
   //metrics
   public Histogram messageFormatValidationTime;
-  public Histogram messageFormatGlobalValidationTime;
+  public Histogram messageFormatBatchValidationTime;
 
   public ValidMessageFormatInputStream(List<MessageInfoByteBufferPair> messageInfoByteBufferPairList,
       List<MessageInfo> messageInfoList, int validSize, StoreKeyFactory storeKeyFactory,
@@ -127,7 +125,7 @@ public class ValidMessageFormatInputStream extends InputStream {
       }
       absoluteStartOffset += sizeToBeRead;
     }
-    messageFormatGlobalValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
+    messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     messageInfoByteBufferPairIterator = messageInfoByteBufferPairList.iterator();
     currentMessageInfoByteBufferPair = messageInfoByteBufferPairIterator.next();
     sizeLeftToRead = validSize;
@@ -136,8 +134,8 @@ public class ValidMessageFormatInputStream extends InputStream {
   public void initializeMetrics() {
     messageFormatValidationTime = metricRegistry
         .histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatValidationTime"));
-    messageFormatGlobalValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatGlobalValidationTime"));
+    messageFormatBatchValidationTime = metricRegistry
+        .histogram(MetricRegistry.name(ValidMessageFormatInputStream.class, "MessageFormatBatchValidationTime"));
   }
 
   /**
@@ -186,7 +184,6 @@ public class ValidMessageFormatInputStream extends InputStream {
       return -1;
     }
 
-    int read = 0;
     int sizeYetToRead = count;
 
     do {
@@ -196,10 +193,9 @@ public class ValidMessageFormatInputStream extends InputStream {
       int sizeToReadFromCurrentBuffer =
           Math.min(currentMessageInfoByteBufferPair.getByteBuffer().remaining(), sizeYetToRead);
       currentMessageInfoByteBufferPair.getByteBuffer().get(bytes, offset, sizeToReadFromCurrentBuffer);
-      read += sizeToReadFromCurrentBuffer;
       sizeYetToRead -= sizeToReadFromCurrentBuffer;
       offset += sizeToReadFromCurrentBuffer;
-    } while (read < count);
+    } while (sizeYetToRead > 0);
     return count;
   }
 
@@ -327,7 +323,7 @@ public class ValidMessageFormatInputStream extends InputStream {
           BlobOutput output = MessageFormatRecord.deserializeBlob(inputStream);
           strBuilder.append("Blob - size ").append(output.getSize()).append("\n");
         } else {
-          throw new IllegalStateException("Message cannot not be a deleted record ");
+          throw new IllegalStateException("Message cannot be a deleted record ");
         }
         logger.trace(strBuilder.toString());
         if (availableBeforeParsing - inputStream.available() != size) {
