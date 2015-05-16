@@ -10,7 +10,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.messageformat.ValidMessageFormatInputStream;
+import com.github.ambry.messageformat.ValidMessageDetectionInputStream;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.commons.BlobId;
@@ -36,6 +36,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import java.io.InputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -620,16 +621,25 @@ class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              ValidMessageFormatInputStream validMessageFormatInputStream =
-                  new ValidMessageFormatInputStream(getResponse.getInputStream(),
-                      messageInfoList, storeKeyFactory, validateMessageStream, metricRegistry);
-              if (validMessageFormatInputStream.hasInvalidMessages()) {
-                replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
+              MessageFormatWriteSet writeset = null;
+              if (validateMessageStream) {
+                ValidMessageDetectionInputStream validMessageDetectionInputStream =
+                    new ValidMessageDetectionInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
+                         metricRegistry);
+                if (validMessageDetectionInputStream.hasInvalidMessages()) {
+                  replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
+                }
+                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, true);
+                writeset.setSizeToWrite(validMessageDetectionInputStream.getSize());
+              } else {
+                int sizeToWrite = 0;
+                for (MessageInfo msgInfo : messageInfoList) {
+                  sizeToWrite += msgInfo.getSize();
+                }
+                ByteBufferInputStream byteBufferInputStream =
+                    new ByteBufferInputStream(getResponse.getInputStream(), sizeToWrite);
+                writeset = new MessageFormatWriteSet(byteBufferInputStream, messageInfoList, true);
               }
-
-              MessageFormatWriteSet writeset =
-                  new MessageFormatWriteSet(validMessageFormatInputStream, messageInfoList, true);
-              writeset.setSizeToWrite(validMessageFormatInputStream.getSize());
               remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {
