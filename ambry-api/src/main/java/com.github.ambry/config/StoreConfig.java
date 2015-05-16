@@ -80,7 +80,7 @@ public class StoreConfig {
    * Whether hard deletes are to be enabled or not
    */
   @Config("store.enable.hard.delete")
-  @Default("true")
+  @Default("false")
   public final boolean storeEnableHardDelete;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
@@ -98,7 +98,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
     storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
-    storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", true);
+    storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
   }
 }
 

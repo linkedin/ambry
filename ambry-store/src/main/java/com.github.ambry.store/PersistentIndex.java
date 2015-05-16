@@ -62,7 +62,8 @@ public class PersistentIndex {
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
-  private HardDeleteThread hardDeleteThread;
+  private HardDeleteThread hardDeleter;
+  private Thread hardDeleteThread;
   private MessageStoreHardDelete hardDelete;
   private StoreKeyFactory factory;
   private StoreConfig config;
@@ -101,7 +102,8 @@ public class PersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
-      hardDeleteThread = new HardDeleteThread(new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance()));
+      hardDeleter =
+          new HardDeleteThread(new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance()));
       this.hardDelete = hardDelete;
       storeJournalFactory = Utils.getObj(config.storeJournalFactory);
       /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
@@ -169,7 +171,7 @@ public class PersistentIndex {
 
       // After recovering the last messages, and the log end offset is set, let the hard delete thread do its recovery.
       logger.info("Index : " + datadir + " Starting hard delete recovery");
-      hardDeleteThread.performRecovery();
+      hardDeleter.performRecovery();
       logger.info("Index : " + datadir + " Finished performing hard delete recovery");
       metrics.initializeHardDeleteProgressMetric(this, log);
 
@@ -191,7 +193,10 @@ public class PersistentIndex {
 
       if (config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
-        Utils.newThread("hard delete thread " + datadir, hardDeleteThread, false).start();
+        hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
+        hardDeleteThread.start();
+      } else {
+        hardDeleter.shutdownLatch.countDown();
       }
     } catch (StoreException e) {
       throw e;
@@ -863,7 +868,7 @@ public class PersistentIndex {
       throws StoreException {
     persistor.write();
     try {
-      hardDeleteThread.shutDown();
+      hardDeleter.shutDown();
     } catch (Exception e) {
       logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
     }
@@ -1005,12 +1010,12 @@ public class PersistentIndex {
                 "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
 
-          hardDeleteThread.preLogFlush();
+          hardDeleter.preLogFlush();
 
           // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
-          hardDeleteThread.postLogFlush();
+          hardDeleter.postLogFlush();
 
           long lastOffset = lastEntry.getKey();
           IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
@@ -1050,10 +1055,11 @@ public class PersistentIndex {
     FindToken startTokenBeforeLogFlush;
     FindToken startTokenSafeToPersist;
     FindToken endToken;
-    final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
+    private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     boolean running = true;
+    private final long hardDeleterCaughtUpSleepTimeMs = 10000; //how long to sleep if token does not advance.
 
     HardDeleteThread(Throttler throttler) {
       this.throttler = throttler;
@@ -1273,7 +1279,13 @@ public class PersistentIndex {
     public void run() {
       try {
         while (running) {
-          hardDelete();
+          if (!hardDelete()) {
+            try {
+              Thread.sleep(hardDeleterCaughtUpSleepTimeMs);
+            } catch (InterruptedException e) {
+              logger.info("Caught interrupted exception");
+            }
+          }
         }
       } finally {
         shutdownLatch.countDown();
@@ -1283,13 +1295,14 @@ public class PersistentIndex {
     public void shutDown()
         throws InterruptedException, StoreException, IOException {
       running = false;
+      hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
       shutdownLatch.await();
       persistCleanupToken();
     }
   }
 
   public long getHardDeleteProgress() {
-    return hardDeleteThread.getProgress();
+    return hardDeleter.getProgress();
   }
 }
 
