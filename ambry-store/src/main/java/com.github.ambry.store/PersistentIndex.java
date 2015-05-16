@@ -1059,7 +1059,7 @@ public class PersistentIndex {
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     boolean running = true;
-    private final long hardDeleterCaughtUpSleepTimeMs = 10000; //how long to sleep if token does not advance.
+    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10000; //how long to sleep if token does not advance.
 
     HardDeleteThread(Throttler throttler) {
       this.throttler = throttler;
@@ -1281,7 +1281,7 @@ public class PersistentIndex {
         while (running) {
           if (!hardDelete()) {
             try {
-              Thread.sleep(hardDeleterCaughtUpSleepTimeMs);
+              Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
             } catch (InterruptedException e) {
               logger.info("Caught interrupted exception");
             }
