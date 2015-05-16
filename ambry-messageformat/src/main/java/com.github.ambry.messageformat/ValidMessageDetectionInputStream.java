@@ -121,8 +121,8 @@ public class ValidMessageDetectionInputStream extends InputStream {
   }
 
   /**
-   * Ensures blob validity for all the blobs in the given input stream
-   * For now, we check for blob corruption
+   * Ensures blob validity of the blob in the given input stream
+   * For now, we check for blob corruption as part of validation
    * Expected format for a single blob : | header | blob id | blob property | user metadata | blob |
    * @param inputStream InputStream for which the check is to be done
    * @param size total size of the message expected
@@ -195,30 +195,6 @@ public class ValidMessageDetectionInputStream extends InputStream {
       messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
     return isValid;
-  }
-
-  class MessageInfoByteBufferPair {
-    private MessageInfo msgInfo;
-    private ByteBuffer byteBuffer;
-    private int absoluteStartOffset;
-
-    public MessageInfoByteBufferPair(MessageInfo msgInfo, ByteBuffer byteBuffer, int absoluteStartOffset) {
-      this.msgInfo = msgInfo;
-      this.byteBuffer = byteBuffer;
-      this.absoluteStartOffset = absoluteStartOffset;
-    }
-
-    MessageInfo getMsgInfo() {
-      return msgInfo;
-    }
-
-    ByteBuffer getByteBuffer() {
-      return byteBuffer;
-    }
-
-    int getAbsoluteStartOffset() {
-      return absoluteStartOffset;
-    }
   }
 }
 

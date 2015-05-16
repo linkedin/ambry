@@ -522,7 +522,7 @@ public class ReplicationTest {
 
         for (int j = 0; j < 10; j++) {
           BlobId id = new BlobId(partitionIds.get(i));
-          ByteBuffer byteBuffer = constructEntireMessageForTestBlob(id, 1000, random);
+          ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
           long streamSize = byteBuffer.limit();
           messageInfoListLocalReplica.add(new MessageInfo(id, streamSize));
           messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
@@ -533,7 +533,7 @@ public class ReplicationTest {
         // add additional messages to replica 2
         for (int j = 10; j < 15; j++) {
           BlobId id = new BlobId(partitionIds.get(i));
-          ByteBuffer byteBuffer = constructEntireMessageForTestBlob(id, 1000, random);
+          ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
           long streamSize = byteBuffer.limit();
           messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
           messageBufferListLocalReplica2.add(byteBuffer);
@@ -541,7 +541,7 @@ public class ReplicationTest {
 
         // add an expired message to replica 2
         BlobId idExpired = new BlobId(partitionIds.get(i));
-        ByteBuffer byteBuffer = constructEntireMessageForTestBlob(idExpired, 1000, random);
+        ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
         long streamSize = byteBuffer.limit();
         messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, streamSize, 1));
         messageBufferListLocalReplica2.add(byteBuffer);
@@ -689,7 +689,7 @@ public class ReplicationTest {
     }
   }
 
-  private ByteBuffer constructEntireMessageForTestBlob(BlobId id, long blobSize, Random random)
+  private ByteBuffer constructTestBlobInMessageFormat(BlobId id, long blobSize, Random random)
       throws MessageFormatException, IOException {
       return constructEntireMessageForTestBlob(id, blobSize, random, "test");
   }

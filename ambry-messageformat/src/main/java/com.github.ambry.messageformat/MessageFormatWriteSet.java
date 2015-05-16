@@ -37,11 +37,10 @@ public class MessageFormatWriteSet implements MessageWriteSet {
    * Used to override the total size to be written only incase of materialized stream
    * @param sizeToWrite
    */
-  public void setSizeToWrite(long sizeToWrite){
-    if(materializeStream){
-    this.sizeToWrite = sizeToWrite;
-    }
-    else{
+  public void setSizeToWrite(long sizeToWrite) {
+    if (materializeStream) {
+      this.sizeToWrite = sizeToWrite;
+    } else {
       throw new IllegalStateException("Non-materialized stream size cannot be overridden");
     }
   }
