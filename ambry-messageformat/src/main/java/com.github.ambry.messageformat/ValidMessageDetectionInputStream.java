@@ -12,6 +12,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,7 @@ public class ValidMessageDetectionInputStream extends InputStream {
   private ByteBuffer byteBuffer;
   private boolean hasInvalidMessage;
   private final MetricRegistry metricRegistry;
+  private List<MessageInfo> validMessageInfoList;
 
   //metrics
   public Histogram messageFormatValidationTime;
@@ -47,12 +49,13 @@ public class ValidMessageDetectionInputStream extends InputStream {
     this.logger = LoggerFactory.getLogger(getClass());
     this.metricRegistry = metricRegistry;
     this.initializeMetrics();
+    validSize = 0;
+    hasInvalidMessage = false;
+    validMessageInfoList = new ArrayList<MessageInfo>();
 
     // check for empty list
     if (messageInfoList.size() == 0) {
-      validSize = 0;
       byteBuffer = ByteBuffer.allocate(0);
-      hasInvalidMessage = false;
       return;
     }
 
@@ -62,21 +65,20 @@ public class ValidMessageDetectionInputStream extends InputStream {
     }
 
     byte[] data = new byte[size];
-    int offset = 0;
     long startTime = SystemTime.getInstance().milliseconds();
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      stream.read(data, offset, msgSize);
-      InputStream inputStream = new ByteArrayInputStream(data, offset, msgSize);
-      if (isValid(inputStream, msgSize, offset, storeKeyFactory)) {
+      stream.read(data, validSize, msgSize);
+      InputStream inputStream = new ByteArrayInputStream(data, validSize, msgSize);
+      if (isValid(inputStream, validSize, msgSize, storeKeyFactory)) {
         validSize += msgSize;
-        offset += msgSize;
+        validMessageInfoList.add(msgInfo);
       } else {
         hasInvalidMessage = true;
       }
     }
     messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    byteBuffer = ByteBuffer.wrap(data, 0, offset);
+    byteBuffer = ByteBuffer.wrap(data, 0, validSize);
   }
 
   public void initializeMetrics() {
@@ -120,6 +122,10 @@ public class ValidMessageDetectionInputStream extends InputStream {
     return hasInvalidMessage;
   }
 
+  public List<MessageInfo> getValidMessageInfoList(){
+    return validMessageInfoList;
+  }
+
   /**
    * Ensures blob validity of the blob in the given input stream
    * For now, we check for blob corruption as part of validation
@@ -131,7 +137,7 @@ public class ValidMessageDetectionInputStream extends InputStream {
    * @return true if message was corrupt and false otherwise
    * @throws IOException
    */
-  private boolean isValid(InputStream inputStream, long size, int currentOffset, StoreKeyFactory storeKeyFactory)
+  private boolean isValid(InputStream inputStream, int currentOffset, long size, StoreKeyFactory storeKeyFactory)
       throws IOException {
     StringBuilder strBuilder = new StringBuilder();
     boolean isValid = false;

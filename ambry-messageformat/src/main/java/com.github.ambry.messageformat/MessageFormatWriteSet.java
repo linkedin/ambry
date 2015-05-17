@@ -20,9 +20,8 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private final InputStream streamToWrite;
   private long sizeToWrite;
   private List<MessageInfo> streamInfo;
-  private boolean materializeStream;
 
-  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializeStream)
+  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo)
       throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
@@ -30,19 +29,6 @@ public class MessageFormatWriteSet implements MessageWriteSet {
     }
     this.streamInfo = streamInfo;
     this.streamToWrite = streamToWrite;
-    this.materializeStream = materializeStream;
-  }
-
-  /**
-   * Used to override the total size to be written only incase of materialized stream
-   * @param sizeToWrite
-   */
-  public void setSizeToWrite(long sizeToWrite) {
-    if (materializeStream) {
-      this.sizeToWrite = sizeToWrite;
-    } else {
-      throw new IllegalStateException("Non-materialized stream size cannot be overridden");
-    }
   }
 
   @Override

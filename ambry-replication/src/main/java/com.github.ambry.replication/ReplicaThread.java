@@ -455,7 +455,7 @@ class ReplicaThread implements Runnable {
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList);
           remoteReplicaInfo.getLocalStore().delete(writeset);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -629,8 +629,8 @@ class ReplicaThread implements Runnable {
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
                   replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
                 }
-                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, true);
-                writeset.setSizeToWrite(validMessageDetectionInputStream.getSize());
+                messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList);
               } else {
                 int sizeToWrite = 0;
                 for (MessageInfo msgInfo : messageInfoList) {
@@ -638,7 +638,7 @@ class ReplicaThread implements Runnable {
                 }
                 ByteBufferInputStream byteBufferInputStream =
                     new ByteBufferInputStream(getResponse.getInputStream(), sizeToWrite);
-                writeset = new MessageFormatWriteSet(byteBufferInputStream, messageInfoList, true);
+                writeset = new MessageFormatWriteSet(byteBufferInputStream, messageInfoList);
               }
               remoteReplicaInfo.getLocalStore().put(writeset);
 
