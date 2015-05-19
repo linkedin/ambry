@@ -363,8 +363,8 @@ class Processor extends AbstractServerThread {
               close(key);
             }
           }
-          long roundTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
-          logger.trace("Processor id {} one round of processing time = {}", id, roundTime);
+          long selectedKeysProcessingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          logger.trace("Processor id {} one selector iteration processing time = {}", id, selectedKeysProcessingTime);
         }
       }
       logger.debug("Closing server socket and selector.");
@@ -452,7 +452,7 @@ class Processor extends AbstractServerThread {
    */
   private void read(SelectionKey key)
       throws InterruptedException, IOException {
-    long startTimeInMs = SystemTime.getInstance().milliseconds();
+    long startTimeToReadInMs = SystemTime.getInstance().milliseconds();
     try {
       SocketChannel socketChannel = (SocketChannel) key.channel();
       BoundedByteBufferReceive input = null;
@@ -489,8 +489,8 @@ class Processor extends AbstractServerThread {
         wakeup();
       }
     } finally {
-      long readTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
-      logger.trace("SocketServer read piece of data from channel time = {}", readTime);
+      long readTime = SystemTime.getInstance().milliseconds() - startTimeToReadInMs;
+      logger.trace("SocketServer time spent on read per key = {}", readTime);
     }
   }
 
@@ -499,7 +499,7 @@ class Processor extends AbstractServerThread {
    */
   private void write(SelectionKey key)
       throws IOException {
-    long startTimeInMs = SystemTime.getInstance().milliseconds();
+    long startTimeToWriteInMs = SystemTime.getInstance().milliseconds();
     try {
       SocketChannel socketChannel = (SocketChannel) key.channel();
       SocketServerResponse response = (SocketServerResponse) key.attachment();
@@ -531,8 +531,8 @@ class Processor extends AbstractServerThread {
         wakeup();
       }
     } finally {
-      long writeTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
-      logger.trace("SocketServer write piece of data to channel time = {}", writeTime);
+      long writeTime = SystemTime.getInstance().milliseconds() - startTimeToWriteInMs;
+      logger.trace("SocketServer time spent on write per key = {}", writeTime);
     }
   }
 }
