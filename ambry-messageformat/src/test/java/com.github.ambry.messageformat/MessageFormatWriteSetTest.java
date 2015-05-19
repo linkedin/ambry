@@ -55,7 +55,7 @@ public class MessageFormatWriteSetTest {
     infoList.add(info2);
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
     MessageFormatWriteSet set =
-        new MessageFormatWriteSet(byteBufferInputStream, infoList);
+        new MessageFormatWriteSet(byteBufferInputStream, infoList, false);
     MockWrite write = new MockWrite(2000);
     long written = set.writeTo(write);
     Assert.assertEquals(written, 2000);

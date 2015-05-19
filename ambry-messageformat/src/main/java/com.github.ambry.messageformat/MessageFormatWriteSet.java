@@ -21,7 +21,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private long sizeToWrite;
   private List<MessageInfo> streamInfo;
 
-  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo)
+  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializedStream)
       throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {

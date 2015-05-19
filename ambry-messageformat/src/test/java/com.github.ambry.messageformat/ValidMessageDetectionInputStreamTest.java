@@ -1,6 +1,6 @@
 package com.github.ambry.messageformat;
 
-import com.github.ambry.clustermap.MockClusterMap;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -16,17 +16,9 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
-import org.slf4j.LoggerFactory;
 
 
 public class ValidMessageDetectionInputStreamTest {
-
-  MockClusterMap clusterMap;
-
-  public ValidMessageDetectionInputStreamTest()
-      throws IOException {
-    clusterMap = new MockClusterMap();
-  }
 
   @Test
   public void validMessageDetectionInputStreamTestForValidBlobs()
@@ -97,7 +89,7 @@ public class ValidMessageDetectionInputStreamTest {
 
     ValidMessageDetectionInputStream validMessageDetectionInputStream =
         new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            clusterMap.getMetricRegistry());
+            new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -205,7 +197,7 @@ public class ValidMessageDetectionInputStreamTest {
 
     ValidMessageDetectionInputStream validMessageDetectionInputStream =
         new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            clusterMap.getMetricRegistry());
+            new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -294,7 +286,7 @@ public class ValidMessageDetectionInputStreamTest {
 
     ValidMessageDetectionInputStream validMessageDetectionInputStream =
         new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            clusterMap.getMetricRegistry());
+            new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);

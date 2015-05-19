@@ -19,16 +19,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * InputStream that skips invalid blobs based on a validation criteria
- * For now Corrupt blobs are skipped when read from the stream
- * Non-corrupt blobs should have the format:  | header | blobId | blob properties | user metadata | blob |
+ * InputStream that skips invalid blobs based on some validation criteria.
+ * For now, the check only supports detection of message corruption
  */
 public class ValidMessageDetectionInputStream extends InputStream {
   private int validSize;
   private final Logger logger;
   private ByteBuffer byteBuffer;
   private boolean hasInvalidMessage;
-  private final MetricRegistry metricRegistry;
   private List<MessageInfo> validMessageInfoList;
 
   //metrics
@@ -47,8 +45,10 @@ public class ValidMessageDetectionInputStream extends InputStream {
       StoreKeyFactory storeKeyFactory, MetricRegistry metricRegistry)
       throws IOException {
     this.logger = LoggerFactory.getLogger(getClass());
-    this.metricRegistry = metricRegistry;
-    this.initializeMetrics();
+    messageFormatValidationTime = metricRegistry
+        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatValidationTime"));
+    messageFormatBatchValidationTime = metricRegistry
+        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatBatchValidationTime"));
     validSize = 0;
     hasInvalidMessage = false;
     validMessageInfoList = new ArrayList<MessageInfo>();
@@ -59,18 +59,17 @@ public class ValidMessageDetectionInputStream extends InputStream {
       return;
     }
 
-    int size = 0;
+    int totalMessageListSize = 0;
     for (MessageInfo info : messageInfoList) {
-      size += info.getSize();
+      totalMessageListSize += info.getSize();
     }
 
-    byte[] data = new byte[size];
+    byte[] data = new byte[totalMessageListSize];
     long startTime = SystemTime.getInstance().milliseconds();
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
       stream.read(data, validSize, msgSize);
-      InputStream inputStream = new ByteArrayInputStream(data, validSize, msgSize);
-      if (isValid(inputStream, validSize, msgSize, storeKeyFactory)) {
+      if (checkForMessageValidity(data, validSize, msgSize, storeKeyFactory)) {
         validSize += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
@@ -81,17 +80,8 @@ public class ValidMessageDetectionInputStream extends InputStream {
     byteBuffer = ByteBuffer.wrap(data, 0, validSize);
   }
 
-  public void initializeMetrics() {
-    messageFormatValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatValidationTime"));
-    messageFormatBatchValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatBatchValidationTime"));
-  }
-
   /**
-   * Returns the total Size which could be read from the stream.
-   * Passed in size in the constructor gives the total size of the stream. This method is responsible for
-   * getting the total size of valid messages which could be read from the stream.
+   * Returns the total size of all valid messages that could be read from the stream
    * @return validSize
    */
   public int getSize() {
@@ -118,69 +108,79 @@ public class ValidMessageDetectionInputStream extends InputStream {
     return count;
   }
 
+  /**
+   * Whether the stream has invalid messages or not
+   * @return
+   */
   public boolean hasInvalidMessages() {
     return hasInvalidMessage;
   }
 
-  public List<MessageInfo> getValidMessageInfoList(){
+  public List<MessageInfo> getValidMessageInfoList() {
     return validMessageInfoList;
   }
 
   /**
-   * Ensures blob validity of the blob in the given input stream
-   * For now, we check for blob corruption as part of validation
-   * Expected format for a single blob : | header | blob id | blob property | user metadata | blob |
-   * @param inputStream InputStream for which the check is to be done
+   * Ensures blob validity of the blob in the given input stream. For now, blobs are checked for message corruption
+   * @param data against which validation has to be done
    * @param size total size of the message expected
-   * @param currentOffset Current offset at which the stream was read from the buffer
+   * @param currentOffset Current offset at which the data has to be read from the given byte array
    * @param storeKeyFactory StoreKeyFactory used to get store key
-   * @return true if message was corrupt and false otherwise
+   * @return true if message is valid and false otherwise
    * @throws IOException
    */
-  private boolean isValid(InputStream inputStream, int currentOffset, long size, StoreKeyFactory storeKeyFactory)
+  private boolean checkForMessageValidity(byte[] data, int currentOffset, long size,
+      StoreKeyFactory storeKeyFactory)
       throws IOException {
     StringBuilder strBuilder = new StringBuilder();
     boolean isValid = false;
+    int startOffset = currentOffset;
     long startTime = SystemTime.getInstance().milliseconds();
     try {
-      int availableBeforeParsing = inputStream.available();
-      byte[] headerVersionInBytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes];
-      inputStream.read(headerVersionInBytes, 0, MessageFormatRecord.Version_Field_Size_In_Bytes);
-      ByteBuffer headerVersion = ByteBuffer.wrap(headerVersionInBytes);
+      int availableBeforeParsing = (int) size;
+      ByteBuffer headerVersion =
+          ByteBuffer.wrap(data, currentOffset, MessageFormatRecord.Version_Field_Size_In_Bytes);
+      currentOffset += MessageFormatRecord.Version_Field_Size_In_Bytes;
+      size -= MessageFormatRecord.Version_Field_Size_In_Bytes;
       short version = headerVersion.getShort();
       if (version == 1) {
-        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-        buffer.putShort(version);
-        inputStream.read(buffer.array(), 2, buffer.capacity() - 2);
-        buffer.position(buffer.capacity());
-        buffer.flip();
-        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-        strBuilder.append("Header - version ").append(header.getVersion()).append(" messagesize ").
-            append(header.getMessageSize()).append(" currentOffset ").append(currentOffset)
-            .append(" blobPropertiesRelativeOffset ").append(header.getBlobPropertiesRecordRelativeOffset())
-            .append(" userMetadataRelativeOffset ").append(header.getUserMetadataRecordRelativeOffset())
-            .append(" dataRelativeOffset ").append(header.getBlobRecordRelativeOffset())
-            .append(" crc " + header.getCrc()).append("\n");
+        ByteBuffer headerBuffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+        headerBuffer.putShort(version);
+        headerBuffer.put(data, currentOffset, headerBuffer.capacity() - MessageFormatRecord.Version_Field_Size_In_Bytes);
+        headerBuffer.position(headerBuffer.capacity());
+        headerBuffer.flip();
+        currentOffset += MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+            - MessageFormatRecord.Version_Field_Size_In_Bytes;
+        size -= MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+            - MessageFormatRecord.Version_Field_Size_In_Bytes;
+        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(headerBuffer);
+        strBuilder.append("Header - version ").append(header.getVersion());
+        strBuilder.append(" Message Size ").append(header.getMessageSize());
+        strBuilder.append(" Current Offset ").append(startOffset);
+        strBuilder.append(" BlobPropertiesRelativeOffset ").append(header.getBlobPropertiesRecordRelativeOffset());
+        strBuilder.append(" UserMetadataRelativeOffset ").append(header.getUserMetadataRecordRelativeOffset());
+        strBuilder.append(" DataRelativeOffset ").append(header.getBlobRecordRelativeOffset());
+        strBuilder.append(" Crc ").append(header.getCrc());
 
-        StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(inputStream));
-        strBuilder.append(" Id - ").append(storeKey.getID());
+        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, currentOffset, (int) size);
+        StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
+        strBuilder.append("; Id - ").append(storeKey.getID());
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(inputStream);
-          strBuilder.append(" Blob properties - blobSize  ").append(props.getBlobSize()).append(" serviceId ")
-              .append(props.getServiceId()).append("\n");
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(inputStream);
-          strBuilder.append(" Metadata - size ").append(metadata.capacity()).append("\n");
-          BlobOutput output = MessageFormatRecord.deserializeBlob(inputStream);
-          strBuilder.append("Blob - size ").append(output.getSize()).append("\n");
+          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
+          strBuilder.append("; Blob properties - blobSize  ").append(props.getBlobSize()).append(" serviceId ")
+              .append(props.getServiceId());
+          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
+          strBuilder.append("; Metadata - size ").append(metadata.capacity());
+          BlobOutput output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
+          strBuilder.append("; Blob - size ").append(output.getSize());
         } else {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }
         logger.trace(strBuilder.toString());
-        if (availableBeforeParsing - inputStream.available() != size) {
-          logger.error(
-              "Parsed message size " + (inputStream.available() - availableBeforeParsing) + " is not equivalent " +
-                  "to the size in message info " + size);
+        if (availableBeforeParsing - byteArrayInputStream.available() != size) {
+          logger.error("Parsed message size " + (byteArrayInputStream.available() - availableBeforeParsing)
+              + " is not equivalent to the size in message info " + size);
           isValid = false;
         }
         logger.trace("Message successfully read {} ", strBuilder);
@@ -189,11 +189,12 @@ public class ValidMessageDetectionInputStream extends InputStream {
         throw new IllegalStateException("Header version not supported " + version);
       }
     } catch (IllegalArgumentException e) {
-      logger.error("Illegal arg exception thrown at " + currentOffset + " and exception: ", e);
+      logger.error("Illegal argument exception thrown at " + startOffset + " and exception: ", e);
     } catch (IllegalStateException e) {
-      logger.error("Illegal state exception thrown at " + currentOffset + " and exception: ", e);
+      logger.error("Illegal state exception thrown at " + startOffset + " and exception: ", e);
+      throw e;
     } catch (MessageFormatException e) {
-      logger.error("MessageFormat exception thrown at " + currentOffset + " and exception: ", e);
+      logger.error("MessageFormat exception thrown at " + startOffset + " and exception: ", e);
     } catch (EOFException e) {
       logger.error("EOFException thrown at " + currentOffset, e);
       throw e;

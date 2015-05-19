@@ -455,7 +455,7 @@ class ReplicaThread implements Runnable {
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList);
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           remoteReplicaInfo.getLocalStore().delete(writeset);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
@@ -630,15 +630,9 @@ class ReplicaThread implements Runnable {
                   replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList);
+                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
               } else {
-                int sizeToWrite = 0;
-                for (MessageInfo msgInfo : messageInfoList) {
-                  sizeToWrite += msgInfo.getSize();
-                }
-                ByteBufferInputStream byteBufferInputStream =
-                    new ByteBufferInputStream(getResponse.getInputStream(), sizeToWrite);
-                writeset = new MessageFormatWriteSet(byteBufferInputStream, messageInfoList);
+                writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
               }
               remoteReplicaInfo.getLocalStore().put(writeset);
 
