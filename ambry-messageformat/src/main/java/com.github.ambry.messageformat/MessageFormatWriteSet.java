@@ -3,6 +3,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Write;
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;
@@ -28,7 +29,13 @@ public class MessageFormatWriteSet implements MessageWriteSet {
       sizeToWrite += info.getSize();
     }
     this.streamInfo = streamInfo;
-    this.streamToWrite = streamToWrite;
+    if(materializedStream){
+      ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(streamToWrite, (int)sizeToWrite);
+      this.streamToWrite = byteBufferInputStream;
+    }
+    else{
+      this.streamToWrite = streamToWrite;
+    }
   }
 
   @Override
