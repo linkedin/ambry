@@ -149,9 +149,9 @@ public class ValidMessageDetectionInputStream extends InputStream {
         headerBuffer.put(data, currentOffset, headerBuffer.capacity() - MessageFormatRecord.Version_Field_Size_In_Bytes);
         headerBuffer.position(headerBuffer.capacity());
         headerBuffer.flip();
-        currentOffset += MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+        currentOffset += headerBuffer.capacity()
             - MessageFormatRecord.Version_Field_Size_In_Bytes;
-        size -= MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
+        size -= headerBuffer.capacity()
             - MessageFormatRecord.Version_Field_Size_In_Bytes;
         MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(headerBuffer);
         strBuilder.append("Header - version ").append(header.getVersion());
@@ -178,9 +178,9 @@ public class ValidMessageDetectionInputStream extends InputStream {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }
         logger.trace(strBuilder.toString());
-        if (availableBeforeParsing - byteArrayInputStream.available() != size) {
-          logger.error("Parsed message size " + (byteArrayInputStream.available() - availableBeforeParsing)
-              + " is not equivalent to the size in message info " + size);
+        if (byteArrayInputStream.available() != 0) {
+          logger.error("Parsed message size " + (availableBeforeParsing + byteArrayInputStream.available())
+              + " is not equivalent to the size in message info " + availableBeforeParsing);
           isValid = false;
         }
         logger.trace("Message successfully read {} ", strBuilder);
@@ -192,7 +192,6 @@ public class ValidMessageDetectionInputStream extends InputStream {
       logger.error("Illegal argument exception thrown at " + startOffset + " and exception: ", e);
     } catch (IllegalStateException e) {
       logger.error("Illegal state exception thrown at " + startOffset + " and exception: ", e);
-      throw e;
     } catch (MessageFormatException e) {
       logger.error("MessageFormat exception thrown at " + startOffset + " and exception: ", e);
     } catch (EOFException e) {
