@@ -43,6 +43,14 @@ public enum CoordinatorError {
    * Blob is too large. Cannot store blob of such size.
    */
   BlobTooLarge,
+  /**
+   * Blob already exists in local colo, happens when replication process is faster than put operation
+   */
+  BlobAlreadyExistInLocalColo,
+  /**
+   * Blob already exists in remote colo, happens when replication process is faster than put operation
+   */
+  BlobAlreadyExistInRemoteColo,
 
   // Errors on read path. May occur for getBlobProperties, getBlobUserMetadata, or getBlob operations.
   /**

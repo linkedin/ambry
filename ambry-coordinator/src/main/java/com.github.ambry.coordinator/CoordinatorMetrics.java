@@ -45,6 +45,8 @@ public class CoordinatorMetrics {
   private final Counter invalidPutArgumentError;
   private final Counter insufficientCapacityError;
   private final Counter blobTooLargeError;
+  private final Counter blobAlreadyExistInLocalColoError;
+  private final Counter blobAlreadyExistInRemoteColoError;
   private final Counter blobDoesNotExistError;
   private final Counter blobDeletedError;
   private final Counter blobExpiredError;
@@ -99,6 +101,10 @@ public class CoordinatorMetrics {
     insufficientCapacityError =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "insufficientCapacityError"));
     blobTooLargeError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobTooLargeError"));
+    blobAlreadyExistInLocalColoError =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobAlreadyExistInLocalColoError"));
+    blobAlreadyExistInRemoteColoError =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobAlreadyExistInRemoteColoError"));
     blobDoesNotExistError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDoesNotExistError"));
     blobDeletedError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDeletedError"));
     blobExpiredError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
@@ -139,6 +145,14 @@ public class CoordinatorMetrics {
       case UnexpectedInternalError:
         updateOperationMetric(operation);
         unexpectedInternalError.inc();
+        break;
+      case BlobAlreadyExistInLocalColo:
+        updateOperationMetric(operation);
+        blobAlreadyExistInLocalColoError.inc();
+        break;
+      case BlobAlreadyExistInRemoteColo:
+        updateOperationMetric(operation);
+        blobAlreadyExistInRemoteColoError.inc();
         break;
       case AmbryUnavailable:
         updateOperationMetric(operation);
