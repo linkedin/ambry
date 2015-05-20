@@ -233,6 +233,7 @@ public class ValidMessageDetectionInputStreamTest {
     // ValidMessageDetectionInputStream contains put records for 2 valid blobs and 1 deleted blob
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
 
+    try {
     // create message stream for blob 1
     StoreKey key1 = new MockId("id1");
     BlobProperties prop1 = new BlobProperties(10, "servid1");
@@ -247,7 +248,7 @@ public class ValidMessageDetectionInputStreamTest {
 
     MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
 
-    // create message stream for blob 2
+    // create message stream for blob 2 and mark it as deleted
     StoreKey key2 = new MockId("id2");
     MessageFormatInputStream messageFormatStream2 = new DeleteMessageFormatInputStream(key2);
 
@@ -287,29 +288,11 @@ public class ValidMessageDetectionInputStreamTest {
     ValidMessageDetectionInputStream validMessageDetectionInputStream =
         new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
             new MetricRegistry());
-
-    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
-    int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
-    int userMetadataSize =
-        MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
-    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
-
-    int totalHeadSize = 2 * headerSize;
-    int totalBlobPropertiesSize = 2 * blobPropertiesRecordSize;
-    int totalUserMetadataSize = 2 * userMetadataSize;
-    int totalBlobSize = 2 * (int) blobSize;
-    int totalKeySize = key1.sizeInBytes() + key3.sizeInBytes();
-
-    Assert.assertEquals(validMessageDetectionInputStream.getSize(),
-        totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize);
-
-    Assert.assertEquals(true,
-        verifyBlob(validMessageDetectionInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
-            (int) blobSize, key1, 10, "servid1", usermetadata1, data1));
-
-    Assert.assertEquals(true,
-        verifyBlob(validMessageDetectionInputStream, headerSize, blobPropertiesRecordSize, userMetadataSize,
-            (int) blobSize, key3, 10, "servid3", usermetadata3, data3));
+      Assert.fail("IllegalStateException should have been thrown due to delete record ");
+    }
+    catch(IllegalStateException e) {
+      Assert.assertTrue("IllegalStateException thrown as expected ", true);
+    }
   }
 
   private boolean verifyBlob(ValidMessageDetectionInputStream validMessageDetectionInputStream, int headerSize,
