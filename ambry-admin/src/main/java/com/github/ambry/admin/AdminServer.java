@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
+import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,6 @@ import org.slf4j.LoggerFactory;
  * starting the various components.
  */
 public class AdminServer {
-  private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties verifiableProperties;
   private final MetricRegistry metricRegistry;
 
@@ -21,6 +21,9 @@ public class AdminServer {
   private final AdminMetrics adminMetrics;
 
   private final AdminRequestDelegator requestDelegator;
+
+  private CountDownLatch shutdownLatch = new CountDownLatch(1);
+  private Logger logger = LoggerFactory.getLogger(getClass());
   private RestServer restServer;
   private boolean up = false;
 
@@ -60,13 +63,23 @@ public class AdminServer {
     }
   }
 
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
     logger.info("Shutting down admin server");
-    restServer.shutdown();
-    requestDelegator.shutdown();
-    up = false;
-    logger.info("Admin server shutdown complete");
+    try {
+      restServer.shutdown();
+      requestDelegator.shutdown();
+      up = false;
+      logger.info("Admin server shutdown complete");
+    } catch (Exception e) {
+      logger.error("Exception while shutting down AdminServer - " + e);
+    } finally {
+      shutdownLatch.countDown();
+    }
+  }
+
+  public void awaitShutdown()
+      throws InterruptedException {
+    shutdownLatch.await();
   }
 
   private boolean isReadyToStart() {

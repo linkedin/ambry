@@ -23,7 +23,7 @@ public class AdminMain {
   private static Logger logger = LoggerFactory.getLogger(AdminMain.class);
 
   public static void main(String[] args) {
-    AdminServer adminServer = null;
+    final AdminServer adminServer;
     try {
       // TODO: These two lines have to be replaced by something generic
       String log4jConfPath =
@@ -41,21 +41,25 @@ public class AdminMain {
 
         logger.info("Bootstrapping admin..");
         adminServer = new AdminServer(verifiableProperties, metricRegistry);
+
+        // attach shutdown handler to catch control-c
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+          public void run() {
+            adminServer.shutdown();
+          }
+        });
+
         adminServer.start();
+        adminServer.awaitShutdown();
       }
+    } catch (InterruptedException e) {
+      logger.error("Await shutdown interuptted - " + e);
     } catch (IOException e) {
       logger.error("Options parse failed or properties file was not loaded - " + e);
-      logger.error("Admin bootstrap failed - " + e);
+      logger.error("Admin bootstrap failed");
     } catch (InstantiationException e) {
       logger.error("InstantiationException while starting admin - " + e);
-      try {
-        if (adminServer != null) {
-          adminServer.shutdown();
-        }
-      } catch (Exception sde) {
-        logger.error("Admin shutdown failed - " + sde);
-      }
-      logger.error("Admin bootstrap failed - " + e);
+      logger.error("Admin bootstrap failed");
     }
   }
 
