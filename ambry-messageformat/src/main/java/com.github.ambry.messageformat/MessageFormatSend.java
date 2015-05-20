@@ -240,8 +240,7 @@ class MessageReadSetIndexInputStream extends InputStream {
     ByteBuffer buf = ByteBuffer.wrap(b);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
     long sizeInBlobReadOptions = messageReadSet.sizeInBytes(indexToRead);
-    long sizeToRead = sizeInBlobReadOptions == -1 ? buf.remaining()
-        : Math.min(buf.remaining(), sizeInBlobReadOptions - currentOffset);
+    long sizeToRead = Math.min(buf.remaining(), sizeInBlobReadOptions - currentOffset);
     long bytesWritten = messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, sizeToRead);
     currentOffset += bytesWritten;
     return (int) bytesWritten;

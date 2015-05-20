@@ -632,8 +632,7 @@ class IndexSegment {
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesScannedInBytes The current total size in bytes of the entries that are scanned.
    *                                                Note that these are not necessarily part of the entries returned.
-   * @return the last store key scanned. If flags==0, this will be the key added to entries. If none were scanned,
-   *         null is returned.
+   * @return the last store key scanned. If none were scanned, null is returned.
    * @throws IOException
    */
   public StoreKey getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
@@ -652,9 +651,9 @@ class IndexSegment {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
-          IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
           // we include the key in the final list if it is not the initial key or if the initial key was null
-          if ((key == null || newKey.compareTo(key) != 0)) {
+          if (key == null || newKey.compareTo(key) != 0) {
+            IndexValue newValue = new IndexValue(ByteBuffer.wrap(buf));
             MessageInfo info =
                 new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
                     newValue.getTimeToLiveInMs());

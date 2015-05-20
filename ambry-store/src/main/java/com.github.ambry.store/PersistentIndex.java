@@ -150,10 +150,8 @@ public class PersistentIndex {
       }
       this.dataDir = datadir;
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getLogEndOffset());
-
       // perform recovery if required
       final Timer.Context context = metrics.recoveryTime.time();
-
       // Recover the last messages in the log into the index, if any.
       if (indexes.size() > 0) {
         IndexSegment lastSegment = indexes.lastEntry().getValue();
@@ -162,9 +160,7 @@ public class PersistentIndex {
       } else {
         recover(null, log.sizeInBytes(), recovery);
       }
-
       context.stop();
-
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(getCurrentEndOffset());
       logEndOffsetOnStartup = log.getLogEndOffset();
@@ -699,6 +695,8 @@ public class PersistentIndex {
    *            is null, all the keys will be read.
    * @param messageEntries the list to be populated with the MessageInfo for every entry that is read.
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned.
+   * @param endTimeSec The time that determines the latest segment to be scanned. Entries from a segment whose last
+   *                   modified time is later than this parameter will not be returned.
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,

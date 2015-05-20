@@ -16,6 +16,7 @@ import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * This class takes a read set for blobs that are to be hard deleted and provides corresponding
  * replacement messages, that can then be written back by the caller to hard delete those blobs.
@@ -57,10 +58,10 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
 
   /**
    * For the message at readSetIndex, does the following:
-    1. Reads the whole blob and does a crc check. If the crc check fails, returns null - this means that the record
-       is not retrievable anyway.
-    2. Adds to a hard delete replacement write set.
-    3. Returns the hard delete info.
+   1. Reads the whole blob and does a crc check. If the crc check fails, returns null - this means that the record
+   is not retrievable anyway.
+   2. Adds to a hard delete replacement write set.
+   3. Returns the hard delete info.
    */
   private HardDeleteInfo getHardDeleteInfo(int readSetIndex) {
 
@@ -99,28 +100,29 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
             throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
                 MessageFormatErrorCodes.IO_Error);
           } else {
-            BlobProperties blobProperties = getBlobPropertiesRecord(readSet, readSetIndex,
-                headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                    .getBlobPropertiesRecordRelativeOffset());
+            BlobProperties blobProperties =
+                getBlobPropertiesRecord(readSet, readSetIndex, headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                    headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
+                        .getBlobPropertiesRecordRelativeOffset());
 
-            long userMetadataSize = getUserMetadataRecordSize(readSet, readSetIndex,
-                headerFormat.getUserMetadataRecordRelativeOffset(),
-                headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
+            long userMetadataSize =
+                getUserMetadataRecordSize(readSet, readSetIndex, headerFormat.getUserMetadataRecordRelativeOffset(),
+                    headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
 
-            long blobStreamSize =
-                getBlobRecordSize(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
-                    headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
-                        .getBlobPropertiesRecordRelativeOffset()));
+            long blobStreamSize = getBlobRecordSize(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
+                headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
+                    .getBlobPropertiesRecordRelativeOffset()));
 
             MessageFormatInputStream replaceStream =
-                new HardDeleteMessageFormatInputStream(storeKey, blobProperties, (int) userMetadataSize, (int) blobStreamSize);
+                new HardDeleteMessageFormatInputStream(storeKey, blobProperties, (int) userMetadataSize,
+                    (int) blobStreamSize);
 
             hardDeleteInfo = new HardDeleteInfo(Channels.newChannel(replaceStream), replaceStream.getSize());
           }
           break;
         default:
-          logger.error("Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
+          logger.error(
+              "Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
       }
     } catch (Exception e) {
       logger.error("Exception, cause: {}", e.getCause());
@@ -128,8 +130,8 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     return hardDeleteInfo;
   }
 
-  private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex,
-      long relativeOffset, long blobPropertiesSize)
+  private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
+      long blobPropertiesSize)
       throws MessageFormatException, IOException {
 
     /* Read the field from the channel */
@@ -150,12 +152,12 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(userMetaData)), relativeOffset,
         userMetadataSize);
     userMetaData.flip();
-    ByteBuffer deserializedUserMetadata = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData));
+    ByteBuffer deserializedUserMetadata =
+        MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData));
     return deserializedUserMetadata.capacity();
   }
 
-  private long getBlobRecordSize(MessageReadSet readSet, int readSetIndex, long relativeOffset,
-      long blobRecordSize)
+  private long getBlobRecordSize(MessageReadSet readSet, int readSetIndex, long relativeOffset, long blobRecordSize)
       throws MessageFormatException, IOException {
 
     /* Read the field from the channel */
