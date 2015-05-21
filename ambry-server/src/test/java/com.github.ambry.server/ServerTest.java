@@ -271,9 +271,9 @@ public class ServerTest {
       MockClusterMap clusterMap = cluster.getClusterMap();
       ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
       ArrayList<byte[]> data = new ArrayList<byte[]>(9);
-      for (int i=0; i<9; i++) {
-        usermetadata.add(new byte[1000+i]);
-        data.add(new byte[31870+i]);
+      for (int i = 0; i < 9; i++) {
+        usermetadata.add(new byte[1000 + i]);
+        data.add(new byte[31870 + i]);
         new Random().nextBytes(usermetadata.get(i));
         new Random().nextBytes(data.get(i));
       }
@@ -388,7 +388,7 @@ public class ServerTest {
 
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      for (int i=0; i<6; i++) {
+      for (int i = 0; i < 6; i++) {
         ids.add(blobIdList.get(i));
       }
 
@@ -447,16 +447,18 @@ public class ServerTest {
       Assert.assertEquals(response6.getError(), ServerErrorCode.No_Error);
 
       // put blob 7
-      PutRequest putRequest7 = new PutRequest(1, "client1", blobIdList.get(7), properties.get(7), ByteBuffer.wrap(usermetadata.get(7)),
-          new ByteBufferInputStream(ByteBuffer.wrap(data.get(7))));
+      PutRequest putRequest7 =
+          new PutRequest(1, "client1", blobIdList.get(7), properties.get(7), ByteBuffer.wrap(usermetadata.get(7)),
+              new ByteBufferInputStream(ByteBuffer.wrap(data.get(7))));
       channel.send(putRequest7);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response7 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response7.getError(), ServerErrorCode.No_Error);
 
       // put blob 8
-      PutRequest putRequest8 = new PutRequest(1, "client1", blobIdList.get(8), properties.get(8), ByteBuffer.wrap(usermetadata.get(8)),
-          new ByteBufferInputStream(ByteBuffer.wrap(data.get(8))));
+      PutRequest putRequest8 =
+          new PutRequest(1, "client1", blobIdList.get(8), properties.get(8), ByteBuffer.wrap(usermetadata.get(8)),
+              new ByteBufferInputStream(ByteBuffer.wrap(data.get(8))));
       channel.send(putRequest8);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response9 = PutResponse.readFrom(new DataInputStream(putResponseStream));

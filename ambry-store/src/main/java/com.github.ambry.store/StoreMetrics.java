@@ -30,8 +30,9 @@ public class StoreMetrics {
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public final Counter keySizeMismatchCount;
-  public final Counter cleanupDoneCount;
-  public final Counter cleanupFailedCount;
+  public final Counter hardDeleteDoneCount;
+  public final Counter hardDeleteFailedCount;
+  public final Counter hardDeleteIncompleteRecoveryCount;
   public Gauge<Long> currentCapacityUsed;
   public Gauge<Long> currentHardDeleteProgress;
   public final Histogram segmentSizeForExists;
@@ -65,8 +66,11 @@ public class StoreMetrics {
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "-bloomFalsePositiveCount"));
     keySizeMismatchCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "-keySizeMismatchCount"));
-    cleanupDoneCount = registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-cleanupDoneCount"));
-    cleanupFailedCount = registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-cleanupFailedCount"));
+    hardDeleteDoneCount = registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteDoneCount"));
+    hardDeleteFailedCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteFailedCount"));
+    hardDeleteIncompleteRecoveryCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteIncompleteRecoveryCount"));
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 
@@ -102,6 +106,7 @@ public class StoreMetrics {
         return ((double) index.getHardDeleteProgress() / log.getLogEndOffset()) * 100;
       }
     };
-    registry.register(MetricRegistry.name(Log.class, name + "-percentageHardDeleteCompleted"), percentageHardDeleteCompleted);
+    registry.register(MetricRegistry.name(Log.class, name + "-percentageHardDeleteCompleted"),
+        percentageHardDeleteCompleted);
   }
 }

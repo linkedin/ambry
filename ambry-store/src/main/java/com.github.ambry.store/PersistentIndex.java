@@ -7,6 +7,7 @@ import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -49,7 +50,7 @@ public class PersistentIndex {
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
   private static final String Clean_Shutdown_Filename = "cleanshutdown";
-  private static final String Cleanup_Token_Filename = "cleanupToken";
+  private static final String Cleanup_Token_Filename = "cleanuptoken";
   public static final Short version = 0;
 
   protected Scheduler scheduler;
@@ -181,7 +182,7 @@ public class PersistentIndex {
         cleanShutdownFile.delete();
       }
 
-      // start scheduler thread to persist index in the background and to perform hard delete of deleted records.
+      // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
       this.scheduler.schedule("index persistor", persistor,
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
@@ -192,7 +193,7 @@ public class PersistentIndex {
         hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
         hardDeleteThread.start();
       } else {
-        hardDeleter.shutdownLatch.countDown();
+        hardDeleter.close();
       }
     } catch (StoreException e) {
       throw e;
@@ -482,34 +483,6 @@ public class PersistentIndex {
     return missingKeys;
   }
 
-  private class SegmentSearchInfo {
-    private byte flags;
-    private long endTime;
-    private long maxSize;
-
-    public SegmentSearchInfo(byte flags, long endTime, long maxSize) {
-      this.flags = flags;
-      this.endTime = endTime;
-      this.maxSize = maxSize;
-    }
-
-    public byte getFlags() {
-      return flags;
-    }
-
-    public long getEndtime() {
-      return endTime;
-    }
-
-    public long getMaxSize() {
-      return maxSize;
-    }
-
-    public boolean inRange(long checkTime) {
-      return endTime == -1 || endTime >= checkTime;
-    }
-  }
-
   /**
    * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
    * where entries needs to be fetched
@@ -611,8 +584,8 @@ public class PersistentIndex {
           StoreFindToken newToken = null;
           if (entry != null && entry.getKey() != indexes.lastKey()) {
             startTimeInMs = SystemTime.getInstance().milliseconds();
-            newToken =
-                findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries, -1);
+            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
+                new FindEntriesCondition(maxTotalSizeOfEntries));
             logger.trace("Journal based to segment based token, Time used to find entries: {}",
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -643,7 +616,7 @@ public class PersistentIndex {
         startTimeInMs = SystemTime.getInstance().milliseconds();
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
-                messageEntries, maxTotalSizeOfEntries, -1);
+                messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries));
         logger.trace("Segment based token, Time used to find entries: {}",
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -694,13 +667,12 @@ public class PersistentIndex {
    * @param key The key representing the position (exclusive) in the segment to start reading entries from. If the key
    *            is null, all the keys will be read.
    * @param messageEntries the list to be populated with the MessageInfo for every entry that is read.
-   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned.
-   * @param endTimeSec The time that determines the latest segment to be scanned. Entries from a segment whose last
-   *                   modified time is later than this parameter will not be returned.
+   * @param findEntriesCondition that determines whether to fetch more entries based on a maximum total size of entries
+   *                             that needs to be returned and a time that determines the latest segment to be scanned.
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,
-      List<MessageInfo> messageEntries, long maxTotalSizeOfEntries, long endTimeSec)
+      List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition)
       throws IOException, StoreException {
     long segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset == indexes.lastKey()) {
@@ -710,7 +682,6 @@ public class PersistentIndex {
     }
 
     long newTokenSegmentStartOffset = StoreFindToken.Uninitialized_Offset;
-    StoreKey newTokenSegmentKey = null;
     long newTokenOffsetInJournal = StoreFindToken.Uninitialized_Offset;
 
     IndexSegment segmentToProcess = indexes.get(segmentStartOffset);
@@ -720,9 +691,8 @@ public class PersistentIndex {
        key. Otherwise, since all the keys starting from the offset have to be read, skip this and check in the journal
        first. */
     if (key != null) {
-      newTokenSegmentKey =
-          segmentToProcess.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
-      if (newTokenSegmentKey != null) {
+      if (segmentToProcess.getEntriesSince(key, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
+        // if we did fetch entries from this segment, set the new token info accordingly.
         newTokenSegmentStartOffset = segmentStartOffset;
       }
       logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
@@ -731,8 +701,7 @@ public class PersistentIndex {
       segmentToProcess = indexes.get(segmentStartOffset);
     }
 
-    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries && (endTimeSec == -1
-        || endTimeSec >= segmentToProcess.getLastModifiedTime())) {
+    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTime())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       long journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       long journalLastOffsetBeforeCheck = journal.getLastOffset();
@@ -747,7 +716,7 @@ public class PersistentIndex {
             it ineligible, skip */
             long nextSegmentStartOffset = indexes.higherKey(currentSegment.getStartOffset());
             currentSegment = indexes.get(nextSegmentStartOffset);
-            if (endTimeSec != -1 && endTimeSec < currentSegment.getLastModifiedTime()) {
+            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
               break;
             }
           }
@@ -756,7 +725,8 @@ public class PersistentIndex {
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.getTimeToLiveInMs()));
-          if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
+          currentTotalSizeOfEntries.addAndGet(value.getSize());
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
             break;
           }
         }
@@ -776,9 +746,7 @@ public class PersistentIndex {
             + journalLastOffsetBeforeCheck + "]");
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
-        newTokenSegmentKey =
-            segmentToProcess.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries);
-        if (newTokenSegmentKey != null) {
+        if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
           newTokenSegmentStartOffset = segmentStartOffset;
         }
         logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
@@ -790,14 +758,18 @@ public class PersistentIndex {
 
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
-    } else if (messageEntries.size() == 0 && endTimeSec == -1) {
-      /* If endTimeSec is null, then since we have entered a segment, we should return at least one message */
+    /*} else if (messageEntries.size() == 0 && endTimeSec == -1) {
+      /* If endTimeSec is null, then since we have entered a segment, we should return at least one message *
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", max total size of entries to return: "
-              + maxTotalSizeOfEntries);
+              + maxTotalSizeOfEntries); */
     } else {
-      return new StoreFindToken(newTokenSegmentKey, newTokenSegmentStartOffset, sessionId);
+      // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
+      // uninitialized token
+      return newTokenSegmentStartOffset == StoreFindToken.Uninitialized_Offset ? new StoreFindToken()
+          : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
+              sessionId);
     }
   }
 
@@ -925,7 +897,7 @@ public class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         newToken = findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
-            messageEntries, maxTotalSizeOfEntries, endTimeSeconds);
+            messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds));
         if (newToken.isUninitialized()) {
           newToken = storeToken;
         }
@@ -965,8 +937,8 @@ public class PersistentIndex {
           // Case 3: offset based, but offset out of journal
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           if (entry != null && entry.getKey() != indexes.lastKey()) {
-            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries,
-                endTimeSeconds);
+            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
+                new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds));
             if (newToken.isUninitialized()) {
               newToken = storeToken;
             }
@@ -1049,15 +1021,36 @@ public class PersistentIndex {
   }
 
   class HardDeleteThread implements Runnable {
+    /** A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
+     * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing
+     * hard deletes when we do a crash recovery.
+     * Four tokens are maintained:
+     * startTokenSafeToPersist <= startTokenBeforeLogFlush <= startToken <= endToken
+     *
+     * Ongoing hard deletes are for entries within startToken and endToken. These keep getting incremented as and when
+     * hard deletes happen. The cleanup token that is persisted periodically is used during recovery to figure out the
+     * range on which recovery is to be done. The end token to persist is the endToken that we maintain. However, the
+     * start token that is persisted has to be a token up to which the hard deletes that were performed have been flushed.
+     * Since the index persistor runs asynchronously to the hard delete thread, a few other tokens are used to help safely
+     * persist tokens:
+     * startTokenSafeToPersist: This will always be a value up to which the log has been flushed. The 'current' start token
+     * can be greater than this value.
+     * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
+     * flushed, this is used to set startTokenSafeToPersist.
+     */
     FindToken startToken;
     FindToken startTokenBeforeLogFlush;
     FindToken startTokenSafeToPersist;
     FindToken endToken;
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
+    private final int messageRetentionSeconds =
+        config.storeDeletedMessageRetentionDays * SystemTime.getInstance().SecsPerDay;
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     boolean running = true;
-    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10000; //how long to sleep if token does not advance.
+
+    //how long to sleep if token does not advance.
+    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
 
     HardDeleteThread(Throttler throttler) {
       this.throttler = throttler;
@@ -1104,20 +1097,22 @@ public class PersistentIndex {
       }
       startTokenBeforeLogFlush = startTokenSafeToPersist = startToken;
 
-      /* perform hard deletes. startToken and endToken could be more than one scan size apart as they get persisted at different
-         frequencies (endToken during hardDelete() and startToken during index persist). Therefore, continue with hard
-         deletes until we reach endTokenForRecovery.*/
-      if (!endTokenForRecovery.isUninitialized()) {
+      /* perform hard deletes if endTokenForRecovery is ahead of the start token. startToken and endToken could be more
+         than one scan size apart as they get modified at different frequencies (endToken during hardDelete() and
+         startTokenToPersist during index persist). Therefore, continue with hard deletes until we reach
+         endTokenForRecovery.*/
+      if (!endTokenForRecovery.isUninitialized() && !endTokenForRecovery.equals(startToken)) {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
           if (!hardDelete()) {
             logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
                 dataDir, endToken);
+            metrics.hardDeleteIncompleteRecoveryCount.inc();
             break;
           }
           logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
-        } while (((StoreFindToken) endToken).getAppropriateOffset() <= endTokenForRecovery.getAppropriateOffset());
+        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken));
       }
     }
 
@@ -1178,8 +1173,7 @@ public class PersistentIndex {
     private void performHardDeletes(List<MessageInfo> messageInfoList)
         throws StoreException {
       try {
-        EnumSet<StoreGetOptions> getOptions =
-            EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
+        EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
         Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(messageInfoList.size());
         for (MessageInfo info : messageInfoList) {
@@ -1198,14 +1192,14 @@ public class PersistentIndex {
           long offsetToWriteAt = readOptionsIterator.next().getOffset();
           if (hardDeleteInfo != null) {
             log.writeFrom(hardDeleteInfo.getChannel(), offsetToWriteAt, hardDeleteInfo.getSize());
-            metrics.cleanupDoneCount.inc(1);
+            metrics.hardDeleteDoneCount.inc(1);
             try {
               throttler.maybeThrottle(hardDeleteInfo.getSize());
             } catch (InterruptedException e) {
               logger.error("Caught interrupted exception, continuing ");
             }
           } else {
-            metrics.cleanupFailedCount.inc(1);
+            metrics.hardDeleteFailedCount.inc(1);
           }
         }
       } catch (IOException e) {
@@ -1214,7 +1208,8 @@ public class PersistentIndex {
     }
 
     /**
-     * Finds deleted entries from the index calls performHardDelete to delete the corresponding put records in the log.
+     * Finds deleted entries from the index, persists tokens and calls performHardDelete to delete the corresponding put
+     * records in the log.
      * Note: At this time, expired blobs are not hard deleted.
      * The algorithm is as follows:
      * 1. Start at the current token S.
@@ -1229,7 +1224,7 @@ public class PersistentIndex {
      *
      * The guarantee provided is that for any persisted token pair (S', E):
      *    - all the hard deletes till point S' have been flushed in the log; and
-     *    - ongoing hard deletes are between S' and E, so during recovery this is the range to be covered.
+     *    - ongoing hard deletes are between S' and E, so during recovery this is the range to be recovered.
      *
      * @return true if the token moved forward, false otherwise.
      */
@@ -1238,7 +1233,7 @@ public class PersistentIndex {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
           FindInfo info = findDeletedEntriesSince(startToken, scanSizeInBytes,
-              SystemTime.getInstance().milliseconds() / 1000 - config.storeDeletedMessageRetentionDays * 24 * 60 * 60);
+              SystemTime.getInstance().seconds() - messageRetentionSeconds);
           endToken = info.getFindToken();
           if (!endToken.equals(startToken)) {
             persistCleanupToken(); // this is to persist the end token before performing the writes to the log.
@@ -1258,20 +1253,19 @@ public class PersistentIndex {
     }
 
     /**
-     Gets an approximate number of bytes between start and end tokens
-     @param start the start token.
-     @param end the end token.
-     */
-    long getBytesProcessed(StoreFindToken start, StoreFindToken end) {
-      return end.getAppropriateOffset() - start.getAppropriateOffset();
-    }
-
-    /**
      * Gets the number of bytes processed so far
-     * @return the number of bytes processed so far as represented by the start token.
+     * @return the number of bytes processed so far as represented by the start token. Note that if the token is
+     * index based, this is at segment granularity.
      */
     public long getProgress() {
-      return ((StoreFindToken) startToken).getAppropriateOffset();
+      StoreFindToken token = (StoreFindToken) startToken;
+      if (token.isUninitialized()) {
+        return 0;
+      } else if (token.getOffset() != StoreFindToken.Uninitialized_Offset) {
+        return token.getOffset();
+      } else {
+        return token.getIndexStartOffset();
+      }
     }
 
     public void run() {
@@ -1286,16 +1280,23 @@ public class PersistentIndex {
           }
         }
       } finally {
-        shutdownLatch.countDown();
+        close();
       }
     }
 
     public void shutDown()
         throws InterruptedException, StoreException, IOException {
+      if (running) {
+        running = false;
+        hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
+        shutdownLatch.await();
+        persistCleanupToken();
+      }
+    }
+
+    public void close() {
       running = false;
-      hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
-      shutdownLatch.await();
-      persistCleanupToken();
+      shutdownLatch.countDown();
     }
   }
 
@@ -1445,17 +1446,33 @@ class StoreFindToken implements FindToken {
     return sb.toString();
   }
 
+  /** Return if the token has a valid segment start offset or a journal offset
+   *
+   * @return true if initialized token, false otherwise.
+   */
   public boolean isUninitialized() {
     return this.getOffset() == Uninitialized_Offset && this.getIndexStartOffset() == Uninitialized_Offset;
   }
 
-  public long getAppropriateOffset() {
-    if (isUninitialized()) {
-      return 0;
-    } else if (offset == Uninitialized_Offset) {
-      return indexStartOffset;
-    } else {
-      return offset;
+  /** Test whether this token is greater than the passed in token
+   *
+   * @return true if this token is greater than the passed in token, false otherwise.
+   */
+
+  public boolean greaterThan(StoreFindToken token) {
+    if (this.isUninitialized() || token.isUninitialized()) {
+      throw new IllegalArgumentException("Cannot compare with uninitialized token");
+    }
+
+    if (this.offset != Uninitialized_Offset && token.offset != Uninitialized_Offset) { //both journal based
+      return this.offset > token.getOffset();
+    } else if (this.offset != Uninitialized_Offset) { // this is journal based
+      return this.offset > token.getIndexStartOffset();
+    } else if (this.offset == Uninitialized_Offset && token.offset != Uninitialized_Offset) { // token is journal based
+      return this.indexStartOffset > token.getOffset();
+    } else { // both index based.
+      return this.indexStartOffset == token.getIndexStartOffset() ? this.getStoreKey().compareTo(token.getStoreKey())
+          > 0 : this.indexStartOffset > token.getIndexStartOffset();
     }
   }
 

@@ -628,17 +628,16 @@ class IndexSegment {
    * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved upto maxentries
-   * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
+   * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
-   * @param currentTotalSizeOfEntriesScannedInBytes The current total size in bytes of the entries that are scanned.
-   *                                                Note that these are not necessarily part of the entries returned.
-   * @return the last store key scanned. If none were scanned, null is returned.
+   * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @return true if any entries were added.
    * @throws IOException
    */
-  public StoreKey getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesScannedInBytes)
+  public boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
+      AtomicLong currentTotalSizeOfEntriesInBytes)
       throws IOException {
-    StoreKey returnKey = key;
+    int entriesSizeAtStart = entries.size();
     if (mapped.get()) {
       int index = 0;
       if (key != null) {
@@ -647,7 +646,8 @@ class IndexSegment {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (currentTotalSizeOfEntriesScannedInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
+        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), this.getLastModifiedTime())
+            && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
@@ -658,8 +658,7 @@ class IndexSegment {
                 new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
                     newValue.getTimeToLiveInMs());
             entries.add(info);
-            currentTotalSizeOfEntriesScannedInBytes.addAndGet(newValue.getSize());
-            returnKey = newKey;
+            currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
           }
           index++;
         }
@@ -673,19 +672,18 @@ class IndexSegment {
         tempMap = index.tailMap(key, true);
       }
       for (Map.Entry<StoreKey, IndexValue> entry : tempMap.entrySet()) {
-        if ((key == null || entry.getKey().compareTo(key) != 0)) {
+        if (key == null || entry.getKey().compareTo(key) != 0) {
           MessageInfo info = new MessageInfo(entry.getKey(), entry.getValue().getSize(),
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs());
           entries.add(info);
-          currentTotalSizeOfEntriesScannedInBytes.addAndGet(entry.getValue().getSize());
-          returnKey = entry.getKey();
-          if (currentTotalSizeOfEntriesScannedInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
+          currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), this.getLastModifiedTime())) {
             break;
           }
         }
       }
     }
-    return returnKey;
+    return entries.size() > entriesSizeAtStart;
   }
 }
 

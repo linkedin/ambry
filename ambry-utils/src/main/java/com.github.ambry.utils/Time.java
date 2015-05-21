@@ -25,6 +25,8 @@ public abstract class Time {
 
   public abstract long nanoseconds();
 
+  public abstract long seconds();
+
   public abstract void sleep(long ms)
       throws InterruptedException;
 }

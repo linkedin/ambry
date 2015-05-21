@@ -141,15 +141,15 @@ public class PersistentIndexTest {
 
       // test getEntriesSince
       List<MessageInfo> entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 4000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId6, new FindEntriesCondition(4000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId1, new FindEntriesCondition(5000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(null, new FindEntriesCondition(5000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -195,15 +195,15 @@ public class PersistentIndexTest {
 
       // test getEntriesSince
       entries = new ArrayList<MessageInfo>();
-      info.getEntriesSince(blobId6, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId6, new FindEntriesCondition(5000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(entries.get(2).getStoreKey(), blobId9);
       Assert.assertEquals(entries.size(), 3);
       entries.clear();
-      info.getEntriesSince(blobId1, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(blobId1, new FindEntriesCondition(5000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       entries.clear();
-      info.getEntriesSince(null, 5000, entries, new AtomicLong(0));
+      info.getEntriesSince(null, new FindEntriesCondition(5000), entries, new AtomicLong(0));
       Assert.assertEquals(entries.size(), 5);
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
@@ -1679,6 +1679,11 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(7).getStoreKey(), blobId15);
       Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId15);
 
+      // just close and open again to execute the shutdown logic once again.
+      index.close();
+      index = new MockIndex(logFile, scheduler, log, config, factory);
+
+      // close and cleanup for good.
       index.close();
       indexFile.delete();
       scheduler.shutdown();

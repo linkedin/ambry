@@ -86,6 +86,9 @@ class StoreMessageReadSet implements MessageReadSet {
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
     long sizeInBlobReadOptions = readOptions.get(index).getSize();
+    if (sizeInBlobReadOptions == -1) {
+      System.out.println("minus one");
+    }
     long size = sizeInBlobReadOptions == -1 ? maxSize : Math.min(sizeInBlobReadOptions - relativeOffset, maxSize);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, size);
     long written = fileChannel
