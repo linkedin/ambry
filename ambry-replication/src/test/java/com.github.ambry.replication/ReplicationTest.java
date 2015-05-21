@@ -689,6 +689,448 @@ public class ReplicationTest {
     }
   }
 
+
+  @Test
+  public void replicaThreadTestForExpiredBlobs()
+      throws InterruptedException, IOException {
+    try {
+      Random random = new Random();
+      MockClusterMap clusterMap = new MockClusterMap();
+
+      List<ReplicaId> replicaIds = clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422));
+
+      Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
+          new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
+      Map<String, Map<PartitionId, List<ByteBuffer>>> replicaBuffers =
+          new HashMap<String, Map<PartitionId, List<ByteBuffer>>>();
+
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      Map<PartitionId, List<MessageInfo>> messageInfoNode1 = new HashMap<PartitionId, List<MessageInfo>>();
+      Map<PartitionId, List<MessageInfo>> messageInfoNode2 = new HashMap<PartitionId, List<MessageInfo>>();
+      Map<PartitionId, List<ByteBuffer>> bufferListNode1 = new HashMap<PartitionId, List<ByteBuffer>>();
+      Map<PartitionId, List<ByteBuffer>> bufferListNode2 = new HashMap<PartitionId, List<ByteBuffer>>();
+      for (int i = 0; i < partitionIds.size(); i++) {
+        List<MessageInfo> messageInfoListLocalReplica = new ArrayList<MessageInfo>();
+        List<ByteBuffer> messageBufferListLocalReplica = new ArrayList<ByteBuffer>();
+
+        List<MessageInfo> messageInfoListRemoteReplica2 = new ArrayList<MessageInfo>();
+        List<ByteBuffer> messageBufferListLocalReplica2 = new ArrayList<ByteBuffer>();
+
+        for (int j = 0; j < 10; j++) {
+          BlobId id = new BlobId(partitionIds.get(i));
+          ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
+          long streamSize = byteBuffer.limit();
+          messageInfoListLocalReplica.add(new MessageInfo(id, streamSize));
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListLocalReplica.add(byteBuffer);
+          messageBufferListLocalReplica2.add(byteBuffer);
+        }
+
+        // add an expired message to replica 2
+        BlobId idExpired = new BlobId(partitionIds.get(i));
+        ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
+        long streamSize = byteBuffer.limit();
+        messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, streamSize, 1));
+        messageBufferListLocalReplica2.add(byteBuffer);
+        messageInfoNode1.put(partitionIds.get(i), messageInfoListLocalReplica);
+        bufferListNode1.put(partitionIds.get(i), messageBufferListLocalReplica);
+
+        // add additional messages to replica 2
+        for (int j = 10; j < 15; j++) {
+          BlobId id = new BlobId(partitionIds.get(i));
+          byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
+          streamSize = byteBuffer.limit();
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListLocalReplica2.add(byteBuffer);
+        }
+
+        messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
+        bufferListNode2.put(partitionIds.get(i), messageBufferListLocalReplica2);
+      }
+      replicaStores.put("localhost" + 64423, messageInfoNode2);
+      replicaBuffers.put("localhost" + 64423, bufferListNode2);
+
+      List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
+      for (ReplicaId replicaId : replicaIds) {
+        for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
+          RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
+              new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
+                  bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
+              SystemTime.getInstance());
+          remoteReplicas.add(remoteReplicaInfo);
+        }
+      }
+
+      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+      DataNodeId dataNodeId = null;
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == 64423) {
+          dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+          List<RemoteReplicaInfo> remoteReplicaInfoList =
+              replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
+          if (remoteReplicaInfoList != null) {
+            remoteReplicaInfoList.add(remoteReplicaInfo);
+          } else {
+            remoteReplicaInfoList = new ArrayList<RemoteReplicaInfo>();
+            remoteReplicaInfoList.add(remoteReplicaInfo);
+            replicasToReplicate.put(remoteReplicaInfo.getReplicaId().getDataNodeId(), remoteReplicaInfoList);
+          }
+        }
+      }
+      ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
+
+      ReplicationMetrics replicationMetrics =
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+              replicaIds);
+      StoreKeyFactory storeKeyFactory = null;
+      try {
+        storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+      } catch (Exception e) {
+        System.out.println("Error creating StoreKeyFactory ");
+        throw new IOException("Error creating StoreKeyFactory " + e);
+      }
+
+      ReplicaThread replicaThread =
+          new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
+              true, clusterMap.getMetricRegistry());
+      List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 4);
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 8);
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 1);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 11);
+      }
+
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
+      }
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 1);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 15);
+      }
+
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 15);
+      }
+
+      //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
+      for (Map.Entry<PartitionId, List<MessageInfo>> entry : messageInfoNode2.entrySet()) {
+        for (MessageInfo messageInfo : entry.getValue()) {
+          boolean found = false;
+          for (MessageInfo messageInfo1 : messageInfoNode1.get(entry.getKey())) {
+            if (messageInfo.getStoreKey().equals(messageInfo1.getStoreKey())) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            Assert.assertTrue(messageInfo.isExpired());
+          }
+        }
+      }
+      for (Map.Entry<PartitionId, List<ByteBuffer>> entry : bufferListNode2.entrySet()) {
+        int totalFound = 0;
+        for (ByteBuffer buf : entry.getValue()) {
+          for (ByteBuffer bufActual : bufferListNode1.get(entry.getKey())) {
+            if (Arrays.equals(buf.array(), bufActual.array())) {
+              totalFound++;
+              break;
+            }
+          }
+        }
+        Assert.assertEquals(totalFound, entry.getValue().size() - 1);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
+  }
+
+
+  @Test
+  public void replicaThreadTestWithCorruptMessages()
+      throws InterruptedException, IOException {
+    try {
+      Random random = new Random();
+      MockClusterMap clusterMap = new MockClusterMap();
+
+      List<ReplicaId> replicaIds = clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", 64422));
+
+      Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
+          new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
+      Map<String, Map<PartitionId, List<ByteBuffer>>> replicaBuffers =
+          new HashMap<String, Map<PartitionId, List<ByteBuffer>>>();
+
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      Map<PartitionId, List<MessageInfo>> messageInfoNode1 = new HashMap<PartitionId, List<MessageInfo>>();
+      Map<PartitionId, List<MessageInfo>> messageInfoNode2 = new HashMap<PartitionId, List<MessageInfo>>();
+      Map<PartitionId, List<ByteBuffer>> bufferListNode1 = new HashMap<PartitionId, List<ByteBuffer>>();
+      Map<PartitionId, List<ByteBuffer>> bufferListNode2 = new HashMap<PartitionId, List<ByteBuffer>>();
+
+      Map<PartitionId, BlobId> partitionIdToCorruptIdMap = new HashMap<PartitionId, BlobId>();
+
+      for (int i = 0; i < partitionIds.size(); i++) {
+        List<MessageInfo> messageInfoListLocalReplica = new ArrayList<MessageInfo>();
+        List<ByteBuffer> messageBufferListLocalReplica = new ArrayList<ByteBuffer>();
+
+        List<MessageInfo> messageInfoListRemoteReplica2 = new ArrayList<MessageInfo>();
+        List<ByteBuffer> messageBufferListRemoteReplica2 = new ArrayList<ByteBuffer>();
+
+        for (int j = 0; j < 10; j++) {
+          BlobId id = new BlobId(partitionIds.get(i));
+          ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
+          long streamSize = byteBuffer.limit();
+          messageInfoListLocalReplica.add(new MessageInfo(id, streamSize));
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListLocalReplica.add(byteBuffer);
+          messageBufferListRemoteReplica2.add(byteBuffer);
+        }
+
+        // add a corrupt message to replica 2
+        BlobId corruptId = new BlobId(partitionIds.get(i));
+        ByteBuffer corruptByteBuffer = constructTestBlobInMessageFormat(corruptId, 1000, random);
+        byte[] data = corruptByteBuffer.array();
+        new Random().nextBytes(data);
+        long corruptStreamSize = corruptByteBuffer.limit();
+        messageInfoListRemoteReplica2.add(new MessageInfo(corruptId, corruptStreamSize));
+        messageBufferListRemoteReplica2.add(corruptByteBuffer);
+        partitionIdToCorruptIdMap.put(partitionIds.get(i), corruptId);
+
+        // add additional messages to replica 2
+        for (int j = 10; j < 15; j++) {
+          BlobId id = new BlobId(partitionIds.get(i));
+          ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
+          long streamSize = byteBuffer.limit();
+          messageInfoListRemoteReplica2.add(new MessageInfo(id, streamSize));
+          messageBufferListRemoteReplica2.add(byteBuffer);
+        }
+
+        // add an expired message to replica 2
+        BlobId idExpired = new BlobId(partitionIds.get(i));
+        ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
+        long streamSize = byteBuffer.limit();
+        messageInfoListRemoteReplica2.add(new MessageInfo(idExpired, streamSize, 1));
+        messageBufferListRemoteReplica2.add(byteBuffer);
+
+        messageInfoNode1.put(partitionIds.get(i), messageInfoListLocalReplica);
+        bufferListNode1.put(partitionIds.get(i), messageBufferListLocalReplica);
+        messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
+        bufferListNode2.put(partitionIds.get(i), messageBufferListRemoteReplica2);
+      }
+      replicaStores.put("localhost" + 64423, messageInfoNode2);
+      replicaBuffers.put("localhost" + 64423, bufferListNode2);
+
+      List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
+      for (ReplicaId replicaId : replicaIds) {
+        for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
+          RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
+              new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
+                  bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
+              SystemTime.getInstance());
+          remoteReplicas.add(remoteReplicaInfo);
+        }
+      }
+
+      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+      DataNodeId dataNodeId = null;
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == 64423) {
+          dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+          List<RemoteReplicaInfo> remoteReplicaInfoList =
+              replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
+          if (remoteReplicaInfoList != null) {
+            remoteReplicaInfoList.add(remoteReplicaInfo);
+          } else {
+            remoteReplicaInfoList = new ArrayList<RemoteReplicaInfo>();
+            remoteReplicaInfoList.add(remoteReplicaInfo);
+            replicasToReplicate.put(remoteReplicaInfo.getReplicaId().getDataNodeId(), remoteReplicaInfoList);
+          }
+        }
+      }
+      ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
+
+      ReplicationMetrics replicationMetrics =
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+              replicaIds);
+      StoreKeyFactory storeKeyFactory = null;
+      try {
+        storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+      } catch (Exception e) {
+        System.out.println("Error creating StoreKeyFactory ");
+        throw new IOException("Error creating StoreKeyFactory " + e);
+      }
+
+      ReplicaThread replicaThread =
+          new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
+              true, clusterMap.getMetricRegistry());
+      List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 4);
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 8);
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        // one message is corrupt
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 2);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 11);
+      }
+
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
+      }
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        // one message is corrupt
+        Assert.assertTrue(response.get(i).missingStoreKeys.size() == 1);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 16);
+      }
+
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+          replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false, response);
+      for (int i = 0; i < response.size(); i++) {
+        replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
+      }
+
+      response = replicaThread.exchangeMetadata(
+          new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
+              replicaBuffers.get("localhost" + 64423), 4), replicasToReplicate.get(dataNodeId), false);
+      Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
+      for (int i = 0; i < response.size(); i++) {
+        Assert.assertTrue(response.get(i).missingStoreKeys.size() == 0);
+        Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 16);
+      }
+
+      //check replica1 store is the same as replica 2 store in messageinfo and byte buffers
+      for (Map.Entry<PartitionId, List<MessageInfo>> entry : messageInfoNode2.entrySet()) {
+        PartitionId partitionId = entry.getKey();
+        for (MessageInfo messageInfo : entry.getValue()) {
+          boolean found = false;
+          for (MessageInfo messageInfo1 : messageInfoNode1.get(entry.getKey())) {
+            if (messageInfo.getStoreKey().equals(messageInfo1.getStoreKey())) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            if(!messageInfo.isExpired() && !(messageInfo.getStoreKey().equals(partitionIdToCorruptIdMap.get(partitionId)))) {
+              Assert.assertFalse("Message is neither expired nor corrupt " + messageInfo, false);
+            }
+          }
+        }
+      }
+      for (Map.Entry<PartitionId, List<ByteBuffer>> entry : bufferListNode2.entrySet()) {
+        int totalFound = 0;
+        for (ByteBuffer buf : entry.getValue()) {
+          for (ByteBuffer bufActual : bufferListNode1.get(entry.getKey())) {
+            if (Arrays.equals(buf.array(), bufActual.array())) {
+              totalFound++;
+              break;
+            }
+          }
+        }
+        Assert.assertEquals(totalFound, entry.getValue().size() - 2);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
+  }
+
   private ByteBuffer constructTestBlobInMessageFormat(BlobId id, long blobSize, Random random)
       throws MessageFormatException, IOException {
       return constructEntireMessageForTestBlob(id, blobSize, random, "test");
