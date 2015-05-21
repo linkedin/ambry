@@ -132,9 +132,11 @@ public class ValidMessageDetectionInputStream extends InputStream {
   private boolean checkForMessageValidity(ByteArrayInputStream byteArrayInputStream, int currentOffset, long size,
       StoreKeyFactory storeKeyFactory)
       throws IOException {
-    StringBuilder strBuilder = new StringBuilder();
     boolean isValid = false;
     int startOffset = currentOffset;
+    BlobProperties props = null;
+    ByteBuffer metadata = null;
+    BlobOutput output = null;
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       int availableBeforeParsing = byteArrayInputStream.available();
@@ -148,43 +150,48 @@ public class ValidMessageDetectionInputStream extends InputStream {
         byteArrayInputStream.read(headerBuffer.array(), 2, headerBuffer.capacity() - 2);
         headerBuffer.position(headerBuffer.capacity());
         headerBuffer.flip();
-        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(headerBuffer);
-        strBuilder.append("Header - version ").append(header.getVersion());
-        strBuilder.append(" Message Size ").append(header.getMessageSize());
-        strBuilder.append(" Starting Offset of blob ").append(startOffset);
-        strBuilder.append(" BlobPropertiesRelativeOffset ").append(header.getBlobPropertiesRecordRelativeOffset());
-        strBuilder.append(" UserMetadataRelativeOffset ").append(header.getUserMetadataRecordRelativeOffset());
-        strBuilder.append(" DataRelativeOffset ").append(header.getBlobRecordRelativeOffset());
-        strBuilder.append(" DeleteRecordRelativeOffset ").append(header.getDeleteRecordRelativeOffset());
-        strBuilder.append(" Crc ").append(header.getCrc());
-
+        MessageFormatRecord.MessageHeader_Format_V1 header =
+            new MessageFormatRecord.MessageHeader_Format_V1(headerBuffer);
         StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
-        strBuilder.append("; Id - ").append(storeKey.getID());
+
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
-          strBuilder.append("; Blob properties - blobSize  ").append(props.getBlobSize()).append(" serviceId ")
-              .append(props.getServiceId());
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-          strBuilder.append("; Metadata - size ").append(metadata.capacity());
-          BlobOutput output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
-          strBuilder.append("; Blob - size ").append(output.getSize());
+          props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
+          metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
+          output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
         } else {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }
-        logger.trace(strBuilder.toString());
         if (byteArrayInputStream.available() != 0) {
           logger.error("Parsed message size " + (availableBeforeParsing + byteArrayInputStream.available())
               + " is not equivalent to the size in message info " + availableBeforeParsing);
           isValid = false;
         }
-        logger.trace("Message successfully read {} ", strBuilder);
+        if (logger.isTraceEnabled()) {
+          StringBuilder strBuilder = new StringBuilder();
+          strBuilder.append("Header - version ").append(header.getVersion());
+          strBuilder.append(" Message Size ").append(header.getMessageSize());
+          strBuilder.append(" Starting Offset of blob ").append(startOffset);
+          strBuilder.append(" BlobPropertiesRelativeOffset ").append(header.getBlobPropertiesRecordRelativeOffset());
+          strBuilder.append(" UserMetadataRelativeOffset ").append(header.getUserMetadataRecordRelativeOffset());
+          strBuilder.append(" DataRelativeOffset ").append(header.getBlobRecordRelativeOffset());
+          strBuilder.append(" DeleteRecordRelativeOffset ").append(header.getDeleteRecordRelativeOffset());
+          strBuilder.append(" Crc ").append(header.getCrc());
+          strBuilder.append("; Id - ").append(storeKey.getID());
+          strBuilder.append("; Blob properties - blobSize  ").append(props.getBlobSize()).append(" serviceId ")
+              .append(props.getServiceId());
+          strBuilder.append("; Metadata - size ").append(metadata.capacity());
+          strBuilder.append("; Blob - size ").append(output.getSize());
+          logger.trace("Message successfully read " + strBuilder.toString());
+        }
         isValid = true;
       } else {
-        throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("Header version not supported " + version,
+            MessageFormatErrorCodes.Data_Corrupt);
       }
     } catch (MessageFormatException e) {
-      logger.error("MessageFormat exception thrown for a blob starting at offset " + startOffset + " with exception: ", e);
+      logger.error("MessageFormat exception thrown for a blob starting at offset " + startOffset + " with exception: ",
+          e);
     } finally {
       messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
