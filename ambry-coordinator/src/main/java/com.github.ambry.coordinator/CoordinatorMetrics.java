@@ -31,6 +31,8 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
+  public final Counter blobAlreadyExistInLocalColoError;
+  public final Counter blobAlreadyExistInRemoteColoError;
 
   private final Counter putBlobError;
   private final Counter deleteBlobError;
@@ -45,8 +47,6 @@ public class CoordinatorMetrics {
   private final Counter invalidPutArgumentError;
   private final Counter insufficientCapacityError;
   private final Counter blobTooLargeError;
-  private final Counter blobAlreadyExistInLocalColoError;
-  private final Counter blobAlreadyExistInRemoteColoError;
   private final Counter blobDoesNotExistError;
   private final Counter blobDeletedError;
   private final Counter blobExpiredError;
@@ -145,14 +145,6 @@ public class CoordinatorMetrics {
       case UnexpectedInternalError:
         updateOperationMetric(operation);
         unexpectedInternalError.inc();
-        break;
-      case BlobAlreadyExistInLocalColo:
-        updateOperationMetric(operation);
-        blobAlreadyExistInLocalColoError.inc();
-        break;
-      case BlobAlreadyExistInRemoteColo:
-        updateOperationMetric(operation);
-        blobAlreadyExistInRemoteColoError.inc();
         break;
       case AmbryUnavailable:
         updateOperationMetric(operation);

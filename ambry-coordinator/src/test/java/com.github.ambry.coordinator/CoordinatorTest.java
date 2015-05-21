@@ -100,7 +100,7 @@ public class CoordinatorTest {
     putErrorMappings.put(ServerErrorCode.Partition_ReadOnly, CoordinatorError.UnexpectedInternalError);
     putErrorMappings.put(ServerErrorCode.Partition_Unknown, CoordinatorError.UnexpectedInternalError);
     putErrorMappings.put(ServerErrorCode.Disk_Unavailable, CoordinatorError.AmbryUnavailable);
-    putErrorMappings.put(ServerErrorCode.Blob_Already_Exists, CoordinatorError.BlobAlreadyExistInLocalColo);
+    putErrorMappings.put(ServerErrorCode.Blob_Already_Exists, CoordinatorError.UnexpectedInternalError);
     //unknown
     putErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
   }
