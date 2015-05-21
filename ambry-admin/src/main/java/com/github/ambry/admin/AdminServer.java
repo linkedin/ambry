@@ -1,6 +1,7 @@
 package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
@@ -16,50 +17,46 @@ import org.slf4j.LoggerFactory;
 public class AdminServer {
   private final VerifiableProperties verifiableProperties;
   private final MetricRegistry metricRegistry;
+  private final ClusterMap clusterMap;
 
   private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
-
   private final AdminRequestDelegator requestDelegator;
+  private final RestServer restServer;
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private RestServer restServer;
-  private boolean up = false;
 
-  public boolean isUp() {
-    return up;
-  }
-
-  public AdminServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public AdminServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+      throws Exception {
     this.verifiableProperties = verifiableProperties;
     this.metricRegistry = metricRegistry;
+    this.clusterMap = clusterMap;
 
-    adminConfig = new AdminConfig(verifiableProperties);
-    adminMetrics = new AdminMetrics(metricRegistry);
-    requestDelegator = new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics);
+    if(serverReadyForStart()) {
+      adminConfig = new AdminConfig(verifiableProperties);
+      adminMetrics = new AdminMetrics(metricRegistry);
+      requestDelegator = new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics);
+      restServer = RestServerFactory.getRestServer(verifiableProperties, metricRegistry, requestDelegator);
+    } else {
+      String msg = "Did not receive all required components for starting admin server";
+      logger.error(msg);
+      throw new Exception(msg);
+    }
   }
 
   public void start()
       throws InstantiationException {
-    if (isReadyToStart()) {
-      try {
-        logger.info("Starting server");
+    try {
+      logger.info("Starting server");
 
-        requestDelegator.start();
-        restServer = RestServerFactory.getRestServer(verifiableProperties, metricRegistry, requestDelegator);
-        restServer.start();
-        up = true;
+      requestDelegator.start();
+      restServer.start();
 
-        logger.info("Admin server started");
-      } catch (Exception e) {
-        logger.error("Error during start ", e);
-        throw new InstantiationException("Error during start " + e);
-      }
-    } else {
-      String msg = "Did not receive all required components for starting admin server";
-      logger.error(msg);
-      throw new InstantiationException(msg);
+      logger.info("Admin server started");
+    } catch (Exception e) {
+      logger.error("Error during start ", e);
+      throw new InstantiationException("Error during start " + e);
     }
   }
 
@@ -68,7 +65,6 @@ public class AdminServer {
     try {
       restServer.shutdown();
       requestDelegator.shutdown();
-      up = false;
       logger.info("Admin server shutdown complete");
     } catch (Exception e) {
       logger.error("Exception while shutting down AdminServer - " + e);
@@ -82,7 +78,9 @@ public class AdminServer {
     shutdownLatch.await();
   }
 
-  private boolean isReadyToStart() {
-    return verifiableProperties != null && metricRegistry != null;
+  private boolean serverReadyForStart() {
+    return verifiableProperties != null
+        && metricRegistry != null
+        && clusterMap != null;
   }
 }
