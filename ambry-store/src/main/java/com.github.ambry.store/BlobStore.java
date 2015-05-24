@@ -110,7 +110,7 @@ public class BlobStore implements Store {
       for (StoreKey key : ids) {
         BlobReadOptions readInfo = index.getBlobReadInfo(key, storeGetOptions);
         readOptions.add(readInfo);
-        indexMessages.put(key, new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
+        indexMessages.put(key, readInfo.getMessageInfo());
       }
 
       MessageReadSet readSet = log.getView(readOptions);

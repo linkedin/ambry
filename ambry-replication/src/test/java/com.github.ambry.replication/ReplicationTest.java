@@ -103,6 +103,11 @@ public class ReplicationTest {
     public StoreKey getKeyAt(int index) {
       return storeKeys.get(index);
     }
+
+    @Override
+    public long getReadableSize(int index, long relativeOffset, long maxSize) {
+      return Math.min(bytebuffers.get(0).remaining() - relativeOffset, maxSize);
+    }
   }
 
   class MockStore implements Store {

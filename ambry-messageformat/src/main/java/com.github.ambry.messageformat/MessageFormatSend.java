@@ -82,6 +82,8 @@ public class MessageFormatSend implements Send {
           // just copy over the total size and use relative offset to be 0
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
+          // Note: This will throw an exception if the readSet contains deleted objects. For deleted objects,
+          // MessageFormatFlags.All is unsupported as of now.
           infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
           totalSizeToWrite += readSet.sizeInBytes(i);
         } else {
@@ -217,7 +219,8 @@ class MessageReadSetIndexInputStream extends InputStream {
   @Override
   public int read()
       throws IOException {
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
+    long sizeToRead = messageReadSet.getReadableSize(indexToRead, currentOffset, 1);
+    if (sizeToRead <= 0) {
       throw new IOException("Reached end of stream of message read set");
     }
     ByteBuffer buf = ByteBuffer.allocate(1);
@@ -234,14 +237,12 @@ class MessageReadSetIndexInputStream extends InputStream {
   @Override
   public int read(byte b[], int off, int len)
       throws IOException {
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
+    long sizeToRead = messageReadSet.getReadableSize(indexToRead, currentOffset, len);
+    if (sizeToRead <= 0) {
       throw new IOException("Reached end of stream of message read set");
     }
     ByteBuffer buf = ByteBuffer.wrap(b);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
-    long sizeInBlobReadOptions = messageReadSet.sizeInBytes(indexToRead);
-    long sizeToRead = sizeInBlobReadOptions == -1 ? buf.remaining()
-        : Math.min(buf.remaining(), sizeInBlobReadOptions - currentOffset);
     long bytesWritten =
         messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, sizeToRead);
     currentOffset += bytesWritten;

@@ -369,10 +369,25 @@ public class BlobStoreTest {
 
       readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 5);
-      Assert.assertEquals(readSet.sizeInBytes(0), -1); // deleted
+      try {
+        readSet.sizeInBytes(0); // deleted
+        Assert.assertEquals(false, true);
+      } catch (IllegalStateException e) {
+        Assert.assertEquals(true, true);
+      }
       Assert.assertEquals(readSet.sizeInBytes(1), 1000);
-      Assert.assertEquals(readSet.sizeInBytes(2), -1); // deleted
-      Assert.assertEquals(readSet.sizeInBytes(3), -1); // deleted
+      try {
+        readSet.sizeInBytes(2); // deleted
+        Assert.assertEquals(false, true);
+      } catch (IllegalStateException e) {
+        Assert.assertEquals(true, true);
+      }
+      try {
+        readSet.sizeInBytes(3); // deleted
+        Assert.assertEquals(false, true);
+      } catch (IllegalStateException e) {
+        Assert.assertEquals(true, true);
+      }
       Assert.assertEquals(readSet.sizeInBytes(4), 1000);
 
       output = new byte[1000];
@@ -396,9 +411,6 @@ public class BlobStoreTest {
       for (int i = 4000; i < 5000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 4000]);
       }
-
-      // Now hard delete the entries
-
     } catch (Exception e) {
       Assert.assertEquals(false, true);
     } finally {

@@ -455,7 +455,8 @@ public class PersistentIndex {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       if (getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
-        return new BlobReadOptions(value.getOriginalMessageOffset(), -1, -1, id);
+        // The delete entry in the index does not contain the information about the size of the original blob.
+        return new DeletedBlobReadOptions(value.getOriginalMessageOffset(), id);
       } else {
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       }
@@ -1175,11 +1176,9 @@ public class PersistentIndex {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
-        Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(messageInfoList.size());
         for (MessageInfo info : messageInfoList) {
           BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
           readOptions.add(readInfo);
-          indexMessages.put(info.getStoreKey(), info);
         }
 
         StoreMessageReadSet readSet = log.getView(readOptions);
