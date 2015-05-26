@@ -33,7 +33,6 @@ public class MessageFormatSend implements Send {
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private MessageFormatMetrics metrics;
 
   private class SendInfo {
     private long relativeOffset;
@@ -58,7 +57,6 @@ public class MessageFormatSend implements Send {
       throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
-    this.metrics = metrics;
     this.storeKeyFactory = storeKeyFactory;
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
