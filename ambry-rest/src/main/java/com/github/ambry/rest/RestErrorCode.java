@@ -1,50 +1,40 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.storageservice.BlobStorageServiceErrorCode;
+
+
 /**
  * All the error codes that accompany a RestException
  */
 public enum RestErrorCode {
   BadRequest,
   DuplicateRequest,
-  MalformedRequest,
   NoRequest,
-  UnknownAction,
+  UnknownOperationType,
   UnknownHttpMethod,
   InternalServerError,
   ChannelActiveTasksFailure,
   HandlerSelectionError,
   HttpObjectConversionFailure,
+  MessageHandleFailure,
   NoMessageHandlers,
-  RequestHandleFailure,
+  RequestProcessingFailure,
+  ResponseBuildingFailure,
   ReponseHandlerMissing,
   RestObjectMissing,
-  RestRequestMissing,
-  UnknownHttpObject,
-  UnknownObject;
+  RestRequestMissing;
 
   /**
-   * Provides a http equivalent error group a given code belongs to
+   * Provides a RestErrorCode given BlobStorageServiceErrorCode
    * @param code
-   * @return the http equivalent error group this code belongs to
+   * @return the RestErrorCode that this BlobStorageServiceErrorCode maps to
    */
-  public static RestErrorCode getErrorGroup(RestErrorCode code) {
+  public static RestErrorCode getRestErrorCode(BlobStorageServiceErrorCode code) {
     switch (code) {
-      case DuplicateRequest:
-      case MalformedRequest:
-      case NoRequest:
-      case UnknownAction:
-      case UnknownHttpMethod:
+      case BadRequest:
+      case UnknownOperationType:
         return BadRequest;
-      case ChannelActiveTasksFailure:
-      case HandlerSelectionError:
-      case HttpObjectConversionFailure:
-      case NoMessageHandlers:
-      case RequestHandleFailure:
-      case ReponseHandlerMissing:
-      case RestObjectMissing:
-      case RestRequestMissing:
-      case UnknownHttpObject:
-      case UnknownObject:
+      case InternalError:
       default:
         return InternalServerError;
     }

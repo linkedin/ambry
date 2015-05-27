@@ -14,10 +14,10 @@ public interface RestRequestDelegator {
   /**
    * Returns a RestMessageHandler that can be used to handle incoming messages
    * @return
-   * @throws Exception
+   * @throws RestException
    */
   public RestMessageHandler getMessageHandler()
-      throws Exception;
+      throws RestException;
 
   /**
    * Does shutdown tasks for the delegator

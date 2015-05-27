@@ -8,51 +8,50 @@ public interface RestResponseHandler {
    * Add to body of the rest data we are returning and write to the channel
    * @param data
    * @param isLast isLastChunk
-   * @throws Exception
+   * @throws RestException
    */
   public void addToBody(byte[] data, boolean isLast)
-      throws Exception;
+      throws RestException;
 
   /**
    * Add to body of the rest data we are returning and flush the write to the channel
    * @param data
    * @param isLast isLastChunk
-   * @throws Exception
+   * @throws RestException
    */
   public void addToBodyAndFlush(byte[] data, boolean isLast)
-      throws Exception;
+      throws RestException;
 
   /**
    * Write the response to the channel
-   * @throws Exception
+   * @throws RestException
    */
   public void finalizeResponse()
-      throws Exception;
+      throws RestException;
 
   /**
    * Write the response to the channel and flush
-   * @throws Exception
+   * @throws RestException
    */
   public void finalizeResponseAndFlush()
-      throws Exception;
+      throws RestException;
 
   /**
    * Flush all data in the channel
-   * @throws Exception
+   * @throws RestException
    */
   public void flush()
-      throws Exception;
+      throws RestException;
 
   /**
    * Close the channel
-   * @throws Exception
+   * @throws RestException
    */
   public void close()
-      throws Exception;
+      throws RestException;
 
   /**
    * Called by the RestMessageHandler when it detects/catches an error
-   * @throws Exception
    */
   public void onError(Throwable cause);
 
@@ -76,8 +75,8 @@ public interface RestResponseHandler {
   /**
    * set the content type of the response
    * @param type
-   * @throws Exception
+   * @throws RestException
    */
   public void setContentType(String type)
-      throws Exception;
+      throws RestException;
 }

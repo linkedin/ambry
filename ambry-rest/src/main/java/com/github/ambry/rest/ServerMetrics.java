@@ -10,8 +10,6 @@ import org.slf4j.LoggerFactory;
  * Handles common metrics required by all implementations of servers
  */
 public abstract class ServerMetrics {
-  protected final MetricRegistry metricRegistry;
-
   // RestMessageHandler
   // errors
   public final Counter handlerQueueOfferTookTooLongErrorCount;
@@ -21,14 +19,11 @@ public abstract class ServerMetrics {
   public final Counter handlerResponseHandlerMissingErrorCount;
   public final Counter handlerRestObjectMissingErrorCount;
   public final Counter handlerRestRequestMissingErrorCount;
-  public final Counter handlerUnknownErrorCount;
   public final Counter handlerUnknownHttpMethodErrorCount;
 
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   protected ServerMetrics(MetricRegistry metricRegistry) {
-    this.metricRegistry = metricRegistry;
-
     handlerQueueOfferTookTooLongErrorCount =
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "offerTookTooLongErrorCount"));
     handlerQueueOfferInterruptedErrorCount =
@@ -43,8 +38,6 @@ public abstract class ServerMetrics {
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "restObjectMissingErrorCount"));
     handlerRestRequestMissingErrorCount =
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "restRequestMissingErrorCount"));
-    handlerUnknownErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "unknownErrorCount"));
     handlerUnknownHttpMethodErrorCount =
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "unknownHttpMethodErrorCount"));
   }

@@ -19,6 +19,4 @@ public interface RestServer {
 
   public void shutdown()
       throws Exception;
-
-  public boolean isUp();
 }

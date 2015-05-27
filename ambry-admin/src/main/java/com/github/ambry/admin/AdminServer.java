@@ -21,6 +21,7 @@ public class AdminServer {
 
   private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
+  private final AdminBlobStorageService adminBlobStorageService;
   private final AdminRequestDelegator requestDelegator;
   private final RestServer restServer;
 
@@ -33,15 +34,15 @@ public class AdminServer {
     this.metricRegistry = metricRegistry;
     this.clusterMap = clusterMap;
 
-    if(serverReadyForStart()) {
+    if (serverReadyForStart()) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(metricRegistry);
-      requestDelegator = new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics);
+      adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+      requestDelegator =
+          new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics, adminBlobStorageService);
       restServer = RestServerFactory.getRestServer(verifiableProperties, metricRegistry, requestDelegator);
     } else {
-      String msg = "Did not receive all required components for starting admin server";
-      logger.error(msg);
-      throw new Exception(msg);
+      throw new Exception("Did not receive all required components for starting admin server");
     }
   }
 
@@ -79,8 +80,6 @@ public class AdminServer {
   }
 
   private boolean serverReadyForStart() {
-    return verifiableProperties != null
-        && metricRegistry != null
-        && clusterMap != null;
+    return verifiableProperties != null && metricRegistry != null && clusterMap != null;
   }
 }

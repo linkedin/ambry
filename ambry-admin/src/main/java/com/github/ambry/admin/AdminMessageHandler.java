@@ -6,6 +6,9 @@ import com.github.ambry.rest.RestException;
 import com.github.ambry.rest.RestMessageHandler;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.storageservice.BlobStorageServiceException;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 
 /**
@@ -15,14 +18,23 @@ import com.github.ambry.rest.RestResponseHandler;
  */
 public class AdminMessageHandler extends RestMessageHandler {
   private final AdminMetrics adminMetrics;
+  private final AdminBlobStorageService adminBlobStorageService;
 
-  public AdminMessageHandler(AdminMetrics adminMetrics) {
+  public AdminMessageHandler(AdminMetrics adminMetrics, AdminBlobStorageService adminBlobStorageService) {
     super(adminMetrics);
     this.adminMetrics = adminMetrics;
+    this.adminBlobStorageService = adminBlobStorageService;
   }
 
   public void onRequestComplete(RestRequest request) {
-    request.release();
+    /**
+     * NOTE: This is where any cleanup code has to go. This is (has to be) called regardless of
+     * the request being concluded successfully or unsuccessfully (i.e. connection interruption).
+     * Any state that is maintained per request has to be destroyed here.
+     */
+    if (request != null) {
+      request.release();
+    }
   }
 
   public void onError(MessageInfo messageInfo, Exception e) {
@@ -40,49 +52,112 @@ public class AdminMessageHandler extends RestMessageHandler {
   }
 
   protected void handleGet(MessageInfo messageInfo)
-      throws Exception {
+      throws RestException {
     RestRequest request = messageInfo.getRestRequest();
     logger.trace("Handling get request - " + request.getUri());
-    if (request.getValuesOfParameterInURI("action") != null) {
-      String action = request.getValuesOfParameterInURI("action").get(0);
-      if (action.startsWith("echo")) {
-        handleEcho(messageInfo);
-      } else {
-        adminMetrics.unknownActionErrorCount.inc();
-        throw new RestException("Unrecognized action to perform " + action, RestErrorCode.UnknownAction);
-      }
+    if (!isSpecialOperation(request)) {
+      // TODO: this is a traditional get
+    } else {
+      handleSpecialGetOperation(messageInfo);
     }
   }
 
   protected void handlePost(MessageInfo messageInfo)
-      throws Exception {
+      throws RestException {
     logger.trace("Handling post");
   }
 
   protected void handleDelete(MessageInfo messageInfo)
-      throws Exception {
+      throws RestException {
     logger.trace("Handling delete");
   }
 
   protected void handleHead(MessageInfo messageInfo)
-      throws Exception {
+      throws RestException {
     logger.trace("Handling head");
   }
 
-  private void handleEcho(MessageInfo messageInfo)
-      throws Exception {
-    logger.trace("Handling echo");
-    RestResponseHandler responseHandler = messageInfo.getResponseHandler();
-    if (messageInfo.getRestObject() instanceof RestRequest
-        && messageInfo.getRestRequest().getValuesOfParameterInURI("text") != null) {
-      String in = messageInfo.getRestRequest().getValuesOfParameterInURI("text").get(0);
-      logger.trace("Client says: " + in);
-      responseHandler.setContentType("text/plain");
-      responseHandler.finalizeResponse();
-      responseHandler.addToBodyAndFlush(in.getBytes(), true);
-    } else {
-      responseHandler.close();
+  private boolean isSpecialOperation(RestRequest request) {
+    return request.getPathPart(0) == null || request.getPathPart(0).isEmpty();
+  }
+
+  private void handleSpecialGetOperation(MessageInfo messageInfo)
+      throws RestException {
+    AdminExecutionData executionData = extractExecutionData(messageInfo.getRestRequest());
+    AdminOperationType operationType = AdminOperationType.convert(executionData.getOperationType());
+    switch (operationType) {
+      case Echo:
+        handleEcho(messageInfo, executionData);
+        break;
+      case GetReplicasForBlobId:
+        handleGetReplicasForBlobId(messageInfo, executionData);
+        break;
+      default:
+        throw new RestException("Unknown operation type - " + executionData.getOperationType(),
+            RestErrorCode.UnknownOperationType);
     }
-    messageInfo.releaseRestObject();
+  }
+
+  private AdminExecutionData extractExecutionData(RestRequest request)
+      throws RestException {
+    try {
+      JSONObject data = new JSONObject(request.getValueOfHeader(EXECUTION_DATA_HEADER_KEY).toString());
+      return new AdminExecutionData(data);
+    } catch (JSONException e) {
+      throw new RestException(EXECUTION_DATA_HEADER_KEY + " header missing or not valid JSON - " + e,
+          RestErrorCode.BadRequest);
+    } catch (IllegalArgumentException e) {
+      throw new RestException(EXECUTION_DATA_HEADER_KEY + " header does not contain required data - " + e,
+          RestErrorCode.BadRequest);
+    }
+  }
+
+  private void handleEcho(MessageInfo messageInfo, AdminExecutionData executionData)
+      throws RestException {
+    logger.trace("Handling echo");
+    try {
+      RestResponseHandler responseHandler = messageInfo.getResponseHandler();
+      if (messageInfo.getRestObject() instanceof RestRequest) {
+        String echoStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
+        if(echoStr != null) {
+          responseHandler.setContentType("text/plain");
+          responseHandler.finalizeResponse();
+          responseHandler.addToBodyAndFlush(echoStr.getBytes(), true);
+        } else {
+          throw new RestException("Did not get a result for the echo operation", RestErrorCode.ResponseBuildingFailure);
+        }
+      } else {
+        responseHandler.close();
+      }
+    } catch (BlobStorageServiceException e) {
+      throw new RestException(e, RestErrorCode.getRestErrorCode(e.getErrorCode()));
+    } finally {
+      messageInfo.releaseRestObject();
+    }
+  }
+
+  private void handleGetReplicasForBlobId(MessageInfo messageInfo, AdminExecutionData executionData)
+      throws RestException {
+    logger.trace("Handling getReplicas");
+    try {
+      RestResponseHandler responseHandler = messageInfo.getResponseHandler();
+      if (messageInfo.getRestObject() instanceof RestRequest) {
+        String replicaStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
+        if(replicaStr != null) {
+          responseHandler.setContentType("application/json");
+          responseHandler.finalizeResponse();
+          responseHandler.addToBodyAndFlush(replicaStr.getBytes(), true);
+        } else {
+          throw new RestException("Did not get a result for the GetReplicasForBlobId operation",
+              RestErrorCode.ResponseBuildingFailure);
+        }
+      } else {
+        responseHandler.close();
+      }
+    } catch (BlobStorageServiceException e) {
+      throw new RestException(e, RestErrorCode.getRestErrorCode(e.getErrorCode()));
+    } finally {
+      messageInfo.releaseRestObject();
+    }
   }
 }

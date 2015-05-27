@@ -7,8 +7,7 @@ import com.codahale.metrics.MetricRegistry;
 /**
  * Netty specific metrics
  */
-public class NettyMetrics extends ServerMetrics {
-
+public class NettyMetrics {
   //errors
   public final Counter badRequestErrorCount;
   public final Counter channelActiveTasksFailureCount;
@@ -22,15 +21,12 @@ public class NettyMetrics extends ServerMetrics {
   public final Counter noRequestErrorCount;
   public final Counter unknownExceptionCount;
   public final Counter unknownHttpObjectErrorCount;
-  public final Counter unknownObjectErrorCount;
   public final Counter unknownRestExceptionCount;
 
   public final Counter channelOperationAfterCloseErrorCount;
   public final Counter deadResponseAccess;
 
   public NettyMetrics(MetricRegistry metricRegistry) {
-    super(metricRegistry);
-
     //errors
     badRequestErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "badRequestErrorCount"));
@@ -55,8 +51,7 @@ public class NettyMetrics extends ServerMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownExceptionCount"));
     unknownHttpObjectErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownHttpObjectErrorCount"));
-    unknownObjectErrorCount =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownObjectErrorCount"));
+
     unknownRestExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownRestExceptionCount"));
 

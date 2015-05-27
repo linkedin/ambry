@@ -14,6 +14,7 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,12 +31,6 @@ public class NettyServer implements RestServer {
 
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
-
-  private boolean up = false;
-
-  public boolean isUp() {
-    return up;
-  }
 
   public NettyServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestDelegator requestDelegator)
@@ -64,13 +59,13 @@ public class NettyServer implements RestServer {
             public void initChannel(SocketChannel ch)
                 throws Exception {
               ch.pipeline().addLast("codec", new HttpServerCodec()).addLast("chunker", new ChunkedWriteHandler())
+                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, serverConfig.getIdleTimeSeconds()))
                   .addLast("processor", new NettyMessageProcessor(requestDelegator, nettyMetrics));
             }
           });
 
       ChannelFuture f = b.bind(serverConfig.getPort()).sync();
       logger.info("Netty server started on port " + serverConfig.getPort());
-      up = true;
 
       f.channel().closeFuture().sync();
     } catch (Exception e) {
@@ -87,7 +82,6 @@ public class NettyServer implements RestServer {
     logger.info("Shutting down netty server..");
     workerGroup.shutdownGracefully();
     bossGroup.shutdownGracefully();
-    up = false;
     logger.info("Netty server shutdown complete..");
   }
 }

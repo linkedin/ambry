@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 public class AdminRequestDelegator implements RestRequestDelegator {
 
   private final AdminMetrics adminMetrics;
+  private final AdminBlobStorageService adminBlobStorageService;
   private final ExecutorService executor;
   private final int handlerCount;
   private final List<AdminMessageHandler> adminMessageHandlers;
@@ -33,24 +35,28 @@ public class AdminRequestDelegator implements RestRequestDelegator {
   private int currIndex = 0;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public AdminRequestDelegator(int handlerCount, AdminMetrics adminMetrics) {
+  public AdminRequestDelegator(int handlerCount, AdminMetrics adminMetrics,
+      AdminBlobStorageService adminBlobStorageService) {
     this.handlerCount = handlerCount;
     this.adminMetrics = adminMetrics;
+    this.adminBlobStorageService = adminBlobStorageService;
     adminMessageHandlers = new ArrayList<AdminMessageHandler>(handlerCount);
     executor = Executors.newFixedThreadPool(handlerCount);
   }
 
   public void start()
       throws Exception {
+    logger.info("Admin request delegator starting");
     for (int i = 0; i < handlerCount; i++) {
-      AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics);
+      AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics, adminBlobStorageService);
       executor.execute(messageHandler);
       adminMessageHandlers.add(messageHandler);
     }
+    logger.info("Admin request delegator started");
   }
 
   public RestMessageHandler getMessageHandler()
-      throws Exception {
+      throws RestException {
     if (adminMessageHandlers.size() == 0) {
       adminMetrics.noMessageHandlersErrorCount.inc();
       throw new RestException("No message handlers available", RestErrorCode.NoMessageHandlers);
@@ -74,9 +80,15 @@ public class AdminRequestDelegator implements RestRequestDelegator {
 
   public void shutdown()
       throws Exception {
+    logger.info("Shutting down admin request delegator");
     for (int i = 0; i < adminMessageHandlers.size(); i++) {
       adminMessageHandlers.get(i).shutdownGracefully();
     }
     executor.shutdown();
+    if (executor.awaitTermination(5, TimeUnit.MINUTES)) {
+      logger.info("Admin request delegator shutdown complete");
+    } else {
+      throw new Exception("Admin request delegator executor service took too long to shutdown");
+    }
   }
 }

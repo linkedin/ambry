@@ -13,7 +13,9 @@ import org.slf4j.LoggerFactory;
  * and process messages that have been put on their queue.
  */
 public abstract class RestMessageHandler implements Runnable {
-  private final long offerTimeout = 30;
+  public static String EXECUTION_DATA_HEADER_KEY = "executionData";
+
+  private final long offerTimeout = 30; //seconds
   private final LinkedBlockingQueue<MessageInfo> messageInfoQueue = new LinkedBlockingQueue<MessageInfo>();
   private final ServerMetrics serverMetrics;
 
@@ -21,10 +23,6 @@ public abstract class RestMessageHandler implements Runnable {
 
   protected RestMessageHandler(ServerMetrics serverMetrics) {
     this.serverMetrics = serverMetrics;
-  }
-
-  public void handleMessage(MessageInfo messageInfo) {
-    queue(messageInfo);
   }
 
   public void run() {
@@ -39,21 +37,28 @@ public abstract class RestMessageHandler implements Runnable {
       } catch (InterruptedException ie) {
         serverMetrics.handlerQueueTakeInterruptedErrorCount.inc();
         logger.error("Wait for data in messageInfoQueue was interrupted - " + ie);
+      } catch (RestException e) {
+        serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
+        logger.error("RestException while trying to process element in messageInfoQueue - " + e);
+        onError(messageInfo, e);
       } catch (Exception e) {
         serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
-        logger.error("Error while trying to process element in messageInfoQueue - " + e);
-        onError(messageInfo, e);
+        logger.error("Exception while trying to process element in messageInfoQueue - " + e);
+        onError(messageInfo, new RestException(e, RestErrorCode.RequestProcessingFailure));
       }
     }
   }
 
-  public void shutdownGracefully()
-      throws Exception {
+  public void shutdownGracefully() {
     queue(new PoisonInfo());
   }
 
+  public void handleMessage(MessageInfo messageInfo) {
+    queue(messageInfo);
+  }
+
   private void processMessage(MessageInfo messageInfo)
-      throws Exception {
+      throws RestException {
     verifyMessageInfo(messageInfo);
     RestMethod restMethod = messageInfo.getRestRequest().getRestMethod();
     if (restMethod == RestMethod.GET) {
@@ -103,16 +108,16 @@ public abstract class RestMessageHandler implements Runnable {
   }
 
   protected abstract void handleGet(MessageInfo messageInfo)
-      throws Exception;
+      throws RestException;
 
   protected abstract void handlePost(MessageInfo messageInfo)
-      throws Exception;
+      throws RestException;
 
   protected abstract void handleDelete(MessageInfo messageInfo)
-      throws Exception;
+      throws RestException;
 
   protected abstract void handleHead(MessageInfo messageInfo)
-      throws Exception;
+      throws RestException;
 
   /**
    * Called by processMessage when it detects/catches an error
@@ -123,6 +128,8 @@ public abstract class RestMessageHandler implements Runnable {
 
   /**
    * Called by the RestServer after the request is complete and the connection is inactive.
+   * This is (has to be) called regardless of the request being concluded successfully or
+   * unsuccessfully (i.e. connection interruption).
    * @param request
    * @throws Exception
    */

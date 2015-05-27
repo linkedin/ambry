@@ -11,6 +11,8 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,9 +57,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     try {
       messageHandler.handleMessage(new MessageInfo(request, obj, responseHandler));
     } catch (Exception e) {
-      logger.error("Processing error for request - " + request.getUri());
+      logger.error("Message handling error for request - " + request.getUri() + " - " + e);
       nettyMetrics.handleRequestFailureCount.inc();
-      throw new RestException("Request processing error", RestErrorCode.RequestHandleFailure);
+      throw new RestException("Message handling error - " + e, RestErrorCode.MessageHandleFailure);
     }
   }
 
@@ -102,7 +104,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
     try {
-      if(responseHandler != null) {
+      if (responseHandler != null) {
         responseHandler.onError(cause);
       } else {
         //TODO: metric
@@ -110,7 +112,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
             + HttpResponseStatus.INTERNAL_SERVER_ERROR);
         sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
       }
-    } catch(Exception e) {
+    } catch (Exception e) {
       //TODO: metric
       logger.error("Caught exception while trying to handle an error - " + e);
       sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
@@ -118,23 +120,43 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   }
 
   @Override
+  public void userEventTriggered(ChannelHandlerContext ctx, Object evt)
+      throws Exception {
+    /**
+     * NOTE: This is specifically in place to handle connections that close unexpectedly.
+     * Even in that situation, any cleanup code that we have in the handlers will be called
+     * (when channelInactive is called as a result of the close). This ensures that multiple
+     * chunk requests that a handler may be tracking is cleaned up properly. We need this
+     * especially because request handlers handle multiple requests at the same time and
+     * are bound to have some sort of state for each connection.
+     */
+
+    if (evt instanceof IdleStateEvent) {
+      IdleStateEvent e = (IdleStateEvent) evt;
+      if (e.state() == IdleState.ALL_IDLE) {
+        logger.error("Connection timed out. Closing channel");
+        ctx.close();
+      } else {
+        logger.error("Unrecognized idle state event - " + e.state());
+      }
+    } else {
+      logger.error("Unrecognized user event - " + evt);
+    }
+  }
+
+  @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
       throws RestException {
     logger.trace("Reading on channel " + ctx.channel() + " from " + ctx.channel().remoteAddress());
-    if (obj instanceof HttpObject) {
+    if (obj != null) {
       if (vetRequest(obj)) {
         RestObject convertedObj = convertObjToGeneric(obj);
         handleMessage(convertedObj);
       } else {
         logger.error("Malformed request received - " + obj);
         nettyMetrics.malformedRequestErrorCount.inc();
-        throw new RestException("Malformed request received - " + obj, RestErrorCode.MalformedRequest);
+        throw new RestException("Malformed request received - " + obj, RestErrorCode.BadRequest);
       }
-    } else {
-      logger.error("requestData received at " + NettyMessageProcessor.class.getSimpleName() + " is not an instance of "
-          + HttpObject.class.getSimpleName());
-      nettyMetrics.unknownObjectErrorCount.inc();
-      throw new RestException("Malformed object received", RestErrorCode.UnknownObject);
     }
   }
 
@@ -158,7 +180,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         return new NettyContent((HttpContent) obj);
       } else {
         nettyMetrics.unknownHttpObjectErrorCount.inc();
-        throw new RestException("HttpObject received is not of a known type", RestErrorCode.UnknownHttpObject);
+        throw new Exception("HttpObject received is not of a known type");
       }
     } catch (Exception e) {
       throw new RestException("Http object conversion failed with reason - " + e,

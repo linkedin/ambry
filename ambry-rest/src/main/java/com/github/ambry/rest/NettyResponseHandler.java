@@ -43,24 +43,20 @@ public class NettyResponseHandler implements RestResponseHandler {
   }
 
   // header helpers
-  public void setContentType(String type)
-      throws Exception {
+  public void setContentType(String type) {
     verifyResponseAlive();
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, type);
   }
 
-  public void finalizeResponse()
-      throws Exception {
+  public void finalizeResponse() {
     finalizeResponse(false);
   }
 
-  public void finalizeResponseAndFlush()
-      throws Exception {
+  public void finalizeResponseAndFlush() {
     finalizeResponse(true);
   }
 
-  private void finalizeResponse(boolean flush)
-      throws Exception {
+  private void finalizeResponse(boolean flush) {
     // no locking needed (for responseFinalized) here since exactly one message handler thread has a
     // reference to this response handler.
     verifyChannelOpen();
@@ -74,18 +70,15 @@ public class NettyResponseHandler implements RestResponseHandler {
     responseFinalized = true;
   }
 
-  public void addToBody(byte[] data, boolean isLast)
-      throws Exception {
+  public void addToBody(byte[] data, boolean isLast) {
     addToBody(data, isLast, false);
   }
 
-  public void addToBodyAndFlush(byte[] data, boolean isLast)
-      throws Exception {
+  public void addToBodyAndFlush(byte[] data, boolean isLast) {
     addToBody(data, isLast, true);
   }
 
-  private void addToBody(byte[] data, boolean isLast, boolean flush)
-      throws Exception {
+  private void addToBody(byte[] data, boolean isLast, boolean flush) {
     verifyChannelOpen();
     /*
      TODO: When we return data via gets, we need to be careful not to modify data while ctx.write() is in flight.
@@ -107,14 +100,12 @@ public class NettyResponseHandler implements RestResponseHandler {
     }
   }
 
-  public void flush()
-      throws Exception {
+  public void flush() {
     verifyChannelOpen();
     ctx.flush();
   }
 
-  public void close()
-      throws Exception {
+  public void close() {
     verifyChannelOpen();
     // no locking needed here (for channelClosed) since exactly one message handler thread has a
     // reference to this response handler.
@@ -132,35 +123,60 @@ public class NettyResponseHandler implements RestResponseHandler {
     }
   }
 
-  public void buildAndSendError(Throwable cause) {
+  public void onRequestComplete()
+      throws Exception {
+    //nothing to do for now
+  }
+
+  private void buildAndSendError(Throwable cause) {
     nettyMetrics.errorStateCount.inc();
     HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
     String msg = "";
     if (cause instanceof RestException) {
-      RestErrorCode errorCodeGroup = RestErrorCode.getErrorGroup(((RestException) cause).getErrorCode());
-      switch (errorCodeGroup) {
-        case BadRequest:
-          status = HttpResponseStatus.BAD_REQUEST;
-          msg = cause.getMessage();
-          nettyMetrics.badRequestErrorCount.inc();
-          break;
-        case InternalServerError:
-          nettyMetrics.internalServerErrorCount.inc();
-          break;
-        default:
-          nettyMetrics.unknownRestExceptionCount.inc();
+      status = getHttpEquivalentErrorCode(((RestException) cause).getErrorCode());
+      if (status == HttpResponseStatus.BAD_REQUEST) {
+        msg = cause.getMessage();
       }
     } else {
       nettyMetrics.unknownExceptionCount.inc();
       logger.error("Unknown exception received while processing error response - " + cause.getCause() + " - " + cause
           .getMessage());
     }
+
     if (ctx.channel().isActive()) {
       sendError(status, msg);
     }
   }
 
-  public void sendError(HttpResponseStatus status, String msg) {
+  private HttpResponseStatus getHttpEquivalentErrorCode(RestErrorCode restErrorCode) {
+    switch (restErrorCode) {
+      case BadRequest:
+      case DuplicateRequest:
+      case NoRequest:
+      case UnknownOperationType:
+      case UnknownHttpMethod:
+        nettyMetrics.badRequestErrorCount.inc();
+        return HttpResponseStatus.BAD_REQUEST;
+      case ChannelActiveTasksFailure:
+      case HandlerSelectionError:
+      case HttpObjectConversionFailure:
+      case InternalServerError:
+      case MessageHandleFailure:
+      case NoMessageHandlers:
+      case RequestProcessingFailure:
+      case ResponseBuildingFailure:
+      case ReponseHandlerMissing:
+      case RestObjectMissing:
+      case RestRequestMissing:
+        nettyMetrics.internalServerErrorCount.inc();
+        return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      default:
+        nettyMetrics.unknownRestExceptionCount.inc();
+        return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+    }
+  }
+
+  private void sendError(HttpResponseStatus status, String msg) {
     String fullMsg = "Failure: " + status;
     if (msg != null && !msg.isEmpty()) {
       fullMsg += ". Reason - " + msg;
@@ -174,21 +190,14 @@ public class NettyResponseHandler implements RestResponseHandler {
     ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
   }
 
-  public void onRequestComplete()
-      throws Exception {
-    //nothing to do for now
-  }
-
-  private void verifyResponseAlive()
-      throws IllegalStateException {
+  private void verifyResponseAlive() {
     if (responseFinalized) {
       nettyMetrics.deadResponseAccess.inc();
       throw new IllegalStateException("Cannot re-finalize response");
     }
   }
 
-  private void verifyChannelOpen()
-      throws IllegalStateException {
+  private void verifyChannelOpen() {
     if (channelClosed || !(ctx.channel().isOpen())) {
       nettyMetrics.channelOperationAfterCloseErrorCount.inc();
       throw new IllegalStateException("Channel " + ctx.channel() + " has already been closed before write");

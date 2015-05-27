@@ -15,9 +15,9 @@ public class NettyRequest implements RestRequest {
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
+  private String[] pathParts = null;
 
-  public NettyRequest(HttpRequest request)
-      throws IllegalArgumentException {
+  public NettyRequest(HttpRequest request) {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
 
@@ -39,8 +39,31 @@ public class NettyRequest implements RestRequest {
     return request.getUri();
   }
 
+  public String getPath() {
+    return query.path();
+  }
+
+  public String getPathPart(int part) {
+   if (pathParts == null) {
+      String path = getPath();
+      if(path == null) {
+        return null;
+      }
+      path = path.startsWith("/") ? path.substring(1) : path;
+      pathParts = path.split("/");
+    }
+    if (part >= pathParts.length) {
+      return null;
+    }
+    return pathParts[part];
+  }
+
   public RestMethod getRestMethod() {
     return restMethod;
+  }
+
+  public Object getValueOfHeader(String name) {
+    return request.headers().get(name);
   }
 
   public List<String> getValuesOfParameterInURI(String parameter) {

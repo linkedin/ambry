@@ -39,11 +39,12 @@ public class AdminMain {
 
       if (!options.hasError()) {
         //TODO: all this loaded differently in LI
-        Properties properties = Utils.loadProps(options.getPropsFileLocation());
+        Properties properties = Utils.loadProps(options.getPropsFilePath());
         VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
         MetricRegistry metricRegistry = new MetricRegistry();
-        ClusterMap clusterMap = new ClusterMapManager(options.getHardwareLayoutFileLocation(),
-            options.getPartitionLayoutFileLocation(), new ClusterMapConfig(verifiableProperties));
+        ClusterMap clusterMap =
+            new ClusterMapManager(options.getHardwareLayoutFilePath(), options.getPartitionLayoutFilePath(),
+                new ClusterMapConfig(verifiableProperties));
 
         logger.info("Bootstrapping admin..");
         adminServer = new AdminServer(verifiableProperties, metricRegistry, clusterMap);
@@ -58,7 +59,7 @@ public class AdminMain {
         adminServer.start();
         adminServer.awaitShutdown();
       }
-    } catch(JSONException e){
+    } catch (JSONException e) {
       logger.error("Cluster map load failed - " + e);
     } catch (InstantiationException e) {
       logger.error("InstantiationException while starting admin - " + e);
@@ -74,51 +75,51 @@ public class AdminMain {
 
   private static class InvocationOptions {
     private boolean hasError = false;
-    private String propsFileLocation = null;
-    private String hardwareLayoutFileLocation = null;
-    private String partitionLayoutFileLocation = null;
+    private String propsFilePath = null;
+    private String hardwareLayoutFilePath = null;
+    private String partitionLayoutFilePath = null;
 
     public boolean hasError() {
       return hasError;
     }
 
-    public String getPropsFileLocation() {
-        return propsFileLocation;
+    public String getPropsFilePath() {
+      return propsFilePath;
     }
 
-    private String getHardwareLayoutFileLocation() {
-      return hardwareLayoutFileLocation;
+    private String getHardwareLayoutFilePath() {
+      return hardwareLayoutFilePath;
     }
 
-    private String getPartitionLayoutFileLocation() {
-      return partitionLayoutFileLocation;
+    private String getPartitionLayoutFilePath() {
+      return partitionLayoutFilePath;
     }
 
     public void parseOptions(String args[])
         throws IOException {
       OptionParser parser = new OptionParser();
 
-      ArgumentAcceptingOptionSpec<String> propsFileLocation =
-          parser.accepts("propsFileLocation", "Path to properties file").withRequiredArg()
-              .describedAs("propsFileLocation").ofType(String.class);
-      ArgumentAcceptingOptionSpec<String> hardwareLayoutFileLocation =
-          parser.accepts("hardwareLayoutFileLocation", "Path to hardware layout file").withRequiredArg()
-              .describedAs("hardwareLayoutFileLocation").ofType(String.class);
-      ArgumentAcceptingOptionSpec<String> partitionLayoutFileLocation =
-          parser.accepts("partitionLayoutFileLocation", "Path to partition layout file").withRequiredArg()
-              .describedAs("partitionLayoutFileLocation").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> propsFilePath =
+          parser.accepts("propsFilePath", "Path to properties file").withRequiredArg().describedAs("propsFilePath")
+              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutFilePath =
+          parser.accepts("hardwareLayoutFilePath", "Path to hardware layout file").withRequiredArg()
+              .describedAs("hardwareLayoutFilePath").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> partitionLayoutFilePath =
+          parser.accepts("partitionLayoutFilePath", "Path to partition layout file").withRequiredArg()
+              .describedAs("partitionLayoutFilePath").ofType(String.class);
 
       ArrayList<OptionSpec<?>> requiredArgs = new ArrayList<OptionSpec<?>>();
-      requiredArgs.add(propsFileLocation);
-      requiredArgs.add(hardwareLayoutFileLocation);
-      requiredArgs.add(partitionLayoutFileLocation);
+      requiredArgs.add(propsFilePath);
+      requiredArgs.add(hardwareLayoutFilePath);
+      requiredArgs.add(partitionLayoutFilePath);
 
       OptionSet options = parser.parse(args);
 
       if (haveRequiredOptions(parser, requiredArgs, options)) {
-        this.propsFileLocation = options.valueOf(propsFileLocation);
-        this.hardwareLayoutFileLocation = options.valueOf(hardwareLayoutFileLocation);
-        this.partitionLayoutFileLocation = options.valueOf(partitionLayoutFileLocation);
+        this.propsFilePath = options.valueOf(propsFilePath);
+        this.hardwareLayoutFilePath = options.valueOf(hardwareLayoutFilePath);
+        this.partitionLayoutFilePath = options.valueOf(partitionLayoutFilePath);
       } else {
         hasError = true;
       }
@@ -130,9 +131,11 @@ public class AdminMain {
       for (OptionSpec opt : requiredArgs) {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
           success = false;
         }
+      }
+      if (!success) {
+        parser.printHelpOn(System.err);
       }
       return success;
     }
