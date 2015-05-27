@@ -759,12 +759,11 @@ public class PersistentIndex {
 
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
-    /*} else if (messageEntries.size() == 0 && endTimeSec == -1) {
-      /* If endTimeSec is null, then since we have entered a segment, we should return at least one message *
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
+      // If endTimeSec is null, then since we have entered a segment, we should return at least one message
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
-              + initialSegmentStartOffset + ", key: " + key + ", max total size of entries to return: "
-              + maxTotalSizeOfEntries); */
+              + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
       // uninitialized token
