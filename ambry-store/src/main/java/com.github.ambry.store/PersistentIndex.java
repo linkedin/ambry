@@ -7,13 +7,11 @@ import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
@@ -170,7 +168,6 @@ public class PersistentIndex {
       logger.info("Index : " + datadir + " Starting hard delete recovery");
       hardDeleter.performRecovery();
       logger.info("Index : " + datadir + " Finished performing hard delete recovery");
-      metrics.initializeHardDeleteProgressMetric(this, log);
 
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
@@ -195,6 +192,7 @@ public class PersistentIndex {
       } else {
         hardDeleter.close();
       }
+      metrics.initializeHardDeleteMetric(this, log);
     } catch (StoreException e) {
       throw e;
     } catch (Exception e) {
@@ -1318,6 +1316,10 @@ public class PersistentIndex {
 
   public long getHardDeleteProgress() {
     return hardDeleter.getProgress();
+  }
+
+  public boolean hardDeleteThreadRunning() {
+    return hardDeleter.shutdownLatch.getCount() != 0;
   }
 }
 
