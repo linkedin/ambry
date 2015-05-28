@@ -455,8 +455,22 @@ public class PersistentIndex {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       if (getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
-        // The delete entry in the index does not contain the information about the size of the original blob.
-        return new DeletedBlobReadOptions(value.getOriginalMessageOffset(), id);
+        // The delete entry in the index does not contain the information about the size of the original blob. So we
+        // use the Message format to read and provide the information. The range in log that we provide starts at the
+        // original message offset and ends at the delete message's start offset (the original message surely cannot go
+        // beyond the start offset of the delete message.
+        MessageInfo deletedBlobInfo =
+            hardDelete.getInfoOfMessageAtOffset(log, value.getOriginalMessageOffset(), value.getOffset(), factory);
+        if (deletedBlobInfo == null) {
+          logger.error("Could not get info of deleted blob at original offset {}", value.getOriginalMessageOffset());
+          return null;
+        }
+        if (!deletedBlobInfo.getStoreKey().equals(id)) {
+          logger.error("Key at offset {} different from key in index", deletedBlobInfo.getStoreKey(), id);
+          return null;
+        }
+        return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
+            deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
       } else {
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       }
@@ -1168,7 +1182,7 @@ public class PersistentIndex {
      * Performs hard deletes of all the messages in the messageInfoList.
      * Gets a view of the records in the log for those messages and calls cleanup to get the appropriate replacement
      * records, and then replaces the records in the log with the corresponding replacement records.
-     * @param messageInfoList:  The messages to be hard deleted in the log.
+     * @param messageInfoList: The messages to be hard deleted in the log.
      */
     private void performHardDeletes(List<MessageInfo> messageInfoList)
         throws StoreException {
@@ -1177,7 +1191,11 @@ public class PersistentIndex {
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
         for (MessageInfo info : messageInfoList) {
           BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
-          readOptions.add(readInfo);
+          if (readInfo == null) {
+            logger.error("Could not fetch read info for blobid {}", info.getStoreKey());
+          } else {
+            readOptions.add(readInfo);
+          }
         }
 
         StoreMessageReadSet readSet = log.getView(readOptions);

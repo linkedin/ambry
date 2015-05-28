@@ -14,4 +14,13 @@ public interface MessageStoreHardDelete {
    * @return iterator over the HardDeleteInfo for the messages in the readSet.
    */
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory);
+
+  /**
+   * Returns information about a message at the given offset from the given Read interface.
+   * @param read The read interface from which the message info is to be read.
+   * @param offset The start offset of the message.
+   * @param factory the store key factory.
+   * @return a MessageInfo object for the message at the offset.
+   */
+  public MessageInfo getInfoOfMessageAtOffset(Read read, long offset, long maxOffset, StoreKeyFactory factory);
 }

@@ -9,6 +9,7 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
 import java.util.EnumSet;
+import java.util.HashMap;
 import org.junit.Test;
 import org.junit.Assert;
 import com.codahale.metrics.MetricRegistry;
@@ -288,10 +289,6 @@ public class BlobStoreTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
-      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete());
-      store.start();
       byte[] bufToWrite = new byte[5000];
       new Random().nextBytes(bufToWrite);
       MockId blobId1 = new MockId("id1");
@@ -310,6 +307,18 @@ public class BlobStoreTest {
       listInfo.add(info3);
       listInfo.add(info4);
       listInfo.add(info5);
+
+      HashMap<Long, MessageInfo> dummyMap = new HashMap<Long, MessageInfo>();
+      dummyMap.put(new Long(0), info1);
+      dummyMap.put(new Long(1000), info2);
+      dummyMap.put(new Long(2000), info3);
+      dummyMap.put(new Long(3000), info4);
+      dummyMap.put(new Long(4000), info5);
+
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(dummyMap));
+      store.start();
 
       // put blobs
       MessageWriteSet set = new MockMessageWriteSet(ByteBuffer.wrap(bufToWrite), listInfo);
@@ -369,25 +378,10 @@ public class BlobStoreTest {
 
       readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 5);
-      try {
-        readSet.sizeInBytes(0); // deleted
-        Assert.assertEquals(false, true);
-      } catch (IllegalStateException e) {
-        Assert.assertEquals(true, true);
-      }
+      Assert.assertEquals(readSet.sizeInBytes(0), 1000);
       Assert.assertEquals(readSet.sizeInBytes(1), 1000);
-      try {
-        readSet.sizeInBytes(2); // deleted
-        Assert.assertEquals(false, true);
-      } catch (IllegalStateException e) {
-        Assert.assertEquals(true, true);
-      }
-      try {
-        readSet.sizeInBytes(3); // deleted
-        Assert.assertEquals(false, true);
-      } catch (IllegalStateException e) {
-        Assert.assertEquals(true, true);
-      }
+      Assert.assertEquals(readSet.sizeInBytes(2), 1000);
+      Assert.assertEquals(readSet.sizeInBytes(3), 1000);
       Assert.assertEquals(readSet.sizeInBytes(4), 1000);
 
       output = new byte[1000];

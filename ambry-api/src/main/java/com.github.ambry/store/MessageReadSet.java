@@ -42,12 +42,4 @@ public interface MessageReadSet {
    * @return The key of the message represented by the index
    */
   StoreKey getKeyAt(int index);
-
-  /** Given a relative offset in the message, return the max that is left to read bounded by maxSize
-   *
-   * @param relativeOffset the relative offset in the message.
-   * @param maxSize the maximum size to return.
-   * @return return the max bytes that can be read starting from the relative offset, or the maxSize whichever is less.
-   */
-  long getReadableSize(int index, long relativeOffset, long maxSize);
 }

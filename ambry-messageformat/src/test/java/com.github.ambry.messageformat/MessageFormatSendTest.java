@@ -52,11 +52,6 @@ public class MessageFormatSendTest {
     public StoreKey getKeyAt(int index) {
       return keys.get(index);
     }
-
-    @Override
-    public long getReadableSize(int index, long relativeOffset, long maxSize) {
-      return Math.min(buffers.get(index).remaining() - relativeOffset, maxSize);
-    }
   }
 
   @Test

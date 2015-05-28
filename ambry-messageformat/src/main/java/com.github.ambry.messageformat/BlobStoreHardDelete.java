@@ -1,12 +1,15 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.HardDeleteInfo;
+import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -22,8 +25,65 @@ import org.slf4j.LoggerFactory;
  * replacement messages, that can then be written back by the caller to hard delete those blobs.
  */
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
+  private Logger logger = LoggerFactory.getLogger(getClass());
+  @Override
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
+  }
+
+  @Override
+  public MessageInfo getInfoOfMessageAtOffset(Read read, long offset, long maxOffset, StoreKeyFactory storeKeyFactory) {
+    MessageInfo info = null;
+    try {
+      // read message header
+      ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
+      read.readInto(headerVersion, offset);
+      offset += headerVersion.capacity();
+      headerVersion.flip();
+      short version = headerVersion.getShort();
+      switch (version) {
+        case MessageFormatRecord.Message_Header_Version_V1:
+          ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+          header.putShort(version);
+          read.readInto(header, offset);
+          offset += header.capacity() - headerVersion.capacity();
+          header.flip();
+          MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
+              new MessageFormatRecord.MessageHeader_Format_V1(header);
+          headerFormat.verifyHeader();
+          ReadInputStream stream = new ReadInputStream(read, offset, maxOffset);
+          StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
+
+          // read the appropriate type of message based on the relative offset that is set
+          if (headerFormat.getBlobPropertiesRecordRelativeOffset()
+              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+            BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
+            // we do not use the user metadata or blob during recovery but we still deserialize them to check
+            // for validity
+            MessageFormatRecord.deserializeUserMetadata(stream);
+            MessageFormatRecord.deserializeBlob(stream);
+            info = new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                    Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
+          } else {
+            boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
+            info =
+                new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), deleteFlag);
+          }
+          break;
+        default:
+          throw new MessageFormatException("Version not known while reading message - " + version,
+              MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+    } catch (MessageFormatException e) {
+      // log in case where we were not able to parse a message.
+      logger.error("Message format exception while recovering messages");
+    } catch (IndexOutOfBoundsException e) {
+      // log in case where were not able to read a complete message.
+      logger.error("Trying to read more than the available bytes");
+    } catch (IOException e) {
+      logger.error("IOException when trying to parse message");
+    }
+    return info;
   }
 }
 

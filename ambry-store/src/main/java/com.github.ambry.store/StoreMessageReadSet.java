@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.File;
@@ -20,7 +19,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long ttl;
   private final StoreKey storeKey;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  protected final static long Uninitialized_Size = -1;
 
   BlobReadOptions(long offset, long size, long ttl, StoreKey storeKey) {
     this.offset = offset;
@@ -50,10 +48,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
     return new MessageInfo(storeKey, size, ttl);
   }
 
-  public long getReadableSize(long relativeOffset, long maxSize) {
-    return Math.min(size - relativeOffset, maxSize);
-  }
-
   public boolean validateFileEndOffset(long fileEndOffset) {
     return offset + size <= fileEndOffset;
   }
@@ -61,37 +55,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   @Override
   public int compareTo(BlobReadOptions o) {
     return offset.compareTo(o.getOffset());
-  }
-}
-
-class DeletedBlobReadOptions extends BlobReadOptions {
-  DeletedBlobReadOptions(long offset, StoreKey storeKey) {
-    super(offset, Uninitialized_Size, Utils.Infinite_Time, storeKey);
-  }
-
-  @Override
-  public long getSize() {
-    throw new IllegalStateException();
-  }
-
-  @Override
-  public long getTTL() {
-    throw new IllegalStateException();
-  }
-
-  @Override
-  public MessageInfo getMessageInfo() {
-    return new MessageInfo(getStoreKey(), Uninitialized_Size, Utils.Infinite_Time);
-  }
-
-  @Override
-  public long getReadableSize(long relativeOffset, long maxSize) {
-    return maxSize;
-  }
-
-  @Override
-  public boolean validateFileEndOffset(long fileEndOffset) {
-    return super.getOffset() < fileEndOffset;
   }
 }
 
@@ -129,7 +92,7 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
-    long sizeToRead = readOptions.get(index).getReadableSize(relativeOffset, maxSize);
+    long sizeToRead = Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = fileChannel.transferTo(startOffset, sizeToRead, channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, file.getAbsolutePath());
@@ -155,10 +118,5 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index out of the messageset for file " + file.getAbsolutePath());
     }
     return readOptions.get(index).getStoreKey();
-  }
-
-  @Override
-  public long getReadableSize(int index, long relativeOffset, long maxSize) {
-    return readOptions.get(index).getReadableSize(relativeOffset, maxSize);
   }
 }
