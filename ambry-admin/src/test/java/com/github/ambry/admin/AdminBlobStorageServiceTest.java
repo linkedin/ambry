@@ -18,7 +18,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * TODO: write description
  */
-public class AmbryBlobStorageServiceTest {
+public class AdminBlobStorageServiceTest {
 
   @Test
   public void startShutDownTest()
