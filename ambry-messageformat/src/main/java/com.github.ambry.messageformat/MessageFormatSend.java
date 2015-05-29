@@ -72,11 +72,12 @@ public class MessageFormatSend implements Send {
   private void calculateOffsets()
       throws IOException, MessageFormatException {
     try {
-      long startTime = SystemTime.getInstance().milliseconds();
       // get size
       int messageCount = readSet.count();
       // for each message, determine the offset and size that needs to be sent based on the flag
       infoList = new ArrayList<SendInfo>(messageCount);
+      logger.trace("Calculate offsets of messages for one partition, MessageFormatFlag : {} number of messages : {}",
+          flag, messageCount);
       for (int i = 0; i < messageCount; i++) {
         if (flag == MessageFormatFlags.All) {
           // just copy over the total size and use relative offset to be 0
@@ -86,15 +87,20 @@ public class MessageFormatSend implements Send {
           totalSizeToWrite += readSet.sizeInBytes(i);
         } else {
           // read header version
+          long startTime = SystemTime.getInstance().milliseconds();
           ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
           readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
               MessageFormatRecord.Version_Field_Size_In_Bytes);
+          logger.trace("Calculate offsets, read header version time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
+
           headerVersion.flip();
           short version = headerVersion.getShort();
           switch (version) {
             case MessageFormatRecord.Message_Header_Version_V1:
 
               // read the header
+              startTime = SystemTime.getInstance().milliseconds();
               ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
               headerVersion.clear();
               header.putShort(headerVersion.getShort());
@@ -102,6 +108,10 @@ public class MessageFormatSend implements Send {
                   MessageFormatRecord.Version_Field_Size_In_Bytes,
                   MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
                       - MessageFormatRecord.Version_Field_Size_In_Bytes);
+              logger.trace("Calculate offsets, read header time: {}",
+                  SystemTime.getInstance().milliseconds() - startTime);
+
+              startTime = SystemTime.getInstance().milliseconds();
               header.flip();
               MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
                   new MessageFormatRecord.MessageHeader_Format_V1(header);
@@ -113,7 +123,10 @@ public class MessageFormatSend implements Send {
                     "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId "
                         + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
               }
+              logger.trace("Calculate offsets, verify header time: {}",
+                  SystemTime.getInstance().milliseconds() - startTime);
 
+              startTime = SystemTime.getInstance().milliseconds();
               if (flag == MessageFormatFlags.BlobProperties) {
                 int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
                     .getBlobPropertiesRecordRelativeOffset();
@@ -121,6 +134,8 @@ public class MessageFormatSend implements Send {
                 infoList.add(i,
                     new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
                 totalSizeToWrite += blobPropertiesRecordSize;
+                logger.trace("Calculate offsets, get total size of blob properties time: {}",
+                    SystemTime.getInstance().milliseconds() - startTime);
                 logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
                     infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
               } else if (flag == MessageFormatFlags.BlobUserMetadata) {
@@ -130,6 +145,8 @@ public class MessageFormatSend implements Send {
                 infoList
                     .add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
                 totalSizeToWrite += userMetadataRecordSize;
+                logger.trace("Calculate offsets, get total size of user metadata time: {}",
+                    SystemTime.getInstance().milliseconds() - startTime);
                 logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
                     infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
               } else if (flag == MessageFormatFlags.Blob) {
@@ -138,6 +155,8 @@ public class MessageFormatSend implements Send {
                         .getBlobPropertiesRecordRelativeOffset());
                 infoList.add(i, new SendInfo(headerFormat.getBlobRecordRelativeOffset(), blobRecordSize));
                 totalSizeToWrite += blobRecordSize;
+                logger.trace("Calculate offsets, get total size of blob time: {}",
+                    SystemTime.getInstance().milliseconds() - startTime);
                 logger.trace("Sending data for message relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
                     infoList.get(i).sizetoSend());
               } else { //just return the header
@@ -145,6 +164,8 @@ public class MessageFormatSend implements Send {
                     + MessageFormatRecord.Version_Field_Size_In_Bytes;
                 infoList.add(i, new SendInfo(0, messageHeaderSize));
                 totalSizeToWrite += messageHeaderSize;
+                logger.trace("Calculate offsets, get total size of header time: {}",
+                    SystemTime.getInstance().milliseconds() - startTime);
                 logger.trace("Sending message header relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
                     infoList.get(i).sizetoSend());
               }

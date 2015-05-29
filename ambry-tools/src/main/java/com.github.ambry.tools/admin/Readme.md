@@ -118,6 +118,13 @@ java -cp "*" com.github.ambry.tools.admin.ConsistencyCheckerTool --hardwareLayou
 turn contains all index files] --outFile [outFile]
 ```
 
+#### Check for consistency of index file boundaries on all replicas of a partition
+```java
+java -cp "*" com.github.ambry.tools.admin.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
+turn contains all index files] --subject index --outFile [outFile]
+```
+
 ```
 Root Directory for Partition should contains N sub-directories pertaining to N replicas. Each sub-directory's name
 should be the same as name of the replica. Each sub directory(replica) in turn should have all the index segments within it.
