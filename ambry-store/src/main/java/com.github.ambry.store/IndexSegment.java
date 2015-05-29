@@ -6,6 +6,7 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
 import com.github.ambry.utils.IFilter;
+import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +68,7 @@ class IndexSegment {
   private int valueSize;
   private File bloomFile;
   private long prevSegmentEndOffset = 0;
+  private AtomicLong lastModifiedTimeSec; // an approximation of the last modified time.
   private AtomicInteger numberOfItems;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
   private final StoreMetrics metrics;
@@ -98,6 +100,7 @@ class IndexSegment {
         .getFilter(config.storeIndexMaxNumberOfInmemElements, config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
     this.metrics = metrics;
+    this.lastModifiedTimeSec = new AtomicLong(0);
   }
 
   /**
@@ -119,6 +122,7 @@ class IndexSegment {
       startOffset = new AtomicLong(Long.parseLong(startOffsetValue));
       endOffset = new AtomicLong(-1);
       this.indexFile = indexFile;
+      this.lastModifiedTimeSec = new AtomicLong(indexFile.lastModified() / 1000);
       this.rwLock = new ReentrantReadWriteLock();
       this.factory = factory;
       sizeWritten = new AtomicLong(0);
@@ -214,6 +218,14 @@ class IndexSegment {
    */
   public int getValueSize() {
     return valueSize;
+  }
+
+  /**
+   * The time of last modification of this segment
+   * @return The time in seconds of the last modification of this segment.
+   */
+  public long getLastModifiedTime() {
+    return lastModifiedTimeSec.get();
   }
 
   /**
@@ -328,6 +340,7 @@ class IndexSegment {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       endOffset.set(fileEndOffset);
+      lastModifiedTimeSec.set(SystemTime.getInstance().milliseconds() / 1000);
       if (keySize == Key_Size_Invalid_Value) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
@@ -615,13 +628,13 @@ class IndexSegment {
    * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved upto maxentries
-   * @param maxTotalSizeOfEntriesInBytes The max total size of entries to retreive
+   * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
    * @return true if any entries were added.
    * @throws IOException
    */
-  public boolean getEntriesSince(StoreKey key, long maxTotalSizeOfEntriesInBytes, List<MessageInfo> entries,
+  public boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes)
       throws IOException {
     int entriesSizeAtStart = entries.size();
@@ -633,7 +646,8 @@ class IndexSegment {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (currentTotalSizeOfEntriesInBytes.get() < maxTotalSizeOfEntriesInBytes && index < totalEntries) {
+        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), this.getLastModifiedTime())
+            && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
           readBuf.get(buf);
@@ -663,7 +677,7 @@ class IndexSegment {
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getTimeToLiveInMs());
           entries.add(info);
           currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
-          if (currentTotalSizeOfEntriesInBytes.get() >= maxTotalSizeOfEntriesInBytes) {
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), this.getLastModifiedTime())) {
             break;
           }
         }

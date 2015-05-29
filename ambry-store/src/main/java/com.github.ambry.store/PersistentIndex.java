@@ -2,10 +2,18 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.EnumSet;
+import java.util.Iterator;
+import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +47,8 @@ public class PersistentIndex {
 
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";
+  private static final String Clean_Shutdown_Filename = "cleanshutdown";
+  private static final String Cleanup_Token_Filename = "cleanuptoken";
   public static final Short version = 0;
 
   protected Scheduler scheduler;
@@ -51,13 +61,15 @@ public class PersistentIndex {
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
+  private HardDeleteThread hardDeleter;
+  private Thread hardDeleteThread;
+  private MessageStoreHardDelete hardDelete;
   private StoreKeyFactory factory;
   private StoreConfig config;
   private JournalFactory storeJournalFactory;
   private UUID sessionId;
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
-  private static final String Clean_Shutdown_Filename = "cleanshutdown";
   private final StoreMetrics metrics;
 
   private class IndexFilter implements FilenameFilter {
@@ -78,7 +90,7 @@ public class PersistentIndex {
    * @throws StoreException
    */
   public PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, StoreMetrics metrics)
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics)
       throws StoreException {
     try {
       this.scheduler = scheduler;
@@ -89,6 +101,9 @@ public class PersistentIndex {
       this.factory = factory;
       this.config = config;
       persistor = new IndexPersistor();
+      hardDeleter =
+          new HardDeleteThread(new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance()));
+      this.hardDelete = hardDelete;
       storeJournalFactory = Utils.getObj(config.storeJournalFactory);
       /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
       whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
@@ -134,9 +149,9 @@ public class PersistentIndex {
       }
       this.dataDir = datadir;
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getLogEndOffset());
-
       // perform recovery if required
       final Timer.Context context = metrics.recoveryTime.time();
+      // Recover the last messages in the log into the index, if any.
       if (indexes.size() > 0) {
         IndexSegment lastSegment = indexes.lastEntry().getValue();
         // recover last segment
@@ -145,10 +160,14 @@ public class PersistentIndex {
         recover(null, log.sizeInBytes(), recovery);
       }
       context.stop();
-
       // set the log end offset to the recovered offset from the index after initializing it
       log.setLogEndOffset(getCurrentEndOffset());
       logEndOffsetOnStartup = log.getLogEndOffset();
+
+      // After recovering the last messages, and the log end offset is set, let the hard delete thread do its recovery.
+      logger.info("Index : " + datadir + " Starting hard delete recovery");
+      hardDeleter.performRecovery();
+      logger.info("Index : " + datadir + " Finished performing hard delete recovery");
 
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
@@ -165,6 +184,15 @@ public class PersistentIndex {
       this.scheduler.schedule("index persistor", persistor,
           config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+
+      if (config.storeEnableHardDelete) {
+        logger.info("Index : " + datadir + " Starting hard delete thread ");
+        hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
+        hardDeleteThread.start();
+      } else {
+        hardDeleter.close();
+      }
+      metrics.initializeHardDeleteMetric(this, log);
     } catch (StoreException e) {
       throw e;
     } catch (Exception e) {
@@ -412,8 +440,9 @@ public class PersistentIndex {
   }
 
   /**
-   * Returns the blob read info for a given key that is not deleted or expired ttl
+   * Returns the blob read info for a given key
    * @param id The id of the entry whose info is required
+   * @param getOptions the get options that indicate whether blob read info for deleted/expired blobs are to be returned.
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
    */
@@ -423,7 +452,23 @@ public class PersistentIndex {
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+      if (getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
+        // The delete entry in the index does not contain the information about the size of the original blob. So we
+        // use the Message format to read and provide the information. The range in log that we provide starts at the
+        // original message offset and ends at the delete message's start offset (the original message surely cannot go
+        // beyond the start offset of the delete message.
+        try {
+          MessageInfo deletedBlobInfo =
+              hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
+          return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
+              deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
+        } catch (IOException e) {
+          throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
+              StoreErrorCodes.IOError);
+        }
+      } else {
+        throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+      }
     } else if (value.isExpired() && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
@@ -549,7 +594,8 @@ public class PersistentIndex {
           StoreFindToken newToken = null;
           if (entry != null && entry.getKey() != indexes.lastKey()) {
             startTimeInMs = SystemTime.getInstance().milliseconds();
-            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries, maxTotalSizeOfEntries);
+            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
+                new FindEntriesCondition(maxTotalSizeOfEntries));
             logger.trace("Journal based to segment based token, Time used to find entries: {}",
                 (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -580,7 +626,7 @@ public class PersistentIndex {
         startTimeInMs = SystemTime.getInstance().milliseconds();
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
-                messageEntries, maxTotalSizeOfEntries);
+                messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries));
         logger.trace("Segment based token, Time used to find entries: {}",
             (SystemTime.getInstance().milliseconds() - startTimeInMs));
 
@@ -631,13 +677,13 @@ public class PersistentIndex {
    * @param key The key representing the position (exclusive) in the segment to start reading entries from. If the key
    *            is null, all the keys will be read.
    * @param messageEntries the list to be populated with the MessageInfo for every entry that is read.
-   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned.
+   * @param findEntriesCondition that determines whether to fetch more entries based on a maximum total size of entries
+   *                             that needs to be returned and a time that determines the latest segment to be scanned.
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,
-      List<MessageInfo> messageEntries, long maxTotalSizeOfEntries)
+      List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition)
       throws IOException, StoreException {
-
     long segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset == indexes.lastKey()) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
@@ -655,7 +701,8 @@ public class PersistentIndex {
        key. Otherwise, since all the keys starting from the offset have to be read, skip this and check in the journal
        first. */
     if (key != null) {
-      if (segmentToProcess.getEntriesSince(key, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries)) {
+      if (segmentToProcess.getEntriesSince(key, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
+        // if we did fetch entries from this segment, set the new token info accordingly.
         newTokenSegmentStartOffset = segmentStartOffset;
       }
       logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
@@ -664,7 +711,7 @@ public class PersistentIndex {
       segmentToProcess = indexes.get(segmentStartOffset);
     }
 
-    while (currentTotalSizeOfEntries.get() < maxTotalSizeOfEntries) {
+    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTime())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       long journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       long journalLastOffsetBeforeCheck = journal.getLastOffset();
@@ -672,13 +719,24 @@ public class PersistentIndex {
       if (entries != null) {
         logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " +
             segmentStartOffset + " total entries received " + entries.size());
+        IndexSegment currentSegment = segmentToProcess;
         for (JournalEntry entry : entries) {
+          if (entry.getOffset() > currentSegment.getEndOffset()) {
+            /* The offset is of the next segment. If the next segment's last modified time makes
+            it ineligible, skip */
+            long nextSegmentStartOffset = indexes.higherKey(currentSegment.getStartOffset());
+            currentSegment = indexes.get(nextSegmentStartOffset);
+            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
+              break;
+            }
+          }
           newTokenOffsetInJournal = entry.getOffset();
           IndexValue value = findKey(entry.getKey());
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.getTimeToLiveInMs()));
-          if (currentTotalSizeOfEntries.addAndGet(value.getSize()) >= maxTotalSizeOfEntries) {
+          currentTotalSizeOfEntries.addAndGet(value.getSize());
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
             break;
           }
         }
@@ -698,7 +756,7 @@ public class PersistentIndex {
             + journalLastOffsetBeforeCheck + "]");
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
-        if (segmentToProcess.getEntriesSince(null, maxTotalSizeOfEntries, messageEntries, currentTotalSizeOfEntries)) {
+        if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
           newTokenSegmentStartOffset = segmentStartOffset;
         }
         logger.trace("Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset +
@@ -710,14 +768,18 @@ public class PersistentIndex {
 
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
-    } else if (messageEntries.size() == 0) {
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
+      // If the condition does not have an endtime, then since we have entered a segment, we should return at least one
+      // message
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
-              + initialSegmentStartOffset + ", key: " + key + ", max total size of entries to return: "
-              + maxTotalSizeOfEntries);
+              + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
-      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
-          sessionId);
+      // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
+      // uninitialized token
+      return newTokenSegmentStartOffset == StoreFindToken.Uninitialized_Offset ? new StoreFindToken()
+          : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
+              sessionId);
     }
   }
 
@@ -762,12 +824,34 @@ public class PersistentIndex {
   }
 
   /**
+   * Filter out the put entries and only get the delete entries.
+   * @param messageEntries The message entry list from which only delete entries have to be returned.
+   */
+  private void filterDeleteEntries(List<MessageInfo> messageEntries) {
+    ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator();
+    /* Note: Ideally we should also filter out duplicate delete entries here. However, due to past bugs,
+       there could be multiple delete entries in the index for the same blob. At the cost of possibly
+       duplicating the effort for those rare cases, we ensure as much deletes are covered as possible.
+     */
+    while (messageEntriesIterator.hasNext()) {
+      if (!messageEntriesIterator.next().isDeleted()) {
+        messageEntriesIterator.remove();
+      }
+    }
+  }
+
+  /**
    * Closes the index
    * @throws StoreException
    */
   public void close()
       throws StoreException {
     persistor.write();
+    try {
+      hardDeleter.shutDown();
+    } catch (Exception e) {
+      logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
+    }
     File cleanShutdownFile = new File(dataDir, Clean_Shutdown_Filename);
     try {
       cleanShutdownFile.createNewFile();
@@ -801,6 +885,88 @@ public class PersistentIndex {
     }
   }
 
+  /**
+   * Finds all the deleted entries from the given start token. The token defines the start position in the index from
+   * where entries needs to be fetched
+   * @param token The token that signifies the start position in the index from where deleted entries need to be
+   *              retrieved
+   * @param maxTotalSizeOfEntries The maximum total size of entries that need to be returned. The api will try to
+   *                              return a list of entries whose total size is close to this value.
+   * @param endTimeSeconds The (approximate) time of the latest entry to be fetched. This is used at segment granularity.
+   * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
+   */
+  protected FindInfo findDeletedEntriesSince(FindToken token, long maxTotalSizeOfEntries, long endTimeSeconds)
+      throws StoreException {
+    try {
+      StoreFindToken storeToken = (StoreFindToken) token;
+      StoreFindToken newToken;
+      List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
+
+      if (storeToken.getStoreKey() != null) {
+        // Case 1: index based
+        // Find the index segment corresponding to the token indexStartOffset.
+        // Get entries starting from the token Key in this index.
+        newToken = findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
+            messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds));
+        if (newToken.isUninitialized()) {
+          newToken = storeToken;
+        }
+      } else {
+        // journal based
+        long offsetToStart = storeToken.getOffset();
+        boolean inclusive = false;
+        if (offsetToStart == StoreFindToken.Uninitialized_Offset) {
+          offsetToStart = 0;
+          inclusive = true;
+        }
+        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
+
+        long offsetEnd = offsetToStart;
+        if (entries != null) {
+          // Case 2: offset based, and offset still in journal
+          IndexSegment currentSegment = indexes.floorEntry(offsetToStart).getValue();
+          for (JournalEntry entry : entries) {
+            if (entry.getOffset() > currentSegment.getEndOffset()) {
+              long nextSegmentStartOffset = indexes.higherKey(currentSegment.getStartOffset());
+              currentSegment = indexes.get(nextSegmentStartOffset);
+            }
+            if (endTimeSeconds < currentSegment.getLastModifiedTime()) {
+              break;
+            }
+
+            IndexValue value = findKey(entry.getKey());
+            boolean deleteEntry = value.isFlagSet(IndexValue.Flags.Delete_Index);
+            if (deleteEntry) {
+              messageEntries
+                  .add(new MessageInfo(entry.getKey(), value.getSize(), deleteEntry, value.getTimeToLiveInMs()));
+            }
+            offsetEnd = entry.getOffset();
+          }
+          newToken = new StoreFindToken(offsetEnd, sessionId);
+        } else {
+          // Case 3: offset based, but offset out of journal
+          Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
+          if (entry != null && entry.getKey() != indexes.lastKey()) {
+            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
+                new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds));
+            if (newToken.isUninitialized()) {
+              newToken = storeToken;
+            }
+          } else {
+            newToken = storeToken; //use the same offset as before.
+          }
+        }
+      }
+      filterDeleteEntries(messageEntries);
+      return new FindInfo(messageEntries, newToken);
+    } catch (IOException e) {
+      throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    }
+  }
+
   class IndexPersistor implements Runnable {
 
     /**
@@ -824,8 +990,12 @@ public class PersistentIndex {
                 "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
 
-          //  flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
+          hardDeleter.preLogFlush();
+
+          // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
+
+          hardDeleter.postLogFlush();
 
           long lastOffset = lastEntry.getKey();
           IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
@@ -858,6 +1028,298 @@ public class PersistentIndex {
         logger.error("Index : " + dataDir + " error while persisting the index to disk ", e);
       }
     }
+  }
+
+  class HardDeleteThread implements Runnable {
+    /** A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
+     * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing
+     * hard deletes when we do a crash recovery.
+     * Four tokens are maintained:
+     * startTokenSafeToPersist <= startTokenBeforeLogFlush <= startToken <= endToken
+     *
+     * Ongoing hard deletes are for entries within startToken and endToken. These keep getting incremented as and when
+     * hard deletes happen. The cleanup token that is persisted periodically is used during recovery to figure out the
+     * range on which recovery is to be done. The end token to persist is the endToken that we maintain. However, the
+     * start token that is persisted has to be a token up to which the hard deletes that were performed have been flushed.
+     * Since the index persistor runs asynchronously to the hard delete thread, a few other tokens are used to help safely
+     * persist tokens:
+     * startTokenSafeToPersist: This will always be a value up to which the log has been flushed. The 'current' start token
+     * can be greater than this value.
+     * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
+     * flushed, this is used to set startTokenSafeToPersist.
+     */
+    FindToken startToken;
+    FindToken startTokenBeforeLogFlush;
+    FindToken startTokenSafeToPersist;
+    FindToken endToken;
+    private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
+    private final int messageRetentionSeconds =
+        config.storeDeletedMessageRetentionDays * SystemTime.getInstance().SecsPerDay;
+    Throttler throttler;
+    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
+    boolean running = true;
+
+    //how long to sleep if token does not advance.
+    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
+
+    HardDeleteThread(Throttler throttler) {
+      this.throttler = throttler;
+    }
+
+    /**
+     * Reads from the cleanupToken file and recovers at least all the messages between the startToken and the endToken.
+     * If cleanupToken is non-existent or if there is a crc failure, resets the token.
+     * On version mismatch, throws.
+     */
+    private void performRecovery()
+        throws IOException, StoreException {
+      StoreFindToken endTokenForRecovery;
+      File cleanupTokenFile = new File(dataDir, Cleanup_Token_Filename);
+      if (cleanupTokenFile.exists()) {
+        CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
+        DataInputStream stream = new DataInputStream(crcStream);
+        try {
+          short version = stream.readShort();
+          switch (version) {
+            case 0:
+              startToken = StoreFindToken.fromBytes(stream, factory);
+              endTokenForRecovery = StoreFindToken.fromBytes(stream, factory);
+              break;
+            default:
+              throw new StoreException("Invalid version in cleanup token " + dataDir,
+                  StoreErrorCodes.Index_Version_Error);
+          }
+          long crc = crcStream.getValue();
+          if (crc != stream.readLong()) {
+            logger.error("Crc check does not match for cleanup token file for dataDir {}, creating a clean one ",
+                dataDir);
+            startToken = new StoreFindToken();
+            endTokenForRecovery = new StoreFindToken();
+          }
+        } catch (IOException e) {
+          throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.Initialization_Error);
+        } finally {
+          stream.close();
+        }
+      } else {
+        startToken = new StoreFindToken();
+        endTokenForRecovery = new StoreFindToken();
+      }
+      startTokenBeforeLogFlush = startTokenSafeToPersist = startToken;
+
+      /* perform hard deletes if endTokenForRecovery is ahead of the start token. startToken and endToken could be more
+         than one scan size apart as they get modified at different frequencies (endToken during hardDelete() and
+         startTokenToPersist during index persist). Therefore, continue with hard deletes until we reach
+         endTokenForRecovery.*/
+      if (!endTokenForRecovery.isUninitialized() && !endTokenForRecovery.equals(startToken)) {
+        logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
+            endTokenForRecovery);
+        do {
+          if (!hardDelete()) {
+            logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
+                dataDir, endToken);
+            metrics.hardDeleteIncompleteRecoveryCount.inc();
+            break;
+          }
+          logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
+        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken));
+      }
+    }
+
+    /**
+     * This method will be called before the log is flushed.
+     */
+    private void preLogFlush() {
+      /* Save the current start token before the log gets flushed */
+      startTokenBeforeLogFlush = startToken;
+    }
+
+    /**
+     * This method will be called after the log is flushed.
+     */
+    private void postLogFlush() {
+      /* start token saved before the flush is now safe to be persisted */
+      startTokenSafeToPersist = startTokenBeforeLogFlush;
+    }
+
+    private void persistCleanupToken()
+        throws IOException, StoreException {
+      if (endToken == null || ((StoreFindToken) endToken).isUninitialized()) {
+        return;
+      }
+      final Timer.Context context = metrics.cleanupTokenFlushTime.time();
+      File tempFile = new File(dataDir, Cleanup_Token_Filename + ".tmp");
+      File actual = new File(dataDir, Cleanup_Token_Filename);
+
+      FileOutputStream fileStream = new FileOutputStream(tempFile);
+      CrcOutputStream crc = new CrcOutputStream(fileStream);
+      DataOutputStream writer = new DataOutputStream(crc);
+      try {
+        // write the current version
+        writer.writeShort(version);
+        writer.write(startTokenSafeToPersist.toBytes());
+        writer.write(endToken.toBytes());
+        long crcValue = crc.getValue();
+        writer.writeLong(crcValue);
+
+        fileStream.getChannel().force(true);
+        tempFile.renameTo(actual);
+      } catch (IOException e) {
+        throw new StoreException("IO error while persisting cleanup tokens to disk " + tempFile.getAbsoluteFile(),
+            StoreErrorCodes.IOError);
+      } finally {
+        writer.close();
+        context.stop();
+      }
+      logger.debug("Completed writing cleanup tokens to file {}", actual.getAbsolutePath());
+    }
+
+    /**
+     * Performs hard deletes of all the messages in the messageInfoList.
+     * Gets a view of the records in the log for those messages and calls cleanup to get the appropriate replacement
+     * records, and then replaces the records in the log with the corresponding replacement records.
+     * @param messageInfoList: The messages to be hard deleted in the log.
+     */
+    private void performHardDeletes(List<MessageInfo> messageInfoList)
+        throws StoreException {
+      try {
+        EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
+        List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
+        for (MessageInfo info : messageInfoList) {
+          try {
+            BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
+            readOptions.add(readInfo);
+          } catch (StoreException e) {
+            logger.error(
+                "Failed to read blob info for blobid {} during hard deletes, ignoring the blob. Caught exception {}",
+                info.getStoreKey(), e);
+          }
+        }
+
+        StoreMessageReadSet readSet = log.getView(readOptions);
+
+        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
+        Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
+
+        while (hardDeleteIterator.hasNext()) {
+          HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
+          long offsetToWriteAt = readOptionsIterator.next().getOffset();
+          if (hardDeleteInfo != null) {
+            log.writeFrom(hardDeleteInfo.getChannel(), offsetToWriteAt, hardDeleteInfo.getSize());
+            metrics.hardDeleteDoneCount.inc(1);
+            try {
+              throttler.maybeThrottle(hardDeleteInfo.getSize());
+            } catch (InterruptedException e) {
+              logger.error("Caught interrupted exception, continuing ");
+            }
+          } else {
+            metrics.hardDeleteFailedCount.inc(1);
+          }
+        }
+      } catch (IOException e) {
+        throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
+      }
+    }
+
+    /**
+     * Finds deleted entries from the index, persists tokens and calls performHardDelete to delete the corresponding put
+     * records in the log.
+     * Note: At this time, expired blobs are not hard deleted.
+     * The algorithm is as follows:
+     * 1. Start at the current token S.
+     * 2. (E, entries) = findDeletedEntriesSince(S).
+     * 3. Persist (S', E) // so during recovery we know where to stop (we will see what S' is below).
+     * 4. performHardDelete(entries) // this is going on for (S, E]
+     * 5. set S = E
+     * 6. Index Persistor runs in the background and
+     *    a) S' = S
+     *    b) flushes log (so everything upto S' is surely flushed in the log)
+     *    c) persists (S',E)
+     *
+     * The guarantee provided is that for any persisted token pair (S', E):
+     *    - all the hard deletes till point S' have been flushed in the log; and
+     *    - ongoing hard deletes are between S' and E, so during recovery this is the range to be recovered.
+     *
+     * @return true if the token moved forward, false otherwise.
+     */
+    private boolean hardDelete() {
+      if (indexes.size() > 0) {
+        final Timer.Context context = metrics.hardDeleteTime.time();
+        try {
+          FindInfo info = findDeletedEntriesSince(startToken, scanSizeInBytes,
+              SystemTime.getInstance().seconds() - messageRetentionSeconds);
+          endToken = info.getFindToken();
+          if (!endToken.equals(startToken)) {
+            persistCleanupToken(); // this is to persist the end token before performing the writes to the log.
+            if (!info.getMessageEntries().isEmpty()) {
+              performHardDeletes(info.getMessageEntries());
+            }
+            startToken = endToken;
+            return true;
+          }
+        } catch (Exception e) {
+          logger.error("Index : " + dataDir + " error while performing hard deletes ", e);
+        } finally {
+          context.stop();
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Gets the number of bytes processed so far
+     * @return the number of bytes processed so far as represented by the start token. Note that if the token is
+     * index based, this is at segment granularity.
+     */
+    public long getProgress() {
+      StoreFindToken token = (StoreFindToken) startToken;
+      if (token.isUninitialized()) {
+        return 0;
+      } else if (token.getOffset() != StoreFindToken.Uninitialized_Offset) {
+        return token.getOffset();
+      } else {
+        return token.getIndexStartOffset();
+      }
+    }
+
+    public void run() {
+      try {
+        while (running) {
+          if (!hardDelete()) {
+            try {
+              Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
+            } catch (InterruptedException e) {
+              logger.info("Caught interrupted exception");
+            }
+          }
+        }
+      } finally {
+        close();
+      }
+    }
+
+    public void shutDown()
+        throws InterruptedException, StoreException, IOException {
+      if (running) {
+        running = false;
+        hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
+        shutdownLatch.await();
+        persistCleanupToken();
+      }
+    }
+
+    public void close() {
+      running = false;
+      shutdownLatch.countDown();
+    }
+  }
+
+  public long getHardDeleteProgress() {
+    return hardDeleter.getProgress();
+  }
+
+  public boolean hardDeleteThreadRunning() {
+    return hardDeleter.shutdownLatch.getCount() != 0;
   }
 }
 
@@ -1000,5 +1462,54 @@ class StoreFindToken implements FindToken {
     }
     sb.append(" bytesRead ").append(bytesRead);
     return sb.toString();
+  }
+
+  /** Return if the token has a valid segment start offset or a journal offset
+   *
+   * @return true if initialized token, false otherwise.
+   */
+  public boolean isUninitialized() {
+    return this.getOffset() == Uninitialized_Offset && this.getIndexStartOffset() == Uninitialized_Offset;
+  }
+
+  /** Test whether this token is greater than the passed in token
+   *
+   * @return true if this token is greater than the passed in token, false otherwise.
+   */
+
+  public boolean greaterThan(StoreFindToken token) {
+    if (this.isUninitialized() || token.isUninitialized()) {
+      throw new IllegalArgumentException("Cannot compare with uninitialized token");
+    }
+
+    if (this.offset != Uninitialized_Offset && token.offset != Uninitialized_Offset) { //both journal based
+      return this.offset > token.getOffset();
+    } else if (this.offset != Uninitialized_Offset) { // this is journal based
+      return this.offset > token.getIndexStartOffset();
+    } else if (this.offset == Uninitialized_Offset && token.offset != Uninitialized_Offset) { // token is journal based
+      return this.indexStartOffset > token.getOffset();
+    } else { // both index based.
+      return this.indexStartOffset == token.getIndexStartOffset() ? this.getStoreKey().compareTo(token.getStoreKey())
+          > 0 : this.indexStartOffset > token.getIndexStartOffset();
+    }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    StoreFindToken token = (StoreFindToken) o;
+    if (this.getOffset() != Uninitialized_Offset) {
+      return this.getOffset() == token.getOffset();
+    } else {
+      return this.getIndexStartOffset() == token.getIndexStartOffset() && this.getStoreKey()
+          .equals(token.getStoreKey());
+    }
   }
 }

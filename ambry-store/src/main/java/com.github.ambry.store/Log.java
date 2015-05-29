@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * It provides ability to read from arbitrary offset into the file. It can also provide a static view
  * of the log for a given set of offset,size pairs.
  */
-public class Log implements Write, Read {
+public class Log implements Read, Write {
 
   private AtomicLong currentWriteOffset;
   private final FileChannel fileChannel;
@@ -45,7 +45,7 @@ public class Log implements Write, Read {
     this.metrics = metrics;
   }
 
-  MessageReadSet getView(List<BlobReadOptions> readOptions)
+  StoreMessageReadSet getView(List<BlobReadOptions> readOptions)
       throws IOException {
     return new StoreMessageReadSet(file, fileChannel, readOptions, currentWriteOffset.get());
   }
@@ -104,6 +104,24 @@ public class Log implements Write, Read {
     currentWriteOffset.addAndGet(bytesWritten);
     logger.trace("Log : {} bytes appended to the log from read channel bytesWritten: {}", file.getAbsolutePath(),
         bytesWritten);
+  }
+
+  @Override
+  public void writeFrom(ReadableByteChannel channel, long offset, long size)
+      throws IOException {
+    logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {} offset to append at {}",
+        file.getAbsolutePath(), currentWriteOffset, capacityInBytes, size, offset);
+    if (offset < 0 || offset + size > currentWriteOffset.get()) {
+      metrics.overflowWriteError.inc(1);
+      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to write to log " +
+          "from channel since new data size " + size + "exceeds log end offset " + currentWriteOffset.get());
+    }
+    long bytesWritten = 0;
+    while (bytesWritten < size) {
+      bytesWritten += fileChannel.transferFrom(channel, offset + bytesWritten, size - bytesWritten);
+    }
+    logger.trace("Log : {} bytes written to the log from read channel at {}, bytesWritten: {}", file.getAbsolutePath(),
+        offset, bytesWritten);
   }
 
   /**

@@ -255,13 +255,17 @@ class MessageReadSetIndexInputStream extends InputStream {
   @Override
   public int read(byte b[], int off, int len)
       throws IOException {
+    if (off < 0 || len < 0 || len > b.length - off) {
+      throw new IndexOutOfBoundsException();
+    }
     if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
       throw new IOException("Reached end of stream of message read set");
     }
     ByteBuffer buf = ByteBuffer.wrap(b);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
-    long bytesWritten = messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset,
-        Math.min(buf.remaining(), messageReadSet.sizeInBytes(indexToRead) - currentOffset));
+    long sizeToRead = Math.min(len - off, messageReadSet.sizeInBytes(indexToRead) - currentOffset);
+    long bytesWritten =
+        messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, sizeToRead);
     currentOffset += bytesWritten;
     return (int) bytesWritten;
   }
