@@ -12,6 +12,7 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Iterator;
@@ -25,15 +26,16 @@ import org.slf4j.LoggerFactory;
  * replacement messages, that can then be written back by the caller to hard delete those blobs.
  */
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+
   @Override
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory);
   }
 
   @Override
-  public MessageInfo getInfoOfMessageAtOffset(Read read, long offset, long maxOffset, StoreKeyFactory storeKeyFactory) {
-    MessageInfo info = null;
+  public MessageInfo getMessageInfoOfMessageAtOffset(Read read, long offset, StoreKeyFactory storeKeyFactory)
+      throws IOException {
+    MessageInfo info;
     try {
       // read message header
       ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
@@ -51,19 +53,21 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
           MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
               new MessageFormatRecord.MessageHeader_Format_V1(header);
           headerFormat.verifyHeader();
-          ReadInputStream stream = new ReadInputStream(read, offset, maxOffset);
-          StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
+          long endOffset = headerFormat.getBlobPropertiesRecordRelativeOffset()
+              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset? offset + headerFormat
+            .getBlobPropertiesRecordRelativeOffset() + headerFormat.getMessageSize():
+          offset + headerFormat.getDeleteRecordRelativeOffset() + headerFormat.getMessageSize();
+
+          ReadInputStream stream = new ReadInputStream(read, offset, endOffset);
+          StoreKey key =
+            storeKeyFactory.getStoreKey(new DataInputStream(stream));
 
           // read the appropriate type of message based on the relative offset that is set
           if (headerFormat.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
             BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
-            // we do not use the user metadata or blob during recovery but we still deserialize them to check
-            // for validity
-            MessageFormatRecord.deserializeUserMetadata(stream);
-            MessageFormatRecord.deserializeBlob(stream);
             info = new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                    Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
+                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
             info =
@@ -74,16 +78,14 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
           throw new MessageFormatException("Version not known while reading message - " + version,
               MessageFormatErrorCodes.Unknown_Format_Version);
       }
+      return info;
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.
-      logger.error("Message format exception while recovering messages");
+      throw new IOException("Message format exception while parsing messages");
     } catch (IndexOutOfBoundsException e) {
       // log in case where were not able to read a complete message.
-      logger.error("Trying to read more than the available bytes");
-    } catch (IOException e) {
-      logger.error("IOException when trying to parse message");
+      throw new IOException("Trying to read more than the available bytes");
     }
-    return info;
   }
 }
 

@@ -31,7 +31,7 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   }
 
   @Override
-  public MessageInfo getInfoOfMessageAtOffset(Read read, long offset, long maxOffset, StoreKeyFactory factory) {
+  public MessageInfo getMessageInfoOfMessageAtOffset(Read read, long offset, StoreKeyFactory factory) {
     return dummyMap.get(offset);
   }
 }

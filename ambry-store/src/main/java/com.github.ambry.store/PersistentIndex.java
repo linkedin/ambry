@@ -457,18 +457,15 @@ public class PersistentIndex {
         // use the Message format to read and provide the information. The range in log that we provide starts at the
         // original message offset and ends at the delete message's start offset (the original message surely cannot go
         // beyond the start offset of the delete message.
-        MessageInfo deletedBlobInfo =
-            hardDelete.getInfoOfMessageAtOffset(log, value.getOriginalMessageOffset(), value.getOffset(), factory);
-        if (deletedBlobInfo == null) {
-          logger.error("Could not get info of deleted blob at original offset {}", value.getOriginalMessageOffset());
-          return null;
+        try {
+          MessageInfo deletedBlobInfo =
+              hardDelete.getMessageInfoOfMessageAtOffset(log, value.getOriginalMessageOffset(), factory);
+          return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
+              deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
+        } catch (IOException e) {
+          throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
+              StoreErrorCodes.IOError);
         }
-        if (!deletedBlobInfo.getStoreKey().equals(id)) {
-          logger.error("Key at offset {} different from key in index", deletedBlobInfo.getStoreKey(), id);
-          return null;
-        }
-        return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
-            deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
       } else {
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       }
@@ -1189,11 +1186,13 @@ public class PersistentIndex {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
         for (MessageInfo info : messageInfoList) {
-          BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
-          if (readInfo == null) {
-            logger.error("Could not fetch read info for blobid {}", info.getStoreKey());
-          } else {
+          try {
+            BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
             readOptions.add(readInfo);
+          } catch (StoreException e) {
+            logger.error(
+                "Failed to read blob info for blobid {} during hard deletes, ignoring the blob. Caught exception {}",
+                info.getStoreKey(), e);
           }
         }
 
