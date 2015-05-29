@@ -101,7 +101,7 @@ public class MessageSievingInputStream extends InputStream {
   public int read(byte[] bytes, int offset, int length)
       throws IOException {
     if (bytes == null) {
-      throw new NullPointerException();
+      throw new IllegalArgumentException("Byte array cannot be null");
     } else if (offset < 0 || length < 0 || length > bytes.length - offset) {
       throw new IndexOutOfBoundsException();
     } else if (length == 0) {
