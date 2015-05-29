@@ -53,9 +53,12 @@ public class BlobStatus {
   }
 
   public String toString() {
+    int totalReplicas = available.size() + deletedOrExpired.size() + unavailable.size();
     String msg =
-        "Available :: " + available + "\nDeleted/Expired :: " + deletedOrExpired + "\nUnavailable :: " + unavailable
-            + "\n";
+        "Available size: " + available.size() + " Available :: " + available
+            + "\nDeleted/Expired size: " + deletedOrExpired.size() + "Deleted/Expired :: " + deletedOrExpired
+            + "\nUnavailable size: " + unavailable.size() + "Unavailable :: " + unavailable
+            + "\nTotal Replica count: " + totalReplicas;
     return msg;
   }
 }

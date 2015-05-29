@@ -4,8 +4,12 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.DataInputStream;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -20,28 +24,27 @@ import java.io.File;
 
 
 /**
- * Consistency Checker took is used to check for consistency among replicas for any given partition
+ * Consistency Checker tool is used to check for consistency
+ * 1) Among replicas for any given partition
+ * 2) In the index file boundaries on all replicas in a partition
  */
 public class ConsistencyCheckerTool {
 
-  String outFile;
-  FileWriter fileWriter;
+  public static String SUBJECT_BLOBS = "blobs";
+  public static String SUBJECT_INDEX = "index";
 
-  public void init(String outFile) {
-    try {
-      if (outFile != null) {
-        this.outFile = outFile;
-        fileWriter = new FileWriter(new File(outFile));
-      }
-    } catch (IOException IOException) {
-      System.out.println("IOException while trying to create File " + this.outFile);
-    }
+  //For additional checks
+  public static int DELETE_RECORD_SIZE = 97;
+
+  ClusterMap map;
+  FileWriter fileWriter;
+  String outFile;
+
+  public ConsistencyCheckerTool(ClusterMap map){
+    this.map = map;
   }
 
   public static void main(String args[]) {
-
-    ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool();
-
     try {
       OptionParser parser = new OptionParser();
 
@@ -54,8 +57,9 @@ public class ConsistencyCheckerTool {
               .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> rootDirectoryForPartitionOpt = parser.accepts("rootDirectoryForPartition",
-          "Directory which contains all replicas for a partition which in turn will have all index filesfor the respective replica, for Operation ConsistencyCheckForIndex ")
-          .withRequiredArg().describedAs("root_directory_partition").ofType(String.class);
+          "Directory which contains all replicas for a partition which in turn will have all index files "
+              + "for the respective replica, for Operation ConsistencyCheckForIndex ").withRequiredArg()
+          .describedAs("root_directory_partition").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> outFileOpt =
           parser.accepts("outFile", "Output file for \"ConsistencyCheckForIndex\" or \"ConsistencyCheckForLog\" ")
@@ -65,6 +69,12 @@ public class ConsistencyCheckerTool {
           parser.accepts("includeAcceptableInconsistentBlobs", "To include acceptable inconsistent blobs")
               .withRequiredArg().describedAs("Whether to output acceptable inconsistent blobs or not")
               .defaultsTo("false").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> subjectOpt =
+          parser.accepts("subject", "The subject of the check (" + SUBJECT_BLOBS + ", " + SUBJECT_INDEX + " etc)")
+              .withRequiredArg()
+              .describedAs("To select the subject of the check (" + SUBJECT_BLOBS + ", " + SUBJECT_INDEX + " etc)")
+              .defaultsTo(SUBJECT_BLOBS).ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -89,51 +99,51 @@ public class ConsistencyCheckerTool {
       String outFile = options.valueOf(outFileOpt);
       boolean includeAcceptableInconsistentBlobs =
           Boolean.parseBoolean(options.valueOf(includeAcceptableInconsistentBlobsOpt));
+      String subject = options.valueOf(subjectOpt);
 
-      consistencyCheckerTool.init(outFile);
-      consistencyCheckerTool.consistencyCheck(map, rootDirectoryForPartition, includeAcceptableInconsistentBlobs);
+      ConsistencyCheckerTool consistencyCheckerTool = null;
+      if (subject.equals(SUBJECT_INDEX)) {
+        consistencyCheckerTool = new IndexConsistencyCheckerTool(map);
+      } else {
+        consistencyCheckerTool = new BlobConsistencyCheckerTool(map, includeAcceptableInconsistentBlobs);
+      }
+
+      consistencyCheckerTool.setupOutputFile(outFile);
+      consistencyCheckerTool.checkConsistency(rootDirectoryForPartition);
       consistencyCheckerTool.shutdown();
     } catch (Exception e) {
-      consistencyCheckerTool.logOutput("Closed with error " + e);
+      System.err.println("Consistency checker exited with Exception: " + e);
     }
   }
 
-  private void consistencyCheck(ClusterMap map, String directoryForConsistencyCheck,
-      boolean includeAcceptableInconsistentBlobs)
-      throws IOException, InterruptedException {
-    File rootDir = new File(directoryForConsistencyCheck);
-    ArrayList<String> replicaList = populateReplicaList(rootDir);
-    logOutput("Replica List " + replicaList);
-    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
-    AtomicLong totalKeysProcessed = new AtomicLong(0);
-    int replicaCount = replicaList.size();
-    checkForConsistency(rootDir.listFiles(), map, replicaList, blobIdToStatusMap, totalKeysProcessed);
-    populateOutput(totalKeysProcessed, blobIdToStatusMap, replicaCount, includeAcceptableInconsistentBlobs);
-  }
-
-  private ArrayList<String> populateReplicaList(File rootDir) {
-    logOutput("Root directory for Partition" + rootDir);
-    ArrayList<String> replicaList = new ArrayList<String>();
-    File[] replicas = rootDir.listFiles();
-    for (File replicaFile : replicas) {
-      replicaList.add(replicaFile.getName());
+  public void setupOutputFile(String outFile) {
+    try {
+      if (outFile != null) {
+        this.outFile = outFile;
+        fileWriter = new FileWriter(new File(outFile));
+      }
+    } catch (IOException IOException) {
+      System.out.println("IOException while trying to create File " + this.outFile);
     }
-    return replicaList;
   }
 
-  private void checkForConsistency(File[] replicas, ClusterMap map, ArrayList<String> replicasList,
-      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed)
-      throws IOException, InterruptedException {
-    DumpData dumpData = new DumpData(outFile, fileWriter, map);
-    CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
-    for (File replica : replicas) {
-      new Thread(new ReplicaProcessorThread(map, replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
-          countDownLatch)).start();
+  public boolean checkConsistency(String directoryForConsistencyCheck)
+      throws Exception {
+    return false;
+  }
+
+  public void shutdown() {
+    try {
+      if (outFile != null) {
+        fileWriter.flush();
+        fileWriter.close();
+      }
+    } catch (IOException IOException) {
+      System.out.println("IOException while trying to close File " + outFile);
     }
-    countDownLatch.await();
   }
 
-  public void logOutput(String msg) {
+  protected void logOutput(String msg) {
     try {
       if (outFile == null) {
         System.out.println(msg);
@@ -144,8 +154,57 @@ public class ConsistencyCheckerTool {
       System.out.println("IOException while trying to write to File");
     }
   }
+}
 
-  private void populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap,
+class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
+
+  private boolean includeAcceptableInconsistentBlobs;
+
+  public BlobConsistencyCheckerTool(ClusterMap map, boolean includeAcceptableInconsistentBlobs){
+    super(map);
+    this.includeAcceptableInconsistentBlobs = includeAcceptableInconsistentBlobs;
+  }
+
+  @Override
+  public boolean checkConsistency(String directoryForConsistencyCheck)
+      throws Exception {
+    File rootDir = new File(directoryForConsistencyCheck);
+    logOutput("Root directory for Partition" + rootDir);
+    ArrayList<String> replicaList = populateReplicaList(rootDir);
+    logOutput("Replica List " + replicaList);
+    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
+    AtomicLong totalKeysProcessed = new AtomicLong(0);
+    int replicaCount = replicaList.size();
+
+    doCheck(rootDir.listFiles(), replicaList, blobIdToStatusMap, totalKeysProcessed);
+    return populateOutput(totalKeysProcessed, blobIdToStatusMap, replicaCount, includeAcceptableInconsistentBlobs);
+  }
+
+  private ArrayList<String> populateReplicaList(File rootDir) {
+    ArrayList<String> replicaList = new ArrayList<String>();
+    File[] replicas = rootDir.listFiles();
+    for (File replicaFile : replicas) {
+      replicaList.add(replicaFile.getName());
+    }
+    return replicaList;
+  }
+
+  private void doCheck(File[] replicas, ArrayList<String> replicasList,
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed)
+      throws IOException, InterruptedException {
+    DumpData dumpData = new DumpData(outFile, fileWriter, map);
+    CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
+    for (File replica : replicas) {
+      Thread thread = new Thread(
+          new ReplicaProcessorForBlobs(replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
+              countDownLatch));
+      thread.start();
+      thread.join();
+    }
+    countDownLatch.await();
+  }
+
+  private boolean populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap,
       int replicaCount, boolean includeAcceptableInconsistentBlobs) {
     logOutput("Total keys processed " + totalKeysProcessed.get());
     logOutput("\nTotal Blobs Found " + blobIdToStatusMap.size());
@@ -181,22 +240,15 @@ public class ConsistencyCheckerTool {
       logOutput("Acceptable Inconsistent blobs count : " + acceptableInconsistentBlobs);
     }
     logOutput("Real Inconsistent blobs count :" + realInconsistentBlobs);
-  }
 
-  public void shutdown() {
-    try {
-      if (outFile != null) {
-        fileWriter.flush();
-        fileWriter.close();
-      }
-    } catch (IOException IOException) {
-      System.out.println("IOException while trying to close File " + outFile);
+    if(realInconsistentBlobs > 0) {
+      return false;
     }
+    return true;
   }
 
-  class ReplicaProcessorThread implements Runnable {
+  class ReplicaProcessorForBlobs implements Runnable {
 
-    ClusterMap map;
     File rootDirectory;
     ArrayList<String> replicaList;
     ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap;
@@ -204,10 +256,9 @@ public class ConsistencyCheckerTool {
     DumpData dumpData;
     CountDownLatch countDownLatch;
 
-    public ReplicaProcessorThread(ClusterMap map, File rootDirectory, ArrayList<String> replicaList,
+    public ReplicaProcessorForBlobs(File rootDirectory, ArrayList<String> replicaList,
         ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
         CountDownLatch countDownLatch) {
-      this.map = map;
       this.rootDirectory = rootDirectory;
       this.replicaList = replicaList;
       this.blobIdToStatusMap = blobIdToStatusMap;
@@ -229,3 +280,92 @@ public class ConsistencyCheckerTool {
     }
   }
 }
+
+class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
+
+  public IndexConsistencyCheckerTool(ClusterMap map){
+    super(map);
+  }
+
+  @Override
+  public boolean checkConsistency(String directoryForConsistencyCheck)
+      throws Exception {
+    boolean isConsistent = true;
+    File rootDir = new File(directoryForConsistencyCheck);
+    logOutput("Root directory for Partition is " + rootDir);
+    for(File replicaFolder : rootDir.listFiles()) {
+      try {
+        isConsistent = checkSingleReplica(replicaFolder) && isConsistent;
+      } catch (Exception e) {
+        logOutput("Exception while performing operation: " + e);
+      }
+    }
+    return isConsistent;
+  }
+
+  public boolean checkSingleReplica(File replicaFolder) throws Exception {
+    boolean isConsistent = true;
+    File[] indexFiles = replicaFolder.listFiles();
+    Arrays.sort(indexFiles, new IndexFileNameComparator());
+
+    logOutput("------- Processing " + replicaFolder.getName() + " -------");
+    String lastProcessedIndexFileName = null;
+    long lastLogOffsetEnd = 0;
+    for(File indexFile : indexFiles) {
+      long logOffsetStart = getLogOffsetStart(indexFile);
+      isConsistent = validateValues(logOffsetStart, lastLogOffsetEnd,
+          indexFile.getName(), lastProcessedIndexFileName);
+      lastLogOffsetEnd = getLogOffsetEnd(indexFile);
+      lastProcessedIndexFileName = indexFile.getName();
+    }
+
+    return isConsistent;
+  }
+
+  private boolean validateValues(long logOffsetStart, long lastLogOffsetEnd,
+      String currentIndexFileName, String lastProcessedIndexFileName){
+    long difference = logOffsetStart - lastLogOffsetEnd;
+    if(difference > 0) {
+      logOutput("Difference of " + difference + " between "
+          + lastProcessedIndexFileName + " and " + currentIndexFileName
+          + ". (" + lastLogOffsetEnd + ", " + logOffsetStart + ")");
+      if (difference % DELETE_RECORD_SIZE != 0) {
+        logOutput("The difference " + difference + " is not a multiple of delete record size");
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private long getLogOffsetStart(File indexFile){
+    String name = indexFile.getName();
+    return Long.parseLong(name.substring(0, name.indexOf("_")));
+  }
+
+  private long getLogOffsetEnd(File indexFile) throws Exception {
+    long fileEndPointer;
+    DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
+    short version = stream.readShort();
+    if (version == 0) {
+      stream.skipBytes((2 * Integer.SIZE) / Byte.SIZE);
+      fileEndPointer = stream.readLong();
+    } else {
+      throw new Exception("Version read from " + indexFile.getName() + " is " + version + " (not 0)");
+    }
+    return fileEndPointer;
+  }
+
+
+  static class IndexFileNameComparator implements Comparator {
+    public int compare(Object o1, Object o2) {
+      String s1 = ((File) o1).getName();
+      String s2 = ((File) o2).getName();
+
+      long n1 = Long.parseLong(s1.substring(0, s1.indexOf("_")));
+      long n2 = Long.parseLong(s2.substring(0, s2.indexOf("_")));
+
+      return Long.compare(n1, n2);
+    }
+  }
+}
+

@@ -58,6 +58,7 @@ public class MockCluster {
     props.setProperty("store.enable.hard.delete", "true");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
+    props.setProperty("replication.validate.message.stream", "true");
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     server.startup();
