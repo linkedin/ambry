@@ -22,14 +22,14 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   private long sizeToWrite;
   private List<MessageInfo> streamInfo;
 
-  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializedStream)
+  public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializeStream)
       throws IOException {
     sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
       sizeToWrite += info.getSize();
     }
     this.streamInfo = streamInfo;
-    if(materializedStream){
+    if(materializeStream){
       ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(streamToWrite, (int)sizeToWrite);
       this.streamToWrite = byteBufferInputStream;
     }

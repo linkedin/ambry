@@ -18,13 +18,13 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 
 
-public class ValidMessageDetectionInputStreamTest {
+public class MessageSievingInputStreamTest {
 
   @Test
   public void validMessageDetectionInputStreamTestForValidBlobs()
       throws IOException, MessageFormatException {
 
-    // ValidMessageDetectionInputStream contains put records for 3 valid blobs
+    // MessageSievingInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
 
     // create message stream for blob 1
@@ -87,8 +87,8 @@ public class ValidMessageDetectionInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageDetectionInputStream validMessageDetectionInputStream =
-        new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
+    MessageSievingInputStream validMessageDetectionInputStream =
+        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
             new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -126,7 +126,7 @@ public class ValidMessageDetectionInputStreamTest {
   public void validMessageDetectionInputStreamTestForInValidBlobs()
       throws IOException, MessageFormatException {
 
-    // ValidMessageDetectionInputStream contains put records for 2 valid blobs and 1 corrupt blob
+    // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
     // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
 
     // create message stream for blob 1
@@ -195,8 +195,8 @@ public class ValidMessageDetectionInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageDetectionInputStream validMessageDetectionInputStream =
-        new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
+    MessageSievingInputStream validMessageDetectionInputStream =
+        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
             new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
@@ -230,7 +230,7 @@ public class ValidMessageDetectionInputStreamTest {
   public void validMessageDetectionInputStreamTestForDeletedBlobs()
       throws IOException, MessageFormatException {
 
-    // ValidMessageDetectionInputStream contains put records for 2 valid blobs and 1 deleted blob
+    // MessageSievingInputStream contains put records for 2 valid blobs and 1 deleted blob
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
 
     try {
@@ -285,8 +285,8 @@ public class ValidMessageDetectionInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    ValidMessageDetectionInputStream validMessageDetectionInputStream =
-        new ValidMessageDetectionInputStream(inputStream, msgInfoList, new MockIdFactory(),
+    MessageSievingInputStream validMessageDetectionInputStream =
+        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
             new MetricRegistry());
       Assert.fail("IllegalStateException should have been thrown due to delete record ");
     }
@@ -295,7 +295,7 @@ public class ValidMessageDetectionInputStreamTest {
     }
   }
 
-  private boolean verifyBlob(ValidMessageDetectionInputStream validMessageDetectionInputStream, int headerSize,
+  private boolean verifyBlob(MessageSievingInputStream validMessageDetectionInputStream, int headerSize,
       int blobPropertiesRecordSize, int userMetadataSize, int blobSize, StoreKey key, int blobPropertiesSize,
       String serviceId, byte[] usermetadata, byte[] data)
       throws IOException {

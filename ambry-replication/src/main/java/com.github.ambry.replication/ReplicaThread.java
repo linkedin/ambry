@@ -10,7 +10,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.messageformat.ValidMessageDetectionInputStream;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.commons.BlobId;
@@ -36,7 +36,6 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
-import java.io.InputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -623,11 +622,11 @@ class ReplicaThread implements Runnable {
 
               MessageFormatWriteSet writeset = null;
               if (validateMessageStream) {
-                ValidMessageDetectionInputStream validMessageDetectionInputStream =
-                    new ValidMessageDetectionInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
+                MessageSievingInputStream validMessageDetectionInputStream =
+                    new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
                          metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
-                  replicationMetrics.incrementInvalidMessageStreamErrorCount(partitionResponseInfo.getPartition());
+                  replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);

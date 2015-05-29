@@ -21,11 +21,11 @@ import org.slf4j.LoggerFactory;
  * InputStream that skips invalid blobs based on some validation criteria.
  * For now, the check only supports detection of message corruption
  */
-public class ValidMessageDetectionInputStream extends InputStream {
+public class MessageSievingInputStream extends InputStream {
   private int validSize;
   private final Logger logger;
   private ByteBuffer byteBuffer;
-  private boolean hasInvalidMessage;
+  private boolean hasInvalidMessages;
   private List<MessageInfo> validMessageInfoList;
 
   //metrics
@@ -40,16 +40,16 @@ public class ValidMessageDetectionInputStream extends InputStream {
    * @param metricRegistry Metric register to register metrics
    * @throws java.io.IOException
    */
-  public ValidMessageDetectionInputStream(InputStream stream, List<MessageInfo> messageInfoList,
+  public MessageSievingInputStream(InputStream stream, List<MessageInfo> messageInfoList,
       StoreKeyFactory storeKeyFactory, MetricRegistry metricRegistry)
       throws IOException {
     this.logger = LoggerFactory.getLogger(getClass());
-    messageFormatValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatValidationTime"));
+    messageFormatValidationTime =
+        metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "MessageFormatValidationTime"));
     messageFormatBatchValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(ValidMessageDetectionInputStream.class, "MessageFormatBatchValidationTime"));
+        .histogram(MetricRegistry.name(MessageSievingInputStream.class, "MessageFormatBatchValidationTime"));
     validSize = 0;
-    hasInvalidMessage = false;
+    hasInvalidMessages = false;
     validMessageInfoList = new ArrayList<MessageInfo>();
 
     // check for empty list
@@ -73,7 +73,7 @@ public class ValidMessageDetectionInputStream extends InputStream {
         validSize += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
-        hasInvalidMessage = true;
+        hasInvalidMessages = true;
       }
     }
     messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
@@ -100,6 +100,13 @@ public class ValidMessageDetectionInputStream extends InputStream {
   @Override
   public int read(byte[] bytes, int offset, int length)
       throws IOException {
+    if (bytes == null) {
+      throw new NullPointerException();
+    } else if (offset < 0 || length < 0 || length > bytes.length - offset) {
+      throw new IndexOutOfBoundsException();
+    } else if (length == 0) {
+      return 0;
+    }
     int count = Math.min(byteBuffer.remaining(), length);
     if (count == 0) {
       return -1;
@@ -113,7 +120,7 @@ public class ValidMessageDetectionInputStream extends InputStream {
    * @return
    */
   public boolean hasInvalidMessages() {
-    return hasInvalidMessage;
+    return hasInvalidMessages;
   }
 
   public List<MessageInfo> getValidMessageInfoList() {
@@ -168,21 +175,15 @@ public class ValidMessageDetectionInputStream extends InputStream {
           isValid = false;
         }
         if (logger.isTraceEnabled()) {
-          StringBuilder strBuilder = new StringBuilder();
-          strBuilder.append("Header - version ").append(header.getVersion());
-          strBuilder.append(" Message Size ").append(header.getMessageSize());
-          strBuilder.append(" Starting Offset of blob ").append(startOffset);
-          strBuilder.append(" BlobPropertiesRelativeOffset ").append(header.getBlobPropertiesRecordRelativeOffset());
-          strBuilder.append(" UserMetadataRelativeOffset ").append(header.getUserMetadataRecordRelativeOffset());
-          strBuilder.append(" DataRelativeOffset ").append(header.getBlobRecordRelativeOffset());
-          strBuilder.append(" DeleteRecordRelativeOffset ").append(header.getDeleteRecordRelativeOffset());
-          strBuilder.append(" Crc ").append(header.getCrc());
-          strBuilder.append("; Id - ").append(storeKey.getID());
-          strBuilder.append("; Blob properties - blobSize  ").append(props.getBlobSize()).append(" serviceId ")
-              .append(props.getServiceId());
-          strBuilder.append("; Metadata - size ").append(metadata.capacity());
-          strBuilder.append("; Blob - size ").append(output.getSize());
-          logger.trace("Message successfully read " + strBuilder.toString());
+          logger.trace("Message Successfully read");
+          logger.trace(
+              "Header - version {} Message Size {} Starting offset of the blob {} BlobPropertiesRelativeOffset {}"
+                  + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
+              header.getVersion(), header.getMessageSize(), startOffset, header.getBlobPropertiesRecordRelativeOffset(),
+              header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),
+              header.getDeleteRecordRelativeOffset(), header.getCrc());
+          logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
+              props.getBlobSize(), metadata.capacity(), output.getSize());
         }
         isValid = true;
       } else {

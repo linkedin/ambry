@@ -149,7 +149,7 @@ public class ReplicationMetrics {
     registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInterDCReplicaThreads"),
         numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
-    populateInvalidMessageStreamMetricForPartitions(replicaIds);
+    populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {
@@ -176,7 +176,7 @@ public class ReplicationMetrics {
     replicaLagInBytes.add(replicaLag);
   }
 
-  public void populateInvalidMessageStreamMetricForPartitions(List<ReplicaId> replicaIds) {
+  public void populateInvalidMessageMetricForReplicas(List<ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partitionId = replicaId.getPartitionId();
       if (!partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {
@@ -187,7 +187,7 @@ public class ReplicationMetrics {
     }
   }
 
-  public void incrementInvalidMessageStreamErrorCount(PartitionId partitionId) {
+  public void incrementInvalidMessageError(PartitionId partitionId) {
     replicationInvalidMessageStreamErrorCount.inc();
     if (partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {
       partitionIdToInvalidMessageStreamErrorCounter.get(partitionId).inc();
