@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Netty specific implementation of RestRequest
- *
+ * <p/>
  * Just a wrapper over HttpRequest.
  */
 public class NettyRequest implements RestRequest {
@@ -44,9 +44,9 @@ public class NettyRequest implements RestRequest {
   }
 
   public String getPathPart(int part) {
-   if (pathParts == null) {
+    if (pathParts == null) {
       String path = getPath();
-      if(path == null) {
+      if (path == null) {
         return null;
       }
       path = path.startsWith("/") ? path.substring(1) : path;

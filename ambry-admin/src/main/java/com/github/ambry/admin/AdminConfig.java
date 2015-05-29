@@ -12,7 +12,7 @@ public class AdminConfig {
   public static String HANDLER_COUNT_KEY = "ambry.admin.handler.count";
 
   /**
-   *  The number of handlers in the admin that process queued messages
+   * The number of handlers in the admin that process queued messages
    */
   @Config("handlerCount")
   @Default("5")

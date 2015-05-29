@@ -14,15 +14,15 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- *  Admin specific implementation of RestRequestDelgator.
- *
- *  When instantiated, we create a configurable number of message handlers.
- *  The rest server requests to use a handler and we choose one out of the pool of handlers
- *  and return it.
- *  Multiple requests can share the same handler i.e. just because we returned a handler does not mean
- *  that it is fully occupied. Our job is to just return a handler (any one) when asked for. The handler will
- *  take care of serving all the requests that it has been assigned to. Having said this, we would like to
- *  balance load among all the handlers.
+ * Admin specific implementation of RestRequestDelgator.
+ * <p/>
+ * When instantiated, we create a configurable number of message handlers.
+ * The rest server requests to use a handler and we choose one out of the pool of handlers
+ * and return it.
+ * Multiple requests can share the same handler i.e. just because we returned a handler does not mean
+ * that it is fully occupied. Our job is to just return a handler (any one) when asked for. The handler will
+ * take care of serving all the requests that it has been assigned to. Having said this, we would like to
+ * balance load among all the handlers.
  */
 public class AdminRequestDelegator implements RestRequestDelegator {
 
@@ -90,9 +90,10 @@ public class AdminRequestDelegator implements RestRequestDelegator {
     executor.shutdown();
   }
 
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
+      throws InterruptedException {
     up = !executor.awaitTermination(timeout, timeUnit);
-    if(up) {
+    if (up) {
       logger.error("Executor failed to terminate after waiting for " + timeout + " " + timeUnit);
     }
     return !up;

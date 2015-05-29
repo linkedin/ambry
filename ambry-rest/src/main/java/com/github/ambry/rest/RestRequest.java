@@ -16,12 +16,14 @@ public interface RestRequest extends RestMessage {
 
   /**
    * Return the path (the parts of the url after the domain)
+   *
    * @return path
    */
   public String getPath();
 
   /**
    * Returns the specified part in the path (path is separated by "/")
+   *
    * @param part
    * @return
    */
@@ -29,12 +31,14 @@ public interface RestRequest extends RestMessage {
 
   /**
    * Return the request URI
+   *
    * @return request URI
    */
   public String getUri();
 
   /**
    * Get the value of a certain header
+   *
    * @param name
    * @return
    */
@@ -42,6 +46,7 @@ public interface RestRequest extends RestMessage {
 
   /**
    * Return the values of a particular parameter in the URI
+   *
    * @param parameter
    * @return the values of the parameter in the URI
    */

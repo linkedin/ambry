@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Abstract class for a RestMessageHandler. Handles all incoming messages from the RestServer
- *
+ * <p/>
  * One or many instances of this are created by the Admin/Frontend during startup and they continuously run
  * and process messages that have been put on their queue.
  */
@@ -121,6 +121,7 @@ public abstract class RestMessageHandler implements Runnable {
 
   /**
    * Called by processMessage when it detects/catches an error
+   *
    * @param messageInfo
    * @param e
    */
@@ -130,6 +131,7 @@ public abstract class RestMessageHandler implements Runnable {
    * Called by the RestServer after the request is complete and the connection is inactive.
    * This is (has to be) called regardless of the request being concluded successfully or
    * unsuccessfully (i.e. connection interruption).
+   *
    * @param request
    * @throws Exception
    */

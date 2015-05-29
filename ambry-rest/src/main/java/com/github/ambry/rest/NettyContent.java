@@ -7,7 +7,7 @@ import io.netty.util.ReferenceCountUtil;
 
 /**
  * Netty specific implementation of RestContent
- *
+ * <p/>
  * Just a wrapper over HttpContent
  */
 public class NettyContent implements RestContent {

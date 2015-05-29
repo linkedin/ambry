@@ -21,14 +21,16 @@ import static org.junit.Assert.assertEquals;
 public class AmbryBlobStorageServiceTest {
 
   @Test
-  public void startShutDownTest() throws Exception {
+  public void startShutDownTest()
+      throws Exception {
     AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
     adminBlobStorageService.start();
     adminBlobStorageService.shutdown();
   }
 
   @Test
-  public void echoTest() throws BlobStorageServiceException, JSONException {
+  public void echoTest()
+      throws BlobStorageServiceException, JSONException {
     AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
     String inputText = "TextToBeEchoed";
     AdminExecutionData executionData = createEchoExecutionData(inputText);
@@ -37,7 +39,8 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Echoed text must be equal to input text", inputText, echoedText);
   }
 
-  private AdminExecutionData createEchoExecutionData(String inputText) throws JSONException {
+  private AdminExecutionData createEchoExecutionData(String inputText)
+      throws JSONException {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("text", inputText);
@@ -48,12 +51,13 @@ public class AmbryBlobStorageServiceTest {
   }
 
   @Test
-  public void getReplicasForBlobIdTest() throws BlobStorageServiceException, IOException, JSONException {
+  public void getReplicasForBlobIdTest()
+      throws BlobStorageServiceException, IOException, JSONException {
     ClusterMap clusterMap = new MockClusterMap();
     AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(clusterMap);
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
-    for(PartitionId partitionId : partitionIds) {
-      createBlobIdAndTest(partitionId,adminBlobStorageService);
+    for (PartitionId partitionId : partitionIds) {
+      createBlobIdAndTest(partitionId, adminBlobStorageService);
     }
   }
 
@@ -63,13 +67,14 @@ public class AmbryBlobStorageServiceTest {
     BlobId blobId = new BlobId(partitionId);
     AdminExecutionData executionData = createGetReplicasForBlobIdExecutionData(blobId.getID());
     ExecutionResult executionResult = adminBlobStorageService.execute(executionData);
-    String returnedReplicasStr = executionResult.getOperationResult()
-        .getString(GetReplicasForBlobIdExecutor.REPLICAS_KEY).replace("\"", "");
+    String returnedReplicasStr =
+        executionResult.getOperationResult().getString(GetReplicasForBlobIdExecutor.REPLICAS_KEY).replace("\"", "");
     assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
         originalReplicaStr, returnedReplicasStr);
   }
 
-  private AdminExecutionData createGetReplicasForBlobIdExecutionData(String blobId) throws JSONException {
+  private AdminExecutionData createGetReplicasForBlobIdExecutionData(String blobId)
+      throws JSONException {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("blobId", blobId);
@@ -80,13 +85,15 @@ public class AmbryBlobStorageServiceTest {
   }
 
   @Test(expected = BlobStorageServiceException.class)
-  public void unknownOperationExceptionTest() throws JSONException, BlobStorageServiceException {
+  public void unknownOperationExceptionTest()
+      throws JSONException, BlobStorageServiceException {
     AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
     AdminExecutionData executionData = createUnknownOperationExecutionData();
     adminBlobStorageService.execute(executionData);
   }
 
-  private AdminExecutionData createUnknownOperationExecutionData() throws JSONException {
+  private AdminExecutionData createUnknownOperationExecutionData()
+      throws JSONException {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("dummyData", "dummyData");

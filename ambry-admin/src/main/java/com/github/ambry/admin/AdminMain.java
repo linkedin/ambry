@@ -55,7 +55,7 @@ public class AdminMain {
           public void run() {
             try {
               adminServer.shutdown();
-              if(adminServer.awaitShutdown(5, TimeUnit.MINUTES)) {
+              if (adminServer.awaitShutdown(5, TimeUnit.MINUTES)) {
                 logger.info("Shutdown complete");
               }
             } catch (InterruptedException e) {

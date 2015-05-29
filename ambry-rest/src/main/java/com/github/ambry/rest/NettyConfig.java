@@ -17,35 +17,35 @@ public class NettyConfig extends RestServerConfig {
   public static String WORKER_THREADCOUNT_KEY = "netty.server.worker.threadcount";
 
   /**
-   *  Number of netty boss threads
+   * Number of netty boss threads
    */
   @Config("bossThreadCount")
   @Default("1")
   private final int bossThreadCount;
 
   /**
-   *  The amount of time a channel is allowed to be idle before its closed. 0 to disable
+   * The amount of time a channel is allowed to be idle before its closed. 0 to disable
    */
   @Config("idleTimeSeconds")
   @Default("60")
   private final int idleTimeSeconds;
 
   /**
-   *  Port to run netty server on
+   * Port to run netty server on
    */
   @Config("port")
   @Default("8088")
   private final int port;
 
   /**
-   *  Socket backlog size
+   * Socket backlog size
    */
   @Config("soBacklog")
   @Default("100")
   private final int soBacklog;
 
   /**
-   *  Number of netty worker threads
+   * Number of netty worker threads
    */
   @Config("workerThreadCount")
   @Default("1")

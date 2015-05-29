@@ -25,15 +25,18 @@ public class AdminBlobStorageService implements BlobStorageService {
     this.clusterMap = clusterMap;
   }
 
-  public void start() throws InstantiationException {
+  public void start()
+      throws InstantiationException {
     up = true;
   }
 
-  public void shutdown() throws Exception {
+  public void shutdown()
+      throws Exception {
     up = false;
   }
 
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
+      throws InterruptedException {
     //nothing to do
     return true;
   }

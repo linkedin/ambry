@@ -86,9 +86,10 @@ public class NettyServer implements RestServer {
     logger.info("Netty server shutdown complete..");
   }
 
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
+      throws InterruptedException {
     up = !(workerGroup.awaitTermination(timeout, timeUnit) && bossGroup.awaitTermination(timeout, timeUnit));
-    if(up) {
+    if (up) {
       logger.error("Netty boss/worker threads failed to terminate after " + timeout + " " + timeUnit);
     }
     return !up;

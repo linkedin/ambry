@@ -26,6 +26,7 @@ public enum RestErrorCode {
 
   /**
    * Provides a RestErrorCode given BlobStorageServiceErrorCode
+   *
    * @param code
    * @return the RestErrorCode that this BlobStorageServiceErrorCode maps to
    */

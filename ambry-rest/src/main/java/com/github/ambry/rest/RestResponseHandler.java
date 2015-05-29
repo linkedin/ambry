@@ -6,6 +6,7 @@ package com.github.ambry.rest;
 public interface RestResponseHandler {
   /**
    * Add to body of the rest data we are returning and write to the channel
+   *
    * @param data
    * @param isLast isLastChunk
    * @throws RestException
@@ -15,6 +16,7 @@ public interface RestResponseHandler {
 
   /**
    * Add to body of the rest data we are returning and flush the write to the channel
+   *
    * @param data
    * @param isLast isLastChunk
    * @throws RestException
@@ -24,6 +26,7 @@ public interface RestResponseHandler {
 
   /**
    * Write the response to the channel
+   *
    * @throws RestException
    */
   public void finalizeResponse()
@@ -31,6 +34,7 @@ public interface RestResponseHandler {
 
   /**
    * Write the response to the channel and flush
+   *
    * @throws RestException
    */
   public void finalizeResponseAndFlush()
@@ -38,6 +42,7 @@ public interface RestResponseHandler {
 
   /**
    * Flush all data in the channel
+   *
    * @throws RestException
    */
   public void flush()
@@ -45,6 +50,7 @@ public interface RestResponseHandler {
 
   /**
    * Close the channel
+   *
    * @throws RestException
    */
   public void close()
@@ -57,6 +63,7 @@ public interface RestResponseHandler {
 
   /**
    * Called by the rest server when the request is complete and the connection is inactive
+   *
    * @throws Exception
    */
   public void onRequestComplete()
@@ -74,6 +81,7 @@ public interface RestResponseHandler {
 
   /**
    * set the content type of the response
+   *
    * @param type
    * @throws RestException
    */

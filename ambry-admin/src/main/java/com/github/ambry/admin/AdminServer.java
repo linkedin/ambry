@@ -5,7 +5,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

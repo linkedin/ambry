@@ -13,7 +13,7 @@ import org.json.JSONObject;
 
 /**
  * Admin specific implementation of RestMessageHandler
- *
+ * <p/>
  * Supposed to handle GET, POST, DELETE and HEAD. Also is notified on error or when a request is complete
  */
 public class AdminMessageHandler extends RestMessageHandler {
@@ -119,7 +119,7 @@ public class AdminMessageHandler extends RestMessageHandler {
       RestResponseHandler responseHandler = messageInfo.getResponseHandler();
       if (messageInfo.getRestObject() instanceof RestRequest) {
         String echoStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
-        if(echoStr != null) {
+        if (echoStr != null) {
           responseHandler.setContentType("text/plain");
           responseHandler.finalizeResponse();
           responseHandler.addToBodyAndFlush(echoStr.getBytes(), true);
@@ -143,7 +143,7 @@ public class AdminMessageHandler extends RestMessageHandler {
       RestResponseHandler responseHandler = messageInfo.getResponseHandler();
       if (messageInfo.getRestObject() instanceof RestRequest) {
         String replicaStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
-        if(replicaStr != null) {
+        if (replicaStr != null) {
           responseHandler.setContentType("application/json");
           responseHandler.finalizeResponse();
           responseHandler.addToBodyAndFlush(replicaStr.getBytes(), true);
