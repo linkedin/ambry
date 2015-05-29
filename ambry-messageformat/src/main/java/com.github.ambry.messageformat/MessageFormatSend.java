@@ -91,7 +91,8 @@ public class MessageFormatSend implements Send {
           ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
           readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
               MessageFormatRecord.Version_Field_Size_In_Bytes);
-          logger.trace("Calculate offsets, read header version time: {}", SystemTime.getInstance().milliseconds() - startTime);
+          logger.trace("Calculate offsets, read header version time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
 
           headerVersion.flip();
           short version = headerVersion.getShort();
@@ -107,7 +108,8 @@ public class MessageFormatSend implements Send {
                   MessageFormatRecord.Version_Field_Size_In_Bytes,
                   MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
                       - MessageFormatRecord.Version_Field_Size_In_Bytes);
-              logger.trace("Calculate offsets, read header time: {}", SystemTime.getInstance().milliseconds() - startTime);
+              logger.trace("Calculate offsets, read header time: {}",
+                  SystemTime.getInstance().milliseconds() - startTime);
 
               startTime = SystemTime.getInstance().milliseconds();
               header.flip();
@@ -121,7 +123,8 @@ public class MessageFormatSend implements Send {
                     "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId "
                         + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
               }
-              logger.trace("Calculate offsets, verify header time: {}", SystemTime.getInstance().milliseconds() - startTime);
+              logger.trace("Calculate offsets, verify header time: {}",
+                  SystemTime.getInstance().milliseconds() - startTime);
 
               startTime = SystemTime.getInstance().milliseconds();
               if (flag == MessageFormatFlags.BlobProperties) {
