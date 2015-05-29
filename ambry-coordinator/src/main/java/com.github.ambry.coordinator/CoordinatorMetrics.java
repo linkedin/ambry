@@ -31,6 +31,8 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
+  public final Counter blobAlreadyExistsInLocalColoError;
+  public final Counter blobAlreadyExistsInRemoteColoError;
 
   private final Counter putBlobError;
   private final Counter deleteBlobError;
@@ -99,6 +101,10 @@ public class CoordinatorMetrics {
     insufficientCapacityError =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "insufficientCapacityError"));
     blobTooLargeError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobTooLargeError"));
+    blobAlreadyExistsInLocalColoError =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobAlreadyExistsInLocalColoError"));
+    blobAlreadyExistsInRemoteColoError =
+        registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobAlreadyExistsInRemoteColoError"));
     blobDoesNotExistError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDoesNotExistError"));
     blobDeletedError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobDeletedError"));
     blobExpiredError = registry.counter(MetricRegistry.name(AmbryCoordinator.class, "blobExpiredError"));
