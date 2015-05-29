@@ -23,6 +23,6 @@ public interface MessageStoreHardDelete {
    * @param factory the store key factory.
    * @return a MessageInfo object for the message at the offset.
    */
-  public MessageInfo getMessageInfoOfMessageAtOffset(Read read, long offset, StoreKeyFactory factory)
+  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory)
       throws IOException;
 }

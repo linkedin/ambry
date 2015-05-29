@@ -459,7 +459,7 @@ public class PersistentIndex {
         // beyond the start offset of the delete message.
         try {
           MessageInfo deletedBlobInfo =
-              hardDelete.getMessageInfoOfMessageAtOffset(log, value.getOriginalMessageOffset(), factory);
+              hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
           return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
               deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
         } catch (IOException e) {

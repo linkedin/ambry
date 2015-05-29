@@ -33,9 +33,8 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
   }
 
   @Override
-  public MessageInfo getMessageInfoOfMessageAtOffset(Read read, long offset, StoreKeyFactory storeKeyFactory)
+  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory storeKeyFactory)
       throws IOException {
-    MessageInfo info;
     try {
       // read message header
       ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
@@ -54,31 +53,28 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
               new MessageFormatRecord.MessageHeader_Format_V1(header);
           headerFormat.verifyHeader();
           long endOffset = headerFormat.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset? offset + headerFormat
-            .getBlobPropertiesRecordRelativeOffset() + headerFormat.getMessageSize():
-          offset + headerFormat.getDeleteRecordRelativeOffset() + headerFormat.getMessageSize();
+              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset ? offset + headerFormat
+              .getBlobPropertiesRecordRelativeOffset() + headerFormat.getMessageSize()
+              : offset + headerFormat.getDeleteRecordRelativeOffset() + headerFormat.getMessageSize();
 
           ReadInputStream stream = new ReadInputStream(read, offset, endOffset);
-          StoreKey key =
-            storeKeyFactory.getStoreKey(new DataInputStream(stream));
+          StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
 
           // read the appropriate type of message based on the relative offset that is set
           if (headerFormat.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
             BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
-            info = new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
                 Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
-            info =
-                new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), deleteFlag);
+            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                deleteFlag);
           }
-          break;
         default:
           throw new MessageFormatException("Version not known while reading message - " + version,
               MessageFormatErrorCodes.Unknown_Format_Version);
       }
-      return info;
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.
       throw new IOException("Message format exception while parsing messages");
