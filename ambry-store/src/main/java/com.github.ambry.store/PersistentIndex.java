@@ -772,7 +772,8 @@ public class PersistentIndex {
     if (newTokenOffsetInJournal != StoreFindToken.Uninitialized_Offset) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
-      // If endTimeSec is null, then since we have entered a segment, we should return at least one message
+      // If the condition does not have an endtime, then since we have entered a segment, we should return at least one
+      // message
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);

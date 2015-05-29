@@ -32,6 +32,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.FileWatcher;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -363,15 +364,11 @@ public class ServerTest {
       PutResponse response5 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response5.getError(), ServerErrorCode.No_Error);
 
-      // Create a watcher so we know when the cleanup tokens change. We only watch the cleanup token for one of the
-      // replicas - the assumption is
-      final Path path1 = FileSystems.getDefault().getPath(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
-      final Path path2 = FileSystems.getDefault().getPath(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
-      final Path path3 = FileSystems.getDefault().getPath(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
-      WatchService watchService = FileSystems.getDefault().newWatchService();
-      path1.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
-      path2.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
-      path3.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+      // Create a watcher so we know when the cleanup tokens change.
+      FileWatcher fileWatcher = new FileWatcher("cleanuptoken");
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
 
       // delete blob 1
       DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobIdList.get(1));
@@ -397,12 +394,12 @@ public class ServerTest {
       zeroedData = new byte[data.get(4).length];
       data.set(4, zeroedData);
 
-      waitForChange(watchService);
+      fileWatcher.waitForChange();
 
-      watchService = FileSystems.getDefault().newWatchService();
-      path1.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
-      path2.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
-      path3.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+      fileWatcher = new FileWatcher("cleanuptoken");
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
+      fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
 
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -522,7 +519,7 @@ public class ServerTest {
       zeroedData = new byte[data.get(6).length];
       data.set(6, zeroedData);
 
-      waitForChange(watchService);
+      fileWatcher.waitForChange();
 
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
@@ -572,24 +569,6 @@ public class ServerTest {
     } catch (Exception e) {
       e.printStackTrace();
       Assert.assertEquals(true, false);
-    }
-  }
-
-  void waitForChange(WatchService watchService) throws InterruptedException {
-    int count = 3;
-    while (true) {
-      final WatchKey wk = watchService.take();
-      for (WatchEvent<?> event : wk.pollEvents()) {
-        final Path changed = (Path) event.context();
-        if (changed.endsWith("cleanuptoken")) {
-          count--;
-          break;
-        }
-      }
-      if (count == 0) {
-        wk.reset();
-        break;
-      }
     }
   }
 

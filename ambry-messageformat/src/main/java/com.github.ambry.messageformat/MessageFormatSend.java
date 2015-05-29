@@ -82,8 +82,6 @@ public class MessageFormatSend implements Send {
           // just copy over the total size and use relative offset to be 0
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
-          // Note: This will throw an exception if the readSet contains deleted objects. For deleted objects,
-          // MessageFormatFlags.All is unsupported as of now.
           infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
           totalSizeToWrite += readSet.sizeInBytes(i);
         } else {

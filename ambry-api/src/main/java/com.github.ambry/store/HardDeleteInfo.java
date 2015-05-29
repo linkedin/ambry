@@ -10,7 +10,7 @@ public class HardDeleteInfo {
   ReadableByteChannel channel;
   long streamSize;
 
-  public HardDeleteInfo(ReadableByteChannel channel , long streamSize) {
+  public HardDeleteInfo(ReadableByteChannel channel, long streamSize) {
     this.channel = channel;
     this.streamSize = streamSize;
   }
