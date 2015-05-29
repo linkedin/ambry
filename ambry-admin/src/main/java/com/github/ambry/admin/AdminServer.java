@@ -6,6 +6,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +26,6 @@ public class AdminServer {
   private final AdminRequestDelegator requestDelegator;
   private final RestServer restServer;
 
-  private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
@@ -51,6 +51,7 @@ public class AdminServer {
     try {
       logger.info("Starting server");
 
+      adminBlobStorageService.start();
       requestDelegator.start();
       restServer.start();
 
@@ -66,17 +67,21 @@ public class AdminServer {
     try {
       restServer.shutdown();
       requestDelegator.shutdown();
+      adminBlobStorageService.shutdown();
       logger.info("Admin server shutdown complete");
     } catch (Exception e) {
       logger.error("Exception while shutting down AdminServer - " + e);
-    } finally {
-      shutdownLatch.countDown();
     }
   }
 
-  public void awaitShutdown()
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
-    shutdownLatch.await();
+    return restServer.awaitShutdown(timeout, timeUnit) && requestDelegator.awaitShutdown(timeout, timeUnit)
+        && adminBlobStorageService.awaitShutdown(timeout, timeUnit);
+  }
+
+  public boolean isUp() {
+    return adminBlobStorageService.isUp() && requestDelegator.isUp() && restServer.isUp();
   }
 
   private boolean serverReadyForStart() {

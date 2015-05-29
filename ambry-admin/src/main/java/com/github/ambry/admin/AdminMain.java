@@ -9,6 +9,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -52,12 +53,18 @@ public class AdminMain {
         // attach shutdown handler to catch control-c
         Runtime.getRuntime().addShutdownHook(new Thread() {
           public void run() {
-            adminServer.shutdown();
+            try {
+              adminServer.shutdown();
+              if(adminServer.awaitShutdown(5, TimeUnit.MINUTES)) {
+                logger.info("Shutdown complete");
+              }
+            } catch (InterruptedException e) {
+              logger.error("Shutdown did not complete");
+            }
           }
         });
 
         adminServer.start();
-        adminServer.awaitShutdown();
       }
     } catch (JSONException e) {
       logger.error("Cluster map load failed - " + e);

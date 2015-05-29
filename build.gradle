@@ -181,5 +181,6 @@ project(':ambry-admin') {
                 project(':ambry-rest')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }

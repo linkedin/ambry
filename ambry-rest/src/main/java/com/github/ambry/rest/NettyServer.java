@@ -15,6 +15,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +28,7 @@ public class NettyServer implements RestServer {
   private final NettyMetrics nettyMetrics;
   private final RestRequestDelegator requestDelegator;
 
+  private boolean up = false;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private EventLoopGroup bossGroup;
@@ -41,7 +43,7 @@ public class NettyServer implements RestServer {
   }
 
   public void start()
-      throws Exception {
+      throws InstantiationException {
     logger.info("Netty server starting up");
 
     bossGroup = new NioEventLoopGroup(serverConfig.getBossThreadCount());
@@ -65,23 +67,38 @@ public class NettyServer implements RestServer {
           });
 
       ChannelFuture f = b.bind(serverConfig.getPort()).sync();
+      up = true;
       logger.info("Netty server started on port " + serverConfig.getPort());
 
       f.channel().closeFuture().sync();
     } catch (Exception e) {
       logger.error("Netty server start failed - " + e);
-      throw new InstantiationException("Netty server start failed");
-    } finally {
-      // this is recommended in netty. But will see if this is something that the rest server user will need to handle.
-      shutdown();
+      throw new InstantiationException("Netty server start failed - " + e);
     }
   }
 
   public void shutdown()
       throws Exception {
     logger.info("Shutting down netty server..");
+    up = false;
     workerGroup.shutdownGracefully();
     bossGroup.shutdownGracefully();
     logger.info("Netty server shutdown complete..");
+  }
+
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
+    up = !(workerGroup.awaitTermination(timeout, timeUnit) && bossGroup.awaitTermination(timeout, timeUnit));
+    if(up) {
+      logger.error("Netty boss/worker threads failed to terminate after " + timeout + " " + timeUnit);
+    }
+    return !up;
+  }
+
+  public boolean isUp() {
+    return up;
+  }
+
+  public boolean isTerminated() {
+    return bossGroup != null && workerGroup != null && !up && workerGroup.isShutdown() && bossGroup.isShutdown();
   }
 }

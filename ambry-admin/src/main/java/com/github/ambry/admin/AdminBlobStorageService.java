@@ -6,6 +6,7 @@ import com.github.ambry.storageservice.BlobStorageServiceErrorCode;
 import com.github.ambry.storageservice.BlobStorageServiceException;
 import com.github.ambry.storageservice.ExecutionData;
 import com.github.ambry.storageservice.ExecutionResult;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,10 +18,32 @@ public class AdminBlobStorageService implements BlobStorageService {
 
   private final ClusterMap clusterMap;
 
+  private boolean up = false;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminBlobStorageService(ClusterMap clusterMap) {
     this.clusterMap = clusterMap;
+  }
+
+  public void start() throws InstantiationException {
+    up = true;
+  }
+
+  public void shutdown() throws Exception {
+    up = false;
+  }
+
+  public boolean awaitShutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
+    //nothing to do
+    return true;
+  }
+
+  public boolean isUp() {
+    return up;
+  }
+
+  public boolean isTerminated() {
+    return isUp();
   }
 
   public String putBlob() {
