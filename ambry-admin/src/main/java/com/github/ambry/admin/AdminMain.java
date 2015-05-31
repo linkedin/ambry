@@ -55,11 +55,13 @@ public class AdminMain {
           public void run() {
             try {
               adminServer.shutdown();
-              if (adminServer.awaitShutdown(5, TimeUnit.MINUTES)) {
+              if (adminServer.awaitShutdown(5, TimeUnit.MINUTES) && adminServer.isTerminated()) {
                 logger.info("Shutdown complete");
+              } else {
+                logger.error("Shutdown did not complete within timeout");
               }
             } catch (InterruptedException e) {
-              logger.error("Shutdown did not complete");
+              logger.error("wait for shutdown was interrupted");
             }
           }
         });
@@ -71,8 +73,6 @@ public class AdminMain {
     } catch (InstantiationException e) {
       logger.error("InstantiationException while starting admin - " + e);
       logger.error("Admin bootstrap failed");
-    } catch (InterruptedException e) {
-      logger.error("Await shutdown interrupted - " + e);
     } catch (IOException e) {
       logger.error("Options parse failed or properties file was not loaded - " + e);
     } catch (Exception e) {

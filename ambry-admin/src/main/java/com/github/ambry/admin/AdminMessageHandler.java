@@ -57,6 +57,7 @@ public class AdminMessageHandler extends RestMessageHandler {
     logger.trace("Handling get request - " + request.getUri());
     if (!isSpecialOperation(request)) {
       // TODO: this is a traditional get
+      throw new IllegalStateException("Traditional GET not implemented");
     } else {
       handleSpecialGetOperation(messageInfo);
     }
@@ -64,21 +65,21 @@ public class AdminMessageHandler extends RestMessageHandler {
 
   protected void handlePost(MessageInfo messageInfo)
       throws RestException {
-    logger.trace("Handling post");
+    throw new IllegalStateException("handlePost() not implemented in " + this.getClass().getSimpleName());
   }
 
   protected void handleDelete(MessageInfo messageInfo)
       throws RestException {
-    logger.trace("Handling delete");
+    throw new IllegalStateException("handleDelete() not implemented in " + this.getClass().getSimpleName());
   }
 
   protected void handleHead(MessageInfo messageInfo)
       throws RestException {
-    logger.trace("Handling head");
+    throw new IllegalStateException("handleHead() not implemented in " + this.getClass().getSimpleName());
   }
 
   private boolean isSpecialOperation(RestRequest request) {
-    return request.getPathPart(0) == null || request.getPathPart(0).isEmpty();
+    return request.getValueOfHeader(EXECUTION_DATA_HEADER_KEY) != null;
   }
 
   private void handleSpecialGetOperation(MessageInfo messageInfo)
@@ -104,8 +105,7 @@ public class AdminMessageHandler extends RestMessageHandler {
       JSONObject data = new JSONObject(request.getValueOfHeader(EXECUTION_DATA_HEADER_KEY).toString());
       return new AdminExecutionData(data);
     } catch (JSONException e) {
-      throw new RestException(EXECUTION_DATA_HEADER_KEY + " header missing or not valid JSON - " + e,
-          RestErrorCode.BadRequest);
+      throw new RestException(EXECUTION_DATA_HEADER_KEY + " not valid JSON - " + e, RestErrorCode.BadRequest);
     } catch (IllegalArgumentException e) {
       throw new RestException(EXECUTION_DATA_HEADER_KEY + " header does not contain required data - " + e,
           RestErrorCode.BadRequest);

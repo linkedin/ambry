@@ -162,7 +162,6 @@ public class NettyResponseHandler implements RestResponseHandler {
       case HttpObjectConversionFailure:
       case InternalServerError:
       case MessageHandleFailure:
-      case NoMessageHandlers:
       case RequestProcessingFailure:
       case ResponseBuildingFailure:
       case ReponseHandlerMissing:

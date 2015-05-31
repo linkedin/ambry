@@ -46,7 +46,7 @@ public class AdminBlobStorageService implements BlobStorageService {
   }
 
   public boolean isTerminated() {
-    return isUp();
+    return !isUp();
   }
 
   public String putBlob() {

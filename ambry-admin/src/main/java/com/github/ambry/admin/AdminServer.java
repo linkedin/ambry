@@ -28,20 +28,24 @@ public class AdminServer {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
-      throws Exception {
+      throws InstantiationException {
     this.verifiableProperties = verifiableProperties;
     this.metricRegistry = metricRegistry;
     this.clusterMap = clusterMap;
 
     if (serverReadyForStart()) {
-      adminConfig = new AdminConfig(verifiableProperties);
-      adminMetrics = new AdminMetrics(metricRegistry);
-      adminBlobStorageService = new AdminBlobStorageService(clusterMap);
-      requestDelegator =
-          new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics, adminBlobStorageService);
-      restServer = RestServerFactory.getRestServer(verifiableProperties, metricRegistry, requestDelegator);
+      try {
+        adminConfig = new AdminConfig(verifiableProperties);
+        adminMetrics = new AdminMetrics(metricRegistry);
+        adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+        requestDelegator =
+            new AdminRequestDelegator(adminConfig.getHandlerCount(), adminMetrics, adminBlobStorageService);
+        restServer = RestServerFactory.getRestServer(verifiableProperties, metricRegistry, requestDelegator);
+      } catch (Exception e) {
+        throw new InstantiationException("Error while creating admin server components - " + e);
+      }
     } else {
-      throw new Exception("Did not receive all required components for starting admin server");
+      throw new InstantiationException("Did not receive all required components for starting admin server");
     }
   }
 
@@ -81,6 +85,10 @@ public class AdminServer {
 
   public boolean isUp() {
     return adminBlobStorageService.isUp() && requestDelegator.isUp() && restServer.isUp();
+  }
+
+  public boolean isTerminated() {
+    return adminBlobStorageService.isTerminated() && requestDelegator.isTerminated() && restServer.isTerminated();
   }
 
   private boolean serverReadyForStart() {

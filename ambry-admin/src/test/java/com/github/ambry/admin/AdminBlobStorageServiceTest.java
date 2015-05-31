@@ -5,9 +5,11 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.storageservice.BlobStorageServiceException;
+import com.github.ambry.storageservice.ExecutionData;
 import com.github.ambry.storageservice.ExecutionResult;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -23,31 +25,32 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void startShutDownTest()
       throws Exception {
-    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(new MockClusterMap());
     adminBlobStorageService.start();
     adminBlobStorageService.shutdown();
+    if (!adminBlobStorageService.awaitShutdown(1, TimeUnit.MINUTES)) {
+      throw new Exception("Blob storage service did not shut down within timeout");
+    }
+    assertEquals("isTerminated is not true", true, adminBlobStorageService.isTerminated());
   }
 
   @Test
   public void echoTest()
-      throws BlobStorageServiceException, JSONException {
-    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
-    String inputText = "TextToBeEchoed";
+      throws BlobStorageServiceException, IOException, JSONException {
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(new MockClusterMap());
+    String inputText = "textToBeEchoed";
     AdminExecutionData executionData = createEchoExecutionData(inputText);
     ExecutionResult executionResult = adminBlobStorageService.execute(executionData);
     String echoedText = executionResult.getOperationResult().getString(EchoExecutor.TEXT_KEY);
     assertEquals("Echoed text must be equal to input text", inputText, echoedText);
   }
 
-  private AdminExecutionData createEchoExecutionData(String inputText)
-      throws JSONException {
-    JSONObject executionData = new JSONObject();
-    JSONObject operationData = new JSONObject();
-    operationData.put("text", inputText);
-    executionData.put("operationType", "Echo");
-    executionData.put("operationData", operationData);
-
-    return new AdminExecutionData(executionData);
+  @Test(expected = BlobStorageServiceException.class)
+  public void echoWithBadInputTest()
+      throws BlobStorageServiceException, JSONException {
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
+    AdminExecutionData executionData = createBadEchoExecutionData();
+    adminBlobStorageService.execute(executionData);
   }
 
   @Test
@@ -61,6 +64,72 @@ public class AdminBlobStorageServiceTest {
     }
   }
 
+  @Test(expected = BlobStorageServiceException.class)
+  public void getReplicasForBlobIdWithBadInputTest()
+      throws BlobStorageServiceException, IOException, JSONException {
+    ClusterMap clusterMap = new MockClusterMap();
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+    AdminExecutionData executionData = createBadGetReplicasForBlobIdExecutionData();
+    adminBlobStorageService.execute(executionData);
+  }
+
+  @Test(expected = BlobStorageServiceException.class)
+  public void unknownOperationExceptionTest()
+      throws JSONException, BlobStorageServiceException {
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
+    AdminExecutionData executionData = createUnknownOperationExecutionData();
+    adminBlobStorageService.execute(executionData);
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void putBlobTest()
+      throws BlobStorageServiceException, IOException {
+    ClusterMap clusterMap = new MockClusterMap();
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+    adminBlobStorageService.putBlob();
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void getBlobTest()
+      throws BlobStorageServiceException, IOException {
+    ClusterMap clusterMap = new MockClusterMap();
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+    adminBlobStorageService.getBlob();
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void deleteBlobTest()
+      throws BlobStorageServiceException, IOException {
+    ClusterMap clusterMap = new MockClusterMap();
+    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(clusterMap);
+    adminBlobStorageService.deleteBlob();
+  }
+
+  //helpers
+  //echoTest() helpers
+  private AdminExecutionData createEchoExecutionData(String inputText)
+      throws JSONException {
+    JSONObject executionData = new JSONObject();
+    JSONObject operationData = new JSONObject();
+    operationData.put("text", inputText);
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY, "Echo");
+    executionData.put(ExecutionData.OPERATION_DATA_KEY, operationData);
+
+    return new AdminExecutionData(executionData);
+  }
+
+  //echoFailTest() helpers
+  private AdminExecutionData createBadEchoExecutionData()
+      throws JSONException {
+    JSONObject executionData = new JSONObject();
+    JSONObject operationData = new JSONObject();
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY, "Echo");
+    executionData.put(ExecutionData.OPERATION_DATA_KEY, operationData);
+
+    return new AdminExecutionData(executionData);
+  }
+
+  //getReplicasForBlobIdTest() helpers
   private void createBlobIdAndTest(PartitionId partitionId, AdminBlobStorageService adminBlobStorageService)
       throws BlobStorageServiceException, JSONException {
     String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
@@ -78,27 +147,31 @@ public class AdminBlobStorageServiceTest {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("blobId", blobId);
-    executionData.put("operationType", "GetReplicasForBlobId");
-    executionData.put("operationData", operationData);
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY, "GetReplicasForBlobId");
+    executionData.put(ExecutionData.OPERATION_DATA_KEY, operationData);
 
     return new AdminExecutionData(executionData);
   }
 
-  @Test(expected = BlobStorageServiceException.class)
-  public void unknownOperationExceptionTest()
-      throws JSONException, BlobStorageServiceException {
-    AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(null);
-    AdminExecutionData executionData = createUnknownOperationExecutionData();
-    adminBlobStorageService.execute(executionData);
+  //getReplicasForBlobIdFailTest() helpers
+  private AdminExecutionData createBadGetReplicasForBlobIdExecutionData()
+      throws JSONException {
+    JSONObject executionData = new JSONObject();
+    JSONObject operationData = new JSONObject();
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY, "GetReplicasForBlobId");
+    executionData.put(ExecutionData.OPERATION_DATA_KEY, operationData);
+
+    return new AdminExecutionData(executionData);
   }
 
+  //unknownOperationExceptionTest() helpers
   private AdminExecutionData createUnknownOperationExecutionData()
       throws JSONException {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("dummyData", "dummyData");
-    executionData.put("operationType", "@@@UnknownOperation@@@");
-    executionData.put("operationData", operationData);
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY, "@@@UnknownOperation@@@");
+    executionData.put(ExecutionData.OPERATION_DATA_KEY, operationData);
 
     return new AdminExecutionData(executionData);
   }

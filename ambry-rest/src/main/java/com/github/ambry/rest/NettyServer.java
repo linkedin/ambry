@@ -83,7 +83,6 @@ public class NettyServer implements RestServer {
     up = false;
     workerGroup.shutdownGracefully();
     bossGroup.shutdownGracefully();
-    logger.info("Netty server shutdown complete..");
   }
 
   public boolean awaitShutdown(long timeout, TimeUnit timeUnit)

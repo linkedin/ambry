@@ -47,23 +47,22 @@ public class AdminRequestDelegator implements RestRequestDelegator {
   public void start()
       throws InstantiationException {
     logger.info("Admin request delegator starting");
-    executor = Executors.newFixedThreadPool(handlerCount);
-    for (int i = 0; i < handlerCount; i++) {
-      AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics, adminBlobStorageService);
-      executor.execute(messageHandler);
-      adminMessageHandlers.add(messageHandler);
+    if (handlerCount > 0) {
+      executor = Executors.newFixedThreadPool(handlerCount);
+      for (int i = 0; i < handlerCount; i++) {
+        AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics, adminBlobStorageService);
+        executor.execute(messageHandler);
+        adminMessageHandlers.add(messageHandler);
+      }
+      up = true;
+      logger.info("Admin request delegator started");
+    } else {
+      throw new InstantiationException("Handlers to be created is <= 0 - (is " + handlerCount + ")");
     }
-    up = true;
-    logger.info("Admin request delegator started");
   }
 
   public RestMessageHandler getMessageHandler()
       throws RestException {
-    if (adminMessageHandlers.size() == 0) {
-      adminMetrics.noMessageHandlersErrorCount.inc();
-      throw new RestException("No message handlers available", RestErrorCode.NoMessageHandlers);
-    }
-
     try {
       //Alternative: can have an implementation where we check queue sizes and then return the one with the least
       /*  Not locking here because we don't really care if currIndex fails to increment (because of stamping).

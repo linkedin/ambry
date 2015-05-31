@@ -67,10 +67,7 @@ public class NettyRequest implements RestRequest {
   }
 
   public List<String> getValuesOfParameterInURI(String parameter) {
-    if (query.parameters().get(parameter) != null) {
-      return query.parameters().get(parameter);
-    }
-    return null;
+    return query.parameters().get(parameter);
   }
 
   public void release() {
