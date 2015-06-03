@@ -5,6 +5,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,8 @@ import org.slf4j.LoggerFactory;
  * starting the various components.
  */
 public class AdminServer {
+  private final CountDownLatch shutdownLatch = new CountDownLatch(1);
+
   private final VerifiableProperties verifiableProperties;
   private final MetricRegistry metricRegistry;
   private final ClusterMap clusterMap;
@@ -65,30 +68,17 @@ public class AdminServer {
     }
   }
 
-  public void shutdown() {
+  public void shutdown() throws Exception {
     logger.info("Shutting down admin server");
-    try {
-      restServer.shutdown();
-      requestDelegator.shutdown();
-      adminBlobStorageService.shutdown();
-      logger.info("Admin server shutdown complete");
-    } catch (Exception e) {
-      logger.error("Exception while shutting down AdminServer - " + e);
-    }
+    restServer.shutdown();
+    requestDelegator.shutdown();
+    adminBlobStorageService.shutdown();
+    logger.info("Admin server shutdown complete");
+    shutdownLatch.countDown();
   }
 
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    return restServer.awaitShutdown(timeout, timeUnit) && requestDelegator.awaitShutdown(timeout, timeUnit)
-        && adminBlobStorageService.awaitShutdown(timeout, timeUnit);
-  }
-
-  public boolean isUp() {
-    return adminBlobStorageService.isUp() && requestDelegator.isUp() && restServer.isUp();
-  }
-
-  public boolean isTerminated() {
-    return adminBlobStorageService.isTerminated() && requestDelegator.isTerminated() && restServer.isTerminated();
+  public void awaitShutdown() throws InterruptedException {
+    shutdownLatch.await();
   }
 
   private boolean serverReadyForStart() {

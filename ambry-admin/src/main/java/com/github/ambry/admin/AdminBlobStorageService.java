@@ -17,8 +17,6 @@ import org.slf4j.LoggerFactory;
 public class AdminBlobStorageService implements BlobStorageService {
 
   private final ClusterMap clusterMap;
-
-  private boolean up = false;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminBlobStorageService(ClusterMap clusterMap) {
@@ -27,26 +25,12 @@ public class AdminBlobStorageService implements BlobStorageService {
 
   public void start()
       throws InstantiationException {
-    up = true;
+    // nothing to do
   }
 
   public void shutdown()
       throws Exception {
-    up = false;
-  }
-
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    //nothing to do
-    return true;
-  }
-
-  public boolean isUp() {
-    return up;
-  }
-
-  public boolean isTerminated() {
-    return !isUp();
+    // nothing to do
   }
 
   public String putBlob() {

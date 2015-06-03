@@ -28,10 +28,6 @@ public class AdminBlobStorageServiceTest {
     AdminBlobStorageService adminBlobStorageService = new AdminBlobStorageService(new MockClusterMap());
     adminBlobStorageService.start();
     adminBlobStorageService.shutdown();
-    if (!adminBlobStorageService.awaitShutdown(1, TimeUnit.MINUTES)) {
-      throw new Exception("Blob storage service did not shut down within timeout");
-    }
-    assertEquals("isTerminated is not true", true, adminBlobStorageService.isTerminated());
   }
 
   @Test

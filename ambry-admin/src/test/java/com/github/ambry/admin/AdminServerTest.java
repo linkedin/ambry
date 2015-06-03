@@ -31,20 +31,9 @@ public class AdminServerTest {
     ClusterMap clusterMap = new MockClusterMap();
 
     AdminServer server = new AdminServer(verifiableProperties, metricRegistry, clusterMap);
-    try {
-      AtomicReference<Exception> e = new AtomicReference<Exception>();
-      Thread serverStarter = new Thread(new AdminServerStarter(server, e));
-      serverStarter.start();
-      awaitServerStart(server, e);
-    } catch (Exception e) {
-      throw e;
-    } finally {
-      server.shutdown();
-      if (!server.awaitShutdown(1, TimeUnit.MINUTES)) {
-        throw new Exception("Shutdown did not complete within timeout");
-      }
-      assertEquals("isTerminated is not true", true, server.isTerminated());
-    }
+    server.start();
+    server.shutdown();
+    server.awaitShutdown();
   }
 
   @Test
@@ -86,7 +75,7 @@ public class AdminServerTest {
     }
   }
 
-  @Test
+  @Test (expected = Exception.class)
   public void faultyServerStartShutdownTest()
       throws Exception {
     Properties properties = new Properties();
@@ -102,38 +91,15 @@ public class AdminServerTest {
       fail("Faulty server start() would have thrown InstantiationException");
     } catch (InstantiationException e) {
       // nothing to do. expected.
+    } catch (Exception e) {
+      fail("Faulty server start() threw unknown exception - " + e);
+    } finally {
+      server.shutdown();
     }
-
-    assertFalse("Faulty server awaitShutdown() would have returned false", server.awaitShutdown(1, TimeUnit.MINUTES));
   }
 
   // helpers
   // startShutdownTest() helpers
-  private void awaitServerStart(AdminServer server, AtomicReference<Exception> exception)
-      throws Exception {
-    // wait for 5 seconds. After each period of wait, check if server is up
-    int singleWaitTime = 5; //seconds
-    int maxIterations = 6;
-    for (int i = 0; i < maxIterations; i++) {
-      try {
-        Thread.sleep(singleWaitTime * 1000);
-        if (exception.get() != null) {
-          throw exception.get();
-        }
-        if (server.isUp()) {
-          return;
-        }
-      } catch (InterruptedException ie) {
-        // just move on
-      }
-    }
-    if (exception.get() != null) {
-      throw exception.get();
-    } else {
-      throw new InstantiationException("Server did not startup after " + singleWaitTime * maxIterations + " seconds");
-    }
-  }
-
   private class AdminServerStarter implements Runnable {
 
     private final AdminServer server;

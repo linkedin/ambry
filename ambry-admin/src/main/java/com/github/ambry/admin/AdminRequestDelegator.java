@@ -1,11 +1,14 @@
 package com.github.ambry.admin;
 
+import com.github.ambry.rest.HandleMessageEventListener;
+import com.github.ambry.rest.MessageInfo;
 import com.github.ambry.rest.RestErrorCode;
 import com.github.ambry.rest.RestException;
 import com.github.ambry.rest.RestMessageHandler;
 import com.github.ambry.rest.RestRequestDelegator;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,14 +27,14 @@ import org.slf4j.LoggerFactory;
  * take care of serving all the requests that it has been assigned to. Having said this, we would like to
  * balance load among all the handlers.
  */
-public class AdminRequestDelegator implements RestRequestDelegator {
+public class AdminRequestDelegator implements RestRequestDelegator, HandleMessageEventListener {
 
   private final AdminMetrics adminMetrics;
   private final AdminBlobStorageService adminBlobStorageService;
+  private final CountDownLatch adminMessageHandlersUp;
   private final int handlerCount;
   private final List<AdminMessageHandler> adminMessageHandlers;
 
-  private boolean up = false;
   private ExecutorService executor;
   private int currIndex = 0;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -42,6 +45,7 @@ public class AdminRequestDelegator implements RestRequestDelegator {
     this.adminMetrics = adminMetrics;
     this.adminBlobStorageService = adminBlobStorageService;
     adminMessageHandlers = new ArrayList<AdminMessageHandler>(handlerCount);
+    adminMessageHandlersUp = new CountDownLatch(handlerCount);
   }
 
   public void start()
@@ -54,21 +58,16 @@ public class AdminRequestDelegator implements RestRequestDelegator {
         executor.execute(messageHandler);
         adminMessageHandlers.add(messageHandler);
       }
-      up = true;
       logger.info("Admin request delegator started");
     } else {
       throw new InstantiationException("Handlers to be created is <= 0 - (is " + handlerCount + ")");
     }
   }
 
-  public RestMessageHandler getMessageHandler()
+  public synchronized RestMessageHandler getMessageHandler()
       throws RestException {
     try {
       //Alternative: can have an implementation where we check queue sizes and then return the one with the least
-      /*  Not locking here because we don't really care if currIndex fails to increment (because of stamping).
-          As long as it does not go out of bounds, we cool.
-          So my train of thought is that locking unnecessarily slows things down here.
-       */
       AdminMessageHandler messageHandler = adminMessageHandlers.get(currIndex);
       currIndex = (currIndex + 1) % adminMessageHandlers.size();
       return messageHandler;
@@ -81,28 +80,29 @@ public class AdminRequestDelegator implements RestRequestDelegator {
 
   public void shutdown()
       throws Exception {
-    logger.info("Shutting down admin request delegator");
-    up = false;
-    for (int i = 0; i < adminMessageHandlers.size(); i++) {
-      adminMessageHandlers.get(i).shutdownGracefully();
+    if(executor != null) {
+      logger.info("Shutting down admin request delegator");
+      for (int i = 0; i < adminMessageHandlers.size(); i++) {
+        adminMessageHandlers.get(i).shutdownGracefully(this);
+      }
+      executor.shutdown();
+      if(!awaitTermination(60, TimeUnit.SECONDS)) {
+        throw new Exception("AdminRequestDelegator shutdown failed after waiting for 60 seconds");
+      }
+      executor = null;
     }
-    executor.shutdown();
   }
 
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
+  private boolean awaitTermination(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
-    up = !executor.awaitTermination(timeout, timeUnit);
-    if (up) {
-      logger.error("Executor failed to terminate after waiting for " + timeout + " " + timeUnit);
-    }
-    return !up;
+    return adminMessageHandlersUp.await(3 * timeout/4, timeUnit) && executor.awaitTermination(timeout/4, timeUnit);
   }
 
-  public boolean isUp() {
-    return up;
+  public void onMessageHandleSuccess(MessageInfo messageInfo) {
+    adminMessageHandlersUp.countDown();
   }
 
-  public boolean isTerminated() {
-    return executor != null && !up && executor.isTerminated();
+  public void onMessageHandleFailure(MessageInfo messageInfo, Exception e) {
+    throw new IllegalStateException("Should not have come here. Original exception" + e);
   }
 }

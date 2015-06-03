@@ -170,6 +170,7 @@ project(':ambry-rest') {
                 project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile 'io.netty:netty-all:4.0.25.Final'
+        testCompile project(':ambry-api').sourceSets.test.output
     }
 }
 
@@ -182,5 +183,6 @@ project(':ambry-admin') {
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile project(':ambry-rest').sourceSets.test.output
     }
 }

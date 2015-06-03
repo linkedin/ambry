@@ -24,10 +24,6 @@ public class AdminRequestDelegatorTest {
     AdminRequestDelegator adminRequestDelegator = createDelegator(1);
     adminRequestDelegator.start();
     adminRequestDelegator.shutdown();
-    if (!adminRequestDelegator.awaitShutdown(1, TimeUnit.MINUTES)) {
-      throw new Exception("Blob storage service did not shut down within timeout");
-    }
-    assertEquals("isTerminated is not true", true, adminRequestDelegator.isTerminated());
   }
 
   @Test(expected = InstantiationException.class)
@@ -56,9 +52,6 @@ public class AdminRequestDelegatorTest {
       throw e;
     } finally {
       adminRequestDelegator.shutdown();
-      if (!adminRequestDelegator.awaitShutdown(1, TimeUnit.MINUTES)) {
-        throw new Exception("Blob storage service did not shut down within timeout");
-      }
     }
   }
 

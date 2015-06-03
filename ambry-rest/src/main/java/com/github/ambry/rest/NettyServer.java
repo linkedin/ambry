@@ -15,7 +15,9 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +30,6 @@ public class NettyServer implements RestServer {
   private final NettyMetrics nettyMetrics;
   private final RestRequestDelegator requestDelegator;
 
-  private boolean up = false;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private EventLoopGroup bossGroup;
@@ -50,27 +51,15 @@ public class NettyServer implements RestServer {
     workerGroup = new NioEventLoopGroup(serverConfig.getWorkerThreadCount());
 
     try {
-      ServerBootstrap b = new ServerBootstrap();
+      AtomicReference<Exception> startupException = new AtomicReference<Exception>();
+      NettyServerDeployer nettyServerDeployer = new NettyServerDeployer(startupException);
+      Thread deploymentThread = new Thread(nettyServerDeployer);
+      deploymentThread.start();
+      nettyServerDeployer.awaitStartup(serverConfig.getStartupWaitSeconds(), TimeUnit.SECONDS);
 
-      // Right now this pipeline suffices. The old AmbryFrontEnd has a factory for this. Will investigate
-      // if we need any new functionality.
-      b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
-          .option(ChannelOption.SO_BACKLOG, serverConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
-          .childHandler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            public void initChannel(SocketChannel ch)
-                throws Exception {
-              ch.pipeline().addLast("codec", new HttpServerCodec()).addLast("chunker", new ChunkedWriteHandler())
-                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, serverConfig.getIdleTimeSeconds()))
-                  .addLast("processor", new NettyMessageProcessor(requestDelegator, nettyMetrics));
-            }
-          });
-
-      ChannelFuture f = b.bind(serverConfig.getPort()).sync();
-      up = true;
-      logger.info("Netty server started on port " + serverConfig.getPort());
-
-      f.channel().closeFuture().sync();
+      if(startupException.get() != null) {
+        throw startupException.get();
+      }
     } catch (Exception e) {
       logger.error("Netty server start failed - " + e);
       throw new InstantiationException("Netty server start failed - " + e);
@@ -79,26 +68,64 @@ public class NettyServer implements RestServer {
 
   public void shutdown()
       throws Exception {
-    logger.info("Shutting down netty server..");
-    up = false;
-    workerGroup.shutdownGracefully();
-    bossGroup.shutdownGracefully();
-  }
-
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    up = !(workerGroup.awaitTermination(timeout, timeUnit) && bossGroup.awaitTermination(timeout, timeUnit));
-    if (up) {
-      logger.error("Netty boss/worker threads failed to terminate after " + timeout + " " + timeUnit);
+    if(bossGroup != null && workerGroup != null) {
+      logger.info("Shutting down netty server..");
+      workerGroup.shutdownGracefully();
+      bossGroup.shutdownGracefully();
+      if(!awaitTermination(60, TimeUnit.SECONDS)) {
+        throw new Exception("NettyServer shutdown failed after waiting for 60 seconds");
+      }
+      bossGroup = null;
+      workerGroup = null;
+      logger.info("Netty server shutdown");
     }
-    return !up;
   }
 
-  public boolean isUp() {
-    return up;
+  private boolean awaitTermination(long timeout, TimeUnit timeUnit)
+      throws InterruptedException {
+    return  workerGroup.awaitTermination(timeout/2, timeUnit) && bossGroup.awaitTermination(timeout/2, timeUnit);
   }
 
-  public boolean isTerminated() {
-    return bossGroup != null && workerGroup != null && !up && workerGroup.isShutdown() && bossGroup.isShutdown();
+  private class NettyServerDeployer implements Runnable {
+    private CountDownLatch startupDone = new CountDownLatch(1);
+    private AtomicReference<Exception> exception;
+
+    public NettyServerDeployer(AtomicReference<Exception> exception) {
+      this.exception = exception;
+    }
+
+    public void run() {
+      try {
+        ServerBootstrap b = new ServerBootstrap();
+
+        // Right now this pipeline suffices. The old AmbryFrontEnd has a factory for this. Will investigate
+        // if we need any new functionality.
+        b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+            .option(ChannelOption.SO_BACKLOG, serverConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
+            .childHandler(new ChannelInitializer<SocketChannel>() {
+              @Override
+              public void initChannel(SocketChannel ch)
+                  throws Exception {
+                ch.pipeline().addLast("codec", new HttpServerCodec()).addLast("chunker", new ChunkedWriteHandler())
+                    .addLast("idleStateHandler", new IdleStateHandler(0, 0, serverConfig.getIdleTimeSeconds()))
+                    .addLast("processor", new NettyMessageProcessor(requestDelegator, nettyMetrics));
+              }
+            });
+
+        ChannelFuture f = b.bind(serverConfig.getPort()).sync();
+        logger.info("Netty server started on port " + serverConfig.getPort());
+        startupDone.countDown();
+
+        f.channel().closeFuture().sync(); // this is blocking
+      } catch (Exception e) {
+        logger.error("Netty server start failed - " + e);
+        exception.set(e);
+        startupDone.countDown();
+      }
+    }
+
+    public void awaitStartup(long timeout, TimeUnit timeUnit) throws InterruptedException {
+      startupDone.await(timeout, timeUnit);
+    }
   }
 }

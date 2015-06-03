@@ -27,33 +27,37 @@ public abstract class RestMessageHandler implements Runnable {
 
   public void run() {
     while (true) {
-      MessageInfo messageInfo = null;
       try {
-        messageInfo = messageInfoQueue.take();
-        if (messageInfo instanceof PoisonInfo) {
-          break;
+        MessageInfo messageInfo = null;
+        try {
+          messageInfo = messageInfoQueue.take();
+          if (messageInfo instanceof PoisonInfo) {
+            messageInfo.onHandleSuccess();
+            break;
+          }
+          processMessage(messageInfo);
+          doProcessingSuccessTasks(messageInfo);
+        } catch (InterruptedException ie) {
+          serverMetrics.handlerQueueTakeInterruptedErrorCount.inc();
+          logger.error("Wait for data in messageInfoQueue was interrupted - " + ie);
+        } catch (Exception e) {
+          serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
+          logger.error("Exception while trying to process element in messageInfoQueue - " + e);
+          doProcessingFailureTasks(messageInfo, e);
         }
-        processMessage(messageInfo);
-      } catch (InterruptedException ie) {
-        serverMetrics.handlerQueueTakeInterruptedErrorCount.inc();
-        logger.error("Wait for data in messageInfoQueue was interrupted - " + ie);
-      } catch (RestException e) {
-        serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
-        logger.error("RestException while trying to process element in messageInfoQueue - " + e);
-        onError(messageInfo, e);
-      } catch (Exception e) {
-        serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
-        logger.error("Exception while trying to process element in messageInfoQueue - " + e);
-        onError(messageInfo, new RestException(e, RestErrorCode.RequestProcessingFailure));
+      } catch (Exception e) { // net
+        //TODO: metric
       }
     }
   }
 
-  public void shutdownGracefully() {
-    queue(new PoisonInfo());
+  public void shutdownGracefully(HandleMessageEventListener handleMessageEventListener) throws RestException {
+    PoisonInfo poison = new PoisonInfo();
+    poison.addListener(handleMessageEventListener);
+    queue(poison);
   }
 
-  public void handleMessage(MessageInfo messageInfo) {
+  public void handleMessage(MessageInfo messageInfo) throws RestException {
     queue(messageInfo);
   }
 
@@ -89,21 +93,45 @@ public abstract class RestMessageHandler implements Runnable {
     }
   }
 
-  private void queue(MessageInfo messageInfo) {
-    int failedAttempts = 0;
-    while (true) {
+  private void queue(MessageInfo messageInfo) throws RestException {
+    int maxAttempts = 3;
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        if (!messageInfoQueue.offer(messageInfo, offerTimeout, TimeUnit.SECONDS)) {
-          failedAttempts++;
-          serverMetrics.handlerQueueOfferTookTooLongErrorCount.inc();
-          logger.error("Waiting for space to clear up on queue for " + (failedAttempts * offerTimeout) + " seconds");
+        if (messageInfoQueue.offer(messageInfo, offerTimeout, TimeUnit.SECONDS)) {
+          return;
         } else {
-          break;
+          serverMetrics.handlerQueueOfferTookTooLongErrorCount.inc();
+          logger.error("Waiting for space to clear up on queue for " + ((attempt + 1) * offerTimeout) + " seconds");
         }
       } catch (InterruptedException e) {
         serverMetrics.handlerQueueOfferInterruptedErrorCount.inc();
         logger.error("Offer was interrupted - " + e);
       }
+    }
+    throw new RestException("Attempt to queue message failed", RestErrorCode.MessageQueueingFailure);
+  }
+
+  private void doProcessingSuccessTasks(MessageInfo messageInfo) {
+    try {
+      messageInfo.onHandleSuccess();
+    } catch (Exception e) {
+      logger.error("Exception while trying to do processing success tasks - " + e);
+    }
+  }
+
+  private void doProcessingFailureTasks(MessageInfo messageInfo, Exception e) {
+    try {
+      RestException restException;
+      if(e instanceof RestException) {
+        restException = (RestException) e;
+      } else {
+        restException = new RestException(e, RestErrorCode.RequestProcessingFailure);
+      }
+
+      messageInfo.onHandleFailure(e);
+      onError(messageInfo, restException);
+    } catch (Exception ee) {
+      logger.error("Exception while trying to do processing failure tasks - " + ee);
     }
   }
 

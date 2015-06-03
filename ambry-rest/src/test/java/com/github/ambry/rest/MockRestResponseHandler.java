@@ -94,6 +94,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
         response.put(ERROR_MESSAGE_KEY, cause.toString());
         flush();
         errorSent = true;
+        close();
       } catch (JSONException e) {
         logger.error("Error while trying to record exception. Original exception - " + cause + ". New error - " + e);
       } catch (RestException e) {

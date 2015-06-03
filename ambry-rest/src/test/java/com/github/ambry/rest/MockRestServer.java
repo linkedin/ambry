@@ -14,12 +14,12 @@ public class MockRestServer implements RestServer {
   public static String IS_FAULTY_KEY = "isFaulty";
   private final boolean isFaulty;
 
-  private boolean up = false;
+  private boolean terminated = false;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public MockRestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestDelegator restRequestDelegator) {
-    this.isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY);
+    this.isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 
   public void start()
@@ -28,32 +28,14 @@ public class MockRestServer implements RestServer {
     if (isFaulty) {
       throw new InstantiationException("Faulty rest server startup failed");
     }
-    up = true;
     logger.info("Rest server started");
   }
 
   public void shutdown()
       throws Exception {
-    logger.info("Rest server shutting down");
     if (isFaulty) {
       throw new Exception("Faulty rest server shutdown failed");
     }
-    up = false;
-  }
-
-  public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    if (isFaulty) {
-      return false;
-    }
-    return true;
-  }
-
-  public boolean isUp() {
-    return up;
-  }
-
-  public boolean isTerminated() {
-    return !isUp();
+    logger.info("Rest server shutdown");
   }
 }

@@ -55,18 +55,14 @@ public class AdminMain {
           public void run() {
             try {
               adminServer.shutdown();
-              if (adminServer.awaitShutdown(5, TimeUnit.MINUTES) && adminServer.isTerminated()) {
-                logger.info("Shutdown complete");
-              } else {
-                logger.error("Shutdown did not complete within timeout");
-              }
-            } catch (InterruptedException e) {
-              logger.error("wait for shutdown was interrupted");
+            } catch (Exception e) {
+              logger.error("Shutdown threw exception - " + e);
             }
           }
         });
 
         adminServer.start();
+        adminServer.awaitShutdown();
       }
     } catch (JSONException e) {
       logger.error("Cluster map load failed - " + e);

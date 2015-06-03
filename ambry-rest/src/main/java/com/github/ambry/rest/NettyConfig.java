@@ -14,6 +14,7 @@ public class NettyConfig extends RestServerConfig {
   public static String IDLETIME_SECONDS_KEY = "netty.server.idletime.seconds";
   public static String PORT_KEY = "netty.server.port";
   public static String SO_BACKLOG_KEY = "netty.server.sobacklog";
+  public static String STARTUP_WAIT_SECONDS = "netty.server.startup.wait.seconds";
   public static String WORKER_THREADCOUNT_KEY = "netty.server.worker.threadcount";
 
   /**
@@ -45,6 +46,13 @@ public class NettyConfig extends RestServerConfig {
   private final int soBacklog;
 
   /**
+   * startup wait time (in seconds)
+   */
+  @Config("startupWaitSeconds")
+  @Default("30")
+  private final int startupWaitSeconds;
+
+  /**
    * Number of netty worker threads
    */
   @Config("workerThreadCount")
@@ -67,6 +75,10 @@ public class NettyConfig extends RestServerConfig {
     return soBacklog;
   }
 
+  public int getStartupWaitSeconds() {
+    return startupWaitSeconds;
+  }
+
   public int getWorkerThreadCount() {
     return workerThreadCount;
   }
@@ -75,9 +87,10 @@ public class NettyConfig extends RestServerConfig {
     super(verifiableProperties);
 
     bossThreadCount = verifiableProperties.getInt(BOSS_THREADCOUNT_KEY, 1);
+    idleTimeSeconds = verifiableProperties.getInt(IDLETIME_SECONDS_KEY, 60);
     port = verifiableProperties.getInt(PORT_KEY, 8088);
     soBacklog = verifiableProperties.getInt(SO_BACKLOG_KEY, 100);
+    startupWaitSeconds = verifiableProperties.getInt(STARTUP_WAIT_SECONDS, 30);
     workerThreadCount = verifiableProperties.getInt(WORKER_THREADCOUNT_KEY, 1);
-    idleTimeSeconds = verifiableProperties.getInt(IDLETIME_SECONDS_KEY, 60);
   }
 }

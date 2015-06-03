@@ -17,6 +17,7 @@ public enum RestErrorCode {
   HandlerSelectionError,
   HttpObjectConversionFailure,
   MessageHandleFailure,
+  MessageQueueingFailure,
   RequestProcessingFailure,
   ResponseBuildingFailure,
   ReponseHandlerMissing,
