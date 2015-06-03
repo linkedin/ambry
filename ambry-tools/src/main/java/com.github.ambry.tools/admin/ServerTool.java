@@ -47,6 +47,7 @@ import joptsimple.OptionSpec;
  */
 public class ServerTool {
   private ConnectionPool connectionPool;
+  private PartitionId partitionId;
 
   public ServerTool() {
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
@@ -54,20 +55,25 @@ public class ServerTool {
     connectionPool.start();
   }
 
-  public void directoryWalkToCreateBlobs(String path, String prefix, FileWriter writer, String partitionId,
-      String datacenter, ClusterMap clusterMap, boolean enableVerboseLogging)
-      throws CoordinatorException, InterruptedException {
-
-    PartitionId partition = null;
-    for (PartitionId partitionId1 : clusterMap.getWritablePartitionIds()) {
-      if (partitionId1.toString().equalsIgnoreCase(partitionId)) {
-        partition = partitionId1;
+  public void setPartitionId(ClusterMap clusterMap, String partitionStr, boolean enableVerboseLogging) {
+    for (PartitionId writablePartition : clusterMap.getWritablePartitionIds()) {
+      if (writablePartition.toString().equalsIgnoreCase(partitionStr)) {
+        partitionId = writablePartition;
         break;
       }
     }
-    if (enableVerboseLogging) {
-      System.out.println("Chosen partition " + partition);
+    if (partitionId == null) {
+      throw new IllegalArgumentException("Partition " + partitionStr + " is not writable/available");
     }
+
+    if (enableVerboseLogging) {
+      System.out.println("Chosen partition " + partitionId);
+    }
+  }
+
+  public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter,
+      boolean enableVerboseLogging)
+      throws CoordinatorException, InterruptedException {
 
     File root = new File(path);
     File[] list = root.listFiles();
@@ -78,12 +84,7 @@ public class ServerTool {
     }
 
     for (File f : list) {
-      if (f.isDirectory()) {
-        if (f.getName().startsWith(prefix)) {
-          directoryWalkToCreateBlobs(f.getAbsolutePath(), prefix, writer, partitionId, datacenter, clusterMap,
-              enableVerboseLogging);
-        }
-      } else {
+      if (!f.isDirectory()) {
         System.out.println("File :" + f.getAbsoluteFile());
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
@@ -91,7 +92,7 @@ public class ServerTool {
         try {
           long startMs = System.currentTimeMillis();
           int replicaCount = 0;
-          BlobId blobId = new BlobId(partition);
+          BlobId blobId = new BlobId(partitionId);
           List<ReplicaId> successList = new ArrayList<ReplicaId>();
           List<ReplicaId> failureList = new ArrayList<ReplicaId>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
@@ -222,10 +223,6 @@ public class ServerTool {
           parser.accepts("rootDirectory", "The root folder from which all the files will be migrated").withRequiredArg()
               .describedAs("root_directory").ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> folderPrefixInRootOpt =
-          parser.accepts("folderPrefixInRoot", "The prefix of the folders in the root path that needs to be moved")
-              .withRequiredArg().describedAs("folder_prefix_in_root").ofType(String.class);
-
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
           parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
               .describedAs("hardware_layout").ofType(String.class);
@@ -254,7 +251,6 @@ public class ServerTool {
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(rootDirectoryOpt);
-      listOpt.add(folderPrefixInRootOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
       listOpt.add(partitionOpt);
@@ -277,10 +273,6 @@ public class ServerTool {
       String rootDirectory = options.valueOf(rootDirectoryOpt);
       if (enableVerboseLogging) {
         System.out.println("Parsed rootdir " + rootDirectory);
-      }
-      String folderPrefixInRoot = options.valueOf(folderPrefixInRootOpt);
-      if (enableVerboseLogging) {
-        System.out.println("Parsed folder prefix " + folderPrefixInRoot);
       }
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       if (enableVerboseLogging) {
@@ -309,8 +301,8 @@ public class ServerTool {
       File logFile = new File(outFile);
       writer = new FileWriter(logFile);
       ServerTool serverTool = new ServerTool();
-      serverTool.directoryWalkToCreateBlobs(rootDirectory, folderPrefixInRoot, writer, partition, datacenter, map,
-          enableVerboseLogging);
+      serverTool.setPartitionId(map, partition, enableVerboseLogging);
+      serverTool.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging);
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {
