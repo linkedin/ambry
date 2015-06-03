@@ -47,7 +47,7 @@ public class MessageInfo {
   }
 
   public void addListener(HandleMessageEventListener handleMessageEventListener) {
-    if(handleMessageEventListener != null) {
+    if (handleMessageEventListener != null) {
       listeners.add(handleMessageEventListener);
     }
   }

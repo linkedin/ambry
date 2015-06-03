@@ -1,16 +1,15 @@
 package com.github.ambry.storageservice;
 
-import java.util.concurrent.TimeUnit;
-
-
 /**
  * TODO: write description
  */
 public interface BlobStorageService {
 
-  public void start() throws InstantiationException;
+  public void start()
+      throws InstantiationException;
 
-  public void shutdown() throws Exception;
+  public void shutdown()
+      throws Exception;
 
   public String putBlob()
       throws BlobStorageServiceException;

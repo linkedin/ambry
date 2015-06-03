@@ -25,7 +25,7 @@ public class EchoExecutor implements TaskExecutor {
         return packageResult(text);
       } catch (JSONException e) {
         throw new BlobStorageServiceException("Unable to construct result object - " + e,
-            BlobStorageServiceErrorCode.InternalError);
+            BlobStorageServiceErrorCode.ResponseBuildingError);
       }
     } else {
       throw new BlobStorageServiceException("Input AdminExecutionData does not have key - " + TEXT_KEY,

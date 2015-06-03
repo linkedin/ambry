@@ -57,7 +57,7 @@ public class NettyServer implements RestServer {
       deploymentThread.start();
       nettyServerDeployer.awaitStartup(serverConfig.getStartupWaitSeconds(), TimeUnit.SECONDS);
 
-      if(startupException.get() != null) {
+      if (startupException.get() != null) {
         throw startupException.get();
       }
     } catch (Exception e) {
@@ -68,11 +68,11 @@ public class NettyServer implements RestServer {
 
   public void shutdown()
       throws Exception {
-    if(bossGroup != null && workerGroup != null) {
+    if (bossGroup != null && workerGroup != null) {
       logger.info("Shutting down netty server..");
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
-      if(!awaitTermination(60, TimeUnit.SECONDS)) {
+      if (!awaitTermination(60, TimeUnit.SECONDS)) {
         throw new Exception("NettyServer shutdown failed after waiting for 60 seconds");
       }
       bossGroup = null;
@@ -83,7 +83,7 @@ public class NettyServer implements RestServer {
 
   private boolean awaitTermination(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
-    return  workerGroup.awaitTermination(timeout/2, timeUnit) && bossGroup.awaitTermination(timeout/2, timeUnit);
+    return workerGroup.awaitTermination(timeout / 2, timeUnit) && bossGroup.awaitTermination(timeout / 2, timeUnit);
   }
 
   private class NettyServerDeployer implements Runnable {
@@ -124,7 +124,8 @@ public class NettyServer implements RestServer {
       }
     }
 
-    public void awaitStartup(long timeout, TimeUnit timeUnit) throws InterruptedException {
+    public void awaitStartup(long timeout, TimeUnit timeUnit)
+        throws InterruptedException {
       startupDone.await(timeout, timeUnit);
     }
   }

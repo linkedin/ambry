@@ -36,6 +36,7 @@ public enum RestErrorCode {
       case UnknownOperationType:
         return BadRequest;
       case InternalError:
+      case ResponseBuildingError:
       default:
         return InternalServerError;
     }

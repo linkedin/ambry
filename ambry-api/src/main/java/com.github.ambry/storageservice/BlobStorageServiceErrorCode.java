@@ -6,5 +6,6 @@ package com.github.ambry.storageservice;
 public enum BlobStorageServiceErrorCode {
   BadRequest,
   InternalError,
+  ResponseBuildingError,
   UnknownOperationType;
 }

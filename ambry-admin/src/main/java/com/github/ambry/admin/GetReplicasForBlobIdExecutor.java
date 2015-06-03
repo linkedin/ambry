@@ -36,11 +36,11 @@ public class GetReplicasForBlobIdExecutor implements TaskExecutor {
         BlobId blobId = new BlobId(data.getString(BLOB_ID_KEY), clusterMap);
         return packageResult(getReplicas(blobId));
       } catch (IOException e) {
-        throw new BlobStorageServiceException("Unable to convert to blob id object - " + e,
+        throw new BlobStorageServiceException("Unable to get blob id object - " + e,
             BlobStorageServiceErrorCode.InternalError);
       } catch (JSONException e) {
         throw new BlobStorageServiceException("Unable to construct result object - " + e,
-            BlobStorageServiceErrorCode.InternalError);
+            BlobStorageServiceErrorCode.ResponseBuildingError);
       }
     } else {
       throw new BlobStorageServiceException("Input AdminExecutionData does not have key - " + BLOB_ID_KEY,

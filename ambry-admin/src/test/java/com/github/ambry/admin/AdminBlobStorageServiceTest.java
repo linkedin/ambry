@@ -9,7 +9,6 @@ import com.github.ambry.storageservice.ExecutionData;
 import com.github.ambry.storageservice.ExecutionResult;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;

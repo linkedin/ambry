@@ -60,8 +60,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       logger.error("Message handling error for request - " + request.getUri() + " - " + e);
       nettyMetrics.handleRequestFailureCount.inc();
       RestException restException;
-      if(e instanceof RestException) {
-        restException = (RestException)e;
+      if (e instanceof RestException) {
+        restException = (RestException) e;
       } else {
         restException = new RestException("Message handling error - " + e, RestErrorCode.MessageHandleFailure);
       }

@@ -4,9 +4,6 @@ package com.github.ambry.rest;
  * Interface for a rest server
  */
 
-import java.util.concurrent.TimeUnit;
-
-
 /**
  * Components required for LI:
  * 1. Config (UC)

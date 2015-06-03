@@ -45,7 +45,7 @@ public class RestServerFactoryTest {
 
   @Test
   public void getRestServerWithBadInputTest()
-    throws Exception {
+      throws Exception {
     try {
       Properties properties = new Properties();
       properties.setProperty(RestServerFactory.SERVER_CLASS_KEY, "not.a.valid.class");
@@ -58,7 +58,6 @@ public class RestServerFactoryTest {
     } catch (ClassNotFoundException e) {
       //nothing to do. expected.
     }
-
 
     Properties properties = new Properties();
     // not a valid rest server

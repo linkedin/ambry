@@ -6,7 +6,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServerFactory;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +67,8 @@ public class AdminServer {
     }
   }
 
-  public void shutdown() throws Exception {
+  public void shutdown()
+      throws Exception {
     logger.info("Shutting down admin server");
     restServer.shutdown();
     requestDelegator.shutdown();
@@ -77,7 +77,8 @@ public class AdminServer {
     shutdownLatch.countDown();
   }
 
-  public void awaitShutdown() throws InterruptedException {
+  public void awaitShutdown()
+      throws InterruptedException {
     shutdownLatch.await();
   }
 

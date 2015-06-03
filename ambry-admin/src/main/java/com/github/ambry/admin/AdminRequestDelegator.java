@@ -6,6 +6,7 @@ import com.github.ambry.rest.RestErrorCode;
 import com.github.ambry.rest.RestException;
 import com.github.ambry.rest.RestMessageHandler;
 import com.github.ambry.rest.RestRequestDelegator;
+import com.github.ambry.storageservice.BlobStorageService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -30,7 +31,7 @@ import org.slf4j.LoggerFactory;
 public class AdminRequestDelegator implements RestRequestDelegator, HandleMessageEventListener {
 
   private final AdminMetrics adminMetrics;
-  private final AdminBlobStorageService adminBlobStorageService;
+  private final BlobStorageService blobStorageService;
   private final CountDownLatch adminMessageHandlersUp;
   private final int handlerCount;
   private final List<AdminMessageHandler> adminMessageHandlers;
@@ -39,11 +40,10 @@ public class AdminRequestDelegator implements RestRequestDelegator, HandleMessag
   private int currIndex = 0;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public AdminRequestDelegator(int handlerCount, AdminMetrics adminMetrics,
-      AdminBlobStorageService adminBlobStorageService) {
+  public AdminRequestDelegator(int handlerCount, AdminMetrics adminMetrics, BlobStorageService blobStorageService) {
     this.handlerCount = handlerCount;
     this.adminMetrics = adminMetrics;
-    this.adminBlobStorageService = adminBlobStorageService;
+    this.blobStorageService = blobStorageService;
     adminMessageHandlers = new ArrayList<AdminMessageHandler>(handlerCount);
     adminMessageHandlersUp = new CountDownLatch(handlerCount);
   }
@@ -54,7 +54,7 @@ public class AdminRequestDelegator implements RestRequestDelegator, HandleMessag
     if (handlerCount > 0) {
       executor = Executors.newFixedThreadPool(handlerCount);
       for (int i = 0; i < handlerCount; i++) {
-        AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics, adminBlobStorageService);
+        AdminMessageHandler messageHandler = new AdminMessageHandler(adminMetrics, blobStorageService);
         executor.execute(messageHandler);
         adminMessageHandlers.add(messageHandler);
       }
@@ -80,13 +80,13 @@ public class AdminRequestDelegator implements RestRequestDelegator, HandleMessag
 
   public void shutdown()
       throws Exception {
-    if(executor != null) {
+    if (executor != null) {
       logger.info("Shutting down admin request delegator");
       for (int i = 0; i < adminMessageHandlers.size(); i++) {
         adminMessageHandlers.get(i).shutdownGracefully(this);
       }
       executor.shutdown();
-      if(!awaitTermination(60, TimeUnit.SECONDS)) {
+      if (!awaitTermination(60, TimeUnit.SECONDS)) {
         throw new Exception("AdminRequestDelegator shutdown failed after waiting for 60 seconds");
       }
       executor = null;
@@ -95,7 +95,7 @@ public class AdminRequestDelegator implements RestRequestDelegator, HandleMessag
 
   private boolean awaitTermination(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
-    return adminMessageHandlersUp.await(3 * timeout/4, timeUnit) && executor.awaitTermination(timeout/4, timeUnit);
+    return adminMessageHandlersUp.await(3 * timeout / 4, timeUnit) && executor.awaitTermination(timeout / 4, timeUnit);
   }
 
   public void onMessageHandleSuccess(MessageInfo messageInfo) {

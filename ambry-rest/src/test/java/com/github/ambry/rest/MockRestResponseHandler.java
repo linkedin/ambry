@@ -3,8 +3,6 @@ package com.github.ambry.rest;
 import java.io.ByteArrayOutputStream;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -30,8 +28,6 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   private StringBuilder bodyStringBuilder = new StringBuilder();
   private ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
-
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public void addToBody(byte[] data, boolean isLast) {
     addToBody(data, isLast, false);
@@ -96,9 +92,9 @@ public class MockRestResponseHandler implements RestResponseHandler {
         errorSent = true;
         close();
       } catch (JSONException e) {
-        logger.error("Error while trying to record exception. Original exception - " + cause + ". New error - " + e);
+        // nothing to do
       } catch (RestException e) {
-        logger.error("Error while trying to record exception. Original exception - " + cause + ". New error - " + e);
+        // nothing to do
       }
     }
   }

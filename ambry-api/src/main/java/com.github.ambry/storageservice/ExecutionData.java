@@ -30,7 +30,7 @@ public abstract class ExecutionData {
 
   public String getOperationType() {
     try {
-      if(data.has(OPERATION_TYPE_KEY)) {
+      if (data.has(OPERATION_TYPE_KEY)) {
         return data.getString(OPERATION_TYPE_KEY);
       }
     } catch (JSONException e) {
@@ -41,7 +41,7 @@ public abstract class ExecutionData {
 
   public JSONObject getOperationData() {
     try {
-      if(data.has(OPERATION_DATA_KEY)) {
+      if (data.has(OPERATION_DATA_KEY)) {
         return data.getJSONObject(OPERATION_DATA_KEY);
       }
     } catch (JSONException e) {

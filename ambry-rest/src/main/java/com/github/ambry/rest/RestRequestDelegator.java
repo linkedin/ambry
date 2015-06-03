@@ -1,8 +1,5 @@
 package com.github.ambry.rest;
 
-import java.util.concurrent.TimeUnit;
-
-
 /**
  * Interface for a RestRequestDelegator
  */

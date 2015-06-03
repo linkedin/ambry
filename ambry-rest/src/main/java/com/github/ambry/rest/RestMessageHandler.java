@@ -51,13 +51,15 @@ public abstract class RestMessageHandler implements Runnable {
     }
   }
 
-  public void shutdownGracefully(HandleMessageEventListener handleMessageEventListener) throws RestException {
+  public void shutdownGracefully(HandleMessageEventListener handleMessageEventListener)
+      throws RestException {
     PoisonInfo poison = new PoisonInfo();
     poison.addListener(handleMessageEventListener);
     queue(poison);
   }
 
-  public void handleMessage(MessageInfo messageInfo) throws RestException {
+  public void handleMessage(MessageInfo messageInfo)
+      throws RestException {
     queue(messageInfo);
   }
 
@@ -93,7 +95,8 @@ public abstract class RestMessageHandler implements Runnable {
     }
   }
 
-  private void queue(MessageInfo messageInfo) throws RestException {
+  private void queue(MessageInfo messageInfo)
+      throws RestException {
     int maxAttempts = 3;
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       try {
@@ -122,7 +125,7 @@ public abstract class RestMessageHandler implements Runnable {
   private void doProcessingFailureTasks(MessageInfo messageInfo, Exception e) {
     try {
       RestException restException;
-      if(e instanceof RestException) {
+      if (e instanceof RestException) {
         restException = (RestException) e;
       } else {
         restException = new RestException(e, RestErrorCode.RequestProcessingFailure);

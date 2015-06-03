@@ -22,7 +22,7 @@ public abstract class ExecutionResult {
 
   public JSONObject getOperationResult() {
     try {
-      if(result.has(OPERATION_RESULT_KEY)) {
+      if (result.has(OPERATION_RESULT_KEY)) {
         return result.getJSONObject(OPERATION_RESULT_KEY);
       }
     } catch (JSONException e) {

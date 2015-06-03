@@ -6,7 +6,6 @@ import com.github.ambry.storageservice.BlobStorageServiceErrorCode;
 import com.github.ambry.storageservice.BlobStorageServiceException;
 import com.github.ambry.storageservice.ExecutionData;
 import com.github.ambry.storageservice.ExecutionResult;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

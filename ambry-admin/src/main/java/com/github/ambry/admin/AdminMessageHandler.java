@@ -6,6 +6,7 @@ import com.github.ambry.rest.RestException;
 import com.github.ambry.rest.RestMessageHandler;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.storageservice.BlobStorageService;
 import com.github.ambry.storageservice.BlobStorageServiceException;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -18,12 +19,12 @@ import org.json.JSONObject;
  */
 public class AdminMessageHandler extends RestMessageHandler {
   private final AdminMetrics adminMetrics;
-  private final AdminBlobStorageService adminBlobStorageService;
+  private final BlobStorageService blobStorageService;
 
-  public AdminMessageHandler(AdminMetrics adminMetrics, AdminBlobStorageService adminBlobStorageService) {
+  public AdminMessageHandler(AdminMetrics adminMetrics, BlobStorageService blobStorageService) {
     super(adminMetrics);
     this.adminMetrics = adminMetrics;
-    this.adminBlobStorageService = adminBlobStorageService;
+    this.blobStorageService = blobStorageService;
   }
 
   public void onRequestComplete(RestRequest request) {
@@ -118,7 +119,7 @@ public class AdminMessageHandler extends RestMessageHandler {
     try {
       RestResponseHandler responseHandler = messageInfo.getResponseHandler();
       if (messageInfo.getRestObject() instanceof RestRequest) {
-        String echoStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
+        String echoStr = blobStorageService.execute(executionData).getOperationResult().toString();
         if (echoStr != null) {
           responseHandler.setContentType("text/plain");
           responseHandler.finalizeResponse();
@@ -142,7 +143,7 @@ public class AdminMessageHandler extends RestMessageHandler {
     try {
       RestResponseHandler responseHandler = messageInfo.getResponseHandler();
       if (messageInfo.getRestObject() instanceof RestRequest) {
-        String replicaStr = adminBlobStorageService.execute(executionData).getOperationResult().toString();
+        String replicaStr = blobStorageService.execute(executionData).getOperationResult().toString();
         if (replicaStr != null) {
           responseHandler.setContentType("application/json");
           responseHandler.finalizeResponse();

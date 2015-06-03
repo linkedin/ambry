@@ -6,5 +6,6 @@ package com.github.ambry.rest;
 public interface HandleMessageEventListener {
 
   public void onMessageHandleSuccess(MessageInfo messageInfo);
+
   public void onMessageHandleFailure(MessageInfo messageInfo, Exception e);
 }

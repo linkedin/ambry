@@ -5,10 +5,8 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.rest.RestException;
 import com.github.ambry.rest.RestMessageHandler;
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 
