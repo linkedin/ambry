@@ -254,12 +254,12 @@ public class BlockingChannelConnectionPoolTest {
 
   private void waitForConditionAndCheckForException(Map<String, AtomicInteger> channelCount,
       AtomicReference<Exception> exception, int port, int exceptedChannelCount)
-      throws InterruptedException {
+      throws Exception {
     while (channelCount.get("localhost" + port).get() != exceptedChannelCount && exception.get() == null) {
       Thread.sleep(2);
     }
     if (exception.get() != null) {
-      throw new IllegalStateException("Exception was thrown while trying to checkout connection ", exception.get());
+      throw exception.get();
     }
   }
 }
