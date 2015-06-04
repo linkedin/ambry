@@ -69,7 +69,6 @@ public class FileWatcher {
     while (true) {
       final WatchKey wk = watchService.poll(limit - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
       if (wk == null) {
-        System.out.println("Timed out waiting for file changes, count: " + count);
         return false;
       }
       if (!keys.containsKey(wk)) {
@@ -77,8 +76,6 @@ public class FileWatcher {
       }
       for (WatchEvent<?> event : wk.pollEvents()) {
         final Path changed = (Path) event.context();
-        System.out.println(changed);
-        System.out.println("dir: " + keys.get(wk));
         if (changed.endsWith(fileName)) {
           count--;
           break;
