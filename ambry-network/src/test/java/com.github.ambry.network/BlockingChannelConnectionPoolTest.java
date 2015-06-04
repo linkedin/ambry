@@ -208,7 +208,6 @@ public class BlockingChannelConnectionPoolTest {
       } catch (Exception e) {
         exception.set(e);
         e.printStackTrace();
-        Assert.assertFalse(true);
       }
     }
   }
@@ -247,9 +246,9 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   private void waitForConditionAndCheckForException(Map<String, AtomicInteger> channelCount,
-      AtomicReference<Exception> exception, int port, int exceptedChannelCount)
+      AtomicReference<Exception> exception, int port, int expectedChannelCount)
       throws Exception {
-    while (channelCount.get("localhost" + port).get() != exceptedChannelCount && exception.get() == null) {
+    while (channelCount.get("localhost" + port).get() != expectedChannelCount && exception.get() == null) {
       Thread.sleep(2);
     }
     if (exception.get() != null) {
