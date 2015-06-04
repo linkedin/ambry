@@ -271,7 +271,7 @@ public class ServerTest {
     }
   }
 
-  @Test
+  //@Test
   public void endToEndTestHardDeletes()
       throws InterruptedException, IOException {
     MockClusterMap clusterMap = cluster.getClusterMap();
