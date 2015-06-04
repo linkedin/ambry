@@ -24,7 +24,6 @@ import org.junit.runners.Parameterized;
  * Test for the blocking channel connection pool
  */
 
-@RunWith(Parameterized.class)
 public class BlockingChannelConnectionPoolTest {
 
   private SocketServer server1 = null;
@@ -56,11 +55,6 @@ public class BlockingChannelConnectionPoolTest {
     server1.shutdown();
     server2.shutdown();
     server3.shutdown();
-  }
-
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[2][0]);
   }
 
   class BlockingChannelInfoThread implements Runnable {
