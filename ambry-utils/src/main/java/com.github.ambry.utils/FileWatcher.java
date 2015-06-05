@@ -19,10 +19,11 @@ public class FileWatcher {
   private WatchService watchService;
   private String fileName;
   private int registeredPathsCount;
-  private HashMap<WatchKey, String> keys;
+  private HashMap<WatchKey, String> registeredKeys;
 
   /**
-   * Initialize a file watcher class that listens to changes to the given fileName
+   * Initialize a file watcher class that listens to events on the given fileName. The events are typically create,
+   * modify and delete events.
    *
    * @param fileName The fileName of the files in the directories to listen on.
    * @throws IOException
@@ -32,7 +33,7 @@ public class FileWatcher {
     watchService = FileSystems.getDefault().newWatchService();
     registeredPathsCount = 0;
     this.fileName = fileName;
-    keys = new HashMap<WatchKey, String>();
+    registeredKeys = new HashMap<WatchKey, String>();
   }
 
   /**
@@ -40,28 +41,31 @@ public class FileWatcher {
    * will listen for changes to the file with relative name fileName in all the paths registered.
    *
    * @param filePath The path to register.
+   * @param kinds The kinds of events to listen for: ENTRY_CREATE, ENTRY_MODIFY or ENTRY_DELETE.
    * @throws IOException
    */
-  public void register(String filePath)
+  public void register(String filePath, WatchEvent.Kind<?>... kinds)
       throws IOException {
     final Path path = FileSystems.getDefault().getPath(filePath);
-    WatchKey key = path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
-    keys.put(key, filePath);
+    WatchKey key = path.register(watchService, kinds);
+    registeredKeys.put(key, filePath);
     registeredPathsCount++;
   }
 
   /**
-   * Wait until the files with the fileName in all the registered paths change or until the timeout is reached. If no
-   * paths were registered, this will throw.
+   * Wait until the files with the fileName in all the registered paths received an associated event, or until the
+   * timeout is reached. If no paths were registered, this will throw.
    *
    * @param timeoutMs The timeout for the wait.
-   * @return true if all the associated files changed within the given timeout, false otherwise.
+   * @return true if all the associated files went through (at least one of the) registered event kinds within the given
+   * timeout, false otherwise.
    *
    * @throws InterruptedException
    */
   public boolean waitForChange(int timeoutMs)
       throws InterruptedException {
     int count = registeredPathsCount;
+    HashMap<WatchKey, String> keys = new HashMap<WatchKey, String>(registeredKeys);
     if (count == 0) {
       throw new IllegalStateException();
     }
@@ -69,7 +73,6 @@ public class FileWatcher {
     while (true) {
       final WatchKey wk = watchService.poll(limit - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
       if (wk == null) {
-        System.out.println("Timed out waiting for file changes, count: " + count);
         return false;
       }
       if (!keys.containsKey(wk)) {
@@ -77,8 +80,6 @@ public class FileWatcher {
       }
       for (WatchEvent<?> event : wk.pollEvents()) {
         final Path changed = (Path) event.context();
-        System.out.println(changed);
-        System.out.println("dir: " + keys.get(wk));
         if (changed.endsWith(fileName)) {
           count--;
           break;
@@ -93,6 +94,10 @@ public class FileWatcher {
     return true;
   }
 
+  /**
+   * Close this watcher.
+   * @throws IOException
+   */
   public void close()
       throws IOException {
     watchService.close();

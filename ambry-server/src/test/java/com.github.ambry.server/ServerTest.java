@@ -271,7 +271,7 @@ public class ServerTest {
     }
   }
 
-  //@Test
+  @Test
   public void endToEndTestHardDeletes()
       throws InterruptedException, IOException {
     MockClusterMap clusterMap = cluster.getClusterMap();
@@ -364,7 +364,7 @@ public class ServerTest {
     Assert.assertEquals(response5.getError(), ServerErrorCode.No_Error);
 
     // Create a watcher so we know when the cleanup tokens change.
-    FileWatcher fileWatcher = new FileWatcher("cleanuptoken");
+    FileWatcher fileWatcher = new FileWatcher("cleanuptoken.tmp");
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
@@ -396,7 +396,7 @@ public class ServerTest {
     Assert.assertTrue(fileWatcher.waitForChange(10000));
 
     fileWatcher.close();
-    fileWatcher = new FileWatcher("cleanuptoken");
+    fileWatcher = new FileWatcher("cleanuptoken.tmp");
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
     fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
