@@ -41,12 +41,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -364,10 +359,13 @@ public class ServerTest {
     Assert.assertEquals(response5.getError(), ServerErrorCode.No_Error);
 
     // Create a watcher so we know when the cleanup tokens change.
-    FileWatcher fileWatcher = new FileWatcher("cleanuptoken.tmp");
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
+    FileWatcher fileWatcher = new FileWatcher("cleanuptoken");
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
 
     // delete blob 1
     DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobIdList.get(1));
@@ -393,13 +391,16 @@ public class ServerTest {
     zeroedData = new byte[data.get(4).length];
     data.set(4, zeroedData);
 
-    Assert.assertTrue(fileWatcher.waitForChange(10000));
+    Assert.assertTrue(fileWatcher.waitForChange(30000));
 
     fileWatcher.close();
-    fileWatcher = new FileWatcher("cleanuptoken.tmp");
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath());
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath());
-    fileWatcher.register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath());
+    fileWatcher = new FileWatcher("cleanuptoken");
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    fileWatcher
+        .register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -519,7 +520,7 @@ public class ServerTest {
     zeroedData = new byte[data.get(6).length];
     data.set(6, zeroedData);
 
-    Assert.assertTrue(fileWatcher.waitForChange(10000));
+    Assert.assertTrue(fileWatcher.waitForChange(30000));
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
