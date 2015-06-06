@@ -32,7 +32,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.FileWatcher;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -266,6 +266,52 @@ public class ServerTest {
     }
   }
 
+  void waitForCleanupTokenCatchup(String path, MockClusterMap clusterMap, long expectedTokenValue, long timeout) throws IOException {
+    File cleanupTokenFile = new File(path, "cleanuptoken");
+    FindToken startToken = null;
+    FindToken endToken = null;
+    long parsedTokenValue = -1;
+
+    File log = new File(path, "log_current");
+    long log_size = log.length();
+
+    long endTime = SystemTime.getInstance().milliseconds() + timeout;
+    do {
+      if (cleanupTokenFile.exists()) {
+        CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
+        DataInputStream stream = new DataInputStream(crcStream);
+        try {
+          short version = stream.readShort();
+          Assert.assertEquals(version, 0);
+          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+          FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
+
+          startToken = factory.getFindToken(stream);
+          endToken = factory.getFindToken(stream);
+
+          ByteBuffer bytebufferToken = ByteBuffer.wrap(endToken.toBytes());
+          Assert.assertEquals(bytebufferToken.getShort(), 0);
+          int size = bytebufferToken.getInt();
+          bytebufferToken.position(bytebufferToken.position() + size);
+          parsedTokenValue = bytebufferToken.getLong();
+          long crc = crcStream.getValue();
+          Assert.assertEquals(crc, stream.readLong());
+          Thread.sleep(1000);
+        } catch (Exception e) {
+          Assert.assertTrue(false);
+        } finally {
+          stream.close();
+        }
+      }
+    } while (SystemTime.getInstance().milliseconds() < endTime && parsedTokenValue < expectedTokenValue);
+    System.out.println("Start Token is " + startToken);
+    System.out.println("End Token is " + endToken);
+    System.out.println("Size of log: " + log_size);
+    System.out.println("--");
+    Assert.assertEquals(expectedTokenValue, parsedTokenValue);
+  }
+
+
   @Test
   public void endToEndTestHardDeletes()
       throws InterruptedException, IOException {
@@ -358,14 +404,10 @@ public class ServerTest {
     PutResponse response5 = PutResponse.readFrom(new DataInputStream(putResponseStream));
     Assert.assertEquals(response5.getError(), ServerErrorCode.No_Error);
 
-    // Create a watcher so we know when the cleanup tokens change.
-    FileWatcher fileWatcher = new FileWatcher("cleanuptoken");
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    notificationSystem.awaitBlobCreations(blobIdList.get(0).getID());
+    notificationSystem.awaitBlobCreations(blobIdList.get(1).getID());
+    notificationSystem.awaitBlobCreations(blobIdList.get(2).getID());
+    notificationSystem.awaitBlobCreations(blobIdList.get(4).getID());
 
     // delete blob 1
     DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobIdList.get(1));
@@ -391,16 +433,12 @@ public class ServerTest {
     zeroedData = new byte[data.get(4).length];
     data.set(4, zeroedData);
 
-    Assert.assertTrue(fileWatcher.waitForChange(30000));
+    notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
+    notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
-    fileWatcher.close();
-    fileWatcher = new FileWatcher("cleanuptoken");
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
-    fileWatcher
-        .register(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), StandardWatchEventKinds.ENTRY_MODIFY);
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431, 10000);
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299, 10000);
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299, 10000);
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -482,6 +520,9 @@ public class ServerTest {
     PutResponse response9 = PutResponse.readFrom(new DataInputStream(putResponseStream));
     Assert.assertEquals(response9.getError(), ServerErrorCode.No_Error);
 
+    notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
+    notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
+    notificationSystem.awaitBlobCreations(blobIdList.get(8).getID());
     // Do more deletes
 
     // delete blob 3 that is expired.
@@ -520,7 +561,12 @@ public class ServerTest {
     zeroedData = new byte[data.get(6).length];
     data.set(6, zeroedData);
 
-    Assert.assertTrue(fileWatcher.waitForChange(30000));
+    notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
+    notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
+
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905, 10000);
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676, 10000);
+    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676, 10000);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);

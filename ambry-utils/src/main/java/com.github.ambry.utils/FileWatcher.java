@@ -69,27 +69,29 @@ public class FileWatcher {
     if (count == 0) {
       throw new IllegalStateException();
     }
-    long limit = SystemTime.getInstance().milliseconds() + timeoutMs;
-    while (true) {
-      final WatchKey wk = watchService.poll(limit - SystemTime.getInstance().milliseconds(), TimeUnit.MILLISECONDS);
+    long curTime = SystemTime.getInstance().milliseconds();
+    long endTime = curTime + timeoutMs;
+    while (curTime < endTime) {
+      final WatchKey wk = watchService.poll(endTime - curTime, TimeUnit.MILLISECONDS);
       if (wk == null) {
         return false;
       }
       if (!keys.containsKey(wk)) {
-        throw new IllegalStateException("Unexpected event received");
+        continue;
       }
       for (WatchEvent<?> event : wk.pollEvents()) {
         final Path changed = (Path) event.context();
         if (changed.endsWith(fileName)) {
           count--;
+          wk.reset();
+          keys.remove(wk);
           break;
         }
       }
-      wk.reset();
-      keys.remove(wk);
       if (count == 0) {
         break;
       }
+      curTime = SystemTime.getInstance().milliseconds();
     }
     return true;
   }
