@@ -266,16 +266,12 @@ public class ServerTest {
     }
   }
 
-  void EnsureCleanupTokenCatchesUp(String path, MockClusterMap clusterMap, long expectedTokenValue)
+  void ensureCleanupTokenCatchesUp(String path, MockClusterMap clusterMap, long expectedTokenValue)
       throws Exception {
     final int TIMEOUT = 10000;
     File cleanupTokenFile = new File(path, "cleanuptoken");
-    FindToken startToken = null;
-    FindToken endToken = null;
+    FindToken endToken;
     long parsedTokenValue = -1;
-
-    File log = new File(path, "log_current");
-    long log_size = log.length();
 
     long endTime = SystemTime.getInstance().milliseconds() + TIMEOUT;
     do {
@@ -288,7 +284,7 @@ public class ServerTest {
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
-          startToken = factory.getFindToken(stream);
+          factory.getFindToken(stream);
           endToken = factory.getFindToken(stream);
 
           ByteBuffer bytebufferToken = ByteBuffer.wrap(endToken.toBytes());
@@ -309,7 +305,7 @@ public class ServerTest {
 
   @Test
   public void endToEndTestHardDeletes()
-      throws InterruptedException, IOException {
+      throws Exception {
     MockClusterMap clusterMap = cluster.getClusterMap();
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -431,14 +427,9 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
-    try {
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
-    } catch (Exception e) {
-      e.printStackTrace();
-      Assert.assertTrue(false);
-    }
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -564,14 +555,9 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
-    try {
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
-      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
-    } catch (Exception e) {
-      e.printStackTrace();
-      Assert.assertTrue(false);
-    }
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
