@@ -266,7 +266,9 @@ public class ServerTest {
     }
   }
 
-  void waitForCleanupTokenCatchup(String path, MockClusterMap clusterMap, long expectedTokenValue, long timeout) throws IOException {
+  void EnsureCleanupTokenCatchesUp(String path, MockClusterMap clusterMap, long expectedTokenValue)
+      throws Exception {
+    final int TIMEOUT = 10000;
     File cleanupTokenFile = new File(path, "cleanuptoken");
     FindToken startToken = null;
     FindToken endToken = null;
@@ -275,7 +277,7 @@ public class ServerTest {
     File log = new File(path, "log_current");
     long log_size = log.length();
 
-    long endTime = SystemTime.getInstance().milliseconds() + timeout;
+    long endTime = SystemTime.getInstance().milliseconds() + TIMEOUT;
     do {
       if (cleanupTokenFile.exists()) {
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
@@ -297,20 +299,13 @@ public class ServerTest {
           long crc = crcStream.getValue();
           Assert.assertEquals(crc, stream.readLong());
           Thread.sleep(1000);
-        } catch (Exception e) {
-          Assert.assertTrue(false);
         } finally {
           stream.close();
         }
       }
     } while (SystemTime.getInstance().milliseconds() < endTime && parsedTokenValue < expectedTokenValue);
-    System.out.println("Start Token is " + startToken);
-    System.out.println("End Token is " + endToken);
-    System.out.println("Size of log: " + log_size);
-    System.out.println("--");
     Assert.assertEquals(expectedTokenValue, parsedTokenValue);
   }
-
 
   @Test
   public void endToEndTestHardDeletes()
@@ -436,9 +431,14 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431, 10000);
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299, 10000);
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299, 10000);
+    try {
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -564,9 +564,14 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905, 10000);
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676, 10000);
-    waitForCleanupTokenCatchup(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676, 10000);
+    try {
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
+      EnsureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
