@@ -10,4 +10,6 @@ public interface RestContent extends RestObject {
    * @return whether this is the last chunk
    */
   public boolean isLast();
+
+  public byte[] getBytes();
 }

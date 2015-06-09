@@ -28,6 +28,10 @@ public class NettyContent implements RestContent {
     }
   }
 
+  public byte[] getBytes() {
+    return content.content().array();
+  }
+
   public void release() {
     // make sure we release the space we are using so that it can go back to the pool
     ReferenceCountUtil.release(content);

@@ -148,7 +148,7 @@ public class AdminMessageHandlerTest {
 
   @Test
   public void handleEchoTest()
-      throws IOException, JSONException, RestException {
+      throws InstantiationException, IOException, JSONException, RestException {
     AdminMessageHandler adminMessageHandler = getAdminMessageHandler();
     String inputText = "textToBeEchoed";
     MockRestRequest restRequest = createEchoRequest(inputText);
@@ -173,7 +173,7 @@ public class AdminMessageHandlerTest {
 
   @Test
   public void handleGetReplicasForBlobIdTest()
-      throws IOException, JSONException, RestException {
+      throws InstantiationException, IOException, JSONException, RestException {
     ClusterMap clusterMap = new MockClusterMap();
     PartitionId partitionId = clusterMap.getWritablePartitionIds().get(0);
     BlobId blobId = new BlobId(partitionId);
@@ -233,9 +233,10 @@ public class AdminMessageHandlerTest {
   }
 
   private MockRestContent createRestContent(boolean isLast)
-      throws JSONException {
+      throws InstantiationException, JSONException {
     JSONObject data = new JSONObject();
     data.put(MockRestContent.IS_LAST_KEY, isLast);
+    data.put(MockRestContent.CONTENT_KEY, "");
     return new MockRestContent(data);
   }
 

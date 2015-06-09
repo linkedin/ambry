@@ -50,7 +50,7 @@ public class NettyConfig extends RestServerConfig {
    */
   @Config("startupWaitSeconds")
   @Default("30")
-  private final int startupWaitSeconds;
+  private final long startupWaitSeconds;
 
   /**
    * Number of netty worker threads
@@ -75,7 +75,7 @@ public class NettyConfig extends RestServerConfig {
     return soBacklog;
   }
 
-  public int getStartupWaitSeconds() {
+  public long getStartupWaitSeconds() {
     return startupWaitSeconds;
   }
 
@@ -90,7 +90,7 @@ public class NettyConfig extends RestServerConfig {
     idleTimeSeconds = verifiableProperties.getInt(IDLETIME_SECONDS_KEY, 60);
     port = verifiableProperties.getInt(PORT_KEY, 8088);
     soBacklog = verifiableProperties.getInt(SO_BACKLOG_KEY, 100);
-    startupWaitSeconds = verifiableProperties.getInt(STARTUP_WAIT_SECONDS, 30);
+    startupWaitSeconds = verifiableProperties.getLong(STARTUP_WAIT_SECONDS, 30);
     workerThreadCount = verifiableProperties.getInt(WORKER_THREADCOUNT_KEY, 1);
   }
 }

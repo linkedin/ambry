@@ -56,16 +56,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
 
     try {
       messageHandler.handleMessage(new MessageInfo(request, obj, responseHandler));
+    } catch(RestException e) {
+      recordHandlingError(e);
+      throw e;
     } catch (Exception e) {
-      logger.error("Message handling error for request - " + request.getUri() + " - " + e);
-      nettyMetrics.handleRequestFailureCount.inc();
-      RestException restException;
-      if (e instanceof RestException) {
-        restException = (RestException) e;
-      } else {
-        restException = new RestException("Message handling error - " + e, RestErrorCode.MessageHandleFailure);
-      }
-      throw restException;
+      recordHandlingError(e);
+      throw  new RestException("Message handling error - " + e, RestErrorCode.MessageHandleFailure);
     }
   }
 
@@ -137,6 +133,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
      * are bound to have some sort of state for each connection.
      */
 
+    // TODO: This needs a unit test
     if (evt instanceof IdleStateEvent) {
       IdleStateEvent e = (IdleStateEvent) evt;
       if (e.state() == IdleState.ALL_IDLE) {
@@ -166,6 +163,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     }
   }
 
+  private void recordHandlingError(Exception e) {
+    logger.error("Message handling error for request - " + request.getUri() + " - " + e);
+    nettyMetrics.handleRequestFailureCount.inc();
+  }
+
   private Boolean vetRequest(HttpObject obj) {
     if (obj instanceof HttpRequest) {
       HttpRequest httpRequest = (HttpRequest) obj;
@@ -188,9 +190,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.unknownHttpObjectErrorCount.inc();
         throw new Exception("HttpObject received is not of a known type");
       }
+    } catch (RestException e) {
+      throw e;
     } catch (Exception e) {
       throw new RestException("Http object conversion failed with reason - " + e,
-          RestErrorCode.HttpObjectConversionFailure);
+            RestErrorCode.HttpObjectConversionFailure);
     }
   }
 
@@ -200,6 +204,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
 
-    ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    if(ctx.channel().isActive()) {
+      ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    }
   }
 }

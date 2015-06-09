@@ -17,7 +17,7 @@ public class NettyRequest implements RestRequest {
   private final RestMethod restMethod;
   private String[] pathParts = null;
 
-  public NettyRequest(HttpRequest request) {
+  public NettyRequest(HttpRequest request) throws RestException {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
 
@@ -31,7 +31,7 @@ public class NettyRequest implements RestRequest {
     } else if (httpMethod == HttpMethod.HEAD) {
       restMethod = RestMethod.HEAD;
     } else {
-      throw new IllegalArgumentException("http method not supported: " + httpMethod);
+      throw new RestException("http method not supported: " + httpMethod, RestErrorCode.UnknownHttpMethod);
     }
   }
 

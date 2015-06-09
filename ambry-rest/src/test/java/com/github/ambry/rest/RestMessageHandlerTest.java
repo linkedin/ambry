@@ -90,48 +90,6 @@ public class RestMessageHandlerTest {
     }
   }
 
-  private class MessageProcessingSuccessMonitor implements HandleMessageEventListener {
-    private final CountDownLatch toBeProcessed = new CountDownLatch(1);
-    private final MockRestResponseHandler restResponseHandler;
-    private final RestMethod restMethod;
-
-    private Throwable cause = null;
-
-    private Throwable getCause() {
-      return cause;
-    }
-
-    public MessageProcessingSuccessMonitor(MockRestResponseHandler restResponseHandler, RestMethod restMethod)
-        throws Exception {
-      this.restResponseHandler = restResponseHandler;
-      this.restMethod = restMethod;
-    }
-
-    public void onMessageHandleSuccess(MessageInfo messageInfo) {
-      try {
-        String responseBody = restResponseHandler.getFlushedBody().getString(MockRestResponseHandler.BODY_STRING_KEY);
-        // expect MockRestMessageHandler to echo the method back.
-        assertEquals("Unexpected response for " + restMethod, restMethod.toString(), responseBody);
-      } catch (Exception e) {
-        cause = e;
-      } catch (AssertionError e) {
-        cause = e;
-      } finally {
-        toBeProcessed.countDown();
-      }
-    }
-
-    public void onMessageHandleFailure(MessageInfo messageInfo, Exception e) {
-      cause = e;
-      toBeProcessed.countDown();
-    }
-
-    public boolean await(long timeout, TimeUnit timeUnit)
-        throws InterruptedException {
-      return toBeProcessed.await(timeout, timeUnit);
-    }
-  }
-
   // processMessageWithBadInputTest() helpers
   private void processMessageWithRestRequestNull()
       throws Exception {
@@ -160,7 +118,8 @@ public class RestMessageHandlerTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
-    executionData.put(ExecutionData.OPERATION_TYPE_KEY, MockRestMessageHandler.OPERATION_THROW_UNCHECKED_EXCEPTION);
+    executionData.put(ExecutionData.OPERATION_TYPE_KEY,
+        MockRestMessageHandler.OPERATION_THROW_PROCESSING_UNCHECKED_EXCEPTION);
     executionData.put(ExecutionData.OPERATION_DATA_KEY, new JSONObject());
     headers.put(RestMessageHandler.EXECUTION_DATA_HEADER_KEY, executionData);
     MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
@@ -203,6 +162,71 @@ public class RestMessageHandlerTest {
     }
   }
 
+  // badMessageHandleListenersTest() helpers
+  public void badOnHandleSuccessTest()
+      throws Exception {
+    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
+    MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
+    MessageInfo messageInfo = new MessageInfo(restRequest, restRequest, restResponseHandler);
+    doBadHandlerTest(messageInfo);
+  }
+
+  public void badOnHandleFailureTest()
+      throws Exception {
+    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
+    MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
+    MessageInfo messageInfo = new MessageInfo(restRequest, null, restResponseHandler);
+    doBadHandlerTest(messageInfo);
+  }
+
+  public void doBadHandlerTest(MessageInfo messageInfo)
+      throws Exception {
+    MockRestMessageHandler restMessageHandler = getMockRestMessageHandler();
+    Thread messageHandlerRunner = new Thread(restMessageHandler);
+    messageHandlerRunner.start();
+
+    MessageProcessingBadMonitor messageProcessingBadMonitor = new MessageProcessingBadMonitor(messageHandlerRunner);
+    messageInfo.addListener(messageProcessingBadMonitor);
+    restMessageHandler.handleMessage(messageInfo);
+
+    if (!messageProcessingBadMonitor.await(10, TimeUnit.SECONDS)) {
+      fail("Test took too long. There might be a problem or the timeout may need to be increased");
+    }
+
+    // make sure that the message handler is still alive and well
+    assertTrue("RestMessageHandler is dead", messageHandlerRunner.isAlive());
+    for (RestMethod restMethod : RestMethod.values()) {
+      sendRequestAndExpectSuccess(restMethod, restMessageHandler);
+    }
+    restMessageHandler.shutdownGracefully(null);
+  }
+
+  // monitor classes
+  private class MessageProcessingBadMonitor implements HandleMessageEventListener {
+    private final CountDownLatch toBeProcessed = new CountDownLatch(1);
+    private final Thread messageHandlerRunner;
+
+    public MessageProcessingBadMonitor(Thread messageHandlerRunner)
+        throws Exception {
+      this.messageHandlerRunner = messageHandlerRunner;
+    }
+
+    public void onMessageHandleSuccess(MessageInfo messageInfo) {
+      toBeProcessed.countDown();
+      throw new RuntimeException("This is bad handler");
+    }
+
+    public void onMessageHandleFailure(MessageInfo messageInfo, Exception e) {
+      toBeProcessed.countDown();
+      throw new RuntimeException("This is bad handler");
+    }
+
+    public boolean await(long timeout, TimeUnit timeUnit)
+        throws InterruptedException {
+      return toBeProcessed.await(timeout, timeUnit);
+    }
+  }
+
   private class MessageProcessingFailureMonitor implements HandleMessageEventListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
     private final RestErrorCode expectedCode;
@@ -210,7 +234,7 @@ public class RestMessageHandlerTest {
 
     private Throwable cause = null;
 
-    private Throwable getCause() {
+    public Throwable getCause() {
       return cause;
     }
 
@@ -248,62 +272,40 @@ public class RestMessageHandlerTest {
     }
   }
 
-  // badMessageHandleListenersTest() helpers
-  public void badOnHandleSuccessTest()
-      throws Exception {
-    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
-    MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
-    MessageInfo messageInfo = new MessageInfo(restRequest, restRequest, restResponseHandler);
-    doBadHandlerTest(messageInfo);
-  }
-
-  public void badOnHandleFailureTest()
-      throws Exception {
-    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
-    MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
-    MessageInfo messageInfo = new MessageInfo(restRequest, null, restResponseHandler);
-    doBadHandlerTest(messageInfo);
-  }
-
-  public void doBadHandlerTest(MessageInfo messageInfo)
-      throws Exception {
-    MockRestMessageHandler restMessageHandler = getMockRestMessageHandler();
-    Thread messageHandlerRunner = new Thread(restMessageHandler);
-    messageHandlerRunner.start();
-
-    BadMessageProcessingMonitor badMessageProcessingMonitor = new BadMessageProcessingMonitor(messageHandlerRunner);
-    messageInfo.addListener(badMessageProcessingMonitor);
-    restMessageHandler.handleMessage(messageInfo);
-
-    if (!badMessageProcessingMonitor.await(10, TimeUnit.SECONDS)) {
-      fail("Test took too long. There might be a problem or the timeout may need to be increased");
-    }
-
-    // make sure that the message handler is still alive and well
-    assertTrue("RestMessageHandler is dead", messageHandlerRunner.isAlive());
-    for (RestMethod restMethod : RestMethod.values()) {
-      sendRequestAndExpectSuccess(restMethod, restMessageHandler);
-    }
-    restMessageHandler.shutdownGracefully(null);
-  }
-
-  private class BadMessageProcessingMonitor implements HandleMessageEventListener {
+  private class MessageProcessingSuccessMonitor implements HandleMessageEventListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
-    private final Thread messageHandlerRunner;
+    private final MockRestResponseHandler restResponseHandler;
+    private final RestMethod restMethod;
 
-    public BadMessageProcessingMonitor(Thread messageHandlerRunner)
+    private Throwable cause = null;
+
+    public Throwable getCause() {
+      return cause;
+    }
+
+    public MessageProcessingSuccessMonitor(MockRestResponseHandler restResponseHandler, RestMethod restMethod)
         throws Exception {
-      this.messageHandlerRunner = messageHandlerRunner;
+      this.restResponseHandler = restResponseHandler;
+      this.restMethod = restMethod;
     }
 
     public void onMessageHandleSuccess(MessageInfo messageInfo) {
-      toBeProcessed.countDown();
-      throw new RuntimeException("This is bad handler");
+      try {
+        String responseBody = restResponseHandler.getFlushedBody().getString(MockRestResponseHandler.BODY_STRING_KEY);
+        // expect MockRestMessageHandler to echo the method back.
+        assertEquals("Unexpected response for " + restMethod, restMethod.toString(), responseBody);
+      } catch (Exception e) {
+        cause = e;
+      } catch (AssertionError e) {
+        cause = e;
+      } finally {
+        toBeProcessed.countDown();
+      }
     }
 
     public void onMessageHandleFailure(MessageInfo messageInfo, Exception e) {
+      cause = e;
       toBeProcessed.countDown();
-      throw new RuntimeException("This is bad handler");
     }
 
     public boolean await(long timeout, TimeUnit timeUnit)

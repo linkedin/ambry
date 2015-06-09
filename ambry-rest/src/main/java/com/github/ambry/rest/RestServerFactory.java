@@ -13,8 +13,6 @@ import org.slf4j.LoggerFactory;
 public class RestServerFactory {
   public static String SERVER_CLASS_KEY = "rest.server";
 
-  private static Logger logger = LoggerFactory.getLogger(RestServer.class);
-
   public static RestServer getRestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestDelegator requestDelegator)
       throws Exception {

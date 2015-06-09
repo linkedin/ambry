@@ -83,7 +83,7 @@ public class NettyResponseHandler implements RestResponseHandler {
     /*
      TODO: When we return data via gets, we need to be careful not to modify data while ctx.write() is in flight.
      TODO: Working on getting a future implementation that can wait for the write to finish.
-     TODO: Will do this with the getExipredBlob() or getDeletedBlob() API.
+     TODO: Will do this with the getBlob() API.
      */
     ByteBuf buf = Unpooled.wrappedBuffer(data);
     HttpContent content;
@@ -106,17 +106,17 @@ public class NettyResponseHandler implements RestResponseHandler {
   }
 
   public void close() {
-    verifyChannelOpen();
-    // no locking needed here (for channelClosed) since exactly one message handler thread has a
-    // reference to this response handler.
     ChannelFuture future = ctx.close();
+    close(future);
+  }
+
+  private synchronized void close(ChannelFuture future) {
+    verifyChannelOpen();
     future.addListener(ChannelFutureListener.CLOSE);
     channelClosed = true;
   }
 
-  public void onError(Throwable cause) {
-    // no locking needed here (for errorSent) since exactly one message handler thread has a
-    // reference to this response handler.
+  public synchronized void onError(Throwable cause) {
     if (!errorSent) {
       errorSent = true;
       buildAndSendError(cause);
@@ -187,7 +187,8 @@ public class NettyResponseHandler implements RestResponseHandler {
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(fullMsg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
 
-    ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    ChannelFuture future = ctx.writeAndFlush(response);
+    close(future);
   }
 
   private void verifyResponseAlive() {
@@ -198,7 +199,7 @@ public class NettyResponseHandler implements RestResponseHandler {
   }
 
   private void verifyChannelOpen() {
-    if (channelClosed || !(ctx.channel().isOpen())) {
+    if (channelClosed || !(ctx.channel().isActive())) {
       nettyMetrics.channelOperationAfterCloseErrorCount.inc();
       throw new IllegalStateException("Channel " + ctx.channel() + " has already been closed before write");
     }

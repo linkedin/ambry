@@ -2,8 +2,6 @@ package com.github.ambry.storageservice;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -19,16 +17,12 @@ public class MockBlobStorageService implements BlobStorageService {
   public static String EXECUTION_RESULT_KEY = "executeResult";
   public static String DUMMY_EXECUTE_OPERATION = "dummyExecute";
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
-
   public void start()
       throws InstantiationException {
-    logger.info("MockBlobStorageService started");
   }
 
   public void shutdown()
       throws Exception {
-    logger.info("MockBlobStorageService shutdown");
   }
 
   public String putBlob()

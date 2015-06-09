@@ -37,7 +37,7 @@ public class NettyServer implements RestServer {
 
   public NettyServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestDelegator requestDelegator)
-      throws Exception {
+      throws InstantiationException {
     serverConfig = new NettyConfig(verifiableProperties);
     nettyMetrics = new NettyMetrics(metricRegistry);
     this.requestDelegator = requestDelegator;
@@ -55,14 +55,15 @@ public class NettyServer implements RestServer {
       NettyServerDeployer nettyServerDeployer = new NettyServerDeployer(startupException);
       Thread deploymentThread = new Thread(nettyServerDeployer);
       deploymentThread.start();
-      nettyServerDeployer.awaitStartup(serverConfig.getStartupWaitSeconds(), TimeUnit.SECONDS);
-
-      if (startupException.get() != null) {
-        throw startupException.get();
+      long startWaitSecs = serverConfig.getStartupWaitSeconds();
+      if(!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
+        throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds" );
+      } else if (startupException.get() != null) {
+        throw new InstantiationException("Netty server start failed - " + startupException.get());
       }
-    } catch (Exception e) {
-      logger.error("Netty server start failed - " + e);
-      throw new InstantiationException("Netty server start failed - " + e);
+    } catch (InterruptedException e) {
+      logger.error("Netty server start might have failed - " + e);
+      throw new InstantiationException("Netty server start might have failed - " + e);
     }
   }
 
@@ -124,9 +125,9 @@ public class NettyServer implements RestServer {
       }
     }
 
-    public void awaitStartup(long timeout, TimeUnit timeUnit)
+    public boolean awaitStartup(long timeout, TimeUnit timeUnit)
         throws InterruptedException {
-      startupDone.await(timeout, timeUnit);
+      return startupDone.await(timeout, timeUnit);
     }
   }
 }
