@@ -634,10 +634,7 @@ class ReplicaThread implements Runnable {
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
                 if(messageInfoList.size() == 0) {
-                  // if all the messages are invalidated, advance the token
-                  remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-                  logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
-                      remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
+                  logger.error("All messages are invalidated in this message stream ");
                 }
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
               } else {
