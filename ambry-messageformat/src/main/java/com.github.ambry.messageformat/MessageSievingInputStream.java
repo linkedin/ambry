@@ -6,6 +6,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -70,17 +71,7 @@ public class MessageSievingInputStream extends InputStream {
     int offset = 0;
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      int read = 0;
-      int startOffset = offset;
-      while (read < msgSize) {
-        int sizeRead = stream.read(data, offset, msgSize - read);
-        if (sizeRead == 0 || sizeRead == -1) {
-          throw new IOException("Total size read " + read + " is less than the size to be read " + msgSize);
-        }
-        read += sizeRead;
-        offset += sizeRead;
-      }
-      offset = startOffset;
+      Utils.readBytesFromStreamToByteArray(stream, data, offset, msgSize);
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
       ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
       if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
