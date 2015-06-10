@@ -70,24 +70,28 @@ public class MessageSievingInputStream extends InputStream {
     int offset = 0;
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      // this is a blocking call until length "msgSize" bytes is read or end of file is reached or some exception is thrown
-      int bytesRead = stream.read(data, offset, msgSize);
-      if (bytesRead != msgSize) {
-        logger.error("Only able to read " + bytesRead + " bytes from stream, while " + msgSize
-            + " should have been read for message " + msgInfo);
-      } else {
-        logger.trace("Read stream for message info " + msgInfo + "  into memory");
-        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
-        if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
-          offset += msgSize;
-          validMessageInfoList.add(msgInfo);
-        } else {
-          logger.error("Error reading the message at " + bytesReadSoFar + " with messageInfo " + msgInfo
-              + " and hence skipping the message");
-          hasInvalidMessages = true;
+      int read = 0;
+      int startOffset = offset;
+      while (read < msgSize) {
+        int sizeRead = stream.read(data, offset, msgSize - read);
+        if (sizeRead == 0 || sizeRead == -1) {
+          throw new IOException("Total size read " + read + " is less than the size to be read " + msgSize);
         }
+        read += sizeRead;
+        offset += sizeRead;
       }
-      bytesReadSoFar += bytesRead;
+      offset = startOffset;
+      logger.trace("Read stream for message info " + msgInfo + "  into memory");
+      ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
+      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
+        offset += msgSize;
+        validMessageInfoList.add(msgInfo);
+      } else {
+        logger.error("Error reading the message at " + bytesReadSoFar + " with messageInfo " + msgInfo
+            + " and hence skipping the message");
+        hasInvalidMessages = true;
+      }
+      bytesReadSoFar += msgSize;
     }
     if (bytesReadSoFar != totalMessageListSize) {
       logger.error(
