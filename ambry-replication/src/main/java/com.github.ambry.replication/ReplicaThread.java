@@ -633,9 +633,6 @@ class ReplicaThread implements Runnable {
                   replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-                if(messageInfoList.size() == 0) {
-                  logger.error("All messages are invalidated in this message stream ");
-                }
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
               } else {
                 writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);

@@ -63,7 +63,7 @@ public class MessageSievingInputStream extends InputStream {
       totalMessageListSize += info.getSize();
     }
 
-    int bytesReadSoFar = 0;
+    int bytesRead = 0;
     byte[] data = new byte[totalMessageListSize];
     long startTime = SystemTime.getInstance().milliseconds();
     logger.trace("Starting to validate message stream ");
@@ -87,15 +87,18 @@ public class MessageSievingInputStream extends InputStream {
         offset += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
-        logger.error("Error reading the message at " + bytesReadSoFar + " with messageInfo " + msgInfo
+        logger.error("Error reading the message at " + bytesRead + " with messageInfo " + msgInfo
             + " and hence skipping the message");
         hasInvalidMessages = true;
       }
-      bytesReadSoFar += msgSize;
+      bytesRead += msgSize;
     }
-    if (bytesReadSoFar != totalMessageListSize) {
+    if (bytesRead != totalMessageListSize) {
       logger.error(
-          "Failed to read intended size from stream. Expected " + totalMessageListSize + ", actual " + bytesReadSoFar);
+          "Failed to read intended size from stream. Expected " + totalMessageListSize + ", actual " + bytesRead);
+    }
+    if (validMessageInfoList.size() == 0) {
+      logger.error("All messages are invalidated in this message stream ");
     }
     messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     this.validSize = offset;
