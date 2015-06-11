@@ -6,6 +6,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -63,21 +64,37 @@ public class MessageSievingInputStream extends InputStream {
       totalMessageListSize += info.getSize();
     }
 
+    int bytesRead = 0;
     byte[] data = new byte[totalMessageListSize];
     long startTime = SystemTime.getInstance().milliseconds();
+    logger.trace("Starting to validate message stream ");
+    int offset = 0;
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      stream.read(data, validSize, msgSize);
-      ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, validSize, msgSize);
-      if (checkForMessageValidity(byteArrayInputStream, validSize, msgSize, storeKeyFactory)) {
-        validSize += msgSize;
+      Utils.readBytesFromStream(stream, data, offset, msgSize);
+      logger.trace("Read stream for message info " + msgInfo + "  into memory");
+      ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
+      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
+        offset += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
+        logger.error("Error reading the message at " + bytesRead + " with messageInfo " + msgInfo
+            + " and hence skipping the message");
         hasInvalidMessages = true;
       }
+      bytesRead += msgSize;
+    }
+    if (bytesRead != totalMessageListSize) {
+      logger.error(
+          "Failed to read intended size from stream. Expected " + totalMessageListSize + ", actual " + bytesRead);
+    }
+    if (validMessageInfoList.size() == 0) {
+      logger.error("All messages are invalidated in this message stream ");
     }
     messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
+    this.validSize = offset;
     byteBuffer = ByteBuffer.wrap(data, 0, validSize);
+    logger.trace("Completed validation of message stream ");
   }
 
   /**
@@ -140,7 +157,6 @@ public class MessageSievingInputStream extends InputStream {
       StoreKeyFactory storeKeyFactory)
       throws IOException {
     boolean isValid = false;
-    int startOffset = currentOffset;
     BlobProperties props = null;
     ByteBuffer metadata = null;
     BlobOutput output = null;
@@ -179,9 +195,9 @@ public class MessageSievingInputStream extends InputStream {
           logger.trace(
               "Header - version {} Message Size {} Starting offset of the blob {} BlobPropertiesRelativeOffset {}"
                   + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
-              header.getVersion(), header.getMessageSize(), startOffset, header.getBlobPropertiesRecordRelativeOffset(),
-              header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),
-              header.getDeleteRecordRelativeOffset(), header.getCrc());
+              header.getVersion(), header.getMessageSize(), currentOffset,
+              header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
+              header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
           logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
               props.getBlobSize(), metadata.capacity(), output.getSize());
         }
@@ -191,8 +207,9 @@ public class MessageSievingInputStream extends InputStream {
             MessageFormatErrorCodes.Data_Corrupt);
       }
     } catch (MessageFormatException e) {
-      logger.error("MessageFormat exception thrown for a blob starting at offset " + startOffset + " with exception: ",
-          e);
+      logger
+          .error("MessageFormat exception thrown for a blob starting at offset " + currentOffset + " with exception: ",
+              e);
     } finally {
       messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
