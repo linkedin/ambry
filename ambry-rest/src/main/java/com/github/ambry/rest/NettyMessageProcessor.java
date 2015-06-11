@@ -1,5 +1,11 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.MessageInfo;
+import com.github.ambry.restservice.RestObject;
+import com.github.ambry.restservice.RestRequest;
+import com.github.ambry.restservice.RestResponseHandler;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -41,33 +47,33 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   }
 
   public void handleMessage(RestObject obj)
-      throws RestException {
+      throws RestServiceException {
     // We need to maintain state about the request itself for the subsequent chunks (if any) that come in
     if (request == null && obj instanceof RestRequest) {
       request = (RestRequest) obj;
     } else if (request == null) {
       nettyMetrics.noRequestErrorCount.inc();
-      throw new RestException("Received data without a request", RestErrorCode.NoRequest);
+      throw new RestServiceException("Received data without a request", RestServiceErrorCode.NoRequest);
     } else if (obj instanceof RestRequest) {
       nettyMetrics.duplicateRequestErrorCount.inc();
-      throw new RestException("Received duplicate request. Old request - " + request + ". New request - " + obj,
-          RestErrorCode.DuplicateRequest);
+      throw new RestServiceException("Received duplicate request. Old request - " + request + ". New request - " + obj,
+          RestServiceErrorCode.DuplicateRequest);
     }
 
     try {
       messageHandler.handleMessage(new MessageInfo(request, obj, responseHandler));
-    } catch(RestException e) {
+    } catch (RestServiceException e) {
       recordHandlingError(e);
       throw e;
     } catch (Exception e) {
       recordHandlingError(e);
-      throw  new RestException("Message handling error - " + e, RestErrorCode.MessageHandleFailure);
+      throw new RestServiceException("Message handling error - " + e, RestServiceErrorCode.MessageHandleFailure);
     }
   }
 
   @Override
   public void channelActive(ChannelHandlerContext ctx)
-      throws RestException {
+      throws RestServiceException {
     this.ctx = ctx;
     try {
       /*
@@ -81,8 +87,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     } catch (Exception e) {
       logger.error("Unable to obtain message/response handlers - " + e);
       nettyMetrics.channelActiveTasksFailureCount.inc();
-      throw new RestException("Unable to obtain message/response handlers - " + e,
-          RestErrorCode.ChannelActiveTasksFailure);
+      throw new RestServiceException("Unable to obtain message/response handlers - " + e,
+          RestServiceErrorCode.ChannelActiveTasksFailure);
     }
   }
 
@@ -149,7 +155,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
-      throws RestException {
+      throws RestServiceException {
     logger.trace("Reading on channel " + ctx.channel() + " from " + ctx.channel().remoteAddress());
     if (obj != null) {
       if (vetRequest(obj)) {
@@ -158,7 +164,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       } else {
         logger.error("Malformed request received - " + obj);
         nettyMetrics.malformedRequestErrorCount.inc();
-        throw new RestException("Malformed request received - " + obj, RestErrorCode.BadRequest);
+        throw new RestServiceException("Malformed request received - " + obj, RestServiceErrorCode.BadRequest);
       }
     }
   }
@@ -179,7 +185,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   }
 
   private RestObject convertObjToGeneric(HttpObject obj)
-      throws RestException {
+      throws RestServiceException {
     // convert the object into a something that Ambry will understand.
     try {
       if (obj instanceof HttpRequest) {
@@ -190,11 +196,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.unknownHttpObjectErrorCount.inc();
         throw new Exception("HttpObject received is not of a known type");
       }
-    } catch (RestException e) {
+    } catch (RestServiceException e) {
       throw e;
     } catch (Exception e) {
-      throw new RestException("Http object conversion failed with reason - " + e,
-            RestErrorCode.HttpObjectConversionFailure);
+      throw new RestServiceException("Http object conversion failed with reason - " + e,
+          RestServiceErrorCode.HttpObjectConversionFailure);
     }
   }
 
@@ -204,7 +210,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
 
-    if(ctx.channel().isActive()) {
+    if (ctx.channel().isActive()) {
       ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
   }

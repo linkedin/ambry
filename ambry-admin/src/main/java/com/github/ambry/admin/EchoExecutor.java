@@ -1,7 +1,7 @@
 package com.github.ambry.admin;
 
-import com.github.ambry.storageservice.BlobStorageServiceErrorCode;
-import com.github.ambry.storageservice.BlobStorageServiceException;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -17,19 +17,19 @@ public class EchoExecutor implements TaskExecutor {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminExecutionResult execute(AdminExecutionData executionData)
-      throws BlobStorageServiceException {
+      throws RestServiceException {
     JSONObject data = executionData.getOperationData();
     if (data != null && data.has(TEXT_KEY)) {
       try {
         String text = data.getString(TEXT_KEY);
         return packageResult(text);
       } catch (JSONException e) {
-        throw new BlobStorageServiceException("Unable to construct result object - " + e,
-            BlobStorageServiceErrorCode.ResponseBuildingError);
+        throw new RestServiceException("Unable to construct result object - " + e,
+            RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      throw new BlobStorageServiceException("Input AdminExecutionData does not have key - " + TEXT_KEY,
-          BlobStorageServiceErrorCode.BadRequest);
+      throw new RestServiceException("Execution data does not have key - " + TEXT_KEY,
+          RestServiceErrorCode.BadExecutionData);
     }
   }
 

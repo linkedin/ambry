@@ -1,5 +1,11 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.BlobStorageService;
+import com.github.ambry.restservice.HandleMessageEventListener;
+import com.github.ambry.restservice.MessageInfo;
+import com.github.ambry.restservice.RestRequest;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -7,22 +13,23 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Abstract class for a RestMessageHandler. Handles all incoming messages from the RestServer
+ * Abstract class for a RestMessageHandler. Handles all incoming messages from the NIOServer
  * <p/>
  * One or many instances of this are created by the Admin/Frontend during startup and they continuously run
  * and process messages that have been put on their queue.
  */
-public abstract class RestMessageHandler implements Runnable {
-  public static String EXECUTION_DATA_HEADER_KEY = "executionData";
+public class RestMessageHandler implements Runnable {
 
   private final long offerTimeout = 30; //seconds
+  private final BlobStorageService blobStorageService;
   private final LinkedBlockingQueue<MessageInfo> messageInfoQueue = new LinkedBlockingQueue<MessageInfo>();
-  private final ServerMetrics serverMetrics;
+  private final RestServerMetrics restServerMetrics;
 
-  protected Logger logger = LoggerFactory.getLogger(getClass());
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected RestMessageHandler(ServerMetrics serverMetrics) {
-    this.serverMetrics = serverMetrics;
+  public RestMessageHandler(BlobStorageService blobStorageService, RestServerMetrics restServerMetrics) {
+    this.blobStorageService = blobStorageService;
+    this.restServerMetrics = restServerMetrics;
   }
 
   public void run() {
@@ -38,10 +45,10 @@ public abstract class RestMessageHandler implements Runnable {
           processMessage(messageInfo);
           doProcessingSuccessTasks(messageInfo);
         } catch (InterruptedException ie) {
-          serverMetrics.handlerQueueTakeInterruptedErrorCount.inc();
+          restServerMetrics.handlerQueueTakeInterruptedErrorCount.inc();
           logger.error("Wait for data in messageInfoQueue was interrupted - " + ie);
         } catch (Exception e) {
-          serverMetrics.handlerMessageProcessingFailureErrorCount.inc();
+          restServerMetrics.handlerMessageProcessingFailureErrorCount.inc();
           logger.error("Exception while trying to process element in messageInfoQueue - " + e);
           doProcessingFailureTasks(messageInfo, e);
         }
@@ -51,67 +58,56 @@ public abstract class RestMessageHandler implements Runnable {
     }
   }
 
-  public void shutdownGracefully(HandleMessageEventListener handleMessageEventListener)
-      throws RestException {
+  public void shutdownGracefully(HandleMessageEventListener handleMessageEventListener)// CHANGE: to hard shutdown?
+      throws RestServiceException {
     PoisonInfo poison = new PoisonInfo();
     poison.addListener(handleMessageEventListener);
     queue(poison);
   }
 
   public void handleMessage(MessageInfo messageInfo)
-      throws RestException {
+      throws RestServiceException {
+    verifyMessageInfo(messageInfo);
     queue(messageInfo);
   }
 
   private void processMessage(MessageInfo messageInfo)
-      throws RestException {
-    verifyMessageInfo(messageInfo);
-    RestMethod restMethod = messageInfo.getRestRequest().getRestMethod();
-    if (restMethod == RestMethod.GET) {
-      handleGet(messageInfo);
-    } else if (restMethod == RestMethod.POST) {
-      handlePost(messageInfo);
-    } else if (restMethod == RestMethod.DELETE) {
-      handleDelete(messageInfo);
-    } else if (restMethod == RestMethod.HEAD) {
-      handleHead(messageInfo);
-    } else {
-      serverMetrics.handlerUnknownHttpMethodErrorCount.inc();
-      throw new RestException("Unknown httpMethod - " + restMethod, RestErrorCode.UnknownHttpMethod);
-    }
+      throws RestServiceException {
+    blobStorageService.handleMessage(messageInfo);
   }
 
   protected void verifyMessageInfo(MessageInfo messageInfo)
-      throws RestException {
+      throws RestServiceException {
     if (messageInfo.getRestRequest() == null) {
-      serverMetrics.handlerRestRequestMissingErrorCount.inc();
-      throw new RestException("Message info missing rest request", RestErrorCode.RestRequestMissing);
+      restServerMetrics.handlerRestRequestMissingErrorCount.inc();
+      throw new RestServiceException("Message info missing rest request", RestServiceErrorCode.RestRequestMissing);
     } else if (messageInfo.getResponseHandler() == null) {
-      serverMetrics.handlerResponseHandlerMissingErrorCount.inc();
-      throw new RestException("Message info missing response handler", RestErrorCode.ReponseHandlerMissing);
+      restServerMetrics.handlerResponseHandlerMissingErrorCount.inc();
+      throw new RestServiceException("Message info missing response handler",
+          RestServiceErrorCode.ReponseHandlerMissing);
     } else if (messageInfo.getRestObject() == null) {
-      serverMetrics.handlerRestObjectMissingErrorCount.inc();
-      throw new RestException("Message info missing rest object", RestErrorCode.RestObjectMissing);
+      restServerMetrics.handlerRestObjectMissingErrorCount.inc();
+      throw new RestServiceException("Message info missing rest object", RestServiceErrorCode.RestObjectMissing);
     }
   }
 
   private void queue(MessageInfo messageInfo)
-      throws RestException {
-    int maxAttempts = 3;
-    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      throws RestServiceException {
+    int MAX_ATTEMPTS = 3; // magic number
+    for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         if (messageInfoQueue.offer(messageInfo, offerTimeout, TimeUnit.SECONDS)) {
           return;
         } else {
-          serverMetrics.handlerQueueOfferTookTooLongErrorCount.inc();
+          restServerMetrics.handlerQueueOfferTookTooLongErrorCount.inc();
           logger.error("Waiting for space to clear up on queue for " + ((attempt + 1) * offerTimeout) + " seconds");
         }
       } catch (InterruptedException e) {
-        serverMetrics.handlerQueueOfferInterruptedErrorCount.inc();
+        restServerMetrics.handlerQueueOfferInterruptedErrorCount.inc();
         logger.error("Offer was interrupted - " + e);
       }
     }
-    throw new RestException("Attempt to queue message failed", RestErrorCode.MessageQueueingFailure);
+    throw new RestServiceException("Attempt to queue message failed", RestServiceErrorCode.MessageQueueingFailure);
   }
 
   private void doProcessingSuccessTasks(MessageInfo messageInfo) {
@@ -124,31 +120,19 @@ public abstract class RestMessageHandler implements Runnable {
 
   private void doProcessingFailureTasks(MessageInfo messageInfo, Exception e) {
     try {
-      RestException restException;
-      if (e instanceof RestException) {
-        restException = (RestException) e;
+      RestServiceException restServiceException;
+      if (e instanceof RestServiceException) {
+        restServiceException = (RestServiceException) e;
       } else {
-        restException = new RestException(e, RestErrorCode.RequestProcessingFailure);
+        restServiceException = new RestServiceException(e, RestServiceErrorCode.RequestProcessingFailure);
       }
 
       messageInfo.onHandleFailure(e);
-      onError(messageInfo, restException);
+      onError(messageInfo, restServiceException);
     } catch (Exception ee) {
       logger.error("Exception while trying to do processing failure tasks - " + ee);
     }
   }
-
-  protected abstract void handleGet(MessageInfo messageInfo)
-      throws RestException;
-
-  protected abstract void handlePost(MessageInfo messageInfo)
-      throws RestException;
-
-  protected abstract void handleDelete(MessageInfo messageInfo)
-      throws RestException;
-
-  protected abstract void handleHead(MessageInfo messageInfo)
-      throws RestException;
 
   /**
    * Called by processMessage when it detects/catches an error
@@ -156,16 +140,36 @@ public abstract class RestMessageHandler implements Runnable {
    * @param messageInfo
    * @param e
    */
-  protected abstract void onError(MessageInfo messageInfo, Exception e);
+  protected void onError(MessageInfo messageInfo, Exception e) {
+    try {
+      if (messageInfo != null && messageInfo.getResponseHandler() != null) {
+        messageInfo.getResponseHandler().onError(e);
+      } else {
+        logger.error("No error response was sent because there is no response handler."
+            + " The connection to the client might still be open");
+      }
+    } catch (Exception ee) {
+      //TODO: metric
+      logger.error("Caught exception while trying to handle an error - " + ee);
+    }
+  }
 
   /**
-   * Called by the RestServer after the request is complete and the connection is inactive.
+   * Called by the NIOServer after the request is complete and the connection is inactive.
    * This is (has to be) called regardless of the request being concluded successfully or
    * unsuccessfully (i.e. connection interruption).
    *
    * @param request
    * @throws Exception
    */
-  protected abstract void onRequestComplete(RestRequest request)
-      throws Exception;
+  protected void onRequestComplete(RestRequest request) {
+    /**
+     * NOTE: This is where any cleanup code has to go. This is (has to be) called regardless of
+     * the request being concluded successfully or unsuccessfully (i.e. connection interruption).
+     * Any state that is maintained per request has to be destroyed here.
+     */
+    if (request != null) {
+      request.release();
+    }
+  }
 }

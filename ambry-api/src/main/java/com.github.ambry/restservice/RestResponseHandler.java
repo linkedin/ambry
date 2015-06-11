@@ -1,7 +1,7 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 /**
- * Interface for the RestResponseHandler. Provides a way for Ambry to return responses through the RestServer
+ * Interface for the RestResponseHandler. Provides a way for Ambry to return responses through the NIOServer
  */
 public interface RestResponseHandler {
   /**
@@ -9,52 +9,52 @@ public interface RestResponseHandler {
    *
    * @param data
    * @param isLast isLastChunk
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void addToBody(byte[] data, boolean isLast)
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Add to body of the rest data we are returning and flush the write to the channel
    *
    * @param data
    * @param isLast isLastChunk
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void addToBodyAndFlush(byte[] data, boolean isLast)
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Write the response to the channel
    *
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void finalizeResponse()
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Write the response to the channel and flush
    *
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void finalizeResponseAndFlush()
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Flush all data in the channel
    *
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void flush()
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Close the channel
    *
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void close()
-      throws RestException;
+      throws RestServiceException;
 
   /**
    * Called by the RestMessageHandler when it detects/catches an error
@@ -83,8 +83,8 @@ public interface RestResponseHandler {
    * set the content type of the response
    *
    * @param type
-   * @throws RestException
+   * @throws RestServiceException
    */
   public void setContentType(String type)
-      throws RestException;
+      throws RestServiceException;
 }

@@ -1,12 +1,12 @@
 package com.github.ambry.admin;
 
-import com.github.ambry.storageservice.BlobStorageServiceException;
+import com.github.ambry.restservice.RestServiceException;
 
 
 /**
- * TODO: write description
+ * TODO: Under review
  */
 public interface TaskExecutor {
   public AdminExecutionResult execute(AdminExecutionData data)
-      throws BlobStorageServiceException;
+      throws RestServiceException;
 }

@@ -8,7 +8,7 @@ import com.github.ambry.config.VerifiableProperties;
 /**
  * Netty specific config
  */
-public class NettyConfig extends RestServerConfig {
+public class NettyConfig {
 
   public static String BOSS_THREADCOUNT_KEY = "netty.server.boss.threadcount";
   public static String IDLETIME_SECONDS_KEY = "netty.server.idletime.seconds";
@@ -84,8 +84,6 @@ public class NettyConfig extends RestServerConfig {
   }
 
   public NettyConfig(VerifiableProperties verifiableProperties) {
-    super(verifiableProperties);
-
     bossThreadCount = verifiableProperties.getInt(BOSS_THREADCOUNT_KEY, 1);
     idleTimeSeconds = verifiableProperties.getInt(IDLETIME_SECONDS_KEY, 60);
     port = verifiableProperties.getInt(PORT_KEY, 8088);

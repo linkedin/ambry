@@ -2,6 +2,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.restservice.NIOServer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -23,9 +24,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of RestServer. Handles Http for Ambry.
+ * Netty specific implementation of NIOServer. Handles Http for Ambry.
  */
-public class NettyServer implements RestServer {
+public class NettyServer implements NIOServer {
   private final NettyConfig serverConfig;
   private final NettyMetrics nettyMetrics;
   private final RestRequestDelegator requestDelegator;
@@ -56,8 +57,8 @@ public class NettyServer implements RestServer {
       Thread deploymentThread = new Thread(nettyServerDeployer);
       deploymentThread.start();
       long startWaitSecs = serverConfig.getStartupWaitSeconds();
-      if(!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
-        throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds" );
+      if (!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
+        throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds");
       } else if (startupException.get() != null) {
         throw new InstantiationException("Netty server start failed - " + startupException.get());
       }

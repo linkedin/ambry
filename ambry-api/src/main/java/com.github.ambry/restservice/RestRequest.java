@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import java.util.List;
 
@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Interface for RestRequest
  */
-public interface RestRequest extends RestMessage {
+public interface RestRequest extends RestObject {
   /**
    * Return the generic RestMethod that this request desires.
    *
@@ -20,14 +20,6 @@ public interface RestRequest extends RestMessage {
    * @return path
    */
   public String getPath();
-
-  /**
-   * Returns the specified part in the path (path is separated by "/")
-   *
-   * @param part
-   * @return
-   */
-  public String getPathPart(int part);
 
   /**
    * Return the request URI

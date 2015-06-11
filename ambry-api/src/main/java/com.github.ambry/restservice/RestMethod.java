@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 /**
  * Generic equivalents of HttpMethods truncated to ones that Ambry supports

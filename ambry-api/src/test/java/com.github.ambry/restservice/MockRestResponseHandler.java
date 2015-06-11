@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import java.io.ByteArrayOutputStream;
 import org.json.JSONException;
@@ -17,8 +17,6 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public static String STATUS_OK = "OK";
   public static String STATUS_ERROR = "Error";
 
-  public static String BODY_STRING_KEY = "bodyString";
-
   private boolean channelClosed = false;
   private boolean errorSent = false;
   private boolean responseFinalized = false;
@@ -30,45 +28,31 @@ public class MockRestResponseHandler implements RestResponseHandler {
   private ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
 
   public void addToBody(byte[] data, boolean isLast) {
-    addToBody(data, isLast, false);
+    verifyChannelOpen();
+    bodyBytes.write(data, 0, data.length);
   }
 
   public void addToBodyAndFlush(byte[] data, boolean isLast) {
-    addToBody(data, isLast, true);
-  }
-
-  private void addToBody(byte[] data, boolean isLast, boolean flush) {
-    verifyChannelOpen();
-    bodyBytes.write(data, 0, data.length);
-    if (flush) {
-      flush();
-    }
+    addToBody(data, isLast);
+    flush();
   }
 
   public void finalizeResponse()
-      throws RestException {
-    finalizeResponse(false);
-  }
-
-  public void finalizeResponseAndFlush()
-      throws RestException {
-    finalizeResponse(true);
-  }
-
-  private void finalizeResponse(boolean flush)
-      throws RestException {
+      throws RestServiceException {
     verifyChannelOpen();
     verifyResponseAlive();
     try {
       response.put(RESPONSE_STATUS_KEY, STATUS_OK);
       responseFinalized = true;
     } catch (JSONException e) {
-      throw new RestException("Failed to build response", RestErrorCode.ResponseBuildingFailure);
+      throw new RestServiceException("Failed to build response", RestServiceErrorCode.ResponseBuildingFailure);
     }
+  }
 
-    if (flush) {
-      flush();
-    }
+  public void finalizeResponseAndFlush()
+      throws RestServiceException {
+    finalizeResponse();
+    flush();
   }
 
   public void flush() {
@@ -93,7 +77,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
         close();
       } catch (JSONException e) {
         // nothing to do
-      } catch (RestException e) {
+      } catch (RestServiceException e) {
         // nothing to do
       }
     }
@@ -104,14 +88,14 @@ public class MockRestResponseHandler implements RestResponseHandler {
   }
 
   public void setContentType(String type)
-      throws RestException {
+      throws RestServiceException {
     try {
       if (!response.has(RESPONSE_HEADERS_KEY)) {
         response.put(RESPONSE_HEADERS_KEY, new JSONObject());
       }
       response.getJSONObject(RESPONSE_HEADERS_KEY).put(CONTENT_TYPE_HEADER_KEY, type);
     } catch (JSONException e) {
-      throw new RestException("Unable to set content type", RestErrorCode.ResponseBuildingFailure);
+      throw new RestServiceException("Unable to set content type", RestServiceErrorCode.ResponseBuildingFailure);
     }
   }
 
@@ -139,27 +123,14 @@ public class MockRestResponseHandler implements RestResponseHandler {
     return null;
   }
 
-  public JSONObject getBody()
-      throws RestException {
-    try {
-      JSONObject body = getFlushedBody();
-      String fullBody = body.getString(BODY_STRING_KEY) + bodyBytes.toString();
-      body.put(BODY_STRING_KEY, fullBody);
-      return body;
-    } catch (JSONException e) {
-      throw new RestException("Failed to build body", RestErrorCode.ResponseBuildingFailure);
-    }
+  public String getBody()
+      throws RestServiceException {
+    return getFlushedBody() + bodyBytes.toString();
   }
 
-  public JSONObject getFlushedBody()
-      throws RestException {
-    try {
-      JSONObject body = new JSONObject();
-      body.put(BODY_STRING_KEY, bodyStringBuilder.toString());
-      return body;
-    } catch (JSONException e) {
-      throw new RestException("Failed to build body", RestErrorCode.ResponseBuildingFailure);
-    }
+  public String getFlushedBody()
+      throws RestServiceException {
+    return bodyStringBuilder.toString();
   }
 
   public boolean isChannelClosed() {

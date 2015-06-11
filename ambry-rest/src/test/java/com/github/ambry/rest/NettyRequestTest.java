@@ -1,5 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.RestMethod;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
@@ -18,7 +21,8 @@ import static org.junit.Assert.fail;
 public class NettyRequestTest {
 
   @Test
-  public void conversionWithGoodInputTest() throws JSONException, RestException {
+  public void conversionWithGoodInputTest()
+      throws JSONException, RestServiceException {
     NettyRequest nettyRequest;
     String uri;
 
@@ -41,27 +45,26 @@ public class NettyRequestTest {
     uri = "/HEAD" + uriAttachment;
     nettyRequest = new NettyRequest(createRequest(HttpMethod.HEAD, uri, key, value));
     validateRequest(nettyRequest, RestMethod.HEAD, uri, key, value);
-
-    nettyRequest = new NettyRequest(createRequest(HttpMethod.GET, "/", null, null));
-    assertEquals("Path part 0 is not empty", "", nettyRequest.getPathPart(0));
   }
 
   @Test
-  public void conversionWithBadInputTest() throws JSONException, RestException {
+  public void conversionWithBadInputTest()
+      throws JSONException, RestServiceException {
     // unknown http method
     try {
       new NettyRequest(createRequest(HttpMethod.TRACE, "/", null, null));
       fail("Unknown http method was supplied to NettyRequest. It should have failed to construct");
-    } catch (RestException e) {
-      assertEquals("Unexpected RestErrorCode" , e.getErrorCode(), RestErrorCode.UnknownHttpMethod);
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", e.getErrorCode(), RestServiceErrorCode.UnknownRestMethod);
     }
   }
 
   // helpers
   // general
-  private HttpRequest createRequest(HttpMethod httpMethod, String uri, String key, String value) throws JSONException {
+  private HttpRequest createRequest(HttpMethod httpMethod, String uri, String key, String value)
+      throws JSONException {
     HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
-    if(key != null && value != null) {
+    if (key != null && value != null) {
       request.headers().add(key, value);
     }
     return request;
@@ -72,8 +75,6 @@ public class NettyRequestTest {
     assertEquals("Mismatch in rest method", restMethod, nettyRequest.getRestMethod());
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
-    assertEquals("Mismatch in path part 0", restMethod.toString(), nettyRequest.getPathPart(0));
-    assertNull("Path part 1 is not null", nettyRequest.getPathPart(1));
     assertEquals("Mismatch in parameter value", value, nettyRequest.getValuesOfParameterInURI(key).get(0));
     assertEquals("Mismatch in header value", value, nettyRequest.getValueOfHeader(key));
   }

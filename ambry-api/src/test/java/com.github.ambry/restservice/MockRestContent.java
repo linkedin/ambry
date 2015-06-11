@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -13,8 +13,9 @@ public class MockRestContent implements RestContent {
 
   private JSONObject data;
 
-  public MockRestContent(JSONObject data) throws InstantiationException {
-    if(data.has(IS_LAST_KEY) && data.has(CONTENT_KEY)) {
+  public MockRestContent(JSONObject data)
+      throws InstantiationException {
+    if (data.has(IS_LAST_KEY) && data.has(CONTENT_KEY)) {
       this.data = data;
     } else {
       throw new InstantiationException("Given JSONObject cannot be converted to MockRestContent");

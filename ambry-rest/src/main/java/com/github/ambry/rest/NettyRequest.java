@@ -1,5 +1,9 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.RestMethod;
+import com.github.ambry.restservice.RestRequest;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
@@ -15,9 +19,9 @@ public class NettyRequest implements RestRequest {
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
-  private String[] pathParts = null;
 
-  public NettyRequest(HttpRequest request) throws RestException {
+  public NettyRequest(HttpRequest request)
+      throws RestServiceException {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
 
@@ -31,7 +35,8 @@ public class NettyRequest implements RestRequest {
     } else if (httpMethod == HttpMethod.HEAD) {
       restMethod = RestMethod.HEAD;
     } else {
-      throw new RestException("http method not supported: " + httpMethod, RestErrorCode.UnknownHttpMethod);
+      throw new RestServiceException("http method not supported: " + httpMethod,
+          RestServiceErrorCode.UnknownRestMethod);
     }
   }
 
@@ -41,21 +46,6 @@ public class NettyRequest implements RestRequest {
 
   public String getPath() {
     return query.path();
-  }
-
-  public String getPathPart(int part) {
-    if (pathParts == null) {
-      String path = getPath();
-      if (path == null) {
-        return null;
-      }
-      path = path.startsWith("/") ? path.substring(1) : path;
-      pathParts = path.split("/");
-    }
-    if (part >= pathParts.length) {
-      return null;
-    }
-    return pathParts[part];
   }
 
   public RestMethod getRestMethod() {

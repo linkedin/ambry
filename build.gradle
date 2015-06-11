@@ -169,8 +169,10 @@ project(':ambry-rest') {
                 project(':ambry-utils'),
                 project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile 'io.netty:netty-all:4.0.25.Final'
         testCompile project(':ambry-api').sourceSets.test.output
+        testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }
 
@@ -178,11 +180,9 @@ project(':ambry-admin') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-commons'),
-                project(':ambry-rest')
+                project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
-        compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
-        testCompile project(':ambry-rest').sourceSets.test.output
     }
 }

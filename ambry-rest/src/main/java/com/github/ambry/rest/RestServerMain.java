@@ -1,4 +1,4 @@
-package com.github.ambry.admin;
+package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
@@ -20,14 +20,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Start point for creating an instance of AdminServer
+ * Start point for creating an instance of RestServer
  */
-public class AdminMain {
+public class RestServerMain {
 
-  private static Logger logger = LoggerFactory.getLogger(AdminMain.class);
+  private static Logger logger = LoggerFactory.getLogger(RestServerMain.class);
 
   public static void main(String[] args) {
-    final AdminServer adminServer;
+    final RestServer restServer;
     try {
       // TODO: These two lines have to be replaced by something generic
       String log4jConfPath =
@@ -46,28 +46,28 @@ public class AdminMain {
             new ClusterMapManager(options.getHardwareLayoutFilePath(), options.getPartitionLayoutFilePath(),
                 new ClusterMapConfig(verifiableProperties));
 
-        logger.info("Bootstrapping admin..");
-        adminServer = new AdminServer(verifiableProperties, metricRegistry, clusterMap);
+        logger.info("Bootstrapping rest server..");
+        restServer = new RestServer(verifiableProperties, metricRegistry, clusterMap);
 
         // attach shutdown handler to catch control-c
         Runtime.getRuntime().addShutdownHook(new Thread() {
           public void run() {
             try {
-              adminServer.shutdown();
+              restServer.shutdown();
             } catch (Exception e) {
               logger.error("Shutdown threw exception - " + e);
             }
           }
         });
 
-        adminServer.start();
-        adminServer.awaitShutdown();
+        restServer.start();
+        restServer.awaitShutdown();
       }
     } catch (JSONException e) {
       logger.error("Cluster map load failed - " + e);
     } catch (InstantiationException e) {
       logger.error("InstantiationException while starting admin - " + e);
-      logger.error("Admin bootstrap failed");
+      logger.error("Rest server bootstrap failed");
     } catch (IOException e) {
       logger.error("Options parse failed or properties file was not loaded - " + e);
     } catch (Exception e) {

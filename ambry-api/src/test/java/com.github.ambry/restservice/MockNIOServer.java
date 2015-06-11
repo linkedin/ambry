@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
@@ -7,12 +7,11 @@ import com.github.ambry.config.VerifiableProperties;
 /**
  * TODO: write description
  */
-public class MockRestServer implements RestServer {
+public class MockNIOServer implements NIOServer {
   public static String IS_FAULTY_KEY = "isFaulty";
   private final boolean isFaulty;
 
-  public MockRestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestDelegator restRequestDelegator) {
+  public MockNIOServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 

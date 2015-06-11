@@ -1,7 +1,7 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 /**
- * Interface for RestObject. A Generic object that both RestServer and Ambry can understand
+ * Interface for RestObject. A Generic object that both NIOServer and Ambry can understand
  */
 public interface RestObject {
   /**

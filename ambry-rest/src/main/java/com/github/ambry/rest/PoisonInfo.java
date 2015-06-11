@@ -1,5 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.MessageInfo;
+
+
 /**
  * Show stopper for the messageInfoQueue of all message handlers
  */

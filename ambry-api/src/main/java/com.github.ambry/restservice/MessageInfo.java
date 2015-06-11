@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,15 +35,6 @@ public class MessageInfo {
     this.restRequest = restRequest;
     this.restObject = restObject;
     this.responseHandler = responseHandler;
-  }
-
-  public void releaseAll() {
-    restRequest.release();
-    releaseRestObject();
-  }
-
-  public void releaseRestObject() {
-    restObject.release();
   }
 
   public void addListener(HandleMessageEventListener handleMessageEventListener) {

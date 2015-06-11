@@ -1,5 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.restservice.RestResponseHandler;
+import com.github.ambry.restservice.RestServiceErrorCode;
+import com.github.ambry.restservice.RestServiceException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -83,7 +86,7 @@ public class NettyResponseHandler implements RestResponseHandler {
     /*
      TODO: When we return data via gets, we need to be careful not to modify data while ctx.write() is in flight.
      TODO: Working on getting a future implementation that can wait for the write to finish.
-     TODO: Will do this with the getBlob() API.
+     TODO: Will do this with the handleGet() API.
      */
     ByteBuf buf = Unpooled.wrappedBuffer(data);
     HttpContent content;
@@ -132,8 +135,8 @@ public class NettyResponseHandler implements RestResponseHandler {
     nettyMetrics.errorStateCount.inc();
     HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
     String msg = "";
-    if (cause instanceof RestException) {
-      status = getHttpEquivalentErrorCode(((RestException) cause).getErrorCode());
+    if (cause instanceof RestServiceException) {
+      status = getHttpEquivalentErrorCode(((RestServiceException) cause).getErrorCode());
       if (status == HttpResponseStatus.BAD_REQUEST) {
         msg = cause.getMessage();
       }
@@ -148,13 +151,14 @@ public class NettyResponseHandler implements RestResponseHandler {
     }
   }
 
-  private HttpResponseStatus getHttpEquivalentErrorCode(RestErrorCode restErrorCode) {
-    switch (restErrorCode) {
+  private HttpResponseStatus getHttpEquivalentErrorCode(RestServiceErrorCode restServiceErrorCode) {
+    switch (restServiceErrorCode) {
+      case BadExecutionData:
       case BadRequest:
       case DuplicateRequest:
       case NoRequest:
       case UnknownOperationType:
-      case UnknownHttpMethod:
+      case UnknownRestMethod:
         nettyMetrics.badRequestErrorCount.inc();
         return HttpResponseStatus.BAD_REQUEST;
       case ChannelActiveTasksFailure:
