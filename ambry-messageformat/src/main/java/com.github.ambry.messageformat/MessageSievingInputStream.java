@@ -71,7 +71,7 @@ public class MessageSievingInputStream extends InputStream {
     int offset = 0;
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      Utils.readBytesFromStreamToByteArray(stream, data, offset, msgSize);
+      Utils.readBytesFromStream(stream, data, offset, msgSize);
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
       ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
       if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {

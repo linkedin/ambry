@@ -535,7 +535,7 @@ public class Utils {
     return outputBytes;
   }
 
-  public static void readBytesFromStreamToByteArray(InputStream stream, byte[] data, int offset, int size)
+  public static void readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
       throws IOException {
     int read = 0;
     while (read < size) {
