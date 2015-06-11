@@ -521,9 +521,11 @@ public class Utils {
   }
 
   /**
-   * Read "size" bytes from stream to a byte array
+   * Read "size" length of bytes from stream to a byte array. If "size" length of bytes can't be read because the end of
+   * the stream has been reached, IOException is thrown. This method blocks until input data is available, the end of
+   * the stream is detected, or an exception is thrown.
    * @param stream from which data to be read from
-   * @param size length of bytes to be read from the stream
+   * @param size max length of bytes to be read from the stream.
    * @return byte[] which has the data that is read from the stream
    * @throws IOException
    */
@@ -535,7 +537,9 @@ public class Utils {
   }
 
   /**
-   * Read "size" bytes from stream to a byte array at the given offset
+   * Read "size" length of bytes from stream to a byte array starting at the given offset in the byte[]. If "size"
+   * length of bytes can't be read because the end of the stream has been reached, IOException is thrown. This method
+   * blocks until input data is available, the end of the stream is detected, or an exception is thrown.
    * @param stream from which data to be read from
    * @param data byte[] into which the data has to be written
    * @param offset starting offset in the byte[] at which the data has to be written to
