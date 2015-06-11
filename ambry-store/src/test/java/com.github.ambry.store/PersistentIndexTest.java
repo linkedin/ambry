@@ -1654,7 +1654,7 @@ public class PersistentIndexTest {
       AtomicLong beforeSegment5LastModification = new AtomicLong(index.getLastSegment().getLastModifiedTime());
       // Wait long enough for the current time in seconds to be greater than the above time. In the future we
       // should mock time to do this in a cleaner way.
-      Thread.sleep(2000);
+      Thread.sleep(1000);
 
       index.markAsDeleted(blobId17, new FileSpan(3000, 3100));
       index.markAsDeleted(blobId5, new FileSpan(3100, 3200));
