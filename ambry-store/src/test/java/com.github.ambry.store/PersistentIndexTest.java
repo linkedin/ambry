@@ -1651,9 +1651,10 @@ public class PersistentIndexTest {
       index.close();
       index = new MockIndex(logFile, scheduler, log, config, factory);
 
-      AtomicLong beforeSegment5LastModification = new AtomicLong(SystemTime.getInstance().milliseconds()/1000);
-      // Wait long enough for the current time in seconds to be greater than the above time.
-      Thread.sleep(1000);
+      AtomicLong beforeSegment5LastModification = new AtomicLong(index.getLastSegment().getLastModifiedTime());
+      // Wait long enough for the current time in seconds to be greater than the above time. In the future we
+      // should mock time to do this in a cleaner way.
+      Thread.sleep(2000);
 
       index.markAsDeleted(blobId17, new FileSpan(3000, 3100));
       index.markAsDeleted(blobId5, new FileSpan(3100, 3200));
