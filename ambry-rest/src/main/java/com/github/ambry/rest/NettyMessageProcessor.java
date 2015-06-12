@@ -46,31 +46,6 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     this.nettyMetrics = nettyMetrics;
   }
 
-  public void handleMessage(RestObject obj)
-      throws RestServiceException {
-    // We need to maintain state about the request itself for the subsequent chunks (if any) that come in
-    if (request == null && obj instanceof RestRequest) {
-      request = (RestRequest) obj;
-    } else if (request == null) {
-      nettyMetrics.noRequestErrorCount.inc();
-      throw new RestServiceException("Received data without a request", RestServiceErrorCode.NoRequest);
-    } else if (obj instanceof RestRequest) {
-      nettyMetrics.duplicateRequestErrorCount.inc();
-      throw new RestServiceException("Received duplicate request. Old request - " + request + ". New request - " + obj,
-          RestServiceErrorCode.DuplicateRequest);
-    }
-
-    try {
-      messageHandler.handleMessage(new MessageInfo(request, obj, responseHandler));
-    } catch (RestServiceException e) {
-      recordHandlingError(e);
-      throw e;
-    } catch (Exception e) {
-      recordHandlingError(e);
-      throw new RestServiceException("Message handling error - " + e, RestServiceErrorCode.MessageHandleFailure);
-    }
-  }
-
   @Override
   public void channelActive(ChannelHandlerContext ctx)
       throws RestServiceException {
@@ -169,6 +144,31 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     }
   }
 
+  private void handleMessage(RestObject obj)
+      throws RestServiceException {
+    // We need to maintain state about the request itself for the subsequent chunks (if any) that come in
+    if (request == null && obj instanceof RestRequest) {
+      request = (RestRequest) obj;
+    } else if (request == null) {
+      nettyMetrics.noRequestErrorCount.inc();
+      throw new RestServiceException("Received data without a request", RestServiceErrorCode.NoRequest);
+    } else if (obj instanceof RestRequest) {
+      nettyMetrics.duplicateRequestErrorCount.inc();
+      throw new RestServiceException("Received duplicate request. Old request - " + request + ". New request - " + obj,
+          RestServiceErrorCode.DuplicateRequest);
+    }
+
+    try {
+      messageHandler.handleMessage(new MessageInfo(request, obj, responseHandler));
+    } catch (RestServiceException e) {
+      recordHandlingError(e);
+      throw e;
+    } catch (Exception e) {
+      recordHandlingError(e);
+      throw new RestServiceException("Message handling error - " + e, RestServiceErrorCode.MessageHandleFailure);
+    }
+  }
+
   private void recordHandlingError(Exception e) {
     logger.error("Message handling error for request - " + request.getUri() + " - " + e);
     nettyMetrics.handleRequestFailureCount.inc();
@@ -204,7 +204,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     }
   }
 
-  public void sendError(HttpResponseStatus status) {
+  private void sendError(HttpResponseStatus status) {
     String msg = "Failure: " + status + "\r\n";
     FullHttpResponse response =
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));

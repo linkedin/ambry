@@ -27,7 +27,8 @@ public class NettyClient {
   private final AtomicReference<Throwable> cause = new AtomicReference<Throwable>();
   private final NettyClientDeployer deployer;
 
-  public NettyClient(int serverPort, LinkedBlockingQueue<HttpObject> contentQueue, LinkedBlockingQueue<HttpObject> responseQueue) {
+  public NettyClient(int serverPort, LinkedBlockingQueue<HttpObject> contentQueue,
+      LinkedBlockingQueue<HttpObject> responseQueue) {
     deployer = new NettyClientDeployer(serverPort, contentQueue, responseQueue, cause);
   }
 

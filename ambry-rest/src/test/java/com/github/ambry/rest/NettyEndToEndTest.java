@@ -149,7 +149,7 @@ public class NettyEndToEndTest {
   // Before/After class helpers
   private static NettyServer createNettyServer(RestRequestDelegator restRequestDelegator, Properties properties)
       throws InstantiationException {
-    if(properties == null) {
+    if (properties == null) {
       // dud properties. should pick up defaults
       properties = new Properties();
     }
@@ -233,8 +233,9 @@ public class NettyEndToEndTest {
   }
 
   // handleMessageFailureTest() helpers
-  private void doHandleMessageFailureTest(FullHttpRequest httpRequest, HttpResponseStatus expectedStatus
-      , String serverPort) throws Exception {
+  private void doHandleMessageFailureTest(FullHttpRequest httpRequest, HttpResponseStatus expectedStatus,
+      String serverPort)
+      throws Exception {
     LinkedBlockingQueue<HttpObject> contentQueue = new LinkedBlockingQueue<HttpObject>();
     LinkedBlockingQueue<HttpObject> responseQueue = new LinkedBlockingQueue<HttpObject>();
     NettyClient nettyClient = new NettyClient(Integer.parseInt(serverPort), contentQueue, responseQueue);

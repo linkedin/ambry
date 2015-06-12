@@ -8,7 +8,6 @@ import com.github.ambry.restservice.MockBlobStorageService;
 import com.github.ambry.restservice.MockNIOServer;
 import java.io.IOException;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 
 import static org.junit.Assert.fail;
@@ -23,8 +22,8 @@ public class RestServerTest {
   public void startShutdownTest()
       throws Exception {
     Properties properties = new Properties();
-    properties
-        .setProperty(BlobStorageServiceFactory.BLOBSTORAGE_SERVICE_CLASS_KEY, MockBlobStorageService.class.getCanonicalName());
+    properties.setProperty(BlobStorageServiceFactory.BLOBSTORAGE_SERVICE_CLASS_KEY,
+        MockBlobStorageService.class.getCanonicalName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -63,30 +62,11 @@ public class RestServerTest {
       fail("Faulty server start() threw unknown exception - " + e);
     } finally {
       server.shutdown();
+      fail("Faulty server shutdown() would have thrown Exception");
     }
   }
 
   // helpers
-  // startShutdownTest() helpers
-  private class AdminServerStarter implements Runnable {
-
-    private final RestServer server;
-    private AtomicReference<Exception> exception;
-
-    public AdminServerStarter(RestServer server, AtomicReference<Exception> exception) {
-      this.server = server;
-      this.exception = exception;
-    }
-
-    public void run() {
-      try {
-        server.start();
-      } catch (Exception e) {
-        exception.set(e);
-      }
-    }
-  }
-
   // serverCreationWithBadInputTest() helpers
   private void badArgumentsTest()
       throws IOException {

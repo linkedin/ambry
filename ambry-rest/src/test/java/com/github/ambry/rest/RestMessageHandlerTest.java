@@ -43,7 +43,7 @@ public class RestMessageHandlerTest {
 
   @Test
   public void handleMessageWithBadInputTest()
-      throws IOException, JSONException, URISyntaxException {
+      throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     handleMessageWithRestRequestNull();
     handleMessageWithRestObjectNull();
     handleMessageWithRestResponseHandlerNull();
@@ -158,7 +158,7 @@ public class RestMessageHandlerTest {
 
   // handleMessageWithBadInputTest() helpers
   private void handleMessageWithRestRequestNull()
-      throws IOException, JSONException, URISyntaxException {
+      throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
     MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
     MessageInfo messageInfo = new MessageInfo(null, restRequest, restResponseHandler);
@@ -166,7 +166,7 @@ public class RestMessageHandlerTest {
   }
 
   private void handleMessageWithRestObjectNull()
-      throws IOException, JSONException, URISyntaxException {
+      throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
     MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
     MessageInfo messageInfo = new MessageInfo(restRequest, null, restResponseHandler);
@@ -174,14 +174,14 @@ public class RestMessageHandlerTest {
   }
 
   private void handleMessageWithRestResponseHandlerNull()
-      throws IOException, JSONException, URISyntaxException {
+      throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
     MessageInfo messageInfo = new MessageInfo(restRequest, restRequest, null);
     doHandleMessageFailureTest(messageInfo, RestServiceErrorCode.ReponseHandlerMissing);
   }
 
   private void doHandleMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
-      throws IOException {
+      throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
     Thread messageHandlerRunner = new Thread(restMessageHandler);
     messageHandlerRunner.start();
@@ -190,25 +190,29 @@ public class RestMessageHandlerTest {
       restMessageHandler.handleMessage(messageInfo);
       fail("Test should have thrown exception, but did not");
     } catch (RestServiceException e) {
-      // message handler should still be alive
-      assertTrue("Message handler is not alive", messageHandlerRunner.isAlive());
       assertEquals("Did not get expected RestServiceErrorCode", expectedCode, e.getErrorCode());
+
+      // message handler should still be alive and serving requests
+      assertTrue("Message handler is not alive", messageHandlerRunner.isAlive());
+      doProcessMessageSuccessTest(RestMethod.GET, restMessageHandler);
+    } finally {
+      restMessageHandler.shutdownGracefully(null);
     }
   }
 
   // processMessageWithBadInputTest() helpers
   private void processMessageThatThrowsRuntimeException()
       throws Exception {
-    MessageInfo messageInfo = createMessageInfoThatThrowsRuntimeException();
+    MessageInfo messageInfo = createMessageInfoThatThrowsProcessingRuntimeException();
     try {
-      doProcessMessageFailureTest(messageInfo, RestServiceErrorCode.RequestProcessingFailure);
+      doProcessMessageFailureTest(messageInfo, null);
       fail("Did not get an exception even though one was requested");
     } catch (RuntimeException e) {
       // nothing to do. expected.
     }
   }
 
-  private MessageInfo createMessageInfoThatThrowsRuntimeException()
+  private MessageInfo createMessageInfoThatThrowsProcessingRuntimeException()
       throws JSONException, URISyntaxException {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
@@ -252,7 +256,7 @@ public class RestMessageHandlerTest {
 
   public void badOnHandleFailureTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
-    doBadHandlerTest(createMessageInfoThatThrowsRuntimeException());
+    doBadHandlerTest(createMessageInfoThatThrowsProcessingRuntimeException());
   }
 
   public void doBadHandlerTest(MessageInfo messageInfo)
@@ -269,11 +273,9 @@ public class RestMessageHandlerTest {
       fail("Test took too long. There might be a problem or the timeout may need to be increased");
     }
 
-    // make sure that the message handler is still alive and well
-    assertTrue("RestMessageHandler is dead", messageHandlerRunner.isAlive());
-    for (RestMethod restMethod : RestMethod.values()) {
-      doProcessMessageSuccessTest(restMethod, restMessageHandler);
-    }
+    // message handler should still be alive and serving requests
+    assertTrue("Message handler is not alive", messageHandlerRunner.isAlive());
+    doProcessMessageSuccessTest(RestMethod.GET, restMessageHandler);
     restMessageHandler.shutdownGracefully(null);
   }
 

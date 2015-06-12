@@ -24,7 +24,8 @@ public class MockRestRequest implements RestRequest {
   private final URI uri;
   private Map<String, List<String>> parameterValues;
 
-  public MockRestRequest(JSONObject data) throws URISyntaxException, JSONException {
+  public MockRestRequest(JSONObject data)
+      throws URISyntaxException, JSONException {
     this.data = data;
     this.uri = new URI(data.getString(URI_KEY));
   }
@@ -54,7 +55,7 @@ public class MockRestRequest implements RestRequest {
   }
 
   public List<String> getValuesOfParameterInURI(String parameter) {
-    if(parameterValues == null) {
+    if (parameterValues == null) {
       try {
         generateParameterValues();
       } catch (UnsupportedEncodingException e) {
@@ -68,13 +69,15 @@ public class MockRestRequest implements RestRequest {
     //nothing to do
   }
 
-  private void generateParameterValues() throws UnsupportedEncodingException {
+  private void generateParameterValues()
+      throws UnsupportedEncodingException {
     parameterValues = new HashMap<String, List<String>>();
     for (String parameterValue : uri.getQuery().split("&")) {
       int idx = parameterValue.indexOf("=");
-      String key = idx > 0 ? URLDecoder.decode(parameterValue.substring(0, idx), "UTF-8") : parameterValue;
+      String key = idx > 0 ? parameterValue.substring(0, idx) : parameterValue;
+      key = URLDecoder.decode(key, "UTF-8");
       String value = idx > 0 ? URLDecoder.decode(parameterValue.substring(idx + 1), "UTF-8") : null;
-      if(!parameterValues.containsKey(key)) {
+      if (!parameterValues.containsKey(key)) {
         parameterValues.put(key, new LinkedList<String>());
       }
       parameterValues.get(key).add(value);

@@ -15,7 +15,8 @@ public class NIOServerFactory {
   public static NIOServer getNIOServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestDelegator requestDelegator)
       throws Exception {
-    String nioServerClassName = verifiableProperties.getString(NIO_SERVER_CLASS_KEY, "com.github.ambry.rest.NettyServer");
+    String nioServerClassName =
+        verifiableProperties.getString(NIO_SERVER_CLASS_KEY, "com.github.ambry.rest.NettyServer");
     NIOServer nioServer;
     if (requestDelegator != null) {
       // try a constructor with the request delegator
