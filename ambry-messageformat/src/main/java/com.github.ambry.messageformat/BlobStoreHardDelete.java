@@ -179,11 +179,11 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           }
           break;
         default:
-          logger.error(
+          throw new IllegalStateException(
               "Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
       }
     } catch (Exception e) {
-      logger.error("Exception, cause: {}", e.getCause());
+      logger.error("Exception when reading blob: {}", e);
     }
     return hardDeleteInfo;
   }
