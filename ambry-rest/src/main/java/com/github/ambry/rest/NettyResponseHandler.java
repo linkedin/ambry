@@ -26,10 +26,13 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 
 /**
- * Netty specific implementation of RestResponseHandler. Used by ambry to return its response via Http
+ * Netty specific implementation of RestResponseHandler. Used by BlobStorageService to return its response via Http
  */
 public class NettyResponseHandler implements RestResponseHandler {
   private final ChannelHandlerContext ctx;
+  /**
+   * the http response object.
+   */
   private final HttpResponse response;
   private final NettyMetrics nettyMetrics;
 
@@ -51,6 +54,7 @@ public class NettyResponseHandler implements RestResponseHandler {
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, type);
   }
 
+  // other functions
   public void finalizeResponse() {
     finalizeResponse(false);
   }
@@ -131,6 +135,10 @@ public class NettyResponseHandler implements RestResponseHandler {
     //nothing to do for now
   }
 
+  /**
+   * Creates the response status, error msg and delegates it to be sent.
+   * @param cause
+   */
   private void buildAndSendError(Throwable cause) {
     nettyMetrics.errorStateCount.inc();
     HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -142,8 +150,7 @@ public class NettyResponseHandler implements RestResponseHandler {
       }
     } else {
       nettyMetrics.unknownExceptionCount.inc();
-      logger.error("Unknown exception received while processing error response - " + cause.getCause() + " - " + cause
-          .getMessage());
+      logger.error("Unknown exception received while processing error response - " + cause);
     }
 
     if (ctx.channel().isActive()) {
@@ -151,6 +158,11 @@ public class NettyResponseHandler implements RestResponseHandler {
     }
   }
 
+  /**
+   * Converts a RestServiceErrorCode into a http error code.
+   * @param restServiceErrorCode
+   * @return
+   */
   private HttpResponseStatus getHttpEquivalentErrorCode(RestServiceErrorCode restServiceErrorCode) {
     switch (restServiceErrorCode) {
       case BadExecutionData:
@@ -195,6 +207,9 @@ public class NettyResponseHandler implements RestResponseHandler {
     close(future);
   }
 
+  /**
+   * Verify state of response so that we do not try to finalize response more than once.
+   */
   private void verifyResponseAlive() {
     if (responseFinalized) {
       nettyMetrics.deadResponseAccess.inc();
@@ -202,6 +217,9 @@ public class NettyResponseHandler implements RestResponseHandler {
     }
   }
 
+  /**
+   * Verify that channel is still open.
+   */
   private void verifyChannelOpen() {
     if (channelClosed || !(ctx.channel().isActive())) {
       nettyMetrics.channelOperationAfterCloseErrorCount.inc();

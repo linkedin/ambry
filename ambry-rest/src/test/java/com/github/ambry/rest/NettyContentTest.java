@@ -10,10 +10,13 @@ import static org.junit.Assert.assertEquals;
 
 
 /**
- * TODO: write description
+ * Tests functionality of NettyContent
  */
 public class NettyContentTest {
 
+  /**
+   * This tests conversion of HttpContent instances given good input.
+   */
   @Test
   public void conversionWithGoodInputTest() {
     NettyContent nettyContent;

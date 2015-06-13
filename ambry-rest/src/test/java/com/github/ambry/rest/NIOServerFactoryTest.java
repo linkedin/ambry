@@ -18,10 +18,14 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests functionality of NioServerFactory
  */
 public class NioServerFactoryTest {
 
+  /**
+   * Checks to see that getting default NioServer works.
+   * @throws Exception
+   */
   @Test
   public void getRestServerDefaultTest()
       throws Exception {
@@ -35,6 +39,10 @@ public class NioServerFactoryTest {
     assertNotNull("No rest server returned", nioServer);
   }
 
+  /**
+   * Checks to see that setting properties to a different NioServer returns the correct NioServer
+   * @throws Exception
+   */
   @Test
   public void getRestServerNonDefaultTest()
       throws Exception {
@@ -48,11 +56,16 @@ public class NioServerFactoryTest {
     assertEquals("Did not return rest server specified in properties", restServerClass, nioServer.getClass());
   }
 
+  /**
+   * Tests to see that correct exceptions are thrown or null is returned in case of bad input.
+   * @throws Exception
+   */
   @Test
   public void getRestServerWithBadInputTest()
       throws Exception {
     try {
       Properties properties = new Properties();
+      // not a valid class
       properties.setProperty(NioServerFactory.NIO_SERVER_CLASS_KEY, "not.a.valid.class");
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       MetricRegistry metricRegistry = new MetricRegistry();
@@ -79,7 +92,7 @@ public class NioServerFactoryTest {
   // helpers
   // general
   private RestRequestDelegator getRestRequestDelegator()
-      throws IOException {
+      throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     BlobStorageService blobStorageService = getBlobStorageService();
     return new RestRequestDelegator(1, restServerMetrics, blobStorageService);

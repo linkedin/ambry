@@ -14,16 +14,20 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Test functionality of RestServer
  */
 public class RestServerTest {
 
+  /**
+   * Tests basic start shutdown of RestServer
+   * @throws Exception
+   */
   @Test
   public void startShutdownTest()
       throws Exception {
     Properties properties = new Properties();
     properties.setProperty(BlobStorageServiceFactory.BLOBSTORAGE_SERVICE_CLASS_KEY,
-        MockBlobStorageService.class.getCanonicalName());
+        MockBlobStorageService.class.getCanonicalName()); // no defaults defined for blob storage service
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -34,6 +38,10 @@ public class RestServerTest {
     server.awaitShutdown();
   }
 
+  /**
+   * Tests for correct exceptions thrown on bad input during instantiation/start of RestServer
+   * @throws IOException
+   */
   @Test
   public void serverCreationWithBadInputTest()
       throws IOException {
@@ -42,12 +50,16 @@ public class RestServerTest {
     badBlobStorageServiceClassTest();
   }
 
+  /**
+   * Tests that right exceptions are thrown on start/shutdown of RestServer with a bad component.
+   * @throws Exception
+   */
   @Test(expected = Exception.class)
-  public void faultyServerStartShutdownTest()
+  public void startShutdownTestWithBadComponent()
       throws Exception {
     Properties properties = new Properties();
     properties.setProperty(NioServerFactory.NIO_SERVER_CLASS_KEY, "com.github.ambry.restservice.MockNioServer");
-    properties.setProperty(MockNioServer.IS_FAULTY_KEY, "true");
+    properties.setProperty(MockNioServer.IS_FAULTY_KEY, "true"); // makes MockNioServer throw exceptions.
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -55,19 +67,24 @@ public class RestServerTest {
     RestServer server = new RestServer(verifiableProperties, metricRegistry, clusterMap);
     try {
       server.start();
-      fail("Faulty server start() would have thrown InstantiationException");
+      fail("Start should not be successful. MockNioServer::start() would have thrown InstantiationException");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     } catch (Exception e) {
-      fail("Faulty server start() threw unknown exception - " + e);
+      fail("RestServer::start() threw unknown exception - " + e);
     } finally {
       server.shutdown();
-      fail("Faulty server shutdown() would have thrown Exception");
+      fail("Shutdown should not be successful. MockNioServer::shutdown() would have thrown Exception");
     }
   }
 
   // helpers
   // serverCreationWithBadInputTest() helpers
+
+  /**
+   * Tests instantiation attempts with bad input.
+   * @throws IOException
+   */
   private void badArgumentsTest()
       throws IOException {
     // dud properties. server should pick up defaults
@@ -77,6 +94,7 @@ public class RestServerTest {
     ClusterMap clusterMap = new MockClusterMap();
 
     try {
+      // no props
       new RestServer(null, metricRegistry, clusterMap);
       fail("Properties missing, yet no exception was thrown");
     } catch (InstantiationException e) {
@@ -84,6 +102,7 @@ public class RestServerTest {
     }
 
     try {
+      // not metric registry
       new RestServer(verifiableProperties, null, clusterMap);
       fail("Metrics registry missing, yet no exception was thrown");
     } catch (InstantiationException e) {
@@ -91,6 +110,7 @@ public class RestServerTest {
     }
 
     try {
+      // no cluster map
       new RestServer(verifiableProperties, metricRegistry, null);
       fail("Cluster map missing, yet no exception was thrown");
     } catch (InstantiationException e) {
@@ -98,6 +118,10 @@ public class RestServerTest {
     }
   }
 
+  /**
+   * Tests instantiation with bad NioServer class.
+   * @throws IOException
+   */
   private void badNioServerClassTest()
       throws IOException {
     Properties properties = new Properties();
@@ -105,12 +129,26 @@ public class RestServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
-      fail("Properties file contained invalid server class, yet no exception was thrown");
+      fail("Properties file contained non existent class, yet no exception was thrown");
+    } catch (InstantiationException e) {
+      // nothing to do. expected.
+    }
+
+    properties = new Properties();
+    properties.setProperty(NioServerFactory.NIO_SERVER_CLASS_KEY, "com.github.ambry.rest.RestServer");
+    verifiableProperties = new VerifiableProperties(properties);
+    try {
+      new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
+      fail("Properties file contained invalid NioServer class, yet no exception was thrown");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     }
   }
 
+  /**
+   * Tests instantiation with bad BlobStorageService class.
+   * @throws IOException
+   */
   private void badBlobStorageServiceClassTest()
       throws IOException {
     Properties properties = new Properties();
@@ -118,7 +156,17 @@ public class RestServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
-      fail("Properties file contained invalid server class, yet no exception was thrown");
+      fail("Properties file contained non existent class, yet no exception was thrown");
+    } catch (InstantiationException e) {
+      // nothing to do. expected.
+    }
+
+    properties = new Properties();
+    properties.setProperty(BlobStorageServiceFactory.BLOBSTORAGE_SERVICE_CLASS_KEY, "com.github.ambry.rest.RestServer");
+    verifiableProperties = new VerifiableProperties(properties);
+    try {
+      new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
+      fail("Properties file contained invalid BlobStorageService class, yet no exception was thrown");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     }

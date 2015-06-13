@@ -21,9 +21,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
- * TODO: write description
+ * Netty client to send requests and receive responses.
  */
 public class NettyClient {
+  /**
+   * To record any exceptions at startup
+   */
   private final AtomicReference<Throwable> cause = new AtomicReference<Throwable>();
   private final NettyClientDeployer deployer;
 
@@ -32,6 +35,13 @@ public class NettyClient {
     deployer = new NettyClientDeployer(serverPort, contentQueue, responseQueue, cause);
   }
 
+  /**
+   * Starts the netty client. Returns after startup is FULLY complete.
+   * <p/>
+   * For now all content has to be loaded before start() is called. Once start is called, all the contents in the
+   * content queue are sent to the server and any that are enqueued after this call are ignored.
+   * @throws InstantiationException
+   */
   public void start()
       throws InstantiationException {
     try {
@@ -44,11 +54,18 @@ public class NettyClient {
     }
   }
 
+  /**
+   * Shuts down the netty client. Returns after shutdown is FULLY complete.
+   * @throws Exception
+   */
   public void shutdown()
       throws Exception {
     deployer.shutdown();
   }
 
+  /**
+   * Deploys the netty client as a separate thread.
+   */
   private class NettyClientDeployer implements Runnable {
     private final CountDownLatch startupComplete = new CountDownLatch(1);
     private EventLoopGroup group = new NioEventLoopGroup();
@@ -75,7 +92,7 @@ public class NettyClient {
           public void initChannel(SocketChannel ch)
               throws Exception {
             ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler())
-                .addLast(new CommunicationHandler(contentQueue, responseQueue, cause));
+                .addLast(new CommunicationHandler(contentQueue, responseQueue, cause)); // custom handler
           }
         });
 
@@ -88,11 +105,22 @@ public class NettyClient {
       }
     }
 
+    /**
+     * Waits until client is deployed.
+     * @param timeout
+     * @param timeUnit
+     * @return
+     * @throws InterruptedException
+     */
     public boolean awaitStartup(long timeout, TimeUnit timeUnit)
         throws InterruptedException {
       return startupComplete.await(timeout, timeUnit);
     }
 
+    /**
+     * Shuts down netty client. Returns after shutdown is complete.
+     * @throws Exception
+     */
     public void shutdown()
         throws Exception {
       if (group != null) {
@@ -107,6 +135,9 @@ public class NettyClient {
   }
 }
 
+/**
+ * Custom handler that sends out request and receives responses.
+ */
 class CommunicationHandler extends SimpleChannelInboundHandler<Object> {
   private final AtomicReference<Throwable> cause;
   private final LinkedBlockingQueue<HttpObject> contentQueue;
@@ -122,7 +153,7 @@ class CommunicationHandler extends SimpleChannelInboundHandler<Object> {
   @Override
   public void channelActive(ChannelHandlerContext ctx)
       throws Exception {
-    // this can be upgraded later to allow async pushing and pulling but this will do for now
+    // TODO: This can be upgraded later to allow async pushing but this will do for now.
     while (!contentQueue.isEmpty()) {
       ctx.writeAndFlush(contentQueue.remove());
     }
@@ -132,7 +163,7 @@ class CommunicationHandler extends SimpleChannelInboundHandler<Object> {
   public void channelRead0(ChannelHandlerContext ctx, Object in)
       throws Exception {
     if (in instanceof HttpObject) {
-      ReferenceCountUtil.retain(in);
+      ReferenceCountUtil.retain(in); // make sure that we increase refCnt.
       responseQueue.offer((HttpObject) in);
     } else {
       throw new IllegalStateException("Read object is not a HTTPObject");

@@ -20,9 +20,9 @@ public class NettyContent implements RestContent {
   }
 
   public NettyContent(HttpContent content) {
-    ReferenceCountUtil.retain(content);
+    ReferenceCountUtil.retain(content); // since netty content objs are reference counted, we need to inc refCnt here.
     this.content = content;
-    if (content instanceof LastHttpContent) {
+    if (content instanceof LastHttpContent) { // LastHttpContent in the end marker in netty http world
       isLast = true;
     } else {
       isLast = false;
@@ -35,6 +35,6 @@ public class NettyContent implements RestContent {
 
   public void release() {
     // make sure we release the space we are using so that it can go back to the pool
-    ReferenceCountUtil.release(content);
+    ReferenceCountUtil.release(content); // decreases the refCnt (netty content objs are reference counted).
   }
 }

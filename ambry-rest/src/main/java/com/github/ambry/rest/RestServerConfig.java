@@ -6,7 +6,7 @@ import com.github.ambry.config.VerifiableProperties;
 
 
 /**
- * Configuration that is specific to admin functions
+ * Configuration that is specific to RestServer functions
  */
 public class RestServerConfig {
   public static String MESSAGE_HANDLER_COUNT_KEY = "rest.message.handler.count";

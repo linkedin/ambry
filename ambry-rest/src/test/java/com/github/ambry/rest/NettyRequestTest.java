@@ -15,10 +15,15 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests functionality of NettyRequest.
  */
 public class NettyRequestTest {
 
+  /**
+   * Tests conversion to NettyRequest given good input.
+   * @throws JSONException
+   * @throws RestServiceException
+   */
   @Test
   public void conversionWithGoodInputTest()
       throws JSONException, RestServiceException {
@@ -46,6 +51,11 @@ public class NettyRequestTest {
     validateRequest(nettyRequest, RestMethod.HEAD, uri, key, value);
   }
 
+  /**
+   * Tests conversion to NettyRequest given bad input (i.e. checks for the correct exception)
+   * @throws JSONException
+   * @throws RestServiceException
+   */
   @Test
   public void conversionWithBadInputTest()
       throws JSONException, RestServiceException {

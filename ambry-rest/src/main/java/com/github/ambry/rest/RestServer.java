@@ -15,14 +15,30 @@ import org.slf4j.LoggerFactory;
  * starting the various components.
  */
 public class RestServer {
+  /**
+   * Tracks completion of shutdown.
+   */
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
+  /**
+   * Place where the configs are stored.
+   */
   private final VerifiableProperties verifiableProperties;
+  /**
+   * Place where metrics need to go.
+   */
   private final MetricRegistry metricRegistry;
+  /**
+   * The cluster map provided as input.
+   */
   private final ClusterMap clusterMap;
 
   private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
+
+  /**
+   * Component instances.
+   */
   private final BlobStorageService blobStorageService;
   private final RestRequestDelegator requestDelegator;
   private final NioServer nioServer;
@@ -35,23 +51,27 @@ public class RestServer {
     this.metricRegistry = metricRegistry;
     this.clusterMap = clusterMap;
 
-    if (serverReadyForStart()) {
-      try {
-        restServerConfig = new RestServerConfig(verifiableProperties);
-        restServerMetrics = new RestServerMetrics(metricRegistry);
-        blobStorageService =
-            BlobStorageServiceFactory.getBlobStorageService(verifiableProperties, clusterMap, metricRegistry);
-        requestDelegator =
-            new RestRequestDelegator(restServerConfig.getMessageHandlerCount(), restServerMetrics, blobStorageService);
-        nioServer = NioServerFactory.getNIOServer(verifiableProperties, metricRegistry, requestDelegator);
-      } catch (Exception e) {
-        throw new InstantiationException("Error while creating rest server components - " + e);
-      }
-    } else {
-      throw new InstantiationException("Did not receive all required components for starting rest server");
+    verifyInput();
+    try {
+      restServerConfig = new RestServerConfig(verifiableProperties);
+      restServerMetrics = new RestServerMetrics(metricRegistry);
+
+      // create instances of components.
+      blobStorageService =
+          BlobStorageServiceFactory.getBlobStorageService(verifiableProperties, clusterMap, metricRegistry);
+      requestDelegator =
+          new RestRequestDelegator(restServerConfig.getMessageHandlerCount(), restServerMetrics, blobStorageService);
+      nioServer = NioServerFactory.getNIOServer(verifiableProperties, metricRegistry, requestDelegator);
+    } catch (Exception e) {
+      throw new InstantiationException("Error while creating rest server components - " + e);
     }
+    verifyComponents();
   }
 
+  /**
+   * Starts up all the components. Returns when startup is FULLY complete.
+   * @throws InstantiationException
+   */
   public void start()
       throws InstantiationException {
     try {
@@ -68,6 +88,10 @@ public class RestServer {
     }
   }
 
+  /**
+   * Shuts down up all the components. Returns when shutdown is FULLY complete.
+   * @throws Exception
+   */
   public void shutdown()
       throws Exception {
     logger.info("Shutting down rest server");
@@ -78,12 +102,34 @@ public class RestServer {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Wait for shutdown to be triggered and complete.
+   * @throws InterruptedException
+   */
   public void awaitShutdown()
       throws InterruptedException {
     shutdownLatch.await();
   }
 
-  private boolean serverReadyForStart() {
-    return verifiableProperties != null && metricRegistry != null && clusterMap != null;
+  /**
+   * Checks sanity of input arguments.
+   * @throws InstantiationException
+   */
+  private void verifyInput()
+      throws InstantiationException {
+    if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
+      throw new InstantiationException("Received some null arguments while instantiating RestServer");
+    }
+  }
+
+  /**
+   * Checks that all components have been instantiated correctly.
+   * @throws InstantiationException
+   */
+  private void verifyComponents()
+      throws InstantiationException {
+    if (blobStorageService == null || requestDelegator == null || nioServer == null) {
+      throw new InstantiationException("Failed to instantiate one of the components of RestServer");
+    }
   }
 }

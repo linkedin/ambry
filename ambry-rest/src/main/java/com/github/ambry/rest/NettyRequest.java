@@ -25,6 +25,7 @@ public class NettyRequest implements RestRequest {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
 
+    // convert HttpMethod to RestMethod
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;

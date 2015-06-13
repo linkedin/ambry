@@ -34,7 +34,7 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * This handle message can be instructed to throw exceptions. Otherwise it handles the message in the normal way
+   * Handle incoming messages. Can be used to throw exceptions and test error handling upstream.
    * @param messageInfo
    * @throws RestServiceException
    */

@@ -17,11 +17,15 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests functionality of RestRequestDelegator
  */
 
 public class RestRequestDelegatorTest {
 
+  /**
+   * Tests basic start/shutdown
+   * @throws Exception
+   */
   @Test
   public void startShutdownTest()
       throws Exception {
@@ -30,18 +34,28 @@ public class RestRequestDelegatorTest {
     restRequestDelegator.shutdown();
   }
 
+  /**
+   * Tests that an exception is thrown when trying to instantiate a RestRequestDelegator with 0 handlers
+   * @throws Exception
+   */
   @Test(expected = InstantiationException.class)
   public void startWithHandlerCountZeroTest()
       throws Exception {
-    RestRequestDelegator restRequestDelegator = createDelegator(0);
-    restRequestDelegator.start();
+    createDelegator(0);
   }
 
+  /**
+   * Tests exception and error code when trying to get a message handler before starting the RestRequestDelegator
+   * @throws InstantiationException
+   * @throws IOException
+   * @throws RestServiceException
+   */
   @Test
   public void messageHandlerGetWithoutStartTest()
-      throws IOException, RestServiceException { //to test the exception path
+      throws InstantiationException, IOException, RestServiceException {
     RestRequestDelegator restRequestDelegator = createDelegator(5);
     try {
+      // did not start yet.
       restRequestDelegator.getMessageHandler();
       fail("getMessageHandler() should have failed because delegator has not been started");
     } catch (RestServiceException e) {
@@ -49,6 +63,10 @@ public class RestRequestDelegatorTest {
     }
   }
 
+  /**
+   * Tests normal getting of message handler.
+   * @throws Exception
+   */
   @Test
   public void messageHandlerGetTest()
       throws Exception {
@@ -67,7 +85,7 @@ public class RestRequestDelegatorTest {
   //helpers
   //general
   private RestRequestDelegator createDelegator(int handlerCount)
-      throws IOException {
+      throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     BlobStorageService blobStorageService = getBlobStorageService();
     return new RestRequestDelegator(handlerCount, restServerMetrics, blobStorageService);

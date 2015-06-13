@@ -8,11 +8,19 @@ import com.github.ambry.utils.Utils;
 
 
 /**
- * TODO: write description
+ * Factory for returning different types of BlobStorageService implementations based on config.
  */
 public class BlobStorageServiceFactory {
   public static String BLOBSTORAGE_SERVICE_CLASS_KEY = "rest.blobstorage.service";
 
+  /**
+   * Uses a key defined in the configuration file to return the right type of BlobStorageService
+   * @param verifiableProperties
+   * @param clusterMap
+   * @param metricRegistry
+   * @return
+   * @throws Exception
+   */
   public static BlobStorageService getBlobStorageService(VerifiableProperties verifiableProperties,
       ClusterMap clusterMap, MetricRegistry metricRegistry)
       throws Exception {

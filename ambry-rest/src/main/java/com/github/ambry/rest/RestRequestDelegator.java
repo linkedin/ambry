@@ -16,27 +16,45 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Interface for a RestRequestDelegator
+ * A class that starts up a fixed number of RestMessageHandler instances and hands them out as required.
+ * Only one instance of this is expected to be alive and that instance lives through the lifetime of the rest server
  */
 public class RestRequestDelegator implements HandleMessageResultListener {
 
   private final RestServerMetrics restServerMetrics;
+  /**
+   * Underlying BlobStorageService
+   */
   private final BlobStorageService blobStorageService;
+  /**
+   * For tracking shutdown of message handlers
+   */
   private final CountDownLatch messageHandlersUp;
   private final int handlerCount;
+  /**
+   * The list of RestMessageHandler instances that have been started up
+   */
   private final List<RestMessageHandler> messageHandlers;
 
+  /**
+   * Executor pool for the RestMessageHandler instances.
+   */
   private ExecutorService executor;
   private int currIndex = 0;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public RestRequestDelegator(int handlerCount, RestServerMetrics restServerMetrics,
-      BlobStorageService blobStorageService) {
-    this.handlerCount = handlerCount;
-    this.restServerMetrics = restServerMetrics;
-    this.blobStorageService = blobStorageService;
-    messageHandlers = new ArrayList<RestMessageHandler>(handlerCount);
-    messageHandlersUp = new CountDownLatch(handlerCount);
+      BlobStorageService blobStorageService)
+      throws InstantiationException {
+    if (handlerCount > 0) {
+      this.handlerCount = handlerCount;
+      this.restServerMetrics = restServerMetrics;
+      this.blobStorageService = blobStorageService;
+      messageHandlers = new ArrayList<RestMessageHandler>(handlerCount);
+      messageHandlersUp = new CountDownLatch(handlerCount);
+    } else {
+      throw new InstantiationException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
+    }
   }
 
   /**
@@ -47,7 +65,7 @@ public class RestRequestDelegator implements HandleMessageResultListener {
   public void start()
       throws InstantiationException {
     logger.info("Request delegator starting");
-    if (handlerCount > 0) {
+    try {
       executor = Executors.newFixedThreadPool(handlerCount);
       for (int i = 0; i < handlerCount; i++) {
         RestMessageHandler messageHandler = new RestMessageHandler(blobStorageService, restServerMetrics);
@@ -55,16 +73,15 @@ public class RestRequestDelegator implements HandleMessageResultListener {
         messageHandlers.add(messageHandler);
       }
       logger.info("Request delegator started");
-    } else {
-      throw new InstantiationException("Handlers to be created is <= 0 - (is " + handlerCount + ")");
+    } catch (Exception e) {
+      throw new InstantiationException("Exception while trying to start RestRequestDelegator - " + e);
     }
   }
 
   /**
    * Returns a RestMessageHandler that can be used to handle incoming messages
-   *
    * @return
-   * @throws com.github.ambry.restservice.RestServiceException
+   * @throws RestServiceException
    */
   public synchronized RestMessageHandler getMessageHandler()
       throws RestServiceException {
@@ -91,6 +108,8 @@ public class RestRequestDelegator implements HandleMessageResultListener {
       logger.info("Shutting down request delegator");
       for (int i = 0; i < messageHandlers.size(); i++) {
         messageHandlers.get(i).shutdownGracefully(this);
+        // This class implements HandleMessageResultListener. So passing this instance enables us to know
+        // when the shutdown has completed.
       }
       executor.shutdown();
       if (!awaitTermination(60, TimeUnit.SECONDS)) {
@@ -101,16 +120,28 @@ public class RestRequestDelegator implements HandleMessageResultListener {
     }
   }
 
+  /**
+   * Waits for the message handlers and the executor service to terminate.
+   * @param timeout
+   * @param timeUnit
+   * @return
+   * @throws InterruptedException
+   */
   private boolean awaitTermination(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
     return messageHandlersUp.await(3 * timeout / 4, timeUnit) && executor.awaitTermination(timeout / 4, timeUnit);
   }
 
+  /**
+   * Callback for when shutdown of a message handler is complete.
+   * @param messageInfo
+   */
   public void onMessageHandleSuccess(MessageInfo messageInfo) {
     messageHandlersUp.countDown();
   }
 
   public void onMessageHandleFailure(MessageInfo messageInfo, Exception e) {
+    // since we are registering for shutdown only and that can never fail, we should never reach here.
     throw new IllegalStateException("Should not have come here. Original exception" + e);
   }
 }

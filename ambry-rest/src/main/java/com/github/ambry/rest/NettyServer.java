@@ -24,11 +24,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of NioServer. Handles Http for Ambry.
+ * Netty specific implementation of NioServer. Handles Http for the underlying BlobStorageService.
  */
 public class NettyServer implements NioServer {
   private final NettyConfig serverConfig;
   private final NettyMetrics nettyMetrics;
+  /**
+   * This the object through which a RestMessageHandler can be requested.
+   */
   private final RestRequestDelegator requestDelegator;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -52,10 +55,12 @@ public class NettyServer implements NioServer {
     workerGroup = new NioEventLoopGroup(serverConfig.getWorkerThreadCount());
 
     try {
+      // deploy netty server as a thread and catch startup exceptions if any.
       AtomicReference<Exception> startupException = new AtomicReference<Exception>();
       NettyServerDeployer nettyServerDeployer = new NettyServerDeployer(startupException);
       Thread deploymentThread = new Thread(nettyServerDeployer);
       deploymentThread.start();
+
       long startWaitSecs = serverConfig.getStartupWaitSeconds();
       if (!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
         throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds");
@@ -88,8 +93,14 @@ public class NettyServer implements NioServer {
     return workerGroup.awaitTermination(timeout / 2, timeUnit) && bossGroup.awaitTermination(timeout / 2, timeUnit);
   }
 
+  /**
+   * Deploys netty http server.
+   */
   private class NettyServerDeployer implements Runnable {
     private CountDownLatch startupDone = new CountDownLatch(1);
+    /**
+     * To record an exceptions at startup.
+     */
     private AtomicReference<Exception> exception;
 
     public NettyServerDeployer(AtomicReference<Exception> exception) {
@@ -100,23 +111,29 @@ public class NettyServer implements NioServer {
       try {
         ServerBootstrap b = new ServerBootstrap();
 
-        // Right now this pipeline suffices. The old AmbryFrontEnd has a factory for this. Will investigate
-        // if we need any new functionality.
+        // Netty creates a new instance of every class in the pipeline for every connection
+        // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
         b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
             .option(ChannelOption.SO_BACKLOG, serverConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
             .childHandler(new ChannelInitializer<SocketChannel>() {
               @Override
               public void initChannel(SocketChannel ch)
                   throws Exception {
-                ch.pipeline().addLast("codec", new HttpServerCodec()).addLast("chunker", new ChunkedWriteHandler())
+                ch.pipeline()
+                    // for http encoding/decoding.
+                    .addLast("codec", new HttpServerCodec())
+                        // for chunking. TODO: this is not leveraged by us yet. We will do it when doing GET blob.
+                    .addLast("chunker", new ChunkedWriteHandler())
+                        // for detecting connections that have been idle too long - probably because of an error.
                     .addLast("idleStateHandler", new IdleStateHandler(0, 0, serverConfig.getIdleTimeSeconds()))
+                        // custom processing class that interfaces with a BlobStorageService.
                     .addLast("processor", new NettyMessageProcessor(requestDelegator, nettyMetrics));
               }
             });
 
         ChannelFuture f = b.bind(serverConfig.getPort()).sync();
         logger.info("Netty server started on port " + serverConfig.getPort());
-        startupDone.countDown();
+        startupDone.countDown(); // let the parent know that startup is complete
 
         f.channel().closeFuture().sync(); // this is blocking
       } catch (Exception e) {

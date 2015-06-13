@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Handles common metrics required by all implementations of servers
+ * Handles  metrics required by RestServer
  */
 public class RestServerMetrics {
   // RestMessageHandler

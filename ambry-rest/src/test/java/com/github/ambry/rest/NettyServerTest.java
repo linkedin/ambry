@@ -14,10 +14,14 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests netty server basic function
  */
 public class NettyServerTest {
 
+  /**
+   * Tests basic startup/shutdown given good input
+   * @throws Exception
+   */
   @Test
   public void startShutdownTest()
       throws Exception {
@@ -26,6 +30,10 @@ public class NettyServerTest {
     nioServer.shutdown();
   }
 
+  /**
+   * Tests to see that correct exceptions are thrown on instantiation/start with bad input
+   * @throws Exception
+   */
   @Test
   public void startWithBadInputTest()
       throws Exception {
@@ -60,7 +68,7 @@ public class NettyServerTest {
   // helpers
   // general
   private RestRequestDelegator getRestRequestDelegator(Properties properties)
-      throws IOException {
+      throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     BlobStorageService blobStorageService = getBlobStorageService(properties);
     return new RestRequestDelegator(1, restServerMetrics, blobStorageService);

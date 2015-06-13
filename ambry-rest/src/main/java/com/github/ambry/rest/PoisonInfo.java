@@ -4,7 +4,7 @@ import com.github.ambry.restservice.MessageInfo;
 
 
 /**
- * Show stopper for the messageInfoQueue of all message handlers
+ * Show stopper for a RestMessageHandler instance. When this message is processed, the instance shuts down.
  */
 public class PoisonInfo extends MessageInfo {
   public PoisonInfo() {

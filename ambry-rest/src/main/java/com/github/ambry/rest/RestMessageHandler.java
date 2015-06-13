@@ -13,15 +13,32 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Abstract class for a RestMessageHandler. Handles all incoming messages from the NioServer
+ * Scaling unit that handles all incoming messages enqueued by the NioServer.
  * <p/>
- * One or many instances of this are created by the Admin/Frontend during startup and they continuously run
- * and process messages that have been put on their queue.
+ * Multiple instances are created by the RequestDelegator during startup and each instance runs continuously and
+ * processes messages (through the BlobStorageService) that have been enqueued. Messages are enqueued by the NioServer.
+ * <p/>
+ * Each messageInfoQueue might have messages from multiple requests interleaved but messages of the same request will
+ * (have to) be in order. This ordering cannot be enforced by this class but instead has to be enforced by NioServer
+ * (it is responsible for finding a way to use the same RestMessageHandler for all chunks of the same request - for
+ * an example implementation see com.github.com.ambry.rest.NettyMesssageProcessor).
+ * <p/>
+ * These are the scaling units of the any RestServer and can be scaled up and down independently of any other component
+ * of the RestServer.
  */
 public class RestMessageHandler implements Runnable {
 
+  /**
+   * Timeout for messageInfoQueue.offer()
+   */
   private final long offerTimeout = 30; //seconds
+  /**
+   * Backing BlobStorageService
+   */
   private final BlobStorageService blobStorageService;
+  /**
+   * Queue of messages that need to be processed.
+   */
   private final LinkedBlockingQueue<MessageInfo> messageInfoQueue = new LinkedBlockingQueue<MessageInfo>();
   private final RestServerMetrics restServerMetrics;
 
@@ -33,14 +50,15 @@ public class RestMessageHandler implements Runnable {
   }
 
   public void run() {
+    // runs infinitely until poisoned.
     while (true) {
       try {
         MessageInfo messageInfo = null;
         try {
           messageInfo = messageInfoQueue.take();
           if (messageInfo instanceof PoisonInfo) {
-            messageInfo.onHandleSuccess();
-            break;
+            messageInfo.onHandleSuccess(); // acknowledge shutdown.
+            break; // poisoned.
           }
           processMessage(messageInfo);
           doProcessingSuccessTasks(messageInfo);
@@ -52,12 +70,20 @@ public class RestMessageHandler implements Runnable {
           logger.error("Exception while trying to process element in messageInfoQueue - " + e);
           doProcessingFailureTasks(messageInfo, e);
         }
-      } catch (Throwable e) { // net
+      } catch (Throwable e) { // net that needs to catch all errors - RestMessageHandler cannot go down for any reason.
         //TODO: metric
       }
     }
   }
-
+  /**
+   * TODO: think about whether this should return after complete shutdown (that would take a longer time).
+   */
+  /**
+   * Gracefully shuts down the RestMessageHandler. This is done by introducing poison into the queue.
+   * Any message enqueued after the poison is not processed.
+   * @param handleMessageResultListener
+   * @throws RestServiceException
+   */
   public void shutdownGracefully(HandleMessageResultListener handleMessageResultListener)// CHANGE: to hard shutdown?
       throws RestServiceException {
     PoisonInfo poison = new PoisonInfo();
@@ -65,17 +91,32 @@ public class RestMessageHandler implements Runnable {
     queue(poison);
   }
 
+  /**
+   * Enqueues this message to be processed later.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   public void handleMessage(MessageInfo messageInfo)
       throws RestServiceException {
     verifyMessageInfo(messageInfo);
     queue(messageInfo);
   }
 
+  /**
+   * Process dequeued message.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   private void processMessage(MessageInfo messageInfo)
       throws RestServiceException {
     blobStorageService.handleMessage(messageInfo);
   }
 
+  /**
+   * Verifies that all required components are present in the MessageInfo
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   protected void verifyMessageInfo(MessageInfo messageInfo)
       throws RestServiceException {
     if (messageInfo.getRestRequest() == null) {
@@ -91,6 +132,11 @@ public class RestMessageHandler implements Runnable {
     }
   }
 
+  /**
+   * Adds message to the queue.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   private void queue(MessageInfo messageInfo)
       throws RestServiceException {
     int MAX_ATTEMPTS = 3; // magic number
@@ -110,6 +156,10 @@ public class RestMessageHandler implements Runnable {
     throw new RestServiceException("Attempt to queue message failed", RestServiceErrorCode.MessageQueueingFailure);
   }
 
+  /**
+   * Do tasks that are required to be done on message processing success.
+   * @param messageInfo
+   */
   private void doProcessingSuccessTasks(MessageInfo messageInfo) {
     try {
       messageInfo.onHandleSuccess();
@@ -118,6 +168,11 @@ public class RestMessageHandler implements Runnable {
     }
   }
 
+  /**
+   * Do tasks that are required to be done on message processing failure.
+   * @param messageInfo
+   * @param e
+   */
   private void doProcessingFailureTasks(MessageInfo messageInfo, Exception e) {
     try {
       RestServiceException restServiceException;
@@ -135,7 +190,7 @@ public class RestMessageHandler implements Runnable {
   }
 
   /**
-   * Called by processMessage when it detects/catches an error
+   * Handle the detected exception.
    *
    * @param messageInfo
    * @param e
@@ -155,7 +210,9 @@ public class RestMessageHandler implements Runnable {
   }
 
   /**
-   * Called by the NioServer after the request is complete and the connection is inactive.
+   * Do tasks that need to be done after request is complete.
+   * <p/>
+   * Needs to be called by the NioServer after the request is complete and the connection is inactive.
    * This is (has to be) called regardless of the request being concluded successfully or
    * unsuccessfully (i.e. connection interruption).
    *
@@ -166,7 +223,7 @@ public class RestMessageHandler implements Runnable {
     /**
      * NOTE: This is where any cleanup code has to go. This is (has to be) called regardless of
      * the request being concluded successfully or unsuccessfully (i.e. connection interruption).
-     * Any state that is maintained per request has to be destroyed here.
+     * Any state that is maintained per request can be destroyed here.
      */
     if (request != null) {
       request.release();

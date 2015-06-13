@@ -28,12 +28,20 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests functionality of RestMessageHandler
  */
 public class RestMessageHandlerTest {
 
+  /**
+   * Tests handling and processing of messages given good input.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
-  public void processMessageTest()
+  public void handleAndProcessMessageTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
     Thread messageHandlerRunner = new Thread(restMessageHandler);
@@ -44,6 +52,14 @@ public class RestMessageHandlerTest {
     restMessageHandler.shutdownGracefully(null);
   }
 
+  /**
+   * Tests that right exceptions are thrown on bad input while handling.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void handleMessageWithBadInputTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
@@ -52,12 +68,24 @@ public class RestMessageHandlerTest {
     handleMessageWithRestResponseHandlerNull();
   }
 
+  /**
+   * Tests that right exception are thrown on bad input while processing.
+   * @throws Exception
+   */
   @Test
   public void processMessageWithBadInputTest()
       throws Exception {
     processMessageThatThrowsRuntimeException();
   }
 
+  /**
+   * Tests that bad handlers (ones that throw exceptions) do not kill the RestMessageHandler.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void badMessageHandleListenersTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
@@ -65,6 +93,12 @@ public class RestMessageHandlerTest {
     badOnHandleFailureTest();
   }
 
+  /**
+   * Check onError with good input - should not kill RestMessageHandler and expected response should be correct
+   * @throws IOException
+   * @throws JSONException
+   * @throws URISyntaxException
+   */
   @Test
   public void onErrorWithResponseHandlerNotNullTest()
       throws IOException, JSONException, URISyntaxException {
@@ -81,6 +115,12 @@ public class RestMessageHandlerTest {
         response.getString(MockRestResponseHandler.ERROR_MESSAGE_KEY));
   }
 
+  /**
+   * Checks onError with badInput - should not kill RestMessageHandler
+   * @throws IOException
+   * @throws JSONException
+   * @throws URISyntaxException
+   */
   @Test
   public void onErrorWithBadInputTest()
       throws IOException, JSONException, URISyntaxException {
@@ -89,10 +129,18 @@ public class RestMessageHandlerTest {
     Exception placeholderException = new Exception("placeHolderException");
 
     // no exceptions should be thrown
+    // no response handler
     messageHandler.onError(new MessageInfo(restRequest, restRequest, null), placeholderException);
+    // no message info
     messageHandler.onError(null, placeholderException);
   }
 
+  /**
+   * Checks onRequestComplete functionality with good input
+   * @throws IOException
+   * @throws JSONException
+   * @throws URISyntaxException
+   */
   @Test
   public void onRequestCompleteWithRequestNotNullTest()
       throws IOException, JSONException, URISyntaxException {
@@ -105,6 +153,11 @@ public class RestMessageHandlerTest {
     messageHandler.onRequestComplete(restRequest);
   }
 
+  /**
+   * Checks onRequestComplete functionality with bad input
+   * @throws IOException
+   * @throws JSONException
+   */
   @Test
   public void onRequestCompleteWithRequestNullTest()
       throws IOException, JSONException {
@@ -148,7 +201,19 @@ public class RestMessageHandlerTest {
     return new MessageInfo(restRequest, restRequest, new MockRestResponseHandler());
   }
 
-  // processMessageTest() helpers
+  // handleAndProcessMessageTest() helpers
+
+  /**
+   * Sends message to the RestMessageHandler and adds a listener to the message to listen for processing results.
+   * The listener determines success or failure of the test (processing success expected).
+   * Failure of test is bubbled up to this function.
+   * @param restMethod
+   * @param restMessageHandler
+   * @throws InterruptedException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   private void doProcessMessageSuccessTest(RestMethod restMethod, RestMessageHandler restMessageHandler)
       throws InterruptedException, JSONException, RestServiceException, URISyntaxException {
     MessageInfo messageInfo = createMessageInfo(restMethod, "/", new JSONObject());
@@ -191,6 +256,16 @@ public class RestMessageHandlerTest {
     doHandleMessageFailureTest(messageInfo, RestServiceErrorCode.ReponseHandlerMissing);
   }
 
+  /**
+   * Sends message to the RestMessageHandler and expects the handling to fail. Tests for the proper error code.
+   * @param messageInfo
+   * @param expectedCode
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   private void doHandleMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
@@ -235,6 +310,14 @@ public class RestMessageHandlerTest {
     return createMessageInfo(RestMethod.GET, "/", headers);
   }
 
+  /**
+   * Sends message to the RestMessageHandler and adds a listener to the message to listen for processing results.
+   * The listener determines success or failure of the test (processing failure expected and error code has to match).
+   * Failure of test is bubbled up to this function.
+   * @param messageInfo
+   * @param expectedCode
+   * @throws Exception
+   */
   private void doProcessMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
       throws Exception {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
@@ -260,16 +343,45 @@ public class RestMessageHandlerTest {
   }
 
   // badMessageHandleListenersTest() helpers
+
+  /**
+   * Sends a request that will be processed successfully but the listener is bad. Tests that RestMessageHandler does
+   * not get killed.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   public void badOnHandleSuccessTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     doBadHandlerTest(createMessageInfo(RestMethod.GET, "/", new JSONObject()));
   }
 
+  /**
+   * Sends a request that will be processed unsuccessfully and the listener is bad. Tests that RestMessageHandler does
+   * not get killed.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   public void badOnHandleFailureTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     doBadHandlerTest(createMessageInfoThatThrowsProcessingRuntimeException());
   }
 
+  /**
+   * Sends a message and attaches a listener that throws an exception. Checks that the RestMessageHandler is alive and
+   * well at the end of the test.
+   * @param messageInfo
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   public void doBadHandlerTest(MessageInfo messageInfo)
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
@@ -291,6 +403,10 @@ public class RestMessageHandlerTest {
   }
 
   // monitor classes
+
+  /**
+   * Listener that throws exceptions while handling result events.
+   */
   private class MessageProcessingBadMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
 
@@ -310,6 +426,9 @@ public class RestMessageHandlerTest {
     }
   }
 
+  /**
+   * Listener that expects success and checks the expected response. Fails and records exception otherwise.
+   */
   private class MessageProcessingSuccessMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
     private final MockRestResponseHandler restResponseHandler;
@@ -331,9 +450,7 @@ public class RestMessageHandlerTest {
         String responseBody = restResponseHandler.getFlushedBody();
         // expect MockBlobStorageService to echo the method back.
         assertEquals("Unexpected response for " + restMethod, restMethod.toString(), responseBody);
-      } catch (Exception e) {
-        cause = e;
-      } catch (AssertionError e) {
+      } catch (Throwable e) {
         cause = e;
       } finally {
         toBeProcessed.countDown();
@@ -351,6 +468,9 @@ public class RestMessageHandlerTest {
     }
   }
 
+  /**
+   * Listener that expects failure and checks the expected error code. Fails and records exception otherwise.
+   */
   private class MessageProcessingFailureMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
     private final RestServiceErrorCode expectedCode;
@@ -382,10 +502,8 @@ public class RestMessageHandlerTest {
         }
         // message handler should still be alive
         assertTrue("Message handler is not alive", messageHandlerRunner.isAlive());
-      } catch (Exception ne) {
+      } catch (Throwable ne) {
         cause = ne;
-      } catch (AssertionError ae) {
-        cause = ae;
       }
       toBeProcessed.countDown();
     }
