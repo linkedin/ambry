@@ -277,8 +277,8 @@ class ReplicaThread implements Runnable {
           }
         }
         long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}",
-            remoteNode, threadName, processMetadataResponseTimeInMs);
+        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}", remoteNode, threadName,
+            processMetadataResponseTimeInMs);
       } finally {
         if (remoteColo) {
           replicationMetrics.interColoMetadataExchangeCount.inc();
@@ -628,7 +628,7 @@ class ReplicaThread implements Runnable {
               if (validateMessageStream) {
                 MessageSievingInputStream validMessageDetectionInputStream =
                     new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
-                         metricRegistry);
+                        metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
                   replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 }
@@ -637,10 +637,9 @@ class ReplicaThread implements Runnable {
               } else {
                 writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
               }
-              if(messageInfoList.size() > 0) {
+              if (messageInfoList.size() > 0) {
                 remoteReplicaInfo.getLocalStore().put(writeset);
-              }
-              else{
+              } else {
                 logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
               }
 
