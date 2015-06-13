@@ -9,6 +9,9 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class AdminMetrics {
   //errors
+  /**
+   * tracks requests with http methods that the server does not know how to execute.
+   */
   public final Counter unknownActionErrorCount;
 
   public AdminMetrics(MetricRegistry metricRegistry) {

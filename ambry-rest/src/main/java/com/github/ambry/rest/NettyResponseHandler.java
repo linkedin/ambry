@@ -157,7 +157,7 @@ public class NettyResponseHandler implements RestResponseHandler {
       case BadRequest:
       case DuplicateRequest:
       case NoRequest:
-      case UnknownOperationType:
+      case UnknownCustomOperationType:
       case UnknownRestMethod:
         nettyMetrics.badRequestErrorCount.inc();
         return HttpResponseStatus.BAD_REQUEST;

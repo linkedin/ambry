@@ -5,7 +5,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.MockNIOServer;
+import com.github.ambry.restservice.MockNioServer;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -46,8 +46,8 @@ public class RestServerTest {
   public void faultyServerStartShutdownTest()
       throws Exception {
     Properties properties = new Properties();
-    properties.setProperty(NIOServerFactory.NIO_SERVER_CLASS_KEY, "com.github.ambry.restservice.MockNIOServer");
-    properties.setProperty(MockNIOServer.IS_FAULTY_KEY, "true");
+    properties.setProperty(NioServerFactory.NIO_SERVER_CLASS_KEY, "com.github.ambry.restservice.MockNioServer");
+    properties.setProperty(MockNioServer.IS_FAULTY_KEY, "true");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -101,7 +101,7 @@ public class RestServerTest {
   private void badNioServerClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty(NIOServerFactory.NIO_SERVER_CLASS_KEY, "non.existent.server");
+    properties.setProperty(NioServerFactory.NIO_SERVER_CLASS_KEY, "non.existent.server");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());

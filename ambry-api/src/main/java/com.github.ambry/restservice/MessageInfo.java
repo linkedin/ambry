@@ -5,19 +5,27 @@ import java.util.List;
 
 
 /**
- * Stores all the objects required to handle a particular chunk of a request
- * Stores:
- * 1. RestRequest - sort of metadata that is needed to process every chunk
- * 2. RestObject - chunk that needs to be handled. For the very first MessageInfo object of a connection this is the
- * same as RestRequest
- * 3. ResponseHandler - Reference to the RestResponseHandler that the RestMessageHandler will use
+ * Stores all the objects required to handle a particular chunk of a request.
  */
 public class MessageInfo {
+  /**
+   * Metadata that is needed to process every chunk (like RestMethod etc).
+   */
   private final RestObject restObject;
+  /**
+   * Chunk that needs to be handled. For the very first MessageInfo object of a request this is the
+   * same as RestRequest.
+   */
   private final RestRequest restRequest;
+  /**
+   * Reference to the RestResponseHandler that can be used to return responses to the client.
+   */
   private final RestResponseHandler responseHandler;
 
-  private List<HandleMessageEventListener> listeners = new ArrayList<HandleMessageEventListener>();
+  /**
+   * The listeners that need to notified about handling results.
+   */
+  private List<HandleMessageResultListener> listeners = new ArrayList<HandleMessageResultListener>();
 
   public RestRequest getRestRequest() {
     return restRequest;
@@ -37,20 +45,31 @@ public class MessageInfo {
     this.responseHandler = responseHandler;
   }
 
-  public void addListener(HandleMessageEventListener handleMessageEventListener) {
-    if (handleMessageEventListener != null) {
-      listeners.add(handleMessageEventListener);
+  /**
+   * Register to be notified about handling results.
+   * @param handleMessageResultListener
+   */
+  public void addListener(HandleMessageResultListener handleMessageResultListener) {
+    if (handleMessageResultListener != null) {
+      listeners.add(handleMessageResultListener);
     }
   }
 
+  /**
+   * Notify listeners of handling success.
+   */
   public void onHandleSuccess() {
-    for (HandleMessageEventListener listener : listeners) {
+    for (HandleMessageResultListener listener : listeners) {
       listener.onMessageHandleSuccess(this);
     }
   }
 
+  /**
+   * Notify listeners of handling failure.
+   * @param e
+   */
   public void onHandleFailure(Exception e) {
-    for (HandleMessageEventListener listener : listeners) {
+    for (HandleMessageResultListener listener : listeners) {
       listener.onMessageHandleFailure(this, e);
     }
   }

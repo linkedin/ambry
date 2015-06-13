@@ -9,14 +9,20 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * TODO: write description
+ * Executes the custom echo GET operation.
  */
 public class EchoExecutor implements TaskExecutor {
   public static String TEXT_KEY = "text";
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public AdminExecutionResult execute(AdminExecutionData executionData)
+  /**
+   * Refers to the text provided by the client in the operationData of the executionData header and echoes back
+   * @param executionData
+   * @return
+   * @throws RestServiceException
+   */
+  public JSONObject execute(AdminExecutionData executionData)
       throws RestServiceException {
     JSONObject data = executionData.getOperationData();
     if (data != null && data.has(TEXT_KEY)) {
@@ -33,10 +39,16 @@ public class EchoExecutor implements TaskExecutor {
     }
   }
 
-  private AdminExecutionResult packageResult(String text)
+  /**
+   * packages the result into a JSON.
+   * @param text
+   * @return
+   * @throws JSONException
+   */
+  private JSONObject packageResult(String text)
       throws JSONException {
     JSONObject result = new JSONObject();
     result.put(TEXT_KEY, text);
-    return new AdminExecutionResult(result);
+    return result;
   }
 }

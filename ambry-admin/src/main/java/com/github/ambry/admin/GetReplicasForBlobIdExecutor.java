@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * TODO: write description
+ * Executes the custom echo GetReplicasFroBlobId operation.
  */
 public class GetReplicasForBlobIdExecutor implements TaskExecutor {
   public static String BLOB_ID_KEY = "blobId";
@@ -28,7 +28,14 @@ public class GetReplicasForBlobIdExecutor implements TaskExecutor {
     this.clusterMap = clusterMap;
   }
 
-  public AdminExecutionResult execute(AdminExecutionData executionData)
+  /**
+   * Extracts the blob id provided by the client and figures out the partition that the blob id would belong to
+   * based on the cluster map. Using the partition information, returns the list of replicas.
+   * @param executionData
+   * @return
+   * @throws RestServiceException
+   */
+  public JSONObject execute(AdminExecutionData executionData)
       throws RestServiceException {
     JSONObject data = executionData.getOperationData();
     if (data != null && data.has(BLOB_ID_KEY)) {
@@ -47,16 +54,27 @@ public class GetReplicasForBlobIdExecutor implements TaskExecutor {
     }
   }
 
+  /**
+   * Gets replicas for the particular partition (using the cluster map).
+   * @param blobId
+   * @return
+   */
   private List<ReplicaId> getReplicas(BlobId blobId) {
     return blobId.getPartition().getReplicaIds();
   }
 
-  private AdminExecutionResult packageResult(List<ReplicaId> replicaIds)
+  /**
+   * Packages result into a JSON.
+   * @param replicaIds
+   * @return
+   * @throws JSONException
+   */
+  private JSONObject packageResult(List<ReplicaId> replicaIds)
       throws JSONException {
     JSONObject result = new JSONObject();
     for (ReplicaId replicaId : replicaIds) {
       result.append(REPLICAS_KEY, replicaId);
     }
-    return new AdminExecutionResult(result);
+    return result;
   }
 }

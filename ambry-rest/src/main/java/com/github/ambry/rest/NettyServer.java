@@ -2,7 +2,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.NIOServer;
+import com.github.ambry.restservice.NioServer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -24,9 +24,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of NIOServer. Handles Http for Ambry.
+ * Netty specific implementation of NioServer. Handles Http for Ambry.
  */
-public class NettyServer implements NIOServer {
+public class NettyServer implements NioServer {
   private final NettyConfig serverConfig;
   private final NettyMetrics nettyMetrics;
   private final RestRequestDelegator requestDelegator;

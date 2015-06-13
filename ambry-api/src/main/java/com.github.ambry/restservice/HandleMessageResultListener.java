@@ -1,9 +1,9 @@
 package com.github.ambry.restservice;
 
 /**
- * TODO: write description
+ * Interface that can be implemented to listen to handling results for a particular message info.
  */
-public interface HandleMessageEventListener {
+public interface HandleMessageResultListener {
 
   public void onMessageHandleSuccess(MessageInfo messageInfo);
 

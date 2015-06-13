@@ -6,7 +6,7 @@ import org.json.JSONObject;
 
 
 /**
- * TODO: write description
+ * Implementation of RestResponseHandler that can be used by tests.
  */
 public class MockRestResponseHandler implements RestResponseHandler {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
@@ -22,10 +22,30 @@ public class MockRestResponseHandler implements RestResponseHandler {
   private boolean responseFinalized = false;
   private boolean responseFlushed = false;
 
+  /**
+   * The response in constructed as a json object
+   * Contains:
+   * 1. responseStatus - the reponse status.
+   * 2. responseHeaders - the response headers as a json object.
+   *
+   * In case of error it contains an additional field
+   * 3. errorMessage
+   *
+   * Headers
+   * 1. contentType
+   */
   private JSONObject response = new JSONObject();
-
-  private StringBuilder bodyStringBuilder = new StringBuilder();
+  /**
+   * When addToBody is called, the bytes are added to end of this ByteArrayOutputStream.
+   * On flush, the bytes are emptied into bodyStringBuilder and reset.
+   * This essentially represents the un-flushed body only.
+   */
   private ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
+  /**
+   * String builder for the body. Whenever a flush is called, the raw bytes in bodyBytes are appended to this.
+   * This essentially represents the flushed body only.
+   */
+  private StringBuilder bodyStringBuilder = new StringBuilder();
 
   public void addToBody(byte[] data, boolean isLast) {
     verifyChannelOpen();
@@ -99,12 +119,18 @@ public class MockRestResponseHandler implements RestResponseHandler {
     }
   }
 
+  /**
+   * Verify state of response so that we do not try to finalize response more than once.
+   */
   private void verifyResponseAlive() {
     if (responseFinalized) {
       throw new IllegalStateException("Cannot re-finalize response");
     }
   }
 
+  /**
+   * Verify that channel is still open.
+   */
   private void verifyChannelOpen() {
     if (channelClosed) {
       throw new IllegalStateException("Channel has already been closed before write");
@@ -125,7 +151,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   public String getBody()
       throws RestServiceException {
-    return getFlushedBody() + bodyBytes.toString();
+    return getFlushedBody() + bodyBytes.toString(); // the full body contains both flushed and un-flushed data.
   }
 
   public String getFlushedBody()

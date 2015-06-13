@@ -1,8 +1,10 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.HandleMessageEventListener;
+import com.github.ambry.restservice.HandleMessageResultListener;
 import com.github.ambry.restservice.MessageInfo;
 import com.github.ambry.restservice.MockBlobStorageService;
 import com.github.ambry.restservice.MockRestRequest;
@@ -13,6 +15,7 @@ import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
@@ -117,9 +120,17 @@ public class RestMessageHandlerTest {
   // general
   private RestMessageHandler getRestMessageHandler()
       throws IOException {
-    BlobStorageService blobStorageService = new MockBlobStorageService();
+    BlobStorageService blobStorageService = getBlobStorageService();
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     return new RestMessageHandler(blobStorageService, serverMetrics);
+  }
+
+  private BlobStorageService getBlobStorageService()
+      throws IOException {
+    // dud properties. should pick up defaults
+    Properties properties = new Properties();
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    return new MockBlobStorageService(verifiableProperties, new MockClusterMap(), new MetricRegistry());
   }
 
   private RestRequest createRestRequest(RestMethod method, String uri, JSONObject headers)
@@ -280,7 +291,7 @@ public class RestMessageHandlerTest {
   }
 
   // monitor classes
-  private class MessageProcessingBadMonitor implements HandleMessageEventListener {
+  private class MessageProcessingBadMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
 
     public void onMessageHandleSuccess(MessageInfo messageInfo) {
@@ -299,7 +310,7 @@ public class RestMessageHandlerTest {
     }
   }
 
-  private class MessageProcessingSuccessMonitor implements HandleMessageEventListener {
+  private class MessageProcessingSuccessMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
     private final MockRestResponseHandler restResponseHandler;
     private final RestMethod restMethod;
@@ -340,7 +351,7 @@ public class RestMessageHandlerTest {
     }
   }
 
-  private class MessageProcessingFailureMonitor implements HandleMessageEventListener {
+  private class MessageProcessingFailureMonitor implements HandleMessageResultListener {
     private final CountDownLatch toBeProcessed = new CountDownLatch(1);
     private final RestServiceErrorCode expectedCode;
     private final Thread messageHandlerRunner;

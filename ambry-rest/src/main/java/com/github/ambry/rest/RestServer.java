@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.NIOServer;
+import com.github.ambry.restservice.NioServer;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +25,7 @@ public class RestServer {
   private final RestServerMetrics restServerMetrics;
   private final BlobStorageService blobStorageService;
   private final RestRequestDelegator requestDelegator;
-  private final NIOServer NIOServer;
+  private final NioServer nioServer;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -43,7 +43,7 @@ public class RestServer {
             BlobStorageServiceFactory.getBlobStorageService(verifiableProperties, clusterMap, metricRegistry);
         requestDelegator =
             new RestRequestDelegator(restServerConfig.getMessageHandlerCount(), restServerMetrics, blobStorageService);
-        NIOServer = NIOServerFactory.getNIOServer(verifiableProperties, metricRegistry, requestDelegator);
+        nioServer = NioServerFactory.getNIOServer(verifiableProperties, metricRegistry, requestDelegator);
       } catch (Exception e) {
         throw new InstantiationException("Error while creating rest server components - " + e);
       }
@@ -59,7 +59,7 @@ public class RestServer {
 
       blobStorageService.start();
       requestDelegator.start();
-      NIOServer.start();
+      nioServer.start();
 
       logger.info("Rest server started");
     } catch (Exception e) {
@@ -71,7 +71,7 @@ public class RestServer {
   public void shutdown()
       throws Exception {
     logger.info("Shutting down rest server");
-    NIOServer.shutdown();
+    nioServer.shutdown();
     requestDelegator.shutdown();
     blobStorageService.shutdown();
     logger.info("Rest server shutdown complete");

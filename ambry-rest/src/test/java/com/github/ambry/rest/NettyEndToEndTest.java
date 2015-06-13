@@ -1,10 +1,11 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.NIOServer;
+import com.github.ambry.restservice.NioServer;
 import com.github.ambry.restservice.RestMethod;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -42,14 +43,14 @@ public class NettyEndToEndTest {
   private static String NETTY_SERVER_ALTERNATE_PORT = "8089";
 
   private static RestRequestDelegator restRequestDelegator;
-  private static NIOServer nioServer;
+  private static NioServer nioServer;
 
   private static int POLL_MAGIC_TIMEOUT = 30; //seconds
 
   @BeforeClass
   public static void startNettyServer()
       throws InstantiationException, IOException {
-    restRequestDelegator = createRestRequestDelegator();
+    restRequestDelegator = createRestRequestDelegator(null);
     nioServer = createNettyServer(restRequestDelegator, null);
     restRequestDelegator.start();
     nioServer.start();
@@ -117,8 +118,8 @@ public class NettyEndToEndTest {
     Properties properties = new Properties();
     properties.setProperty(NettyConfig.PORT_KEY, NETTY_SERVER_ALTERNATE_PORT);
 
-    RestRequestDelegator delegator = createRestRequestDelegator();
-    NIOServer server = createNettyServer(delegator, properties);
+    RestRequestDelegator delegator = createRestRequestDelegator(properties);
+    NioServer server = createNettyServer(delegator, properties);
     server.start();
 
     // we haven't started the request delegator, so any request we send should result in a failure
@@ -157,11 +158,21 @@ public class NettyEndToEndTest {
     return new NettyServer(verifiableProperties, new MetricRegistry(), restRequestDelegator);
   }
 
-  private static RestRequestDelegator createRestRequestDelegator()
+  private static RestRequestDelegator createRestRequestDelegator(Properties properties)
       throws IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService();
+    BlobStorageService blobStorageService = getBlobStorageService(properties);
     return new RestRequestDelegator(1, restServerMetrics, blobStorageService);
+  }
+
+  private static BlobStorageService getBlobStorageService(Properties properties)
+      throws IOException {
+    if (properties == null) {
+      // dud properties. should pick up defaults
+      properties = new Properties();
+    }
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    return new MockBlobStorageService(verifiableProperties, new MockClusterMap(), new MetricRegistry());
   }
 
   // handleMessageSuccessTest() helpers

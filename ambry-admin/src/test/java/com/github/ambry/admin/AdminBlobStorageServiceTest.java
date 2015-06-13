@@ -29,10 +29,14 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Unit tests for AdminBlobStorageService
  */
 public class AdminBlobStorageServiceTest {
 
+  /**
+   * Tests basic startup and shutdown functionality (no exceptions).
+   * @throws Exception
+   */
   @Test
   public void startShutDownTest()
       throws Exception {
@@ -41,6 +45,13 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.shutdown();
   }
 
+  /**
+   * Tests traditional GET operations.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test(expected = IllegalStateException.class)
   public void handleGetTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -49,6 +60,13 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.handleMessage(messageInfo);
   }
 
+  /**
+   * Tests traditional POST operations.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test(expected = IllegalStateException.class)
   public void handlePostTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -57,6 +75,13 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.handleMessage(messageInfo);
   }
 
+  /**
+   * Tests traditional DELETE operations.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test(expected = IllegalStateException.class)
   public void handleDeleteTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -65,6 +90,13 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.handleMessage(messageInfo);
   }
 
+  /**
+   * Tests traditional HEAD operations.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test(expected = IllegalStateException.class)
   public void handleHeadTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -73,6 +105,14 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.handleMessage(messageInfo);
   }
 
+  /**
+   * Tests a custom GET operation - Echo. Checks to see that the echo matches input text.
+   * @throws InstantiationException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void handleEchoTest()
       throws InstantiationException, IOException, JSONException, RestServiceException, URISyntaxException {
@@ -85,6 +125,13 @@ public class AdminBlobStorageServiceTest {
     finishUpCheck(adminBlobStorageService, messageInfo);
   }
 
+  /**
+   * Tests reactions of the echo executor to bad input - specifically if we do not include required operationData.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void handleEchoWithBadInputTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -98,6 +145,15 @@ public class AdminBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests a custom GET operation - GetReplicasForBlobId. Matches the replicas returned from AdminBlobStorageService
+   * with replicas obtained locally.
+   * @throws InstantiationException
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void handleGetReplicasForBlobIdTest()
       throws InstantiationException, IOException, JSONException, RestServiceException, URISyntaxException {
@@ -109,6 +165,14 @@ public class AdminBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests reactions of the GetReplicasForBlobId executor to bad input - specifically if we do not include
+   * required operationData.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void handleGetReplicasForBlobIdWithBadInputTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -122,6 +186,13 @@ public class AdminBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests reaction of GET to custom operations that are not defined. Should throw exception.
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void customGetUnknownOperationTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -131,10 +202,21 @@ public class AdminBlobStorageServiceTest {
       adminBlobStorageService.handleMessage(messageInfo);
       fail("Test should have thrown Exception");
     } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnknownOperationType, e.getErrorCode());
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnknownCustomOperationType,
+          e.getErrorCode());
     }
   }
 
+  /**
+   * Tests reaction of GET to custom operations that have bad executionData. Should throw exceptions
+   * -> no operationType
+   * -> no operationData
+   * -> invalid JSON
+   * @throws IOException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   @Test
   public void customGetWithBadExecutionDataTest()
       throws IOException, JSONException, RestServiceException, URISyntaxException {
@@ -184,6 +266,15 @@ public class AdminBlobStorageServiceTest {
     return new AdminBlobStorageService(verifiableProperties, clusterMap, new MetricRegistry());
   }
 
+  /**
+   * Method to easily construct requests.
+   * @param restMethod
+   * @param uri
+   * @param headers
+   * @return
+   * @throws JSONException
+   * @throws URISyntaxException
+   */
   private RestRequest getRestRequest(RestMethod restMethod, String uri, JSONObject headers)
       throws JSONException, URISyntaxException {
     JSONObject request = new JSONObject();
@@ -193,18 +284,43 @@ public class AdminBlobStorageServiceTest {
     return new MockRestRequest(request);
   }
 
+  /**
+   * Method to easily create message information objects.
+   * @param restMethod
+   * @param uri
+   * @param headers
+   * @return
+   * @throws JSONException
+   * @throws URISyntaxException
+   */
   private MessageInfo createMessageInfo(RestMethod restMethod, String uri, JSONObject headers)
       throws JSONException, URISyntaxException {
     RestRequest restRequest = getRestRequest(restMethod, uri, headers);
     return new MessageInfo(restRequest, restRequest, new MockRestResponseHandler());
   }
 
+  /**
+   * Decodes the response received from the BlobStorageService.
+   * @param messageInfo
+   * @return
+   * @throws JSONException
+   * @throws RestServiceException
+   */
   private JSONObject getJsonizedResponseBody(MessageInfo messageInfo)
       throws JSONException, RestServiceException {
     MockRestResponseHandler restResponseHandler = (MockRestResponseHandler) messageInfo.getResponseHandler();
     return new JSONObject(restResponseHandler.getFlushedBody());
   }
 
+  /**
+   * Concludes the test by putting in the end marker (last RestContent) and checks that the BlobStorageService
+   * interprets it correctly.
+   * @param adminBlobStorageService
+   * @param messageInfo
+   * @throws InstantiationException
+   * @throws JSONException
+   * @throws RestServiceException
+   */
   private void finishUpCheck(AdminBlobStorageService adminBlobStorageService, MessageInfo messageInfo)
       throws InstantiationException, JSONException, RestServiceException {
     RestContent lastContent = createRestContent(true);
@@ -213,6 +329,13 @@ public class AdminBlobStorageServiceTest {
     assertTrue("Channel is not closed", ((MockRestResponseHandler) messageInfo.getResponseHandler()).isChannelClosed());
   }
 
+  /**
+   * Method to easily create RestContent
+   * @param isLast
+   * @return
+   * @throws InstantiationException
+   * @throws JSONException
+   */
   private RestContent createRestContent(boolean isLast)
       throws InstantiationException, JSONException {
     JSONObject data = new JSONObject();
@@ -241,6 +364,7 @@ public class AdminBlobStorageServiceTest {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
+    // bad input - operation data does not have text that needs to be echoed.
     executionData.put(AdminExecutionData.OPERATION_TYPE_KEY, "Echo");
     executionData.put(AdminExecutionData.OPERATION_DATA_KEY, operationData);
     headers.put(AdminBlobStorageService.EXECUTION_DATA_HEADER_KEY, executionData);
@@ -249,6 +373,17 @@ public class AdminBlobStorageServiceTest {
   }
 
   // handleGetReplicasForBlobIdTest() helpers
+
+  /**
+   * For each parition in the cluster map, a blob id is created. This blob id is sent to the server and the returned
+   * replica list is checked against the locally obtained replica list.
+   * @param partitionId
+   * @param adminBlobStorageService
+   * @throws InstantiationException
+   * @throws JSONException
+   * @throws RestServiceException
+   * @throws URISyntaxException
+   */
   private void createBlobIdAndTest(PartitionId partitionId, AdminBlobStorageService adminBlobStorageService)
       throws InstantiationException, JSONException, RestServiceException, URISyntaxException {
     String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
@@ -281,6 +416,7 @@ public class AdminBlobStorageServiceTest {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
+    // bad input - operationData missing the blob id whose replicas need to be returned.
     executionData.put(AdminExecutionData.OPERATION_TYPE_KEY, "GetReplicasForBlobId");
     executionData.put(AdminExecutionData.OPERATION_DATA_KEY, operationData);
     headers.put(AdminBlobStorageService.EXECUTION_DATA_HEADER_KEY, executionData);
@@ -295,7 +431,7 @@ public class AdminBlobStorageServiceTest {
     JSONObject executionData = new JSONObject();
     JSONObject operationData = new JSONObject();
     operationData.put("dummyData", "dummyData");
-    executionData.put(AdminExecutionData.OPERATION_TYPE_KEY, "@@@UnknownOperation@@@");
+    executionData.put(AdminExecutionData.OPERATION_TYPE_KEY, "@@@UnknownOperation@@@");  // bad input - unknown cust op
     executionData.put(AdminExecutionData.OPERATION_DATA_KEY, operationData);
     headers.put(AdminBlobStorageService.EXECUTION_DATA_HEADER_KEY, executionData);
 
@@ -306,7 +442,7 @@ public class AdminBlobStorageServiceTest {
   private MessageInfo createMessageInfoWithExecDataNotValidJSON()
       throws JSONException, URISyntaxException {
     JSONObject headers = new JSONObject();
-    headers.put("executionData", "@@@InvalidJSON@@@");
+    headers.put("executionData", "@@@InvalidJSON@@@"); // bad input - execution data is not a json object
 
     return createMessageInfo(RestMethod.GET, "/", headers);
   }
@@ -316,6 +452,7 @@ public class AdminBlobStorageServiceTest {
     JSONObject operationData = new JSONObject();
     operationData.put("text", "text");
     JSONObject executionData = new JSONObject();
+    // bad input - operation type missing
     executionData.put(AdminExecutionData.OPERATION_DATA_KEY, operationData);
 
     JSONObject headers = new JSONObject();
@@ -328,7 +465,7 @@ public class AdminBlobStorageServiceTest {
       throws JSONException, URISyntaxException {
     JSONObject executionData = new JSONObject();
     executionData.put(AdminExecutionData.OPERATION_TYPE_KEY, "Echo");
-
+    // bad input - operation data missing
     JSONObject headers = new JSONObject();
     headers.put("executionData", executionData);
 

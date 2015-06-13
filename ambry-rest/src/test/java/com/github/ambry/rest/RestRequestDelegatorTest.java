@@ -1,11 +1,14 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.MockBlobStorageService;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
 import java.io.IOException;
+import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -66,7 +69,15 @@ public class RestRequestDelegatorTest {
   private RestRequestDelegator createDelegator(int handlerCount)
       throws IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService();
+    BlobStorageService blobStorageService = getBlobStorageService();
     return new RestRequestDelegator(handlerCount, restServerMetrics, blobStorageService);
+  }
+
+  private BlobStorageService getBlobStorageService()
+      throws IOException {
+    // dud properties. should pick up defaults
+    Properties properties = new Properties();
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    return new MockBlobStorageService(verifiableProperties, new MockClusterMap(), new MetricRegistry());
   }
 }

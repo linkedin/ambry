@@ -5,13 +5,16 @@ import com.github.ambry.config.VerifiableProperties;
 
 
 /**
- * TODO: write description
+ * Implementation of NioServer that can be used in tests.
  */
-public class MockNIOServer implements NIOServer {
+public class MockNioServer implements NioServer {
   public static String IS_FAULTY_KEY = "isFaulty";
+  /**
+   * Sets this server to be faulty (mainly to check for behaviour under NioServer failures).
+   */
   private final boolean isFaulty;
 
-  public MockNIOServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public MockNioServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 

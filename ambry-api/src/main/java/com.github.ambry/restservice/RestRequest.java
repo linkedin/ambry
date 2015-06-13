@@ -4,7 +4,7 @@ import java.util.List;
 
 
 /**
- * Interface for RestRequest
+ * Interface for RestRequest - the uri + headers part of a request.
  */
 public interface RestRequest extends RestObject {
   /**
@@ -15,21 +15,21 @@ public interface RestRequest extends RestObject {
   public RestMethod getRestMethod();
 
   /**
-   * Return the path (the parts of the url after the domain)
+   * Return the path (the parts of the url after the domain excluding options).
    *
    * @return path
    */
   public String getPath();
 
   /**
-   * Return the request URI
+   * Return the request URI.
    *
    * @return request URI
    */
   public String getUri();
 
   /**
-   * Get the value of a certain header
+   * Get the value of a certain header.
    *
    * @param name
    * @return
@@ -37,7 +37,7 @@ public interface RestRequest extends RestObject {
   public Object getValueOfHeader(String name);
 
   /**
-   * Return the values of a particular parameter in the URI
+   * Return the values of a particular parameter in the URI.
    *
    * @param parameter
    * @return the values of the parameter in the URI

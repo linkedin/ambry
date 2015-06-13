@@ -1,10 +1,12 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.NIOServer;
+import com.github.ambry.restservice.NioServer;
+import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -19,7 +21,7 @@ public class NettyServerTest {
   @Test
   public void startShutdownTest()
       throws Exception {
-    NIOServer nioServer = getNettyServer();
+    NioServer nioServer = getNettyServer(null);
     nioServer.start();
     nioServer.shutdown();
   }
@@ -29,7 +31,7 @@ public class NettyServerTest {
       throws Exception {
     Properties properties = new Properties();
     properties.setProperty(NettyConfig.PORT_KEY, "abcd"); // should be int. So will throw at instantiation
-    NIOServer nioServer = null;
+    NioServer nioServer = null;
     try {
       nioServer = getNettyServer(properties);
       fail("Netty server startup should have failed because of bad port value");
@@ -57,23 +59,31 @@ public class NettyServerTest {
 
   // helpers
   // general
-  private NettyServer getNettyServer()
-      throws InstantiationException {
-    // dud properties. should pick up defaults
-    Properties properties = new Properties();
-    return getNettyServer(properties);
-  }
-
-  private RestRequestDelegator getRestRequestDelegator() {
+  private RestRequestDelegator getRestRequestDelegator(Properties properties)
+      throws IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService();
+    BlobStorageService blobStorageService = getBlobStorageService(properties);
     return new RestRequestDelegator(1, restServerMetrics, blobStorageService);
   }
 
-  private NettyServer getNettyServer(Properties properties)
-      throws InstantiationException {
+  private BlobStorageService getBlobStorageService(Properties properties)
+      throws IOException {
+    if (properties == null) {
+      // dud properties. should pick up defaults
+      properties = new Properties();
+    }
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    RestRequestDelegator requestDelegator = getRestRequestDelegator();
+    return new MockBlobStorageService(verifiableProperties, new MockClusterMap(), new MetricRegistry());
+  }
+
+  private NettyServer getNettyServer(Properties properties)
+      throws InstantiationException, IOException {
+    if (properties == null) {
+      // dud properties. should pick up defaults
+      properties = new Properties();
+    }
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    RestRequestDelegator requestDelegator = getRestRequestDelegator(properties);
     return new NettyServer(verifiableProperties, new MetricRegistry(), requestDelegator);
   }
 }

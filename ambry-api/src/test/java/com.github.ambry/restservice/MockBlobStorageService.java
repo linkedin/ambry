@@ -8,11 +8,9 @@ import org.json.JSONObject;
 
 
 /**
- * TODO: write description
+ * Implementation of the BlobStorageService for testing purposes.
  */
 public class MockBlobStorageService implements BlobStorageService {
-  //TODO: This class will probably change once we get in more components of blob storage service.
-
   public static String EXECUTION_DATA_HEADER_KEY = "executionData";
   public static String OPERATION_TYPE_KEY = "operationType";
   public static String OPERATION_DATA_KEY = "operationData";
@@ -21,11 +19,10 @@ public class MockBlobStorageService implements BlobStorageService {
   public static String OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION = "throwHandlingRuntimeException";
   public static String OPERATION_THROW_PROCESSING_UNCHECKED_EXCEPTION = "throwProcessingUncheckedException";
 
-  public MockBlobStorageService() {
-  }
-
   public MockBlobStorageService(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       MetricRegistry metricRegistry) {
+    // this constructor is around so that this can be instantiated from the NioServerFactory.
+    // we might have uses for the arguments in the future.
   }
 
   public void start()
@@ -36,6 +33,11 @@ public class MockBlobStorageService implements BlobStorageService {
       throws Exception {
   }
 
+  /**
+   * This handle message can be instructed to throw exceptions. Otherwise it handles the message in the normal way
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   public void handleMessage(MessageInfo messageInfo)
       throws RestServiceException {
     // for testing
@@ -52,6 +54,11 @@ public class MockBlobStorageService implements BlobStorageService {
     doHandleMessage(messageInfo);
   }
 
+  /**
+   * Delegates custom operations. All other messages are handled by echoing the rest method back to the client.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   private void doHandleMessage(MessageInfo messageInfo)
       throws RestServiceException {
     RestMethod restMethod = messageInfo.getRestRequest().getRestMethod();
@@ -72,10 +79,21 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  /**
+   * Check for the presence of executionData to determine whether this is a custom operation.
+   * @param request
+   * @return
+   */
   private boolean isCustomOperation(RestRequest request) {
     return request.getValueOfHeader(EXECUTION_DATA_HEADER_KEY) != null;
   }
 
+  /**
+   * Extract the data in the executionData header.
+   * @param restRequest
+   * @return
+   * @throws RestServiceException
+   */
   private JSONObject getExecutionData(RestRequest restRequest)
       throws RestServiceException {
     Object executionData = restRequest.getValueOfHeader(EXECUTION_DATA_HEADER_KEY);
@@ -94,6 +112,11 @@ public class MockBlobStorageService implements BlobStorageService {
     return null;
   }
 
+  /**
+   * Retrieve operation type from the executionData.
+   * @param data
+   * @return
+   */
   private String getOperationType(JSONObject data) {
     try {
       return data.getString(OPERATION_TYPE_KEY);
@@ -102,6 +125,11 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  /**
+   * Retrieve operationData from the executionData.
+   * @param data
+   * @return
+   */
   private Object getOperationData(JSONObject data) {
     try {
       return data.get(OPERATION_DATA_KEY);
@@ -110,12 +138,17 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  /**
+   * Execute any requested custom operations. (for e.g. throw exceptions to check behaviour of RestMessageHandler).
+   * @param messageInfo
+   * @throws RestServiceException
+   */
   private void executeCustomOperation(MessageInfo messageInfo)
       throws RestServiceException {
     /**
      *  Suggestion for extending functionality when required :
-     *  Check if restRequest is an instance of MockRestRequest. After that you can support
-     *  any kind of custom function as long as it can be reached through MockRestRequest.
+     *  Check if restRequest is an instance of MockRestRequest. If it is, you can support
+     *  any kind of custom function as long as it can be reached through MockRestRequest as a callback.
      */
 
     RestObject restObject = messageInfo.getRestObject();

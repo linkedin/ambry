@@ -5,12 +5,18 @@ import org.json.JSONObject;
 
 
 /**
- * TODO: write description
+ * Implmentation of RestContent that be used for tests. Input content should be JSON.
  */
 public class MockRestContent implements RestContent {
   public static String CONTENT_KEY = "content";
   public static String IS_LAST_KEY = "isLast";
 
+  /**
+   * underlying data.
+   * Contains: -
+   * "content" - the actual content.
+   * "isLast" - if this the last content (end marker).
+   */
   private JSONObject data;
 
   public MockRestContent(JSONObject data)

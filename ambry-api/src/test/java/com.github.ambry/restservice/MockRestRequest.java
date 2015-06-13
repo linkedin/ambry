@@ -13,15 +13,25 @@ import org.json.JSONObject;
 
 
 /**
- * TODO: write description
+ * Implementation of RestRequest that can be used in tests.
  */
 public class MockRestRequest implements RestRequest {
   public static String REST_METHOD_KEY = "restMethod";
   public static String URI_KEY = "uri";
   public static String HEADERS_KEY = "headers";
 
+  /**
+   * the underlying request data in the form of JSON
+   * Contains: -
+   * 1. restMethod - the http method required
+   * 2. uri - the uri
+   * 3. headers - all the headers as a json object
+   */
   private final JSONObject data;
   private final URI uri;
+  /**
+   * map that stores all the query parameters as key value pairs
+   */
   private Map<String, List<String>> parameterValues;
 
   public MockRestRequest(JSONObject data)
@@ -69,6 +79,11 @@ public class MockRestRequest implements RestRequest {
     //nothing to do
   }
 
+  /**
+   * Uses the uri and decodes all the query parameters into key value pairs. Handles multiple values for the
+   * same parameter and parameters without values.
+   * @throws UnsupportedEncodingException
+   */
   private void generateParameterValues()
       throws UnsupportedEncodingException {
     parameterValues = new HashMap<String, List<String>>();

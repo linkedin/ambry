@@ -1,7 +1,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.HandleMessageEventListener;
+import com.github.ambry.restservice.HandleMessageResultListener;
 import com.github.ambry.restservice.MessageInfo;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Interface for a RestRequestDelegator
  */
-public class RestRequestDelegator implements HandleMessageEventListener {
+public class RestRequestDelegator implements HandleMessageResultListener {
 
   private final RestServerMetrics restServerMetrics;
   private final BlobStorageService blobStorageService;

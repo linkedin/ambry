@@ -1,22 +1,21 @@
 package com.github.ambry.restservice;
 
 /**
- * Interface for a rest server
+ * Interface for a NIO (non blocking I/O) server.
  */
+public interface NioServer {
 
-/**
- * Components required for LI:
- * 1. Config (UC)
- * 2. Blob storage service
- * 3. Metrics
- * 4. VIP request handler
- * 5. JMX reporter?
- * 6. Public access log
- */
-public interface NIOServer {
+  /**
+   * Do startup tasks for the NioServer. Return when startup is FULLY complete.
+   * @throws InstantiationException
+   */
   public void start()
       throws InstantiationException;
 
+  /**
+   * Do shutdown tasks for the NioServer. Return when shutdown is FULLY complete.
+   * @throws Exception
+   */
   public void shutdown()
       throws Exception;
 }

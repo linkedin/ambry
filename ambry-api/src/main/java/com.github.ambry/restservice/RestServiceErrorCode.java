@@ -8,7 +8,7 @@ public enum RestServiceErrorCode {
   BadRequest,
   DuplicateRequest,
   NoRequest,
-  UnknownOperationType,
+  UnknownCustomOperationType,
   UnknownRestMethod,
   InternalServerError,
   ChannelActiveTasksFailure,
