@@ -252,7 +252,7 @@ public class DumpData {
 
   public void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter)
       throws IOException {
-    System.out.println("Dumping log");
+    logOutput("Dumping log");
     long currentOffset = 0;
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
     long fileSize = file.length();
@@ -264,8 +264,9 @@ public class DumpData {
     if (endOffset == -1) {
       endOffset = fileSize;
     }
-    System.out.println("Starting dumping from offset " + currentOffset);
+    logOutput("Starting dumping from offset " + currentOffset);
     while (currentOffset < endOffset) {
+
       long tempCurrentOffset = currentOffset;
       String messageheader = null;
       String blobId = null;
@@ -279,7 +280,7 @@ public class DumpData {
           ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
           buffer.putShort(version);
           randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-          buffer.flip();
+          buffer.clear();
           MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
           messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
               " currentOffset " + currentOffset +
@@ -310,51 +311,50 @@ public class DumpData {
           if (!isDeleted) {
             if (filter) {
               if (blobs.contains(id.getID())) {
-                System.out.println(
+                logOutput(
                     messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
               }
             } else {
-              System.out.println(
+              logOutput(
                   messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
             }
           } else {
             if (filter) {
               if (blobs.contains(id.getID())) {
-                System.out.println(messageheader + "\n " + blobId + "\n" + deleteMsg);
+                logOutput(messageheader + "\n " + blobId + "\n" + deleteMsg);
               }
             } else {
-              System.out.println(messageheader + "\n " + blobId + "\n" + deleteMsg);
+              logOutput(messageheader + "\n " + blobId + "\n" + deleteMsg);
             }
           }
           currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
         } else {
           if (!lastBlobFailed) {
-            System.out
-                .println("Header Version not supported. Thrown at reading a msg starting at " + tempCurrentOffset);
+            logOutput("Header Version not supported. Thrown at reading a msg starting at " + tempCurrentOffset);
             lastBlobFailed = true;
           }
           randomAccessFile.seek(++tempCurrentOffset);
           currentOffset = tempCurrentOffset;
         }
       } catch (IllegalArgumentException e) {
-        System.out.println("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
+        logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
             "while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
             + blobProperty + usermetadata + blobOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (MessageFormatException e) {
-        System.out.println("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
+        logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
             " while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
             + blobProperty + usermetadata + blobOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (EOFException e) {
         e.printStackTrace();
-        System.out.println("EOFException thrown at " + randomAccessFile.getChannel().position());
+        logOutput("EOFException thrown at " + randomAccessFile.getChannel().position());
         throw (e);
       } catch (Exception e) {
         e.printStackTrace();
-        System.out.println(
+        logOutput(
             "Unknown exception thrown " + e.getMessage() + "\nTrying from next offset " + (tempCurrentOffset + 1));
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
@@ -365,7 +365,7 @@ public class DumpData {
   public void dumpReplicaToken(File replicaTokenFile)
       throws IOException, NoSuchMethodException, InstantiationException, IllegalAccessException,
              ClassNotFoundException, InvocationTargetException {
-    System.out.println("Dumping replica token");
+    logOutput("Dumping replica token");
     DataInputStream stream = new DataInputStream(new FileInputStream(replicaTokenFile));
     short version = stream.readShort();
     switch (version) {
@@ -387,11 +387,11 @@ public class DumpData {
           long totalBytesReadFromLocalStore = stream.readLong();
           // read replica token
           FindToken token = findTokenFactory.getFindToken(stream);
-          System.out.println(
+          logOutput(
               "partitionId " + partitionId + " hostname " + hostname + " replicaPath " + replicaPath + " port " + port
                   + " totalBytesReadFromLocalStore " + totalBytesReadFromLocalStore + " token " + token);
         }
-        System.out.println("crc " + stream.readLong());
+        logOutput("crc " + stream.readLong());
     }
   }
 
