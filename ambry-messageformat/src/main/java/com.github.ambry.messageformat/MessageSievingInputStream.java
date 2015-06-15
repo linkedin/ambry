@@ -74,7 +74,7 @@ public class MessageSievingInputStream extends InputStream {
       Utils.readBytesFromStream(stream, data, offset, msgSize);
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
       ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
-      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
+      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory, msgInfo)) {
         offset += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
@@ -154,7 +154,7 @@ public class MessageSievingInputStream extends InputStream {
    * @throws IOException
    */
   private boolean checkForMessageValidity(ByteArrayInputStream byteArrayInputStream, int currentOffset, long size,
-      StoreKeyFactory storeKeyFactory)
+      StoreKeyFactory storeKeyFactory, MessageInfo msgInfo)
       throws IOException {
     boolean isValid = false;
     BlobProperties props = null;
@@ -201,7 +201,12 @@ public class MessageSievingInputStream extends InputStream {
           logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
               props.getBlobSize(), metadata.capacity(), output.getSize());
         }
-        isValid = true;
+        if(msgInfo.getStoreKey().equals(storeKey)){
+          isValid = true;
+        }
+        else{
+          logger.error("StoreKey in log " + storeKey +" failed to match store key from Index " + msgInfo.getStoreKey());
+        }
       } else {
         throw new MessageFormatException("Header version not supported " + version,
             MessageFormatErrorCodes.Data_Corrupt);
