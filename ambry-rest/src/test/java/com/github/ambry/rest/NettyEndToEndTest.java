@@ -62,11 +62,9 @@ public class NettyEndToEndTest {
 
   /**
    * Shuts down the NettyServer and RequestDelegator. Called just once after all the tests.
-   * @throws Exception
    */
   @AfterClass
-  public static void shutdownNettyServer()
-      throws Exception {
+  public static void shutdownNettyServer() {
     nioServer.shutdown();
     restRequestDelegator.shutdown();
   }

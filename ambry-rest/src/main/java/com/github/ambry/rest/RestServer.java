@@ -43,7 +43,7 @@ public class RestServer {
   private final RestRequestDelegator requestDelegator;
   private final NioServer nioServer;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
@@ -90,10 +90,8 @@ public class RestServer {
 
   /**
    * Shuts down up all the components. Returns when shutdown is FULLY complete.
-   * @throws Exception
    */
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
     logger.info("Shutting down rest server");
     nioServer.shutdown();
     requestDelegator.shutdown();

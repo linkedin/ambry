@@ -5,7 +5,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.MessageInfo;
-import com.github.ambry.restservice.RestMethod;
 import com.github.ambry.restservice.RestRequest;
 import com.github.ambry.restservice.RestResponseHandler;
 import com.github.ambry.restservice.RestServiceErrorCode;
@@ -24,7 +23,7 @@ public class AdminBlobStorageService implements BlobStorageService {
 
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminBlobStorageService(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       MetricRegistry metricRegistry) {
@@ -37,36 +36,8 @@ public class AdminBlobStorageService implements BlobStorageService {
     logger.info("Admin blob storage service started");
   }
 
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
     logger.info("Admin blob storage service shutdown");
-  }
-
-  /**
-   * Entry point for handling operations. This gets called from the RestMessageHandler.
-   * @param messageInfo
-   * @throws RestServiceException
-   */
-  public void handleMessage(MessageInfo messageInfo)
-      throws RestServiceException {
-    RestMethod restMethod = messageInfo.getRestRequest().getRestMethod();
-    switch (restMethod) {
-      case GET:
-        handleGet(messageInfo);
-        break;
-      case POST:
-        handlePost(messageInfo);
-        break;
-      case DELETE:
-        handleDelete(messageInfo);
-        break;
-      case HEAD:
-        handleHead(messageInfo);
-        break;
-      default:
-        adminMetrics.unknownActionErrorCount.inc();
-        throw new RestServiceException("Unknown rest method - " + restMethod, RestServiceErrorCode.UnknownRestMethod);
-    }
   }
 
   /**
@@ -94,7 +65,7 @@ public class AdminBlobStorageService implements BlobStorageService {
    * @param messageInfo
    * @throws RestServiceException
    */
-  private void handleGet(MessageInfo messageInfo)
+  public void handleGet(MessageInfo messageInfo)
       throws RestServiceException {
     RestRequest request = messageInfo.getRestRequest();
     logger.trace("Handling get request - " + request.getUri());
@@ -204,7 +175,7 @@ public class AdminBlobStorageService implements BlobStorageService {
    * Placeholder for POST operations.
    * @param messageInfo
    */
-  private void handlePost(MessageInfo messageInfo) {
+  public void handlePost(MessageInfo messageInfo) {
     throw new IllegalStateException("handleGet() not implemented in " + this.getClass().getSimpleName());
   }
 
@@ -212,7 +183,7 @@ public class AdminBlobStorageService implements BlobStorageService {
    * Placeholder for DELETE operations.
    * @param messageInfo
    */
-  private void handleDelete(MessageInfo messageInfo) {
+  public void handleDelete(MessageInfo messageInfo) {
     throw new IllegalStateException("handleDelete() not implemented in " + this.getClass().getSimpleName());
   }
 
@@ -220,7 +191,7 @@ public class AdminBlobStorageService implements BlobStorageService {
    * Placeholder for HEAD operations.
    * @param messageInfo
    */
-  private void handleHead(MessageInfo messageInfo) {
+  public void handleHead(MessageInfo messageInfo) {
     throw new IllegalStateException("handleHead() not implemented in " + this.getClass().getSimpleName());
   }
 }

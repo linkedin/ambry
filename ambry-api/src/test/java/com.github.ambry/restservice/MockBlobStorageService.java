@@ -17,7 +17,6 @@ public class MockBlobStorageService implements BlobStorageService {
 
   public static String OPERATION_THROW_HANDLING_REST_EXCEPTION = "throwHandlingRestException";
   public static String OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION = "throwHandlingRuntimeException";
-  public static String OPERATION_THROW_PROCESSING_UNCHECKED_EXCEPTION = "throwProcessingUncheckedException";
 
   public MockBlobStorageService(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       MetricRegistry metricRegistry) {
@@ -29,28 +28,26 @@ public class MockBlobStorageService implements BlobStorageService {
       throws InstantiationException {
   }
 
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
   }
 
-  /**
-   * Handle incoming messages. Can be used to throw exceptions and test error handling upstream.
-   * @param messageInfo
-   * @throws RestServiceException
-   */
-  public void handleMessage(MessageInfo messageInfo)
+  public void handleGet(MessageInfo messageInfo)
       throws RestServiceException {
-    // for testing
-    RestObject restObject = messageInfo.getRestObject();
-    if (restObject != null && restObject instanceof RestRequest && isCustomOperation((RestRequest) restObject)) {
-      JSONObject executionData = getExecutionData((RestRequest) restObject);
-      String operationType = getOperationType(executionData);
-      if (OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION.equals(operationType)) {
-        throw new RuntimeException("Requested handling exception");
-      } else if (OPERATION_THROW_HANDLING_REST_EXCEPTION.equals(operationType)) {
-        throw new RestServiceException("Requested handling rest exception", RestServiceErrorCode.InternalServerError);
-      }
-    }
+    doHandleMessage(messageInfo);
+  }
+
+  public void handlePost(MessageInfo messageInfo)
+      throws RestServiceException {
+    doHandleMessage(messageInfo);
+  }
+
+  public void handleDelete(MessageInfo messageInfo)
+      throws RestServiceException {
+    doHandleMessage(messageInfo);
+  }
+
+  public void handleHead(MessageInfo messageInfo)
+      throws RestServiceException {
     doHandleMessage(messageInfo);
   }
 
@@ -154,11 +151,13 @@ public class MockBlobStorageService implements BlobStorageService {
     RestObject restObject = messageInfo.getRestObject();
     JSONObject executionData = getExecutionData((RestRequest) restObject);
     if (executionData != null) {
-      String customOperation = getOperationType(executionData);
-      if (OPERATION_THROW_PROCESSING_UNCHECKED_EXCEPTION.equals(customOperation)) {
-        throw new RuntimeException("Requested processing exception");
+      String operationType = getOperationType(executionData);
+      if (OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION.equals(operationType)) {
+        throw new RuntimeException("Requested handling exception");
+      } else if (OPERATION_THROW_HANDLING_REST_EXCEPTION.equals(operationType)) {
+        throw new RestServiceException("Requested handling rest exception", RestServiceErrorCode.InternalServerError);
       } else {
-        throw new RestServiceException("Unknown " + OPERATION_TYPE_KEY + " - " + customOperation,
+        throw new RestServiceException("Unknown " + OPERATION_TYPE_KEY + " - " + operationType,
             RestServiceErrorCode.BadRequest);
       }
     } else {

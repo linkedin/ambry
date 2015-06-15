@@ -34,7 +34,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final RestRequestDelegator requestDelegator;
   private final NettyMetrics nettyMetrics;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Each of these live through the lifetime of a request.

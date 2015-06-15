@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 public class EchoExecutor implements TaskExecutor {
   public static String TEXT_KEY = "text";
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Refers to the text provided by the client in the operationData of the executionData header and echoes back

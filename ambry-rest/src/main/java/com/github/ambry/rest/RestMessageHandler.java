@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.HandleMessageResultListener;
 import com.github.ambry.restservice.MessageInfo;
+import com.github.ambry.restservice.RestMethod;
 import com.github.ambry.restservice.RestRequest;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
@@ -42,7 +43,7 @@ public class RestMessageHandler implements Runnable {
   private final LinkedBlockingQueue<MessageInfo> messageInfoQueue = new LinkedBlockingQueue<MessageInfo>();
   private final RestServerMetrics restServerMetrics;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public RestMessageHandler(BlobStorageService blobStorageService, RestServerMetrics restServerMetrics) {
     this.blobStorageService = blobStorageService;
@@ -109,7 +110,24 @@ public class RestMessageHandler implements Runnable {
    */
   private void processMessage(MessageInfo messageInfo)
       throws RestServiceException {
-    blobStorageService.handleMessage(messageInfo);
+    RestMethod restMethod = messageInfo.getRestRequest().getRestMethod();
+    switch (restMethod) {
+      case GET:
+        blobStorageService.handleGet(messageInfo);
+        break;
+      case POST:
+        blobStorageService.handlePost(messageInfo);
+        break;
+      case DELETE:
+        blobStorageService.handleDelete(messageInfo);
+        break;
+      case HEAD:
+        blobStorageService.handleHead(messageInfo);
+        break;
+      default:
+        restServerMetrics.handlerUnknownRestMethodErrorCount.inc();
+        throw new RestServiceException("Unknown rest method - " + restMethod, RestServiceErrorCode.UnknownRestMethod);
+    }
   }
 
   /**

@@ -23,7 +23,7 @@ public class RestServerMetrics {
   public final Counter handlerResponseHandlerMissingErrorCount;
   public final Counter handlerRestObjectMissingErrorCount;
   public final Counter handlerRestRequestMissingErrorCount;
-  public final Counter handlerUnknownHttpMethodErrorCount;
+  public final Counter handlerUnknownRestMethodErrorCount;
 
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -45,7 +45,7 @@ public class RestServerMetrics {
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerRestObjectMissingErrorCount"));
     handlerRestRequestMissingErrorCount =
         metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerRestRequestMissingErrorCount"));
-    handlerUnknownHttpMethodErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerUnknownHttpMethodErrorCount"));
+    handlerUnknownRestMethodErrorCount =
+        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerUnknownRestMethodErrorCount"));
   }
 }

@@ -17,7 +17,7 @@ public class AdminExecutionData {
 
   protected final JSONObject data;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminExecutionData(JSONObject data) {
     verifyData(data);

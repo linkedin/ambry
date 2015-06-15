@@ -40,7 +40,7 @@ public class NettyResponseHandler implements RestResponseHandler {
   private boolean errorSent = false;
   private boolean responseFinalized = false;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public NettyResponseHandler(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
     this.ctx = ctx;

@@ -25,10 +25,6 @@ public class MockNioServer implements NioServer {
     }
   }
 
-  public void shutdown()
-      throws Exception {
-    if (isFaulty) {
-      throw new Exception("Faulty rest server shutdown failed");
-    }
+  public void shutdown() {
   }
 }

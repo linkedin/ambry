@@ -34,7 +34,7 @@ public class NettyServer implements NioServer {
    */
   private final RestRequestDelegator requestDelegator;
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
@@ -73,18 +73,22 @@ public class NettyServer implements NioServer {
     }
   }
 
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
     if (bossGroup != null && workerGroup != null) {
       logger.info("Shutting down netty server..");
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
-      if (!awaitTermination(60, TimeUnit.SECONDS)) {
-        throw new Exception("NettyServer shutdown failed after waiting for 60 seconds");
+      try {
+        if (!awaitTermination(60, TimeUnit.SECONDS)) {
+          logger.error("NettyServer shutdown failed after waiting for 60 seconds");
+        } else {
+          bossGroup = null;
+          workerGroup = null;
+          logger.info("Netty server shutdown");
+        }
+      } catch (InterruptedException e) {
+        logger.error("Termination await interrupted while attempting to shutdown NettyServer - " + e);
       }
-      bossGroup = null;
-      workerGroup = null;
-      logger.info("Netty server shutdown");
     }
   }
 

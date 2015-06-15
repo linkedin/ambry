@@ -35,13 +35,12 @@ public class RestRequestDelegator implements HandleMessageResultListener {
    * The list of RestMessageHandler instances that have been started up
    */
   private final List<RestMessageHandler> messageHandlers;
-
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   /**
    * Executor pool for the RestMessageHandler instances.
    */
   private ExecutorService executor;
   private int currIndex = 0;
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public RestRequestDelegator(int handlerCount, RestServerMetrics restServerMetrics,
       BlobStorageService blobStorageService)
@@ -58,9 +57,9 @@ public class RestRequestDelegator implements HandleMessageResultListener {
   }
 
   /**
-   * Does startup tasks for the delegator
+   * Does startup tasks for the delegator. Returns when startup is FULLY complete.
    *
-   * @throws Exception
+   * @throws InstantiationException
    */
   public void start()
       throws InstantiationException {
@@ -98,25 +97,29 @@ public class RestRequestDelegator implements HandleMessageResultListener {
   }
 
   /**
-   * Does shutdown tasks for the delegator.
-   *
-   * @throws Exception
+   * Does shutdown tasks for the delegator. Returns when shutdown is FULLY complete.
    */
-  public void shutdown()
-      throws Exception {
+  public void shutdown() {
     if (executor != null) {
       logger.info("Shutting down request delegator");
-      for (int i = 0; i < messageHandlers.size(); i++) {
-        messageHandlers.get(i).shutdownGracefully(this);
-        // This class implements HandleMessageResultListener. So passing this instance enables us to know
-        // when the shutdown has completed.
+      try {
+        for (int i = 0; i < messageHandlers.size(); i++) {
+          messageHandlers.get(i).shutdownGracefully(this);
+          // This class implements HandleMessageResultListener. So passing this instance enables us to know
+          // when the shutdown has completed.
+        }
+        executor.shutdown();
+        if (!awaitTermination(60, TimeUnit.SECONDS)) {
+          logger.error("Request delegator shutdown failed after waiting for 60 seconds");
+        } else {
+          executor = null;
+          logger.info("Request delegator shutdown complete");
+        }
+      } catch (InterruptedException e) {
+        logger.error("Request delegator termination await was interrupted - " + e);
+      } catch (RestServiceException e) {
+        logger.error("Shutdown of one of the message handlers failed - " + e);
       }
-      executor.shutdown();
-      if (!awaitTermination(60, TimeUnit.SECONDS)) {
-        throw new Exception("Request delegator shutdown failed after waiting for 60 seconds");
-      }
-      executor = null;
-      logger.info("Request delegator shutdown");
     }
   }
 

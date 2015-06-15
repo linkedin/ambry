@@ -69,13 +69,13 @@ public class RestMessageHandlerTest {
   }
 
   /**
-   * Tests that right exception are thrown on bad input while processing.
+   * Tests that right exceptions are thrown on bad input while a de-queued message is being handled.
    * @throws Exception
    */
   @Test
-  public void processMessageWithBadInputTest()
+  public void delayedHandleMessageWithBadInputTest()
       throws Exception {
-    processMessageThatThrowsRuntimeException();
+    delayedHandleMessageThatThrowsRestException();
   }
 
   /**
@@ -286,24 +286,19 @@ public class RestMessageHandlerTest {
     }
   }
 
-  // processMessageWithBadInputTest() helpers
-  private void processMessageThatThrowsRuntimeException()
+  // delayedHandleMessageWithBadInputTest() helpers
+  private void delayedHandleMessageThatThrowsRestException()
       throws Exception {
-    MessageInfo messageInfo = createMessageInfoThatThrowsProcessingRuntimeException();
-    try {
-      doProcessMessageFailureTest(messageInfo, null);
-      fail("Did not get an exception even though one was requested");
-    } catch (RuntimeException e) {
-      // nothing to do. expected.
-    }
+    MessageInfo messageInfo = createMessageInfoForDelayedHandleRestException();
+    doDelayedHandleMessageFailureTest(messageInfo, RestServiceErrorCode.InternalServerError);
   }
 
-  private MessageInfo createMessageInfoThatThrowsProcessingRuntimeException()
+  private MessageInfo createMessageInfoForDelayedHandleRestException()
       throws JSONException, URISyntaxException {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
-    executionData.put(MockBlobStorageService.OPERATION_TYPE_KEY,
-        MockBlobStorageService.OPERATION_THROW_PROCESSING_UNCHECKED_EXCEPTION);
+    executionData
+        .put(MockBlobStorageService.OPERATION_TYPE_KEY, MockBlobStorageService.OPERATION_THROW_HANDLING_REST_EXCEPTION);
     executionData.put(MockBlobStorageService.OPERATION_DATA_KEY, new JSONObject());
     headers.put(MockBlobStorageService.EXECUTION_DATA_HEADER_KEY, executionData);
 
@@ -318,7 +313,7 @@ public class RestMessageHandlerTest {
    * @param expectedCode
    * @throws Exception
    */
-  private void doProcessMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
+  private void doDelayedHandleMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
       throws Exception {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
     Thread messageHandlerRunner = new Thread(restMessageHandler);
@@ -369,7 +364,7 @@ public class RestMessageHandlerTest {
    */
   public void badOnHandleFailureTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
-    doBadHandlerTest(createMessageInfoThatThrowsProcessingRuntimeException());
+    doBadHandlerTest(createMessageInfoForDelayedHandleRestException());
   }
 
   /**

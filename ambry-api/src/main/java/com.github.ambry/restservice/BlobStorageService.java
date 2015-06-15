@@ -6,25 +6,46 @@ package com.github.ambry.restservice;
 public interface BlobStorageService {
 
   /**
-   * Do startup tasks for the BlobStorageService. Return when startup is FULLY complete.
+   * Do startup tasks for the BlobStorageService. Returns when startup is FULLY complete.
    * @throws InstantiationException
    */
   public void start()
       throws InstantiationException;
 
   /**
-   * Do shutdown tasks for the BlobStorageService. Return when shutdown is FULLY complete.
-   * @throws Exception
+   * Do shutdown tasks for the BlobStorageService. Returns when shutdown is FULLY complete.
    */
-  public void shutdown()
-      throws Exception;
+  public void shutdown();
 
   /**
-   * Handle a message given message information. Any underlying functionality has to sit behind this call
-   * and message information should be enough to know what functionality is required.
+   * Handle a GET operation.
    * @param messageInfo
    * @throws RestServiceException
    */
-  public void handleMessage(MessageInfo messageInfo)
+  public void handleGet(MessageInfo messageInfo)
+      throws RestServiceException;
+
+  /**
+   * Handle a POST operation.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
+  public void handlePost(MessageInfo messageInfo)
+      throws RestServiceException;
+
+  /**
+   * Handle a DELETE operation.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
+  public void handleDelete(MessageInfo messageInfo)
+      throws RestServiceException;
+
+  /**
+   * Handle a HEAD operation.
+   * @param messageInfo
+   * @throws RestServiceException
+   */
+  public void handleHead(MessageInfo messageInfo)
       throws RestServiceException;
 }

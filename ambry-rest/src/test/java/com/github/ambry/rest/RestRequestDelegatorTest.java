@@ -24,11 +24,12 @@ public class RestRequestDelegatorTest {
 
   /**
    * Tests basic start/shutdown
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
   @Test
   public void startShutdownTest()
-      throws Exception {
+      throws InstantiationException, IOException {
     RestRequestDelegator restRequestDelegator = createDelegator(1);
     restRequestDelegator.start();
     restRequestDelegator.shutdown();
@@ -65,11 +66,13 @@ public class RestRequestDelegatorTest {
 
   /**
    * Tests normal getting of message handler.
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
+   * @throws RestServiceException
    */
   @Test
   public void messageHandlerGetTest()
-      throws Exception {
+      throws InstantiationException, IOException, RestServiceException {
     RestRequestDelegator restRequestDelegator = createDelegator(5);
     restRequestDelegator.start();
     try {

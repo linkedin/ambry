@@ -35,11 +35,12 @@ public class AdminBlobStorageServiceTest {
 
   /**
    * Tests basic startup and shutdown functionality (no exceptions).
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
   @Test
   public void startShutDownTest()
-      throws Exception {
+      throws InstantiationException, IOException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     adminBlobStorageService.start();
     adminBlobStorageService.shutdown();
@@ -57,7 +58,7 @@ public class AdminBlobStorageServiceTest {
       throws IOException, JSONException, RestServiceException, URISyntaxException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     MessageInfo messageInfo = createMessageInfo(RestMethod.GET, "/", new JSONObject());
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handleGet(messageInfo);
   }
 
   /**
@@ -72,7 +73,7 @@ public class AdminBlobStorageServiceTest {
       throws IOException, JSONException, RestServiceException, URISyntaxException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     MessageInfo messageInfo = createMessageInfo(RestMethod.POST, "/", new JSONObject());
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handlePost(messageInfo);
   }
 
   /**
@@ -87,7 +88,7 @@ public class AdminBlobStorageServiceTest {
       throws IOException, JSONException, RestServiceException, URISyntaxException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     MessageInfo messageInfo = createMessageInfo(RestMethod.DELETE, "/", new JSONObject());
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handleDelete(messageInfo);
   }
 
   /**
@@ -102,7 +103,7 @@ public class AdminBlobStorageServiceTest {
       throws IOException, JSONException, RestServiceException, URISyntaxException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     MessageInfo messageInfo = createMessageInfo(RestMethod.HEAD, "/", new JSONObject());
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handleHead(messageInfo);
   }
 
   /**
@@ -119,10 +120,10 @@ public class AdminBlobStorageServiceTest {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
     String inputText = "textToBeEchoed";
     MessageInfo messageInfo = createEchoMessageInfo(inputText);
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handleGet(messageInfo);
     String echoedText = getJsonizedResponseBody(messageInfo).getString(EchoExecutor.TEXT_KEY);
     assertEquals("Did not get expected response", inputText, echoedText);
-    finishUpCheck(adminBlobStorageService, messageInfo);
+    finishUpHandleGetCheck(adminBlobStorageService, messageInfo);
   }
 
   /**
@@ -138,7 +139,7 @@ public class AdminBlobStorageServiceTest {
     try {
       AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
       MessageInfo messageInfo = createBadEchoMessageInfo();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("Test should have thrown Exception");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadExecutionData, e.getErrorCode());
@@ -179,7 +180,7 @@ public class AdminBlobStorageServiceTest {
     try {
       AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
       MessageInfo messageInfo = createBadGetReplicasForBlobIdMessageInfo();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("Test should have thrown Exception");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadExecutionData, e.getErrorCode());
@@ -199,7 +200,7 @@ public class AdminBlobStorageServiceTest {
     try {
       AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService();
       MessageInfo messageInfo = createUnknownCustomGetOperationMessageInfo();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("Test should have thrown Exception");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnknownCustomOperationType,
@@ -224,7 +225,7 @@ public class AdminBlobStorageServiceTest {
     // no operationType
     try {
       MessageInfo messageInfo = createMesageInfoWithExecDataMissingOpType();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("executionData header was missing " + AdminExecutionData.OPERATION_TYPE_KEY
           + ", yet no exception was thrown");
     } catch (RestServiceException e) {
@@ -234,7 +235,7 @@ public class AdminBlobStorageServiceTest {
     // no operationData
     try {
       MessageInfo messageInfo = createMessageInfoWithExecDataMissingOpData();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("executionData header was missing " + AdminExecutionData.OPERATION_DATA_KEY
           + " , yet no exception was thrown");
     } catch (RestServiceException e) {
@@ -244,7 +245,7 @@ public class AdminBlobStorageServiceTest {
     // executionData invalid JSON
     try {
       MessageInfo messageInfo = createMessageInfoWithExecDataNotValidJSON();
-      adminBlobStorageService.handleMessage(messageInfo);
+      adminBlobStorageService.handleGet(messageInfo);
       fail("executionData header was not a valid JSON , yet no exception was thrown");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadExecutionData, e.getErrorCode());
@@ -321,11 +322,11 @@ public class AdminBlobStorageServiceTest {
    * @throws JSONException
    * @throws RestServiceException
    */
-  private void finishUpCheck(AdminBlobStorageService adminBlobStorageService, MessageInfo messageInfo)
+  private void finishUpHandleGetCheck(AdminBlobStorageService adminBlobStorageService, MessageInfo messageInfo)
       throws InstantiationException, JSONException, RestServiceException {
     RestContent lastContent = createRestContent(true);
     adminBlobStorageService
-        .handleMessage(new MessageInfo(messageInfo.getRestRequest(), lastContent, messageInfo.getResponseHandler()));
+        .handleGet(new MessageInfo(messageInfo.getRestRequest(), lastContent, messageInfo.getResponseHandler()));
     assertTrue("Channel is not closed", ((MockRestResponseHandler) messageInfo.getResponseHandler()).isChannelClosed());
   }
 
@@ -389,12 +390,12 @@ public class AdminBlobStorageServiceTest {
     String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
     BlobId blobId = new BlobId(partitionId);
     MessageInfo messageInfo = createGetReplicasForBlobIdMessageInfo(blobId.getID());
-    adminBlobStorageService.handleMessage(messageInfo);
+    adminBlobStorageService.handleGet(messageInfo);
     String returnedReplicasStr =
         getJsonizedResponseBody(messageInfo).getString(GetReplicasForBlobIdExecutor.REPLICAS_KEY).replace("\"", "");
     assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
         originalReplicaStr, returnedReplicasStr);
-    finishUpCheck(adminBlobStorageService, messageInfo);
+    finishUpHandleGetCheck(adminBlobStorageService, messageInfo);
   }
 
   private MessageInfo createGetReplicasForBlobIdMessageInfo(String blobId)

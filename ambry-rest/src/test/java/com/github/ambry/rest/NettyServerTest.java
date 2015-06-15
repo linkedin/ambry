@@ -20,11 +20,12 @@ public class NettyServerTest {
 
   /**
    * Tests basic startup/shutdown given good input
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
   @Test
   public void startShutdownTest()
-      throws Exception {
+      throws InstantiationException, IOException {
     NioServer nioServer = getNettyServer(null);
     nioServer.start();
     nioServer.shutdown();
@@ -32,11 +33,12 @@ public class NettyServerTest {
 
   /**
    * Tests to see that correct exceptions are thrown on instantiation/start with bad input
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
   @Test
   public void startWithBadInputTest()
-      throws Exception {
+      throws InstantiationException, IOException {
     Properties properties = new Properties();
     properties.setProperty(NettyConfig.PORT_KEY, "abcd"); // should be int. So will throw at instantiation
     NioServer nioServer = null;

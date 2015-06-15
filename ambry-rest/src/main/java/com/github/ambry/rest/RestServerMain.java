@@ -48,11 +48,7 @@ public class RestServerMain {
         // attach shutdown handler to catch control-c
         Runtime.getRuntime().addShutdownHook(new Thread() {
           public void run() {
-            try {
-              restServer.shutdown();
-            } catch (Exception e) {
-              logger.error("Shutdown threw exception - " + e);
-            }
+            restServer.shutdown();
           }
         });
 
