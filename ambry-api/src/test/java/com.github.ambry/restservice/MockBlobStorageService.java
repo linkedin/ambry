@@ -15,8 +15,9 @@ public class MockBlobStorageService implements BlobStorageService {
   public static String OPERATION_TYPE_KEY = "operationType";
   public static String OPERATION_DATA_KEY = "operationData";
 
-  public static String OPERATION_THROW_HANDLING_REST_EXCEPTION = "throwHandlingRestException";
+  public static String OPERATION_THROW_HANDLING_ERROR = "throwHandlingError";
   public static String OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION = "throwHandlingRuntimeException";
+  public static String OPERATION_THROW_HANDLING_REST_EXCEPTION = "throwHandlingRestException";
 
   public MockBlobStorageService(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       MetricRegistry metricRegistry) {
@@ -153,9 +154,12 @@ public class MockBlobStorageService implements BlobStorageService {
     if (executionData != null) {
       String operationType = getOperationType(executionData);
       if (OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION.equals(operationType)) {
-        throw new RuntimeException("Requested handling exception");
+        // message is operationType so that it can be verified by the test
+        throw new RuntimeException(operationType);
       } else if (OPERATION_THROW_HANDLING_REST_EXCEPTION.equals(operationType)) {
-        throw new RestServiceException("Requested handling rest exception", RestServiceErrorCode.InternalServerError);
+        throw new RestServiceException(operationType, RestServiceErrorCode.InternalServerError);
+      } else if (OPERATION_THROW_HANDLING_ERROR.equals(operationType)) {
+        throw new Error(operationType);
       } else {
         throw new RestServiceException("Unknown " + OPERATION_TYPE_KEY + " - " + operationType,
             RestServiceErrorCode.BadRequest);

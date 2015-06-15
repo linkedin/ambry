@@ -41,7 +41,7 @@ public class RestMessageHandlerTest {
    * @throws URISyntaxException
    */
   @Test
-  public void handleAndProcessMessageTest()
+  public void handleMessageTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
     Thread messageHandlerRunner = new Thread(restMessageHandler);
@@ -53,7 +53,7 @@ public class RestMessageHandlerTest {
   }
 
   /**
-   * Tests that right exceptions are thrown on bad input while handling.
+   * Tests that right exceptions are thrown on bad input while handling (before queueing).
    * @throws InterruptedException
    * @throws IOException
    * @throws JSONException
@@ -70,12 +70,14 @@ public class RestMessageHandlerTest {
 
   /**
    * Tests that right exceptions are thrown on bad input while a de-queued message is being handled.
-   * @throws Exception
+   * @throws Throwable
    */
   @Test
   public void delayedHandleMessageWithBadInputTest()
-      throws Exception {
+      throws Throwable {
     delayedHandleMessageThatThrowsRestException();
+    delayedHandleMessageThatThrowsRuntimeException();
+    delayedHandleMessageThatThrowsError();
   }
 
   /**
@@ -201,7 +203,7 @@ public class RestMessageHandlerTest {
     return new MessageInfo(restRequest, restRequest, new MockRestResponseHandler());
   }
 
-  // handleAndProcessMessageTest() helpers
+  // handleMessageTest() helpers
 
   /**
    * Sends message to the RestMessageHandler and adds a listener to the message to listen for processing results.
@@ -288,17 +290,47 @@ public class RestMessageHandlerTest {
 
   // delayedHandleMessageWithBadInputTest() helpers
   private void delayedHandleMessageThatThrowsRestException()
-      throws Exception {
-    MessageInfo messageInfo = createMessageInfoForDelayedHandleRestException();
+      throws Throwable {
+    MessageInfo messageInfo = createMessageInfoForDelayedHandleMessageWithBadInputTest(
+        MockBlobStorageService.OPERATION_THROW_HANDLING_REST_EXCEPTION);
     doDelayedHandleMessageFailureTest(messageInfo, RestServiceErrorCode.InternalServerError);
   }
 
-  private MessageInfo createMessageInfoForDelayedHandleRestException()
+  private void delayedHandleMessageThatThrowsRuntimeException()
+      throws Throwable {
+    MessageInfo messageInfo = createMessageInfoForDelayedHandleMessageWithBadInputTest(
+        MockBlobStorageService.OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION);
+    try {
+      doDelayedHandleMessageFailureTest(messageInfo, RestServiceErrorCode.ResponseBuildingFailure);
+    } catch (RuntimeException e) {
+      // expected. Check message.
+      assertEquals("Failure message does not match expectation",
+          MockBlobStorageService.OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION, e.getMessage());
+    }
+  }
+
+  private void delayedHandleMessageThatThrowsError()
+      throws Exception {
+    MessageInfo messageInfo =
+        createMessageInfoForDelayedHandleMessageWithBadInputTest(MockBlobStorageService.OPERATION_THROW_HANDLING_ERROR);
+
+    RestMessageHandler restMessageHandler = getRestMessageHandler();
+    Thread messageHandlerRunner = new Thread(restMessageHandler);
+    messageHandlerRunner.start();
+    try {
+      restMessageHandler.handleMessage(messageInfo);
+      // there is no exception bubbled up. We just need to check if the message handler is alive and well
+      doProcessMessageSuccessTest(RestMethod.GET, restMessageHandler);
+    } finally {
+      restMessageHandler.shutdownGracefully(null);
+    }
+  }
+
+  private MessageInfo createMessageInfoForDelayedHandleMessageWithBadInputTest(String operationType)
       throws JSONException, URISyntaxException {
     JSONObject headers = new JSONObject();
     JSONObject executionData = new JSONObject();
-    executionData
-        .put(MockBlobStorageService.OPERATION_TYPE_KEY, MockBlobStorageService.OPERATION_THROW_HANDLING_REST_EXCEPTION);
+    executionData.put(MockBlobStorageService.OPERATION_TYPE_KEY, operationType);
     executionData.put(MockBlobStorageService.OPERATION_DATA_KEY, new JSONObject());
     headers.put(MockBlobStorageService.EXECUTION_DATA_HEADER_KEY, executionData);
 
@@ -311,10 +343,10 @@ public class RestMessageHandlerTest {
    * Failure of test is bubbled up to this function.
    * @param messageInfo
    * @param expectedCode
-   * @throws Exception
+   * @throws Throwable
    */
   private void doDelayedHandleMessageFailureTest(MessageInfo messageInfo, RestServiceErrorCode expectedCode)
-      throws Exception {
+      throws Throwable {
     RestMessageHandler restMessageHandler = getRestMessageHandler();
     Thread messageHandlerRunner = new Thread(restMessageHandler);
     messageHandlerRunner.start();
@@ -327,12 +359,11 @@ public class RestMessageHandlerTest {
     if (messageProcessingFailureMonitor.await(30, TimeUnit.SECONDS)) {
       restMessageHandler.shutdownGracefully(null);
       Throwable cause = messageProcessingFailureMonitor.getCause();
-      if (cause != null && !(cause instanceof Exception)) {
-        fail("Failure scenario test failed - " + cause);
-      } else if (cause != null) {
-        throw (Exception) cause;
+      if (cause != null) {
+        throw cause;
       }
     } else {
+      restMessageHandler.shutdownGracefully(null);
       fail("Test took too long. There might be a problem or the timeout may need to be increased");
     }
   }
@@ -364,7 +395,8 @@ public class RestMessageHandlerTest {
    */
   public void badOnHandleFailureTest()
       throws InterruptedException, IOException, JSONException, RestServiceException, URISyntaxException {
-    doBadHandlerTest(createMessageInfoForDelayedHandleRestException());
+    doBadHandlerTest(createMessageInfoForDelayedHandleMessageWithBadInputTest(
+        MockBlobStorageService.OPERATION_THROW_HANDLING_REST_EXCEPTION));
   }
 
   /**
