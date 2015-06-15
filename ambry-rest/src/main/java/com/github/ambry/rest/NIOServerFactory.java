@@ -25,16 +25,18 @@ public class NioServerFactory {
       throws Exception {
     String nioServerClassName =
         verifiableProperties.getString(NIO_SERVER_CLASS_KEY, "com.github.ambry.rest.NettyServer");
-    NioServer nioServer;
+    NioServer nioServer = null;
     /**
-     *  TODO: Since this seems a little ugly, should think about whether RequestDelegator should be a singleton class
-     *  TODO: that provides a static method that can be called from within the NioServer instead of providing it as an
-     *  TODO: argument here.
+     *  TODO: Since this seems a little ugly, should think about whether RestRequestDelegator should be a singleton
+     *  TODO: class that provides a static method that can be called from within the NioServer instead of providing it
+     *  TODO: as an argument here.
      */
     if (requestDelegator != null) {
       // try a constructor with the request delegator.
       nioServer = Utils.getObj(nioServerClassName, verifiableProperties, metricRegistry, requestDelegator);
-    } else {
+    }
+
+    if (nioServer == null) {
       // try a constructor without the request delegator.
       nioServer = Utils.getObj(nioServerClassName, verifiableProperties, metricRegistry);
     }
