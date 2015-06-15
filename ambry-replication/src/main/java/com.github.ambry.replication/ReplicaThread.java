@@ -277,8 +277,8 @@ class ReplicaThread implements Runnable {
           }
         }
         long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}",
-            remoteNode, threadName, processMetadataResponseTimeInMs);
+        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}", remoteNode, threadName,
+            processMetadataResponseTimeInMs);
       } finally {
         if (remoteColo) {
           replicationMetrics.interColoMetadataExchangeCount.inc();
@@ -628,16 +628,21 @@ class ReplicaThread implements Runnable {
               if (validateMessageStream) {
                 MessageSievingInputStream validMessageDetectionInputStream =
                     new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
-                         metricRegistry);
+                        metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
                   replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+                if (messageInfoList.size() == 0) {
+                  logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
+                } else {
+                  writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+                  remoteReplicaInfo.getLocalStore().put(writeset);
+                }
               } else {
                 writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
+                remoteReplicaInfo.getLocalStore().put(writeset);
               }
-              remoteReplicaInfo.getLocalStore().put(writeset);
 
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
