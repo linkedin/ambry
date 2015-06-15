@@ -486,7 +486,7 @@ public final class ReplicationManager {
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.validateMessageStream, metricRegistry);
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
       replicaThreadList.add(replicaThread);
     }
   }
