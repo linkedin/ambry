@@ -74,7 +74,7 @@ public class MessageSievingInputStream extends InputStream {
       Utils.readBytesFromStream(stream, data, offset, msgSize);
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
       ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(data, offset, msgSize);
-      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory)) {
+      if (checkForMessageValidity(byteArrayInputStream, offset, msgSize, storeKeyFactory, msgInfo)) {
         offset += msgSize;
         validMessageInfoList.add(msgInfo);
       } else {
@@ -154,7 +154,7 @@ public class MessageSievingInputStream extends InputStream {
    * @throws IOException
    */
   private boolean checkForMessageValidity(ByteArrayInputStream byteArrayInputStream, int currentOffset, long size,
-      StoreKeyFactory storeKeyFactory)
+      StoreKeyFactory storeKeyFactory, MessageInfo msgInfo)
       throws IOException {
     boolean isValid = false;
     BlobProperties props = null;
@@ -188,20 +188,25 @@ public class MessageSievingInputStream extends InputStream {
         if (byteArrayInputStream.available() != 0) {
           logger.error("Parsed message size " + (availableBeforeParsing + byteArrayInputStream.available())
               + " is not equivalent to the size in message info " + availableBeforeParsing);
-          isValid = false;
+        } else {
+          if (logger.isTraceEnabled()) {
+            logger.trace("Message Successfully read");
+            logger.trace(
+                "Header - version {} Message Size {} Starting offset of the blob {} BlobPropertiesRelativeOffset {}"
+                    + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
+                header.getVersion(), header.getMessageSize(), currentOffset,
+                header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
+                header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
+            logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
+                props.getBlobSize(), metadata.capacity(), output.getSize());
+          }
+          if (msgInfo.getStoreKey().equals(storeKey)) {
+            isValid = true;
+          } else {
+            logger.error(
+                "StoreKey in log " + storeKey + " failed to match store key from Index " + msgInfo.getStoreKey());
+          }
         }
-        if (logger.isTraceEnabled()) {
-          logger.trace("Message Successfully read");
-          logger.trace(
-              "Header - version {} Message Size {} Starting offset of the blob {} BlobPropertiesRelativeOffset {}"
-                  + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
-              header.getVersion(), header.getMessageSize(), currentOffset,
-              header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
-              header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
-          logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
-              props.getBlobSize(), metadata.capacity(), output.getSize());
-        }
-        isValid = true;
       } else {
         throw new MessageFormatException("Header version not supported " + version,
             MessageFormatErrorCodes.Data_Corrupt);
