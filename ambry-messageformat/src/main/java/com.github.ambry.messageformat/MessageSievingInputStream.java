@@ -201,11 +201,11 @@ public class MessageSievingInputStream extends InputStream {
           logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
               props.getBlobSize(), metadata.capacity(), output.getSize());
         }
-        if(msgInfo.getStoreKey().equals(storeKey)){
+        if (msgInfo.getStoreKey().equals(storeKey)) {
           isValid = true;
-        }
-        else{
-          logger.error("StoreKey in log " + storeKey +" failed to match store key from Index " + msgInfo.getStoreKey());
+        } else {
+          logger
+              .error("StoreKey in log " + storeKey + " failed to match store key from Index " + msgInfo.getStoreKey());
         }
       } else {
         throw new MessageFormatException("Header version not supported " + version,
