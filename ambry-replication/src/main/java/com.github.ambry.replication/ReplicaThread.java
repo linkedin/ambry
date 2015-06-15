@@ -625,7 +625,7 @@ class ReplicaThread implements Runnable {
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
               MessageFormatWriteSet writeset = null;
-              boolean emptyMessageStream = false;
+              boolean validMessageStream = true;
               if (validateMessageStream) {
                 MessageSievingInputStream validMessageDetectionInputStream =
                     new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
@@ -636,14 +636,14 @@ class ReplicaThread implements Runnable {
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
                 if (messageInfoList.size() == 0) {
                   logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
-                  emptyMessageStream = true;
+                  validMessageStream = false;
                 } else {
                   writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 }
               } else {
                 writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
               }
-              if (!emptyMessageStream) {
+              if (validMessageStream) {
                 remoteReplicaInfo.getLocalStore().put(writeset);
               }
 
