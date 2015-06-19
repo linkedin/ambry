@@ -1058,6 +1058,7 @@ public class PersistentIndex {
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     boolean running = true;
+    boolean isCaughtUp = false;
 
     //how long to sleep if token does not advance.
     private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
@@ -1282,19 +1283,26 @@ public class PersistentIndex {
       }
     }
 
+    /**
+     * Returns true if the hard delete thread has caught up, that is if the token did not advance in the last iteration
+     * @return true if caught up, false otherwise.
+     */
+    public boolean isCaughtUp() {
+      return isCaughtUp;
+    }
+
     public void run() {
       try {
-        boolean caughtUp = true;
         while (running) {
           if (!hardDelete()) {
-            caughtUp = true;
+            isCaughtUp = true;
             try {
               Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
             } catch (InterruptedException e) {
               logger.info("Caught interrupted exception");
             }
-          } else if (caughtUp) {
-            caughtUp = false;
+          } else if (isCaughtUp) {
+            isCaughtUp = false;
             logger.info("Resumed hard deletes for {} after having caught up", dataDir);
           }
         }
@@ -1325,6 +1333,10 @@ public class PersistentIndex {
 
   public boolean hardDeleteThreadRunning() {
     return hardDeleter.shutdownLatch.getCount() != 0;
+  }
+
+  public boolean hardDeleteCaughtUp() {
+    return hardDeleter.isCaughtUp();
   }
 }
 

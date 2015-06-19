@@ -36,6 +36,7 @@ public class StoreMetrics {
   public Gauge<Long> currentCapacityUsed;
   public Gauge<Long> currentHardDeleteProgress;
   public Gauge<Long> hardDeleteThreadRunning;
+  public Gauge<Long> hardDeleteCaughtUp;
   public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
   public Gauge<Double> percentageHardDeleteCompleted;
@@ -119,5 +120,14 @@ public class StoreMetrics {
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteThreadRunning"),
         hardDeleteThreadRunning);
+
+    hardDeleteCaughtUp = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return index.hardDeleteCaughtUp() ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteCaughtUp"),
+        hardDeleteCaughtUp);
   }
 }
