@@ -1327,14 +1327,26 @@ public class PersistentIndex {
     }
   }
 
+  /**
+   * Gets the total number of bytes processed so far by the hard delete thread.
+   * @return the total number of bytes processed so far by the hard delete thread.
+   */
   public long getHardDeleteProgress() {
     return hardDeleter.getProgress();
   }
 
+  /**
+   * Returns true if the hard delete thread is currently running.
+   * @return true if running, false otherwise.
+   */
   public boolean hardDeleteThreadRunning() {
     return hardDeleter.shutdownLatch.getCount() != 0;
   }
 
+  /**
+   * Returns true if the hard delete thread is caught up.
+   * @return true if caught up, false otherwise.
+   */
   public boolean hardDeleteCaughtUp() {
     return hardDeleter.isCaughtUp();
   }
