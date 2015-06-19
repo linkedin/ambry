@@ -1284,13 +1284,18 @@ public class PersistentIndex {
 
     public void run() {
       try {
+        boolean caughtUp = true;
         while (running) {
           if (!hardDelete()) {
+            caughtUp = true;
             try {
               Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
             } catch (InterruptedException e) {
               logger.info("Caught interrupted exception");
             }
+          } else if (caughtUp) {
+            caughtUp = false;
+            logger.info("Resumed hard deletes for {} after having caught up", dataDir);
           }
         }
       } finally {

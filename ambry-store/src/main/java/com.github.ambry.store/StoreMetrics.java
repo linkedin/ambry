@@ -35,7 +35,7 @@ public class StoreMetrics {
   public final Counter hardDeleteIncompleteRecoveryCount;
   public Gauge<Long> currentCapacityUsed;
   public Gauge<Long> currentHardDeleteProgress;
-  public Gauge<Boolean> hardDeleteThreadRunning;
+  public Gauge<Long> hardDeleteThreadRunning;
   public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
   public Gauge<Double> percentageHardDeleteCompleted;
@@ -111,10 +111,10 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, name + "-percentageHardDeleteCompleted"),
         percentageHardDeleteCompleted);
 
-    hardDeleteThreadRunning = new Gauge<Boolean>() {
+    hardDeleteThreadRunning = new Gauge<Long>() {
       @Override
-      public Boolean getValue() {
-        return index.hardDeleteThreadRunning();
+      public Long getValue() {
+        return index.hardDeleteThreadRunning() ? 1L : 0L;
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteThreadRunning"),
