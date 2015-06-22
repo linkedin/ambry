@@ -58,12 +58,12 @@ class NettyServer implements NioServer {
       nettyServerDeployerThread.start();
       long startWaitSecs = nettyConfig.getStartupWaitSeconds();
       if (!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
-        throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds");
+        throw new InstantiationException("NettyServer failed to start in " + startWaitSecs + " seconds");
       } else if (nettyServerDeployer.getException() != null) {
-        throw new InstantiationException("Netty server start failed - " + nettyServerDeployer.getException());
+        throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
       }
     } catch (InterruptedException e) {
-      logger.error("Netty server start might have failed", e);
+      logger.error("NettyServer start await was interrupted. It might not have started", e);
       throw new InstantiationException("Netty server start might have failed - " + e);
     }
   }
@@ -172,7 +172,8 @@ class NettyServerDeployer implements Runnable {
           logger.error("NettyServer shutdown failed after waiting for 60 seconds");
         }
       } catch (InterruptedException e) {
-        logger.error("Termination await interrupted while attempting to shutdown NettyServer", e);
+        logger.error("Termination await interrupted while attempting to shutdown NettyServer. Shutdown may have been"
+            + " unsuccessful", e);
       }
     }
   }

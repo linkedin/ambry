@@ -23,10 +23,11 @@ import org.slf4j.LoggerFactory;
  * requests submitted by the {@link com.github.ambry.restservice.NioServer} in a non-blocking way by queueing them.
  * The requests are then handled async through a {@link BlobStorageService}.
  * <p/>
- * The queue owned by a single AsyncRequestHandler might have parts from multiple requests interleaved but parts of the same
- * request will (have to) be in order. This ordering cannot be enforced by the AsyncRequestHandler but instead has to be
- * enforced by the {@link com.github.ambry.restservice.NioServer} (it is responsible for finding a way to use the same
- * AsyncRequestHandler for all parts of the same request - for an example implementation see {@link NettyMessageProcessor}).
+ * The queue owned by a single AsyncRequestHandler might have parts from multiple requests interleaved but parts of the
+ * same request will (have to) be in order. This ordering cannot be enforced by the AsyncRequestHandler but instead has
+ * to be enforced by the {@link com.github.ambry.restservice.NioServer} (it is responsible for finding a way to use the
+ * same AsyncRequestHandler for all parts of the same request - for an example implementation see
+ * {@link NettyMessageProcessor}).
  * <p/>
  * These are the scaling units of the {@link RestServer} and can be scaled up and down independently of any other
  * component of the {@link RestServer}.
@@ -66,35 +67,22 @@ class AsyncRequestHandler implements RestRequestHandler {
    */
   @Override
   public void shutdown() {
-    boolean shutdownSuccess = !dequeuedRequestHandlerThread.isAlive();
-    // magic number
-    long waitTimeMillis = 60000;
-    while (!shutdownSuccess && waitTimeMillis > 0) {
-      long startTime = System.currentTimeMillis();
+    if (dequeuedRequestHandlerThread.isAlive()) {
       try {
         logger.info("Shutting down AsyncRequestHandler..");
         queue(new PoisonInfo());
-        if (dequeuedRequestHandler.awaitShutdown(waitTimeMillis, TimeUnit.MILLISECONDS)) {
-          shutdownSuccess = true;
-        } else if (shutdownNow()) {
-          shutdownSuccess = true;
-          logger.info(
-              "AsyncRequestHandler safe shutdown failed. It was forcibly shutdown with " + restRequestInfoQueue.size()
-                  + " RestRequestInfos unprocessed");
+        //magic number
+        if (dequeuedRequestHandler.awaitShutdown(60, TimeUnit.SECONDS) || shutdownNow()) {
+          logger.info("AsyncRequestHandler shutdown complete");
         } else {
-          logger.info("Shutdown of AsyncRequestHandler failed. This should not happen");
+          logger.error("Shutdown of AsyncRequestHandler failed. This should not happen");
         }
-      } catch (RestServiceException e) {
-        logger.error("Shutdown of AsyncRequestHandler threw RestServiceException. Retrying...", e);
       } catch (InterruptedException e) {
-        logger.error("Shutdown of AsyncRequestHandler was interrupted. Retrying...", e);
-      } finally {
-        waitTimeMillis = waitTimeMillis - (System.currentTimeMillis() - startTime);
+        logger.error("Await shutdown of AsyncRequestHandler was interrupted. The AsyncRequestHandler might not have "
+            + "shutdown", e);
+      } catch (RestServiceException e) {
+        logger.error("Shutdown of AsyncRequestHandler threw RestServiceException and was aborted", e);
       }
-    }
-
-    if (shutdownSuccess) {
-      logger.info("AsyncRequestHandler shutdown complete");
     }
   }
 
@@ -172,11 +160,14 @@ class AsyncRequestHandler implements RestRequestHandler {
   }
 
   /**
-   * Forces immediate shutdown of the {@link DequeuedRequestHandler}. All {@link RestRequestInfo}s still in the queue do
-   * not get processed.
+   * Forces immediate shutdown of the {@link DequeuedRequestHandler}. The {@link RestRequestInfo} that is being
+   * currently handled might misbehave and all {@link RestRequestInfo}s still in the queue do not get handled.
    */
   private boolean shutdownNow()
       throws InterruptedException {
+    logger.error(
+        "Forcing shutdown of AsyncRequestHandler with " + restRequestInfoQueue.size() + " RestRequestInfos still in " +
+            "queue. They will be unhandled");
     dequeuedRequestHandler.shutdownNow();
     dequeuedRequestHandlerThread.interrupt();
     return dequeuedRequestHandler.awaitShutdown(5, TimeUnit.SECONDS);

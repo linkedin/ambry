@@ -38,7 +38,7 @@ public class RestServerMain {
             new ClusterMapManager(options.getHardwareLayoutFilePath(), options.getPartitionLayoutFilePath(),
                 new ClusterMapConfig(verifiableProperties));
 
-        logger.info("Bootstrapping rest server..");
+        logger.info("Bootstrapping RestServer..");
         restServer = new RestServer(verifiableProperties, metricRegistry, clusterMap);
 
         // attach shutdown handler to catch control-c

@@ -11,7 +11,9 @@ package com.github.ambry.restservice;
  * Typically, the RestResponseHandler wraps the APIs provided by the framework used for implementation of
  * {@link NioServer}  to return responses to clients.
  * <p/>
- * Implementations are expected to be thread-safe.
+ * Implementations are expected to be thread-safe but use with care across different threads since there are neither
+ * ordering guarantees nor operation success guarantees (e.g. if an external thread closes the channel while a write
+ * attempt is in progress).
  */
 public interface RestResponseHandler {
   /**

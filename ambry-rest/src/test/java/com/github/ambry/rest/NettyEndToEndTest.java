@@ -97,18 +97,6 @@ public class NettyEndToEndTest {
   }
 
   /**
-   * Test the error handling of {@link NettyMessageProcessor} given bad input.
-   * @throws Exception
-   */
-  @Test
-  public void badInputStreamTest()
-      throws Exception {
-    // TODO: the duplicate request handling needs rethinking.
-    // duplicate request test
-    // doDuplicateRequestTest(NETTY_SERVER_PORT);
-  }
-
-  /**
    * Exercises some internals (mostly error handling) of {@link NettyMessageProcessor} and {@link NettyResponseHandler}
    * by wilfully introducing exceptions through {@link MockBlobStorageService}.
    * @throws Exception
@@ -148,8 +136,8 @@ public class NettyEndToEndTest {
     NioServer server = createNettyServer(handlerController, properties);
     server.start();
 
-    // We haven't started the RequestHandlerController (in turn the AsyncRequestHandler, so any request we send should result
-    // in a failure.
+    // We haven't started the RequestHandlerController (in turn the AsyncRequestHandler, so any request we send should
+    // result in a failure.
     FullHttpRequest request = createRequest(HttpMethod.GET, "/");
     doHandleRequestFailureTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, NETTY_SERVER_ALTERNATE_PORT);
 
@@ -249,37 +237,6 @@ public class NettyEndToEndTest {
         } else {
           fail("Did not receive any content in 30 seconds. There is an error or the timeout needs to increase");
         }
-      }
-    } finally {
-      nettyClient.shutdown();
-    }
-  }
-
-  // badInputStreamTest() helpers
-
-  /**
-   * Sends two requests in one stream and expects an error to be returned.
-   * @param serverPort
-   * @throws Exception
-   */
-  private void doDuplicateRequestTest(String serverPort)
-      throws Exception {
-    LinkedBlockingQueue<HttpObject> contentQueue = new LinkedBlockingQueue<HttpObject>();
-    LinkedBlockingQueue<HttpObject> responseQueue = new LinkedBlockingQueue<HttpObject>();
-    NettyClient nettyClient = new NettyClient(Integer.parseInt(serverPort), contentQueue, responseQueue);
-    contentQueue.offer(createRequest(HttpMethod.GET, "/"));
-    contentQueue.offer(createRequest(HttpMethod.GET, "/"));
-
-    nettyClient.start();
-    // request is being sent.
-    try {
-      HttpObject httpObject = responseQueue.poll(RESPONSE_QUEUE_POLL_TIMEOUT_SECS, TimeUnit.SECONDS);
-      if (httpObject != null && httpObject instanceof HttpResponse) {
-        HttpResponse response = (HttpResponse) httpObject;
-        assertTrue("Received a bad response", response.getDecoderResult().isSuccess());
-        assertEquals("Response status is not Bad Request", HttpResponseStatus.BAD_REQUEST, response.getStatus());
-      } else {
-        fail("Did not receive a response");
       }
     } finally {
       nettyClient.shutdown();

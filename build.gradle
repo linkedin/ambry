@@ -167,7 +167,8 @@ project(':ambry-rest') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-admin')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile 'io.netty:netty-all:4.0.25.Final'

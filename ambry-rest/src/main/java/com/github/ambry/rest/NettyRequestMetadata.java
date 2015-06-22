@@ -23,6 +23,10 @@ class NettyRequestMetadata implements RestRequestMetadata {
 
   public NettyRequestMetadata(HttpRequest request)
       throws RestServiceException {
+    if(request == null) {
+      throw new IllegalArgumentException("Received null HttpRequest");
+    }
+
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
 

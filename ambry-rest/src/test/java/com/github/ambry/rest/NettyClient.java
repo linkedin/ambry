@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Netty client to send requests and receive responses in tests.
  */
-public class NettyClient {
+class NettyClient {
   private final AtomicReference<Throwable> cause = new AtomicReference<Throwable>();
   private final NettyClientDeployer deployer;
   private final Thread deployerThread;
@@ -46,12 +46,12 @@ public class NettyClient {
     try {
       deployerThread.start();
       if (!deployer.awaitStartup(30, TimeUnit.SECONDS)) {
-        throw new InstantiationException("Client did not start in 30 seconds");
+        throw new InstantiationException("NettyClient did not start in 30 seconds");
       } else if (cause.get() != null) {
-        throw new InstantiationException("Client startup threw exception" + cause.get());
+        throw new InstantiationException("NettyClient startup threw exception" + cause.get());
       }
     } catch (InterruptedException e) {
-      throw new InstantiationException("the await startup was interrupted. Client may not have started");
+      throw new InstantiationException("Startup await of NettyClient was interrupted. Client may not have started");
     }
   }
 

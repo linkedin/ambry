@@ -25,7 +25,8 @@ import org.json.JSONObject;
  * {@link MockRestResponseHandler#flush()}, the {@link ByteArrayOutputStream} is emptied into a {@link StringBuilder}
  * and reset. The {@link StringBuilder} represents the flushed responseBody.
  * <p/>
- * All functions are synchronized because this is expected to be thread safe.
+ * All functions are synchronized because this is expected to be thread safe (very coarse grained but this is not
+ * expected to be performant, just .
  */
 public class MockRestResponseHandler implements RestResponseHandler {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
@@ -145,7 +146,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
    * @return  - get response metadata if flushed.
    */
   public synchronized JSONObject getFlushedResponseMetadata() {
-    if (responseMetadataFinalized) {
+    if (responseMetadataFlushed) {
       return getResponseMetadata();
     }
     return null;

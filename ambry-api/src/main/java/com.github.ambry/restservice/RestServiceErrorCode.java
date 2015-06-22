@@ -50,6 +50,10 @@ public enum RestServiceErrorCode {
    */
   ChannelActiveTasksFailure,
   /**
+   * Indicates that there was a {@link InterruptedException} while trying to perform the operation.
+   */
+  OperationInterrupted,
+  /**
    * Indicates failure of the {@link RestRequestHandlerController} to select and provide a handler.
    */
   RequestHandlerSelectionError,

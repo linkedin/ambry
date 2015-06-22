@@ -16,11 +16,13 @@ import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.CharsetUtil;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,38 +40,40 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 class NettyResponseHandler implements RestResponseHandler {
   // TODO: Should upgrade this implementation to throw exceptions or provide callbacks to inform the caller of
   // TODO: success or failure of writes.
-  //
-  // TODO: Find out if netty channel close waits for data written to be flushed.
-  //
-  // TODO: Review the thread safety of this class.
 
   private final ChannelHandlerContext ctx;
   private final HttpResponse responseMetadata;
   private final NettyMetrics nettyMetrics;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  // This can be used to do a sanity check on the channel. Mostly used to ensure the state transitions are correct i.e.
-  // no thread calls addToResponseBody() after close() etc.
-  private final AtomicBoolean channelClosed = new AtomicBoolean(false);
   // This guarantees that errors are never sent twice.
   private final AtomicBoolean errorSent = new AtomicBoolean(false);
   // This guarantees that duplicate response status/headers are never sent.
-  private final AtomicBoolean responseMetadataWritten = new AtomicBoolean(false);
+  private boolean responseMetadataWritten = false;
+  // This can be used to do a sanity check on the channel. Mostly used to ensure the state transitions are correct i.e.
+  // no thread calls addToResponseBody() after close() etc.
+  private boolean channelClosed = false;
+
+  // synchronization for changes to response metadata.
+  private final ReentrantLock responseMetadataChangeLock = new ReentrantLock();
+  // synchronization for writes to channel.
+  private final ReentrantLock channelWriteLock = new ReentrantLock();
+  // Maintains the future of the last write operation so that close can use it.
+  private ChannelFuture lastWriteFuture;
 
   public NettyResponseHandler(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
     this.responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    lastWriteFuture = ctx.newSucceededFuture();
   }
 
   @Override
   public void addToResponseBody(byte[] data, boolean isLast)
       throws RestServiceException {
-    // This is just a sanity check. There is no guarantee that the channel is open at write time.
-    verifyChannelActive();
-
-    if (responseMetadataWritten.compareAndSet(false, true)) {
-      writeResponseMetadata();
+    if (!responseMetadataWritten) {
+      // Just made a sanity check to avoid locking + exceptions in maybeWriteResponseMetadata().
+      maybeWriteResponseMetadata(responseMetadata);
     }
     // TODO: When we return data via gets, we need to be careful not to modify data while ctx.write() is in flight.
     // TODO: Working on getting a future implementation that can wait for the write to finish. Or at least indicate
@@ -81,47 +85,53 @@ class NettyResponseHandler implements RestResponseHandler {
     } else {
       content = new DefaultHttpContent(buf);
     }
-    // This write may or may not succeed depending on whether the channel is open. This is thread-safe but there
-    // are no ordering guarantees.
-    ctx.write(content);
+    writeToChannel(content);
   }
 
   @Override
-  public void flush()
-      throws RestServiceException {
-    // This is just a sanity check. There is no guarantee that the channel is open at flush time.
-    verifyChannelActive();
-    if (responseMetadataWritten.compareAndSet(false, true)) {
-      writeResponseMetadata();
+  public void flush() {
+    if (!responseMetadataWritten) {
+      // Just made a sanity check to avoid locking + exceptions in maybeWriteResponseMetadata().
+      maybeWriteResponseMetadata(responseMetadata);
     }
-    // This flush may or may not succeed depending on whether the channel is open. This is thread-safe but there
-    // are no ordering guarantees.
+    // CAVEAT: It is possible that this flush might fail because the channel has been closed by an external thread with
+    // a direct reference to the ChannelHandlerContext.
     ctx.flush();
   }
 
   @Override
   public void close() {
-    close(ctx.newSucceededFuture());
+    if (!channelClosed && ctx.channel().isOpen()) {
+      // made a quick sanity check to avoid locking.
+      try {
+        channelWriteLock.lockInterruptibly();
+        channelClosed = true;
+        // Waits for the last write operation performed by this object to succeed before closing.
+        // This is NOT blocking.
+        lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
+      } catch (InterruptedException e) {
+        logger.error("Interrupted while trying to acquire a lock for channel close. Aborting.. ");
+      } finally {
+        if (channelWriteLock.isHeldByCurrentThread()) {
+          channelWriteLock.unlock();
+        }
+      }
+    }
   }
 
   @Override
   public void onError(RestRequestMetadata requestMetadata, Throwable cause) {
     if (errorSent.compareAndSet(false, true)) {
-      if (!responseMetadataWritten.getAndSet(true)) {
-        FullHttpResponse errorResponse = getErrorResponse(cause);
-        try {
-          verifyChannelActive();
-          // no guarantee that the channel is not already closed at write time. Thread safe, but no ordering guarantees.
-          close(ctx.writeAndFlush(errorResponse));
-        } catch (RestServiceException e) {
-          logger.error("Channel has been closed before error response could be sent to client. Original error follows",
-              cause);
-        }
-      } else {
-        logger.error("Discovered that response metadata had already been sent to the client when attempting to send " +
-            " an error. This indicates a bad state transition. The request metadata is " + requestMetadata +
-            ". The original cause" + " of error follows: ", cause);
+      ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
+      if (!errorResponseWrite.isSuccess()) {
+        logger.error("Could not send error response to client. Reason for failure and original error follow: ",
+            errorResponseWrite.cause(), cause);
+        // close the connection anyway so that the client knows something went wrong.
+        // TODO: lookup what the general directives on how to handle the case where we realize there is problem in the
+        // TODO: middle of sending a (huge) response and we have already sent 200 OK to the client.
       }
+      flush();
+      close();
     }
   }
 
@@ -133,24 +143,99 @@ class NettyResponseHandler implements RestResponseHandler {
   @Override
   public void setContentType(String type)
       throws RestServiceException {
-    verifyResponseAlive();
-    responseMetadata.headers().set(HttpHeaders.Names.CONTENT_TYPE, type);
+    changeResponseHeader(HttpHeaders.Names.CONTENT_TYPE, type);
   }
 
   /**
-   * Writes the response data to the channel.
+   * Writes response metadata to the channel if not already written previously and channel is active.
+   * <p/>
+   * Other than Netty write failures, this operation can fail for three reasons: -
+   * 1. Response metadata has already been written - results in a {@link RestServiceException}.
+   * 2. Channel is inactive - results in a {@link RestServiceException}.
+   * 3. Synchronize for response metadata write was interrupted- results in a {@link InterruptedException}.
+   * In all three cases, a failed {@link ChannelFuture} wrapping the exact exception is returned.
+   * @param responseMetadata - The response metadata to be written.
+   * @return - A {@link ChannelFuture} that tracks the write operation if sanity checks succeeded. Else, a failed
+   * {@link ChannelFuture} wrapping the exact exception.
    */
-  private void writeResponseMetadata() {
-    ctx.write(responseMetadata);
+  private ChannelFuture maybeWriteResponseMetadata(HttpResponse responseMetadata) {
+    try {
+      responseMetadataChangeLock.lockInterruptibly();
+      verifyResponseAlive();
+      responseMetadataWritten = true;
+      return writeToChannel(responseMetadata);
+    } catch (Exception e) {
+      // specifically don't want this to throw Exceptions because the semantic "maybe" hints that it is possible that
+      // the caller does not care whether this happens or not. If he does care, he will check the future returned.
+      return ctx.newFailedFuture(e);
+    } finally {
+      if (channelWriteLock.isHeldByCurrentThread()) {
+        channelWriteLock.unlock();
+      }
+    }
   }
 
   /**
-   * Closes the channel once the operation represented by the future succeeds.
-   * @param future
+   * Writes the provided {@link HttpObject} to the channel.
+   * </p>
+   * This function is thread safe but offers no ordering guarantees. The write can fail if synchronization to write to
+   * channel is interrupted.
+   * @param httpObject - the {@link HttpObject} to be written.
+   * @return - A {@link ChannelFuture} that tracks the write operation.
+   * @throws RestServiceException - If the channel is not active.
    */
-  private void close(ChannelFuture future) {
-    if (channelClosed.compareAndSet(false, true) && ctx.channel().isOpen()) {
-      future.addListener(ChannelFutureListener.CLOSE);
+  private ChannelFuture writeToChannel(HttpObject httpObject)
+      throws RestServiceException {
+    try {
+      channelWriteLock.lockInterruptibly();
+      // CAVEAT: This is just a sanity check. There is no guarantee that the channel is open at write/flush time.
+      // Netty generally puts all writes on the channel before close but there is no guarantee that we will get the
+      // write in before some external thread closes the connection. This merely checks for bad state transitions
+      // through this object.
+      verifyChannelActive();
+      // CAVEAT: This write may or may not succeed depending on whether the channel is open at actual write time.
+      // While this object makes sure that close happens only after all writes of this object are complete, any external
+      // thread that has a direct reference to the ChannelHandlerContext can close the channel at any time.
+      // CAVEAT: This write is thread-safe but there are no ordering guarantees (there cannot be).
+      lastWriteFuture = ctx.write(httpObject);
+      return lastWriteFuture;
+    } catch (InterruptedException e) {
+      throw new RestServiceException("Channel write synchronization was interrupted", e,
+          RestServiceErrorCode.OperationInterrupted);
+    } finally {
+      if (channelWriteLock.isHeldByCurrentThread()) {
+        channelWriteLock.unlock();
+      }
+    }
+  }
+
+  /**
+   * Changes the value of response headers after making sure that the response metadata is not already sent or is being
+   * sent.
+   * <p/>
+   * The update can fail for two reasons: -
+   * 1. Synchronization for response metadata write was interrupted - results in a {@link InterruptedException}. This is
+   * wrapped in a {@link RestServiceException}.
+   * 2. The response metadata was already sent or is being sent - results in a {@link RestServiceException} that is
+   * thrown as is.
+   * @param headerName - The name of the header.
+   * @param headerValue - The intended value of the header.
+   * @return - The updated headers.
+   * @throws RestServiceException - if the response metadata is already sent or is being sent.
+   */
+  private HttpHeaders changeResponseHeader(String headerName, Object headerValue)
+      throws RestServiceException {
+    try {
+      responseMetadataChangeLock.lockInterruptibly();
+      verifyResponseAlive();
+      return responseMetadata.headers().set(headerName, headerValue);
+    } catch (InterruptedException e) {
+      throw new RestServiceException("Response metadata change synchronization was interrupted", e,
+          RestServiceErrorCode.OperationInterrupted);
+    } finally {
+      if (channelWriteLock.isHeldByCurrentThread()) {
+        channelWriteLock.unlock();
+      }
     }
   }
 
@@ -158,11 +243,12 @@ class NettyResponseHandler implements RestResponseHandler {
    * Verify state of responseMetadata so that we do not try to modify responseMetadata after it has been written to the
    * channel.
    * <p/>
-   * Simply checks for invalid state transitions. No atomicity guarantees.
+   * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
+   * their responsibility to ensure it.
    */
   private void verifyResponseAlive()
       throws RestServiceException {
-    if (responseMetadataWritten.get()) {
+    if (responseMetadataWritten) {
       nettyMetrics.deadResponseAccess.inc();
       throw new RestServiceException("Response metadata has already been written to channel",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
@@ -170,16 +256,18 @@ class NettyResponseHandler implements RestResponseHandler {
   }
 
   /**
-   * Verify that channel is still open.
+   * Verify that the channel is still active.
    * <p/>
-   * Simply checks for invalid state transitions. No atomicity guarantees.
+   * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
+   * their responsibility to ensure it.
    */
   private void verifyChannelActive()
       throws RestServiceException {
-    // TODO: once we support keepalive, we might want to verify if request is alive rather than channel
-    if (channelClosed.get() || !(ctx.channel().isActive())) {
+    // TODO: once we support keepalive, we might want to verify if request is alive rather than channel.
+    if (channelClosed || !(ctx.channel().isActive())) {
       nettyMetrics.channelOperationAfterCloseErrorCount.inc();
-      throw new IllegalStateException("Channel " + ctx.channel() + " has already been closed before write");
+      throw new RestServiceException("Channel " + ctx.channel() + " has already been closed before write",
+          RestServiceErrorCode.ChannelPreviouslyClosed);
     }
   }
 
@@ -187,9 +275,9 @@ class NettyResponseHandler implements RestResponseHandler {
    * Provided a cause, returns an error response with the right status and error message.
    * @param cause - the cause of the error.
    */
-  private FullHttpResponse getErrorResponse(Throwable cause) {
+  private FullHttpResponse generateErrorResponse(Throwable cause) {
     nettyMetrics.errorStateCount.inc();
-    HttpResponseStatus status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+    HttpResponseStatus status;
     StringBuilder errReason = new StringBuilder();
     if (cause instanceof RestServiceException) {
       status = getHttpResponseStatus(((RestServiceException) cause).getErrorCode());
@@ -197,6 +285,7 @@ class NettyResponseHandler implements RestResponseHandler {
         errReason.append(" (Reason - ").append(cause.getCause()).append(")");
       }
     } else {
+      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       nettyMetrics.unknownExceptionCount.inc();
       logger.error("While building error response: Unknown cause received", cause);
     }
@@ -209,7 +298,7 @@ class NettyResponseHandler implements RestResponseHandler {
   }
 
   /**
-   * Converts a RestServiceErrorCode into a HTTP response status.
+   * Converts a {@link RestServiceErrorCode} into a {@link HttpResponseStatus}.
    * @param restServiceErrorCode
    * @return
    */
@@ -225,6 +314,7 @@ class NettyResponseHandler implements RestResponseHandler {
         nettyMetrics.badRequestErrorCount.inc();
         return HttpResponseStatus.BAD_REQUEST;
       case ChannelActiveTasksFailure:
+      case OperationInterrupted:
       case RequestHandlerSelectionError:
       case InternalServerError:
       case RequestHandleFailure:

@@ -51,7 +51,6 @@ class AdminBlobStorageService implements BlobStorageService {
         GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap);
         break;
       default:
-        // TODO: this is probably a blob get
         throw new IllegalStateException("Blob GET not implemented");
     }
   }

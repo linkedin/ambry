@@ -33,8 +33,6 @@ import static org.junit.Assert.assertFalse;
  * Tests functionality of {@link NettyResponseHandler}.
  */
 public class NettyResponseHandlerTest {
-  // TODO: More tests will be added.
-
   /**
    * Tests the common workflow of the {@link NettyResponseHandler} i.e., add some content to response body via
    * {@link NettyResponseHandler#addToResponseBody(byte[], boolean)} and then

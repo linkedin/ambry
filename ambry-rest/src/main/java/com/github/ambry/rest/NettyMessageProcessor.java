@@ -50,6 +50,10 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  * Every time a new channel is created, Netty creates instances of all handlers in its pipeline. Since this class is one
  * of the handlers, a new instance of it is created for every connection. Therefore there can be multiple instances of
  * this class at any point of time.
+ * <p/>
+ * If there is no keepalive, a channel is created and destroyed for the lifetime of exactly one request. If there is
+ * keepalive, requests can follow one after the other. But at any point of time, only one request is actually "alive"
+ * in the channel (i.e. there cannot be multiple requests in flight that are being actively served on the same channel).
  */
 class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final RestRequestHandlerController requestHandlerController;
@@ -71,7 +75,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   /**
    * Netty calls this function when the channel is active.
    * <p/>
-   * This is called exactly once in the lifetime of the channel.
+   * This is called exactly once in the lifetime of the channel. If there is no keepalive, this will be called
+   * before the request (and the channel lives to serve exactly one request). If there is keepalive, this will be
+   * called just once before receiving the first request.
    * <p/>
    * At this point the required {@link RestRequestHandler} and {@link RestResponseHandler} are obtained and the same
    * instances are used throughout the lifetime of the channel.
@@ -87,9 +93,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     this.ctx = ctx;
     try {
       // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
-      // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since the
-      // request parts have to be processed in order, we maintain references to the handlers throughout and use the same
-      // handlers for the whole request.
+      // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
+      // the request parts have to be processed in order, we maintain references to the handlers throughout and use the
+      // same handlers for the whole request.
       requestHandler = requestHandlerController.getRequestHandler();
       responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
     } catch (Exception e) {
@@ -104,13 +110,16 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed. Any tasks
    * at this point of time cannot communicate with the client.
    * <p/>
-   * This is called exactly once in the lifetime of the channel.
+   * This is called exactly once in the lifetime of the channel. If there is no keepalive, this will be called
+   * after one request (since the channel lives to serve exactly one request). If there is keepalive, this will be
+   * called once all the requests are done (the channel is closed).
    * <p/>
    * At this point we can perform state cleanup.
    * @param ctx - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
+    // TODO: once we support keepalive, we need to do this at the end of a request too.
     try {
       if (requestHandler != null) {
         requestHandler.onRequestComplete(request);
@@ -128,7 +137,8 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   /**
    * Netty calls this function when any exception is caught during the functioning of this handler.
    * <p/>
-   * Centralized error handling based on the exception can be performed here.
+   * Centralized error handling based on the exception is performed here. Error responses are sent to the client via
+   * the {@link RestResponseHandler} wherever possible.
    * <p/>
    * If this function throws an Exception, it is bubbled up to the handler before this one in the Netty pipeline.
    * @param ctx - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
@@ -237,11 +247,12 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       request = restRequestMetadata;
       handleRequestInfo(new RestRequestInfo(request, null, responseHandler));
     } else {
-      // TODO: the duplicate request handling needs rethinking.
+      // We have received a duplicate request. This shouldn't happen and there is no good way to deal with it. So
+      // just update a metric and log an error.
       nettyMetrics.duplicateRequestErrorCount.inc();
-      throw new RestServiceException(
-          "Received duplicate request. Old request - " + request + ". New request - " + httpRequest,
-          RestServiceErrorCode.DuplicateRequest);
+      logger.error(
+          "Received duplicate request. Old request - " + request + ". New request - " + httpRequest + " on channel "
+              + ctx.channel());
     }
   }
 
