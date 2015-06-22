@@ -1,8 +1,7 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.restservice.NioServer;
+import com.github.ambry.restservice.RestRequestHandlerController;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -18,138 +17,163 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of NioServer. Handles Http for the underlying BlobStorageService.
+ * Netty specific implementation of {@link NioServer}.
+ * <p/>
+ * Responsible for accepting connections from clients, decoding HTTP data, passing them on the underlying
+ * {@link com.github.ambry.restservice.BlobStorageService} and providing a Netty specific implementation of
+ * {@link com.github.ambry.restservice.RestResponseHandler} ({@link NettyResponseHandler}) for writing responses to
+ * clients.
+ * <p/>
+ * This implementation creates a pipeline of handlers for every connection that it accepts and the last inbound handler,
+ * {@link NettyMessageProcessor}, is responsible for invoking a {@link com.github.ambry.restservice.RestRequestHandler}.
+ * <p/>
+ * Each {@link NettyMessageProcessor} instance makes use of the {@link RestRequestHandlerController} provided to request
+ * a {@link com.github.ambry.restservice.RestRequestHandler}.
  */
-public class NettyServer implements NioServer {
-  private final NettyConfig serverConfig;
+class NettyServer implements NioServer {
+  private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  /**
-   * This the object through which a RestMessageHandler can be requested.
-   */
-  private final RestRequestDelegator requestDelegator;
-
+  private final NettyServerDeployer nettyServerDeployer;
+  private final Thread nettyServerDeployerThread;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private EventLoopGroup bossGroup;
-  private EventLoopGroup workerGroup;
-
-  public NettyServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestDelegator requestDelegator)
-      throws InstantiationException {
-    serverConfig = new NettyConfig(verifiableProperties);
-    nettyMetrics = new NettyMetrics(metricRegistry);
-    this.requestDelegator = requestDelegator;
+  public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
+      RestRequestHandlerController requestHandlerController) {
+    this.nettyConfig = nettyConfig;
+    this.nettyMetrics = nettyMetrics;
+    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandlerController);
+    nettyServerDeployerThread = new Thread(nettyServerDeployer);
   }
 
+  @Override
   public void start()
       throws InstantiationException {
-    logger.info("Netty server starting up");
-
-    bossGroup = new NioEventLoopGroup(serverConfig.getBossThreadCount());
-    workerGroup = new NioEventLoopGroup(serverConfig.getWorkerThreadCount());
-
+    logger.info("Starting NettyServer..");
     try {
-      // deploy netty server as a thread and catch startup exceptions if any.
-      AtomicReference<Exception> startupException = new AtomicReference<Exception>();
-      NettyServerDeployer nettyServerDeployer = new NettyServerDeployer(startupException);
-      Thread deploymentThread = new Thread(nettyServerDeployer);
-      deploymentThread.start();
-
-      long startWaitSecs = serverConfig.getStartupWaitSeconds();
+      nettyServerDeployerThread.start();
+      long startWaitSecs = nettyConfig.getStartupWaitSeconds();
       if (!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
         throw new InstantiationException("Netty server failed to start in " + startWaitSecs + " seconds");
-      } else if (startupException.get() != null) {
-        throw new InstantiationException("Netty server start failed - " + startupException.get());
+      } else if (nettyServerDeployer.getException() != null) {
+        throw new InstantiationException("Netty server start failed - " + nettyServerDeployer.getException());
       }
     } catch (InterruptedException e) {
-      logger.error("Netty server start might have failed - " + e);
+      logger.error("Netty server start might have failed", e);
       throw new InstantiationException("Netty server start might have failed - " + e);
     }
   }
 
+  @Override
   public void shutdown() {
-    if (bossGroup != null && workerGroup != null) {
-      logger.info("Shutting down netty server..");
-      workerGroup.shutdownGracefully();
-      bossGroup.shutdownGracefully();
-      try {
-        if (!awaitTermination(60, TimeUnit.SECONDS)) {
-          logger.error("NettyServer shutdown failed after waiting for 60 seconds");
-        } else {
-          bossGroup = null;
-          workerGroup = null;
-          logger.info("Netty server shutdown");
-        }
-      } catch (InterruptedException e) {
-        logger.error("Termination await interrupted while attempting to shutdown NettyServer - " + e);
-      }
+    if (nettyServerDeployerThread.isAlive()) {
+      nettyServerDeployer.shutdown();
     }
   }
+}
 
-  private boolean awaitTermination(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    return workerGroup.awaitTermination(timeout / 2, timeUnit) && bossGroup.awaitTermination(timeout / 2, timeUnit);
+/**
+ * Deploys netty HTTP server in a separate thread so that the main thread is unblocked.
+ */
+class NettyServerDeployer implements Runnable {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final CountDownLatch startupDone = new CountDownLatch(1);
+  private final EventLoopGroup bossGroup;
+  private final EventLoopGroup workerGroup;
+  private final NettyConfig nettyConfig;
+  private final NettyMetrics nettyMetrics;
+  private final RestRequestHandlerController requestHandlerController;
+  private Exception exception = null;
+
+  public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
+      RestRequestHandlerController requestHandlerController) {
+    this.nettyConfig = nettyConfig;
+    this.nettyMetrics = nettyMetrics;
+    this.requestHandlerController = requestHandlerController;
+
+    bossGroup = new NioEventLoopGroup(nettyConfig.getBossThreadCount());
+    workerGroup = new NioEventLoopGroup(nettyConfig.getWorkerThreadCount());
+  }
+
+  @Override
+  public void run() {
+    try {
+      ServerBootstrap b = new ServerBootstrap();
+      // Netty creates a new instance of every class in the pipeline for every connection
+      // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
+      b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+          .option(ChannelOption.SO_BACKLOG, nettyConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
+          .childHandler(new ChannelInitializer<SocketChannel>() {
+            @Override
+            public void initChannel(SocketChannel ch)
+                throws Exception {
+              ch.pipeline()
+                  // for http encoding/decoding.
+                  .addLast("codec", new HttpServerCodec())
+                      // for chunking. TODO: this is not leveraged by us yet. We will do it when doing GET blob.
+                  .addLast("chunker", new ChunkedWriteHandler())
+                      // for detecting connections that have been idle too long - probably because of an error.
+                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.getIdleTimeSeconds()))
+                      // custom processing class that interfaces with a BlobStorageService.
+                  .addLast("processor", new NettyMessageProcessor(requestHandlerController, nettyMetrics));
+            }
+          });
+      ChannelFuture f = b.bind(nettyConfig.getPort()).sync();
+      logger.info("NettyServer has started on port " + nettyConfig.getPort());
+
+      // let the parent know that startup is complete and so that it can proceed.
+      startupDone.countDown();
+      // this is blocking
+      f.channel().closeFuture().sync();
+    } catch (Exception e) {
+      logger.error("Netty server start failed", e);
+      exception = e;
+      startupDone.countDown();
+    }
   }
 
   /**
-   * Deploys netty http server.
+   * Wait for the specified time for the startup to complete.
+   * @param timeout - time to wait.
+   * @param timeUnit - unit of timeout
+   * @return - true if startup was done within the timeout, false otherwise.
+   * @throws InterruptedException
    */
-  private class NettyServerDeployer implements Runnable {
-    private CountDownLatch startupDone = new CountDownLatch(1);
-    /**
-     * To record an exceptions at startup.
-     */
-    private AtomicReference<Exception> exception;
+  public boolean awaitStartup(long timeout, TimeUnit timeUnit)
+      throws InterruptedException {
+    return startupDone.await(timeout, timeUnit);
+  }
 
-    public NettyServerDeployer(AtomicReference<Exception> exception) {
-      this.exception = exception;
-    }
+  /**
+   * Gets exceptions that occurred during startup if any.
+   * @return - null if no exception occurred during startup, the exception that occurred otherwise.
+   */
+  public Exception getException() {
+    return exception;
+  }
 
-    public void run() {
+  /**
+   * Shuts down the NettyServerDeployer.
+   */
+  public void shutdown() {
+    if (!bossGroup.isTerminated() || !workerGroup.isTerminated()) {
+      logger.info("Shutting down NettyServer..");
+      workerGroup.shutdownGracefully();
+      bossGroup.shutdownGracefully();
       try {
-        ServerBootstrap b = new ServerBootstrap();
-
-        // Netty creates a new instance of every class in the pipeline for every connection
-        // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
-        b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
-            .option(ChannelOption.SO_BACKLOG, serverConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
-            .childHandler(new ChannelInitializer<SocketChannel>() {
-              @Override
-              public void initChannel(SocketChannel ch)
-                  throws Exception {
-                ch.pipeline()
-                    // for http encoding/decoding.
-                    .addLast("codec", new HttpServerCodec())
-                        // for chunking. TODO: this is not leveraged by us yet. We will do it when doing GET blob.
-                    .addLast("chunker", new ChunkedWriteHandler())
-                        // for detecting connections that have been idle too long - probably because of an error.
-                    .addLast("idleStateHandler", new IdleStateHandler(0, 0, serverConfig.getIdleTimeSeconds()))
-                        // custom processing class that interfaces with a BlobStorageService.
-                    .addLast("processor", new NettyMessageProcessor(requestDelegator, nettyMetrics));
-              }
-            });
-
-        ChannelFuture f = b.bind(serverConfig.getPort()).sync();
-        logger.info("Netty server started on port " + serverConfig.getPort());
-        startupDone.countDown(); // let the parent know that startup is complete
-
-        f.channel().closeFuture().sync(); // this is blocking
-      } catch (Exception e) {
-        logger.error("Netty server start failed - " + e);
-        exception.set(e);
-        startupDone.countDown();
+        // magic number
+        if (workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
+          logger.info("NettyServer shutdown complete");
+        } else {
+          logger.error("NettyServer shutdown failed after waiting for 60 seconds");
+        }
+      } catch (InterruptedException e) {
+        logger.error("Termination await interrupted while attempting to shutdown NettyServer", e);
       }
-    }
-
-    public boolean awaitStartup(long timeout, TimeUnit timeUnit)
-        throws InterruptedException {
-      return startupDone.await(timeout, timeUnit);
     }
   }
 }

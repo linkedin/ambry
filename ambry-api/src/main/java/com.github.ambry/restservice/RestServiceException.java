@@ -1,7 +1,8 @@
 package com.github.ambry.restservice;
 
 /**
- * High level exception used to exchange error information b/w different layers and implementations.
+ * Exceptions thrown by different layers of the RESTful frontend. All exceptions are accompanied by a
+ * {@link RestServiceErrorCode}.
  */
 public class RestServiceException extends Exception {
   private final RestServiceErrorCode error;

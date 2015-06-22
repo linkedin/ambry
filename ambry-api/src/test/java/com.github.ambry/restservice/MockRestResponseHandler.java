@@ -6,7 +6,26 @@ import org.json.JSONObject;
 
 
 /**
- * Implementation of RestResponseHandler that can be used by tests.
+ * Implementation of {@link RestResponseHandler} that can be used by tests.
+ * <p/>
+ * The responseMetadata is stored in-memory and data is "flushed" by moving it to a different data structure. The
+ * responseMetadata and responseBody (flushed or non-flushed) can be obtained through APIs to check correctness.
+ * <p/>
+ * The responseMetadata in constructed as a {@link JSONObject} that contains the following fields: -
+ * 1. "responseStatus" - String - the response status, "OK" or "Error".
+ * 2. "responseHeaders" - {@link JSONObject} - the response headers as key value pairs.
+ * In case of error it contains an additional field
+ * 3. "errorMessage" - String - description of the error.
+ * <p/>
+ * List of possible responseHeaders: -
+ * 1. "contentType" - String - the content type of the data in the response.
+ * <p/>
+ * When {@link MockRestResponseHandler#addToResponseBody(byte[], boolean)} is called, the input bytes are added to a
+ * {@link ByteArrayOutputStream}. This represents the unflushed responseBody. On
+ * {@link MockRestResponseHandler#flush()}, the {@link ByteArrayOutputStream} is emptied into a {@link StringBuilder}
+ * and reset. The {@link StringBuilder} represents the flushed responseBody.
+ * <p/>
+ * All functions are synchronized because this is expected to be thread safe.
  */
 public class MockRestResponseHandler implements RestResponseHandler {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
@@ -17,161 +36,146 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public static String STATUS_OK = "OK";
   public static String STATUS_ERROR = "Error";
 
-  private boolean channelClosed = false;
+  private boolean channelActive = true;
   private boolean errorSent = false;
-  private boolean responseFinalized = false;
-  private boolean responseFlushed = false;
+  private boolean responseMetadataFinalized = false;
+  private boolean responseMetadataFlushed = false;
 
-  /**
-   * The response in constructed as a json object
-   * Contains:
-   * 1. responseStatus - the reponse status.
-   * 2. responseHeaders - the response headers as a json object.
-   *
-   * In case of error it contains an additional field
-   * 3. errorMessage
-   *
-   * Headers
-   * 1. contentType
-   */
-  private JSONObject response = new JSONObject();
-  /**
-   * When addToBody is called, the bytes are added to end of this ByteArrayOutputStream.
-   * On flush, the bytes are emptied into bodyStringBuilder and reset.
-   * This essentially represents the un-flushed body only.
-   */
-  private ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
-  /**
-   * String builder for the body. Whenever a flush is called, the raw bytes in bodyBytes are appended to this.
-   * This essentially represents the flushed body only.
-   */
-  private StringBuilder bodyStringBuilder = new StringBuilder();
+  private final JSONObject responseMetadata = new JSONObject();
+  private final ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
+  private final StringBuilder bodyStringBuilder = new StringBuilder();
 
-  public void addToBody(byte[] data, boolean isLast) {
-    verifyChannelOpen();
+  public MockRestResponseHandler()
+      throws JSONException {
+    responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_OK);
+  }
+
+  @Override
+  public synchronized void addToResponseBody(byte[] data, boolean isLast)
+      throws RestServiceException {
+    verifyChannelActive();
+    responseMetadataFinalized = true;
     bodyBytes.write(data, 0, data.length);
   }
 
-  public void addToBodyAndFlush(byte[] data, boolean isLast) {
-    addToBody(data, isLast);
-    flush();
-  }
-
-  public void finalizeResponse()
+  @Override
+  public synchronized void flush()
       throws RestServiceException {
-    verifyChannelOpen();
-    verifyResponseAlive();
-    try {
-      response.put(RESPONSE_STATUS_KEY, STATUS_OK);
-      responseFinalized = true;
-    } catch (JSONException e) {
-      throw new RestServiceException("Failed to build response", RestServiceErrorCode.ResponseBuildingFailure);
-    }
-  }
-
-  public void finalizeResponseAndFlush()
-      throws RestServiceException {
-    finalizeResponse();
-    flush();
-  }
-
-  public void flush() {
-    responseFlushed = true;
+    verifyChannelActive();
+    responseMetadataFinalized = true;
+    responseMetadataFlushed = true;
     bodyStringBuilder.append(bodyBytes.toString());
     bodyBytes.reset();
   }
 
-  public void close() {
-    verifyChannelOpen();
-    channelClosed = true;
+  @Override
+  public synchronized void close()
+      throws RestServiceException {
+    channelActive = false;
   }
 
-  public void onError(Throwable cause) {
+  @Override
+  public synchronized void onError(RestRequestMetadata restRequestMetadata, Throwable cause) {
     if (!errorSent) {
-      try {
-        setContentType("text/plain");
-        response.put(RESPONSE_STATUS_KEY, STATUS_ERROR);
-        response.put(ERROR_MESSAGE_KEY, cause.toString());
-        flush();
-        errorSent = true;
-        close();
-      } catch (JSONException e) {
-        // nothing to do
-      } catch (RestServiceException e) {
-        // nothing to do
+      if (!responseMetadataFinalized) {
+        try {
+          setContentType("text/plain");
+          responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_ERROR);
+          responseMetadata.put(ERROR_MESSAGE_KEY, cause.toString());
+          flush();
+          close();
+          responseMetadataFinalized = true;
+          errorSent = true;
+        } catch (JSONException e) {
+          // nothing to do
+        } catch (RestServiceException e) {
+          // nothing to do
+        }
+      } else {
+        throw new IllegalStateException("Discovered that a responseMetadata had already been sent to the client when" +
+            " attempting to send an error responseMetadata. This indicates a bad state transition. The request" +
+            " metadata is " + restRequestMetadata + ". The original cause of error follows: ", cause);
       }
     }
   }
 
-  public void onRequestComplete() {
+  @Override
+  public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
     // nothing to do
   }
 
-  public void setContentType(String type)
+  @Override
+  public synchronized void setContentType(String type)
       throws RestServiceException {
-    try {
-      if (!response.has(RESPONSE_HEADERS_KEY)) {
-        response.put(RESPONSE_HEADERS_KEY, new JSONObject());
+    if (!responseMetadataFinalized) {
+      try {
+        if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
+          responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
+        }
+        responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).put(CONTENT_TYPE_HEADER_KEY, type);
+      } catch (JSONException e) {
+        throw new RestServiceException("Unable to set content type", RestServiceErrorCode.ResponseBuildingFailure);
       }
-      response.getJSONObject(RESPONSE_HEADERS_KEY).put(CONTENT_TYPE_HEADER_KEY, type);
-    } catch (JSONException e) {
-      throw new RestServiceException("Unable to set content type", RestServiceErrorCode.ResponseBuildingFailure);
+    } else {
+      throw new IllegalStateException("Trying to change responseMetadata after it has been written to channel");
     }
   }
 
   /**
-   * Verify state of response so that we do not try to finalize response more than once.
+   * Verify that channel is still active.
    */
-  private void verifyResponseAlive() {
-    if (responseFinalized) {
-      throw new IllegalStateException("Cannot re-finalize response");
-    }
-  }
-
-  /**
-   * Verify that channel is still open.
-   */
-  private void verifyChannelOpen() {
-    if (channelClosed) {
+  private void verifyChannelActive() {
+    if (!channelActive) {
       throw new IllegalStateException("Channel has already been closed before write");
     }
   }
 
-  // mock response handler specific functions (for testing)
-  public JSONObject getResponse() {
-    return response;
+  // mock responseMetadata handler specific functions (for testing)
+
+  /**
+   * Gets the current responseMetadata whether it has been flushed or not (Might not be the final response metadata).
+   * @return - get response metadata.
+   */
+  public synchronized JSONObject getResponseMetadata() {
+    return responseMetadata;
   }
 
-  public JSONObject getFlushedResponse() {
-    if (responseFlushed) {
-      return getResponse();
+  /**
+   * Gets the responseMetadata if it has been flushed.
+   * @return  - get response metadata if flushed.
+   */
+  public synchronized JSONObject getFlushedResponseMetadata() {
+    if (responseMetadataFinalized) {
+      return getResponseMetadata();
     }
     return null;
   }
 
-  public String getBody()
+  /**
+   * Gets the responseMetadata body including both flushed and un-flushed data.
+   * @return - flushed and un-flushed response body.
+   * @throws RestServiceException
+   */
+  public synchronized String getResponseBody()
       throws RestServiceException {
-    return getFlushedBody() + bodyBytes.toString(); // the full body contains both flushed and un-flushed data.
+    return getFlushedResponseBody() + bodyBytes.toString();
   }
 
-  public String getFlushedBody()
+  /**
+   * Gets the responseMetadata body that has already been flushed.
+   * @return - flushed response body.
+   * @throws RestServiceException
+   */
+  public synchronized String getFlushedResponseBody()
       throws RestServiceException {
     return bodyStringBuilder.toString();
   }
 
-  public boolean isChannelClosed() {
-    return channelClosed;
-  }
-
-  public boolean isErrorSent() {
-    return errorSent;
-  }
-
-  public boolean isResponseFinalized() {
-    return responseFinalized;
-  }
-
-  public boolean isResponseFlushed() {
-    return responseFlushed;
+  /**
+   * Gets the active state of the channel.
+   * @return - true if active, false if not
+   */
+  public synchronized boolean getChannelActive() {
+    return channelActive;
   }
 }

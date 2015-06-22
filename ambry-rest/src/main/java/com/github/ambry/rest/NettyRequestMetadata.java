@@ -1,26 +1,27 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.restservice.RestMethod;
-import com.github.ambry.restservice.RestRequest;
+import com.github.ambry.restservice.RestRequestMetadata;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import java.util.List;
+import java.util.Map;
 
 
 /**
- * Netty specific implementation of RestRequest
+ * Netty specific implementation of {@link RestRequestMetadata}.
  * <p/>
- * Just a wrapper over HttpRequest.
+ * Just a wrapper over {@link HttpRequest}.
  */
-public class NettyRequest implements RestRequest {
+class NettyRequestMetadata implements RestRequestMetadata {
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
 
-  public NettyRequest(HttpRequest request)
+  public NettyRequestMetadata(HttpRequest request)
       throws RestServiceException {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
@@ -37,31 +38,42 @@ public class NettyRequest implements RestRequest {
       restMethod = RestMethod.HEAD;
     } else {
       throw new RestServiceException("http method not supported: " + httpMethod,
-          RestServiceErrorCode.UnknownRestMethod);
+          RestServiceErrorCode.UnsupportedHttpMethod);
     }
   }
 
+  @Override
   public String getUri() {
     return request.getUri();
   }
 
+  @Override
   public String getPath() {
     return query.path();
   }
 
+  @Override
   public RestMethod getRestMethod() {
     return restMethod;
   }
 
-  public Object getValueOfHeader(String name) {
-    return request.headers().get(name);
+  @Override
+  public Map<String, List<String>> getArgs() {
+    return query.parameters();
   }
 
-  public List<String> getValuesOfParameterInURI(String parameter) {
-    return query.parameters().get(parameter);
+  @Override
+  public void retain() {
+    //nothing to do
   }
 
+  @Override
   public void release() {
-    //nothing to do for this
+    //nothing to do
+  }
+
+  @Override
+  public String toString() {
+    return request.toString();
   }
 }

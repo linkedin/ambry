@@ -2,50 +2,52 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
- * Handles  metrics required by RestServer
+ * {@link RestServer} and Rest infrastructure ({@link com.github.ambry.restservice.RestRequestHandlerController},
+ * {@link com.github.ambry.restservice.RestRequestHandler}) specific metrics tracking.
+ * <p/>
+ * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
-public class RestServerMetrics {
-  // RestMessageHandler
+class RestServerMetrics {
+  // TODO: expansion and documentation in another commit
   // errors
-  // rest request delegator
-  public final Counter delegatorHandlerSelectionErrorCount;
+  // RequestHandlerController
+  public final Counter handlerControllerHandlerSelectionErrorCount;
 
-  // rest message handler
+  // AsyncRequestHandler
   public final Counter handlerQueueOfferTookTooLongErrorCount;
   public final Counter handlerQueueOfferInterruptedErrorCount;
   public final Counter handlerQueueTakeInterruptedErrorCount;
-  public final Counter handlerMessageProcessingFailureErrorCount;
+  public final Counter handlerRequestInfoProcessingFailureErrorCount;
+  public final Counter handlerRestRequestInfoMissingErrorCount;
   public final Counter handlerResponseHandlerMissingErrorCount;
   public final Counter handlerRestObjectMissingErrorCount;
-  public final Counter handlerRestRequestMissingErrorCount;
+  public final Counter handlerRestRequestMetadataMissingErrorCount;
   public final Counter handlerUnknownRestMethodErrorCount;
 
-  protected Logger logger = LoggerFactory.getLogger(getClass());
-
   public RestServerMetrics(MetricRegistry metricRegistry) {
-    delegatorHandlerSelectionErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestRequestDelegator.class, "handlerSelectionErrorCount"));
+    handlerControllerHandlerSelectionErrorCount =
+        metricRegistry.counter(MetricRegistry.name(RequestHandlerController.class, "handlerSelectionErrorCount"));
 
-    handlerQueueOfferTookTooLongErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerQueueOfferTookTooLongErrorCount"));
-    handlerQueueOfferInterruptedErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerQueueOfferInterruptedErrorCount"));
+    handlerQueueOfferTookTooLongErrorCount = metricRegistry
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerQueueOfferTookTooLongErrorCount"));
+    handlerQueueOfferInterruptedErrorCount = metricRegistry
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerQueueOfferInterruptedErrorCount"));
     handlerQueueTakeInterruptedErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerQueueTakeInterruptedErrorCount"));
-    handlerMessageProcessingFailureErrorCount = metricRegistry
-        .counter(MetricRegistry.name(RestMessageHandler.class, "handlerMessageProcessingFailureErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerQueueTakeInterruptedErrorCount"));
+    handlerRequestInfoProcessingFailureErrorCount = metricRegistry
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerRequestInfoProcessingFailureErrorCount"));
+    handlerRestRequestInfoMissingErrorCount = metricRegistry
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerRestRequestInfoMissingErrorCount"));
     handlerResponseHandlerMissingErrorCount = metricRegistry
-        .counter(MetricRegistry.name(RestMessageHandler.class, "handlerResponseHandlerMissingErrorCount"));
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerResponseHandlerMissingErrorCount"));
     handlerRestObjectMissingErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerRestObjectMissingErrorCount"));
-    handlerRestRequestMissingErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerRestRequestMissingErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerRestObjectMissingErrorCount"));
+    handlerRestRequestMetadataMissingErrorCount = metricRegistry
+        .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerRestRequestMetadataMissingErrorCount"));
     handlerUnknownRestMethodErrorCount =
-        metricRegistry.counter(MetricRegistry.name(RestMessageHandler.class, "handlerUnknownRestMethodErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerUnknownRestMethodErrorCount"));
   }
 }

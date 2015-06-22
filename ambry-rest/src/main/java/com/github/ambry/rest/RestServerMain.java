@@ -20,25 +20,21 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Start point for creating an instance of RestServer and starting/shutting it down
+ * Start point for creating an instance of {@link RestServer} and starting/shutting it down.
  */
 public class RestServerMain {
-
   private static Logger logger = LoggerFactory.getLogger(RestServerMain.class);
 
   public static void main(String[] args) {
     final RestServer restServer;
     try {
-      InvocationOptions options = new InvocationOptions();
-      options.parseOptions(args);
-
+      final InvocationOptions options = new InvocationOptions(args);
       if (!options.hasError()) {
-        //Note: all this loaded differently in LI
         PropertyConfigurator.configure(options.getLogPropsFile());
-        Properties properties = Utils.loadProps(options.getPropsFilePath());
-        VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-        MetricRegistry metricRegistry = new MetricRegistry();
-        ClusterMap clusterMap =
+        final Properties properties = Utils.loadProps(options.getPropsFilePath());
+        final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+        final MetricRegistry metricRegistry = new MetricRegistry();
+        final ClusterMap clusterMap =
             new ClusterMapManager(options.getHardwareLayoutFilePath(), options.getPartitionLayoutFilePath(),
                 new ClusterMapConfig(verifiableProperties));
 
@@ -53,25 +49,26 @@ public class RestServerMain {
         });
 
         restServer.start();
+        // block until RestServer shuts down.
         restServer.awaitShutdown();
       }
     } catch (JSONException e) {
-      logger.error("Cluster map load failed - " + e);
+      logger.error("Cluster map load failed.", e);
     } catch (InstantiationException e) {
-      logger.error("InstantiationException while starting RestServer - " + e);
+      logger.error("InstantiationException while starting RestServer.", e);
     } catch (IOException e) {
-      logger.error("Options parse failed or properties file was not loaded - " + e);
+      logger.error("Options parse failed or properties file was not loaded.", e);
     } catch (Exception e) {
-      logger.error("Exception - " + e);
+      logger.error("RestServerMain failed", e);
     }
   }
 
   private static class InvocationOptions {
-    private boolean hasError = false;
-    private String hardwareLayoutFilePath = null;
-    private String logPropsFile = null;
-    private String partitionLayoutFilePath = null;
-    private String propsFilePath = null;
+    private final boolean hasError;
+    private final String hardwareLayoutFilePath;
+    private final String logPropsFile;
+    private final String partitionLayoutFilePath;
+    private final String propsFilePath;
 
     public boolean hasError() {
       return hasError;
@@ -94,11 +91,11 @@ public class RestServerMain {
     }
 
     /**
-     * Parse the arguments provided and extract them into variables.
-     * @param args
+     * Parses the arguments provided and extracts them into variables that can be retrieved through APIs.
+     * @param args - the command line argument list.
      * @throws IOException
      */
-    public void parseOptions(String args[])
+    public InvocationOptions(String args[])
         throws IOException {
       OptionParser parser = new OptionParser();
 
@@ -128,16 +125,21 @@ public class RestServerMain {
         this.logPropsFile = options.valueOf(logPropsFilePath);
         this.partitionLayoutFilePath = options.valueOf(partitionLayoutFilePath);
         this.propsFilePath = options.valueOf(propsFilePath);
+        this.hasError = false;
       } else {
-        hasError = true;
+        this.hardwareLayoutFilePath = null;
+        this.logPropsFile = null;
+        this.partitionLayoutFilePath = null;
+        this.propsFilePath = null;
+        this.hasError = true;
         parser.printHelpOn(System.err);
       }
     }
 
     /**
-     * Check if all required options are present.
-     * @param requiredArgs
-     * @param options
+     * Checks if all required options are present. Prints required arguments that are not.
+     * @param requiredArgs - the list of required arguments.
+     * @param options - the list of received options.
      * @return
      * @throws IOException
      */

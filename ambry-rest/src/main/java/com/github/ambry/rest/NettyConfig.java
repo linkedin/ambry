@@ -6,56 +6,60 @@ import com.github.ambry.config.VerifiableProperties;
 
 
 /**
- * Netty specific config
+ * Configuration parameters required by Netty.
+ * <p/>
+ * Receives the in-memory representation of a properties file and extracts parameters that are specifically
+ * required for Netty and presents them for retrieval through defined APIs.
  */
-public class NettyConfig {
+class NettyConfig {
 
-  public static String BOSS_THREADCOUNT_KEY = "netty.server.boss.threadcount";
-  public static String IDLETIME_SECONDS_KEY = "netty.server.idletime.seconds";
-  public static String PORT_KEY = "netty.server.port";
-  public static String SO_BACKLOG_KEY = "netty.server.sobacklog";
-  public static String STARTUP_WAIT_SECONDS = "netty.server.startup.wait.seconds";
-  public static String WORKER_THREADCOUNT_KEY = "netty.server.worker.threadcount";
+  protected static String BOSS_THREAD_COUNT_KEY = "netty.server.boss.thread.count";
+  protected static String IDLE_TIME_SECONDS_KEY = "netty.server.idle.time.seconds";
+  protected static String PORT_KEY = "netty.server.port";
+  protected static String SO_BACKLOG_KEY = "netty.server.sobacklog";
+  protected static String STARTUP_WAIT_SECONDS = "netty.server.startup.wait.seconds";
+  protected static String WORKER_THREAD_COUNT_KEY = "netty.server.worker.thread.count";
 
   /**
-   * Number of netty boss threads
+   * Number of netty boss threads.
    */
-  @Config("bossThreadCount")
+  @Config("netty.server.boss.thread.count")
   @Default("1")
   private final int bossThreadCount;
 
   /**
-   * The amount of time a channel is allowed to be idle before its closed. 0 to disable
+   * The amount of time a channel is allowed to be idle before it's closed. 0 to disable.
    */
-  @Config("idleTimeSeconds")
+  @Config("netty.server.idle.time.seconds")
   @Default("60")
   private final int idleTimeSeconds;
 
   /**
-   * Port to run netty server on
+   * Port on which to run netty server.
    */
-  @Config("port")
+  @Config("netty.server.port")
   @Default("8088")
   private final int port;
 
   /**
-   * Socket backlog size
+   * Socket backlog size. Defines the number of connections that can wait in queue to be accepted.
    */
-  @Config("soBacklog")
+  @Config("netty.server.sobacklog")
   @Default("100")
   private final int soBacklog;
 
   /**
-   * startup wait time (in seconds)
+   * Startup wait time (in seconds). If the netty server does not start up within this time, the startup is considered
+   * failed.
    */
-  @Config("startupWaitSeconds")
+  @Config("netty.server.startup.wait.seconds")
   @Default("30")
   private final long startupWaitSeconds;
 
   /**
-   * Number of netty worker threads
+   * Number of netty worker threads.
    */
-  @Config("workerThreadCount")
+  @Config("netty.server.worker.thread.count")
   @Default("1")
   private final int workerThreadCount;
 
@@ -84,11 +88,11 @@ public class NettyConfig {
   }
 
   public NettyConfig(VerifiableProperties verifiableProperties) {
-    bossThreadCount = verifiableProperties.getInt(BOSS_THREADCOUNT_KEY, 1);
-    idleTimeSeconds = verifiableProperties.getInt(IDLETIME_SECONDS_KEY, 60);
+    bossThreadCount = verifiableProperties.getInt(BOSS_THREAD_COUNT_KEY, 1);
+    idleTimeSeconds = verifiableProperties.getInt(IDLE_TIME_SECONDS_KEY, 60);
     port = verifiableProperties.getInt(PORT_KEY, 8088);
     soBacklog = verifiableProperties.getInt(SO_BACKLOG_KEY, 100);
     startupWaitSeconds = verifiableProperties.getLong(STARTUP_WAIT_SECONDS, 30);
-    workerThreadCount = verifiableProperties.getInt(WORKER_THREADCOUNT_KEY, 1);
+    workerThreadCount = verifiableProperties.getInt(WORKER_THREAD_COUNT_KEY, 1);
   }
 }

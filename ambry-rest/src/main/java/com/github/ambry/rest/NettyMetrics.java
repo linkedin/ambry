@@ -5,10 +5,13 @@ import com.codahale.metrics.MetricRegistry;
 
 
 /**
- * Netty specific metrics
+ * Netty specific metrics tracking.
+ * <p/>
+ * Exports metrics that are triggered by Netty to the provided {@link MetricRegistry}.
  */
-public class NettyMetrics {
+class NettyMetrics {
   //errors
+  // TODO: expansion and documentation in another commit.
   public final Counter badRequestErrorCount;
   public final Counter channelActiveTasksFailureCount;
   public final Counter channelInactiveTasksFailureCount;

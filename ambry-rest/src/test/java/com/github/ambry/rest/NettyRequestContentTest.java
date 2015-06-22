@@ -10,34 +10,35 @@ import static org.junit.Assert.assertEquals;
 
 
 /**
- * Tests functionality of NettyContent
+ * Tests functionality of {@link NettyRequestContent}.
  */
-public class NettyContentTest {
+public class NettyRequestContentTest {
 
   /**
-   * This tests conversion of HttpContent instances given good input.
+   * This tests conversion of {@link io.netty.handler.codec.http.HttpContent} into {@link NettyRequestContent} given
+   * good input.
    */
   @Test
   public void conversionWithGoodInputTest() {
-    NettyContent nettyContent;
+    NettyRequestContent nettyContent;
     String contentStr = "SomeContent";
     ByteBuf content = Unpooled.copiedBuffer(contentStr.getBytes());
     boolean isLast = false;
 
-    nettyContent = new NettyContent(new DefaultHttpContent(content));
+    nettyContent = new NettyRequestContent(new DefaultHttpContent(content));
     validateContent(nettyContent, contentStr, isLast);
 
     isLast = true;
-    nettyContent = new NettyContent(new DefaultLastHttpContent(content));
+    nettyContent = new NettyRequestContent(new DefaultLastHttpContent(content));
     validateContent(nettyContent, contentStr, isLast);
 
-    nettyContent = new NettyContent(new DefaultLastHttpContent());
+    nettyContent = new NettyRequestContent(new DefaultLastHttpContent());
     validateContent(nettyContent, "", isLast);
   }
 
   // helpers
   // conversionWithGoodInputTest() helpers
-  private void validateContent(NettyContent nettyContent, String contentStr, boolean isLast) {
+  private void validateContent(NettyRequestContent nettyContent, String contentStr, boolean isLast) {
     assertEquals("Content mismatch", contentStr, new String(nettyContent.getBytes()));
     assertEquals("Last status mismatch", isLast, nettyContent.isLast());
   }
