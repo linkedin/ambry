@@ -4,7 +4,7 @@ package com.github.ambry.restservice;
  * A RestRequestHandlerController is expected to start up a fixed number of {@link RestRequestHandler} instances and
  * hand them out when requested.
  * <p/>
- * It cannot expected to return a specific instance of {@link RestRequestHandler} at any point of time and may choose
+ * It cannot be expected to return a specific instance of {@link RestRequestHandler} at any point of time and may choose
  * any instance from its pool.
  * <p/>
  * Implementations are expected to be thread-safe.

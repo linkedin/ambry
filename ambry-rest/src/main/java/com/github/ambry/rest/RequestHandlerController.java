@@ -6,6 +6,7 @@ import com.github.ambry.restservice.RestRequestHandlerController;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -68,9 +69,11 @@ class RequestHandlerController implements RestRequestHandlerController {
   public void shutdown() {
     if (requestHandlers.size() > 0) {
       logger.info("Shutting down RequestHandlerController..");
-      for (int i = 0; i < requestHandlers.size(); i++) {
-        requestHandlers.get(i).shutdown();
-        requestHandlers.remove(i);
+      Iterator<RestRequestHandler> asyncRequestHandlerIterator = requestHandlers.iterator();
+      while (asyncRequestHandlerIterator.hasNext()) {
+        RestRequestHandler requestHandler = asyncRequestHandlerIterator.next();
+        requestHandler.shutdown();
+        asyncRequestHandlerIterator.remove();
       }
       logger.info("RequestHandlerController shutdown complete");
     }

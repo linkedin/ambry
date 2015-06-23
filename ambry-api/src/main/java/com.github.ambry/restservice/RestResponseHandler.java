@@ -1,15 +1,15 @@
 package com.github.ambry.restservice;
 
 /**
- * The RestResponseHandler is a meant to provide a {@link NioServer} implementation independent way to return responses
+ * The RestResponseHandler is meant to provide a {@link NioServer} implementation independent way to return responses
  * to the client. It deals with data in terms of bytes only and is not concerned with different types of data that might
  * need to be returned from the {@link BlobStorageService}.
  * <p/>
  * This functionality is mostly required by implementations of {@link BlobStorageService} since they are agnostic to
  * both the REST protocol being used and the framework used for the implementation of {@link NioServer}.
  * <p/>
- * Typically, the RestResponseHandler wraps the APIs provided by the framework used for implementation of
- * {@link NioServer}  to return responses to clients.
+ * Typically, the RestResponseHandler wraps the APIs provided by the framework used for an implementation of
+ * {@link NioServer} to return responses to clients.
  * <p/>
  * Implementations are expected to be thread-safe but use with care across different threads since there are neither
  * ordering guarantees nor operation success guarantees (e.g. if an external thread closes the channel while a write
