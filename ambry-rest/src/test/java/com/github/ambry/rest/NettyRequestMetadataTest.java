@@ -56,6 +56,14 @@ public class NettyRequestMetadataTest {
   @Test
   public void conversionWithBadInputTest()
       throws RestServiceException {
+    // null input.
+    try {
+      new NettyRequestMetadata(null);
+      fail("Provided null input to NettyRequestMetadata, yet it did not fail");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
     // unknown http method
     try {
       new NettyRequestMetadata(createRequest(HttpMethod.TRACE, "/", null, null));

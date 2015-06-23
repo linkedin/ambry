@@ -91,18 +91,18 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   public void channelActive(ChannelHandlerContext ctx)
       throws RestServiceException {
     this.ctx = ctx;
-    try {
-      // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
-      // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
-      // the request parts have to be processed in order, we maintain references to the handlers throughout and use the
-      // same handlers for the whole request.
-      requestHandler = requestHandlerController.getRequestHandler();
-      responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
-    } catch (Exception e) {
-      logger.error("Unable to obtain request/response handlers", e);
+    // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
+    // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
+    // the request parts have to be processed in order, we maintain references to the handlers throughout and use the
+    // same handlers for the whole request.
+    requestHandler = requestHandlerController.getRequestHandler();
+    responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
+    if (requestHandler == null || responseHandler == null) {
       nettyMetrics.channelActiveTasksFailureCount.inc();
-      throw new RestServiceException("Unable to obtain request/response handlers", e,
-          RestServiceErrorCode.ChannelActiveTasksFailure);
+      String msg =
+          requestHandler == null ? "RestRequestHandler received was null" : "RestResponseHandler received was null";
+      logger.error(msg);
+      throw new RestServiceException(msg, RestServiceErrorCode.ChannelActiveTasksFailure);
     }
   }
 
@@ -225,7 +225,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       handleContent((HttpContent) obj);
     } else {
       nettyMetrics.unknownHttpObjectErrorCount.inc();
-      throw new RestServiceException("HttpObject received is null or not of a known type",
+      throw new RestServiceException("Content received is null or not of a known type",
           RestServiceErrorCode.UnknownHttpObject);
     }
   }

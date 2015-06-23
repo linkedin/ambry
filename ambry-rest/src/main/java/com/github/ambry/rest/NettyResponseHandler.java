@@ -123,14 +123,15 @@ class NettyResponseHandler implements RestResponseHandler {
   public void onError(RestRequestMetadata requestMetadata, Throwable cause) {
     if (errorSent.compareAndSet(false, true)) {
       ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
-      if (!errorResponseWrite.isSuccess()) {
+      if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
+        // TODO: lookup what the general directives on how to handle the case where we realize there is problem in the
+        // TODO: middle of sending a (huge) response and we have already sent 200 OK to the client.
         logger.error("Could not send error response to client. Reason for failure and original error follow: ",
             errorResponseWrite.cause(), cause);
         // close the connection anyway so that the client knows something went wrong.
-        // TODO: lookup what the general directives on how to handle the case where we realize there is problem in the
-        // TODO: middle of sending a (huge) response and we have already sent 200 OK to the client.
+      } else {
+        flush();
       }
-      flush();
       close();
     }
   }
@@ -279,15 +280,16 @@ class NettyResponseHandler implements RestResponseHandler {
     nettyMetrics.errorStateCount.inc();
     HttpResponseStatus status;
     StringBuilder errReason = new StringBuilder();
-    if (cause instanceof RestServiceException) {
+    if (cause != null && cause instanceof RestServiceException) {
       status = getHttpResponseStatus(((RestServiceException) cause).getErrorCode());
       if (status == HttpResponseStatus.BAD_REQUEST) {
-        errReason.append(" (Reason - ").append(cause.getCause()).append(")");
+        errReason.append(" (Reason - ").append(cause.getMessage()).append(")");
       }
     } else {
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       nettyMetrics.unknownExceptionCount.inc();
       logger.error("While building error response: Unknown cause received", cause);
+      // TODO: handle special case of cause = null with metrics. That's a bad state transition.
     }
 
     String fullMsg = "Failure: " + status + errReason;
@@ -305,11 +307,11 @@ class NettyResponseHandler implements RestResponseHandler {
   private HttpResponseStatus getHttpResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     switch (restServiceErrorCode) {
       case BadRequest:
-      case DuplicateRequest:
       case InvalidArgs:
       case MalformedRequest:
       case MissingArgs:
       case NoRequest:
+      case UnknownHttpObject:
       case UnsupportedHttpMethod:
         nettyMetrics.badRequestErrorCount.inc();
         return HttpResponseStatus.BAD_REQUEST;
@@ -324,7 +326,6 @@ class NettyResponseHandler implements RestResponseHandler {
       case ResponseBuildingFailure:
       case ReponseHandlerNull:
       case RequestMetadataNull:
-      case UnknownHttpObject:
       case UnsupportedRestMethod:
         nettyMetrics.internalServerErrorCount.inc();
         return HttpResponseStatus.INTERNAL_SERVER_ERROR;

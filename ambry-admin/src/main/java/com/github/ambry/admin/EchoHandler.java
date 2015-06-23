@@ -34,7 +34,7 @@ class EchoHandler {
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.getRestRequestContent() == null) {
       String echoStr = echo(restRequestInfo.getRestRequestMetadata()).toString();
-      responseHandler.setContentType("text/plain");
+      responseHandler.setContentType("application/json");
       responseHandler.addToResponseBody(echoStr.getBytes(), true);
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.flush();

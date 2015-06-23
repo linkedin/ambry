@@ -16,7 +16,7 @@ class NettyRequestContent implements RestRequestContent {
   private final boolean isLast;
 
   public NettyRequestContent(HttpContent content) {
-    if(content == null) {
+    if (content == null) {
       throw new IllegalArgumentException("Received null HttpContent");
     }
 

@@ -9,10 +9,6 @@ public enum RestServiceErrorCode {
    */
   BadRequest,
   /**
-   * Client has sent request metadata twice in the same request.
-   */
-  DuplicateRequest,
-  /**
    * Client has supplied arguments that are not valid.
    */
   InvalidArgs,

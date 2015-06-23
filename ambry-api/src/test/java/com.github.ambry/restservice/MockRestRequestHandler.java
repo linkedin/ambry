@@ -8,6 +8,8 @@ package com.github.ambry.restservice;
  * is blocking, then this will be blocking too.
  */
 public class MockRestRequestHandler implements RestRequestHandler {
+  public static String THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI = "requestHandlerThrowExceptionOnRequestComplete";
+
   private final BlobStorageService blobStorageService;
 
   public MockRestRequestHandler(BlobStorageService blobStorageService) {
@@ -56,6 +58,8 @@ public class MockRestRequestHandler implements RestRequestHandler {
 
   @Override
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
-    // nothing to do.
+    if (restRequestMetadata != null && THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI.equals(restRequestMetadata.getUri())) {
+      throw new RuntimeException(THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI);
+    }
   }
 }

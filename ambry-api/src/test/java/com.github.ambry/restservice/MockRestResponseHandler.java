@@ -80,7 +80,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
     if (!errorSent) {
       if (!responseMetadataFinalized) {
         try {
-          setContentType("text/plain");
+          setContentType("text/plain; charset=UTF-8");
           responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_ERROR);
           responseMetadata.put(ERROR_MESSAGE_KEY, cause.toString());
           flush();

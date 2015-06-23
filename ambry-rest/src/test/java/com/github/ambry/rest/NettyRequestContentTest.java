@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.DefaultLastHttpContent;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -34,6 +35,17 @@ public class NettyRequestContentTest {
 
     nettyContent = new NettyRequestContent(new DefaultLastHttpContent());
     validateContent(nettyContent, "", isLast);
+  }
+
+  @Test
+  public void conversionWithBadInputTest() {
+    // null input.
+    try {
+      new NettyRequestContent(null);
+      fail("Provided null input to NettyRequestContent, yet it did not fail");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
   }
 
   // helpers

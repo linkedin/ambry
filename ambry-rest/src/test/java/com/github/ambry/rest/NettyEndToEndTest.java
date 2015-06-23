@@ -84,16 +84,16 @@ public class NettyEndToEndTest {
     FullHttpRequest request;
 
     request = createRequest(HttpMethod.GET, "/");
-    doHandleRequestSuccessTest(request, RestMethod.GET.toString(), NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.GET.toString(), NETTY_SERVER_PORT);
 
     request = createRequest(HttpMethod.POST, "/");
-    doHandleRequestSuccessTest(request, RestMethod.POST.toString(), NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.POST.toString(), NETTY_SERVER_PORT);
 
     request = createRequest(HttpMethod.DELETE, "/");
-    doHandleRequestSuccessTest(request, RestMethod.DELETE.toString(), NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.DELETE.toString(), NETTY_SERVER_PORT);
 
     request = createRequest(HttpMethod.HEAD, "/");
-    doHandleRequestSuccessTest(request, RestMethod.HEAD.toString(), NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.HEAD.toString(), NETTY_SERVER_PORT);
   }
 
   /**
@@ -107,18 +107,18 @@ public class NettyEndToEndTest {
     FullHttpRequest request;
 
     request = createRequest(HttpMethod.GET, MockBlobStorageService.OPERATION_THROW_HANDLING_REST_EXCEPTION);
-    doHandleRequestFailureTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, null, NETTY_SERVER_PORT);
 
     request = createRequest(HttpMethod.GET, MockBlobStorageService.OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION);
-    doHandleRequestFailureTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, null, NETTY_SERVER_PORT);
 
     // unknown http method
     request = createRequest(HttpMethod.TRACE, "/");
-    doHandleRequestFailureTest(request, HttpResponseStatus.BAD_REQUEST, NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.BAD_REQUEST, null, NETTY_SERVER_PORT);
 
     // do success test at the end to make sure that server is alive
     request = createRequest(HttpMethod.GET, "/");
-    doHandleRequestSuccessTest(request, RestMethod.GET.toString(), NETTY_SERVER_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.GET.toString(), NETTY_SERVER_PORT);
   }
 
   /**
@@ -139,11 +139,11 @@ public class NettyEndToEndTest {
     // We haven't started the RequestHandlerController (in turn the AsyncRequestHandler, so any request we send should
     // result in a failure.
     FullHttpRequest request = createRequest(HttpMethod.GET, "/");
-    doHandleRequestFailureTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, NETTY_SERVER_ALTERNATE_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.INTERNAL_SERVER_ERROR, null, NETTY_SERVER_ALTERNATE_PORT);
 
     // Now start the handlerController and make sure everything is ok.
     handlerController.start();
-    doHandleRequestSuccessTest(request, RestMethod.GET.toString(), NETTY_SERVER_ALTERNATE_PORT);
+    doHandleRequestTest(request, HttpResponseStatus.OK, RestMethod.GET.toString(), NETTY_SERVER_ALTERNATE_PORT);
     server.shutdown();
     handlerController.shutdown();
   }
@@ -168,6 +168,60 @@ public class NettyEndToEndTest {
     return out.toString("UTF-8");
   }
 
+  /**
+   * Sends a request and expects a certain response. If response doesn't match, declares test failure.
+   * @param httpRequest
+   * @param expectedResponse
+   * @param serverPort
+   * @throws Exception
+   */
+  public void doHandleRequestTest(FullHttpRequest httpRequest, HttpResponseStatus expectedStatus,
+      String expectedResponse, String serverPort)
+      throws Exception {
+    LinkedBlockingQueue<HttpObject> contentQueue = new LinkedBlockingQueue<HttpObject>();
+    LinkedBlockingQueue<HttpObject> responseQueue = new LinkedBlockingQueue<HttpObject>();
+    contentQueue.offer(httpRequest);
+    NettyClient nettyClient = new NettyClient(Integer.parseInt(serverPort), contentQueue, responseQueue);
+    nettyClient.start();
+    // request is being sent.
+    try {
+      boolean responseReceived = false;
+      while (true) {
+        HttpObject httpObject = responseQueue.poll(RESPONSE_QUEUE_POLL_TIMEOUT_SECS, TimeUnit.SECONDS);
+        if (httpObject != null) {
+          if (httpObject instanceof HttpResponse) {
+            responseReceived = true;
+            HttpResponse response = (HttpResponse) httpObject;
+            assertTrue("Received a bad response", response.getDecoderResult().isSuccess());
+            assertEquals("Unexpected response status", expectedStatus, response.getStatus());
+            assertEquals("Unexpected content type", "text/plain; charset=UTF-8",
+                response.headers().get(HttpHeaders.Names.CONTENT_TYPE));
+          } else if (httpObject instanceof HttpContent) {
+            if (httpObject instanceof LastHttpContent) {
+              ReferenceCountUtil.release(httpObject);
+              break;
+            }
+            try {
+              assertTrue("Received HttpContent without receiving a response first", responseReceived);
+              if (expectedResponse != null) {
+                String content = getContentString((HttpContent) httpObject);
+                assertEquals("Did not get expected reply from server", expectedResponse, content);
+              }
+            } finally {
+              ReferenceCountUtil.release(httpObject);
+            }
+          } else {
+            fail("Unknown HttpObject - " + httpObject.getClass());
+          }
+        } else {
+          fail("Did not receive any content in 30 seconds. There is an error or the timeout needs to increase");
+        }
+      }
+    } finally {
+      nettyClient.shutdown();
+    }
+  }
+
   // Before/After class helpers
   private static NioServer createNettyServer(RestRequestHandlerController requestHandlerController,
       Properties properties)
@@ -187,93 +241,5 @@ public class NettyEndToEndTest {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
     return new RequestHandlerController(1, restServerMetrics, blobStorageService);
-  }
-
-  // handleRequestSuccessTest() helpers
-
-  /**
-   * Sends a request and expects a certain response. If response doesn't match, declares test failure.
-   * @param httpRequest
-   * @param expectedResponse
-   * @param serverPort
-   * @throws Exception
-   */
-  public void doHandleRequestSuccessTest(FullHttpRequest httpRequest, String expectedResponse, String serverPort)
-      throws Exception {
-    LinkedBlockingQueue<HttpObject> contentQueue = new LinkedBlockingQueue<HttpObject>();
-    LinkedBlockingQueue<HttpObject> responseQueue = new LinkedBlockingQueue<HttpObject>();
-    NettyClient nettyClient = new NettyClient(Integer.parseInt(serverPort), contentQueue, responseQueue);
-    contentQueue.offer(httpRequest);
-
-    nettyClient.start();
-    // request is being sent.
-    try {
-      boolean responseReceived = false;
-      while (true) {
-        HttpObject httpObject = responseQueue.poll(RESPONSE_QUEUE_POLL_TIMEOUT_SECS, TimeUnit.SECONDS);
-        if (httpObject != null) {
-          if (httpObject instanceof HttpResponse) {
-            responseReceived = true;
-            HttpResponse response = (HttpResponse) httpObject;
-            assertTrue("Received a bad response", response.getDecoderResult().isSuccess());
-            assertEquals("Response status is not OK", HttpResponseStatus.OK, response.getStatus());
-            assertEquals("Unexpected content type", "text/plain",
-                response.headers().get(HttpHeaders.Names.CONTENT_TYPE));
-          } else if (httpObject instanceof HttpContent) {
-            if (httpObject instanceof LastHttpContent) {
-              ReferenceCountUtil.release(httpObject);
-              break;
-            }
-            try {
-              assertTrue("Received HttpContent without receiving a response first", responseReceived);
-              String content = getContentString((HttpContent) httpObject);
-              assertEquals("Did not get expected reply from server", expectedResponse, content);
-            } finally {
-              ReferenceCountUtil.release(httpObject);
-            }
-          } else {
-            fail("Unknown HttpObject - " + httpObject.getClass());
-          }
-        } else {
-          fail("Did not receive any content in 30 seconds. There is an error or the timeout needs to increase");
-        }
-      }
-    } finally {
-      nettyClient.shutdown();
-    }
-  }
-
-  // handleRequestFailureTest() helpers
-
-  /**
-   * Sends a request that is expected to trigger an error and expects the error in the response. If no error or
-   * different from the one being expected, it fails the test.
-   * @param httpRequest
-   * @param expectedStatus
-   * @param serverPort
-   * @throws Exception
-   */
-  private void doHandleRequestFailureTest(FullHttpRequest httpRequest, HttpResponseStatus expectedStatus,
-      String serverPort)
-      throws Exception {
-    LinkedBlockingQueue<HttpObject> contentQueue = new LinkedBlockingQueue<HttpObject>();
-    LinkedBlockingQueue<HttpObject> responseQueue = new LinkedBlockingQueue<HttpObject>();
-    NettyClient nettyClient = new NettyClient(Integer.parseInt(serverPort), contentQueue, responseQueue);
-    contentQueue.offer(httpRequest);
-
-    nettyClient.start();
-    // request is being sent.
-    try {
-      HttpObject httpObject = responseQueue.poll(RESPONSE_QUEUE_POLL_TIMEOUT_SECS, TimeUnit.SECONDS);
-      if (httpObject != null && httpObject instanceof HttpResponse) {
-        HttpResponse response = (HttpResponse) httpObject;
-        assertTrue("Received a bad response", response.getDecoderResult().isSuccess());
-        assertEquals("Response status differs from expectation", expectedStatus, response.getStatus());
-      } else {
-        fail("Did not receive a response");
-      }
-    } finally {
-      nettyClient.shutdown();
-    }
   }
 }

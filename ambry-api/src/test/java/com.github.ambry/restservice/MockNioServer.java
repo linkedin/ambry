@@ -7,7 +7,7 @@ package com.github.ambry.restservice;
  */
 public class MockNioServer implements NioServer {
   // Defines whether this server is faulty (mainly to check for behaviour under NioServer failures).
-  private final boolean isFaulty;
+  private boolean isFaulty;
 
   public MockNioServer(boolean isFaulty) {
     this.isFaulty = isFaulty;
@@ -23,5 +23,19 @@ public class MockNioServer implements NioServer {
 
   @Override
   public void shutdown() {
+  }
+
+  /**
+   * Makes the MockNioServer faulty.
+   */
+  public void breakdown() {
+    isFaulty = true;
+  }
+
+  /**
+   * Fixes the MockNioServer (not faulty anymore).
+   */
+  public void fix() {
+    isFaulty = false;
   }
 }

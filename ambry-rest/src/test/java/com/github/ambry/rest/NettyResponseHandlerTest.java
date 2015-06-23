@@ -1,6 +1,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.restservice.RestRequestMetadata;
 import com.github.ambry.restservice.RestResponseHandler;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
@@ -27,10 +28,14 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 
 
 /**
  * Tests functionality of {@link NettyResponseHandler}.
+ * <p/>
+ * To examine functionality of each URI, refer to {@link MockNettyMessageProcessor#handleRequest(HttpRequest)} and
+ * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
  */
 public class NettyResponseHandlerTest {
   /**
@@ -42,7 +47,7 @@ public class NettyResponseHandlerTest {
    */
   @Test
   public void responseHandlerCommonCaseTest()
-      throws Throwable {
+      throws IOException, JSONException {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
 
@@ -52,45 +57,67 @@ public class NettyResponseHandlerTest {
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
 
-    if (processor.getCause() != null) {
-      throw processor.getCause();
-    }
-
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Response status in not ok", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // content echoed back.
     String returnedContent = getContentString((HttpContent) channel.readOutbound());
     assertEquals("Content does not match with expected content", content, returnedContent);
     // last content echoed back.
     returnedContent = getContentString((HttpContent) channel.readOutbound());
     assertEquals("Content does not match with expected content", lastContent, returnedContent);
-
     assertFalse("Channel not closed on the server", channel.isActive());
   }
 
   /**
    * Checks the case where no body needs to be returned but just a {@link NettyResponseHandler#flush()} is called on the
-   * server. This should return just response metadata
-   * @throws IOException
+   * server. This should return just response metadata.
    * @throws JSONException
    */
   @Test
   public void responseHandlerNoBodyTest()
-      throws Throwable {
+      throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     channel.writeInbound(createRequest(HttpMethod.GET, MockNettyMessageProcessor.IMMEDIATE_FLUSH_AND_CLOSE_URI));
 
-    if (processor.getCause() != null) {
-      throw processor.getCause();
-    }
-
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Response status in not ok", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // Channel should be closed.
     assertFalse("Channel not closed on the server", channel.isActive());
+  }
+
+  /**
+   * Checks {@link NettyResponseHandler#onError(com.github.ambry.restservice.RestRequestMetadata, Throwable)} with a
+   * valid {@link RestServiceException} and with a null exception.
+   * @throws JSONException
+   */
+  @Test
+  public void onErrorTest()
+      throws JSONException {
+    // Good input. There should be a response which is BAD_REQUEST. This is the expected response.
+    doOnErrorTest(MockNettyMessageProcessor.ON_ERROR_WITH_GOOD_INPUT_URI, HttpResponseStatus.BAD_REQUEST);
+
+    // Bad input (exception is null). There should be a response which is INTERNAL_SERVER_ERROR. This is the expected
+    // response.
+    doOnErrorTest(MockNettyMessageProcessor.ON_ERROR_WITH_BAD_INPUT_URI, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  /**
+   * Performs bad state transitions and verifies that they throw the right exceptions.
+   * @throws JSONException
+   */
+  @Test
+  public void badStateTransitionsTest()
+      throws JSONException {
+    // write after close.
+    doBadStateTransitionTest(MockNettyMessageProcessor.WRITE_AFTER_CLOSE_URI,
+        RestServiceErrorCode.ChannelPreviouslyClosed);
+
+    // modify response data after it has been written to the channel
+    doBadStateTransitionTest(MockNettyMessageProcessor.MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI,
+        RestServiceErrorCode.IllegalResponseMetadataStateTransition);
   }
 
   // helpers
@@ -113,13 +140,57 @@ public class NettyResponseHandlerTest {
    * Converts the content in {@link HttpContent} to a human readable string.
    * @param httpContent
    * @return
-   * @throws java.io.IOException
+   * @throws IOException
    */
   private String getContentString(HttpContent httpContent)
       throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     httpContent.content().readBytes(out, httpContent.content().readableBytes());
     return out.toString("UTF-8");
+  }
+
+  // onErrorTest() helpers
+
+  /**
+   * Creates a channel and send the request to the {@link EmbeddedChannel}. Checks the response for the expected
+   * status code.
+   * @param uri - the uri to hit.
+   * @param expectedResponseStatus
+   * @throws JSONException
+   */
+  private void doOnErrorTest(String uri, HttpResponseStatus expectedResponseStatus)
+      throws JSONException {
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    channel.writeInbound(createRequest(HttpMethod.GET, uri));
+
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", expectedResponseStatus, response.getStatus());
+    // Channel should be closed.
+    assertFalse("Channel not closed on the server", channel.isActive());
+  }
+
+  // badStateTransitionsTest() helpers
+
+  /**
+   * Creates a channel and sends the request to the {@link EmbeddedChannel}. Checks for an exception and verifies the
+   * {@link RestServiceErrorCode}.
+   * @param uri
+   * @param expectedCode
+   * @throws JSONException
+   */
+  private void doBadStateTransitionTest(String uri, RestServiceErrorCode expectedCode)
+      throws JSONException {
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    try {
+      channel.writeInbound(createRequest(HttpMethod.GET, uri));
+      fail("This test was expecting the handler in the channel to throw a RestServiceException with error code "
+          + expectedCode);
+    } catch (Exception e) {
+      RestServiceException re = (RestServiceException) e;
+      assertEquals("Unexpected RestServiceErrorCode", expectedCode, re.getErrorCode());
+    }
   }
 }
 
@@ -129,9 +200,12 @@ public class NettyResponseHandlerTest {
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   protected static String IMMEDIATE_FLUSH_AND_CLOSE_URI = "immediateFlushAndClose";
+  protected static String ON_ERROR_WITH_GOOD_INPUT_URI = "onErrorWithGoodInput";
+  protected static String ON_ERROR_WITH_BAD_INPUT_URI = "onErrorWithBadInput";
+  protected static String WRITE_AFTER_CLOSE_URI = "writeAfterClose";
+  protected static String MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI = "modifyResponseMetadataAfterWrite";
 
-  private Throwable cause = null;
-  private HttpRequest request;
+  private RestRequestMetadata request;
   private RestResponseHandler restResponseHandler;
 
   @Override
@@ -146,17 +220,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-    this.cause = cause;
-  }
-
-  @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
       throws RestServiceException {
     if (obj != null && obj instanceof HttpRequest) {
-      HttpRequest httpRequest = (HttpRequest) obj;
-      if (httpRequest.getDecoderResult().isSuccess()) {
-        handleRequest(httpRequest);
+      if (obj.getDecoderResult().isSuccess()) {
+        handleRequest((HttpRequest) obj);
       } else {
         throw new RestServiceException("Malformed request received - " + obj, RestServiceErrorCode.MalformedRequest);
       }
@@ -169,46 +237,47 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 
   /**
-   * Returns the cause of error if there was one. Otherwise null.
-   * @return - the cause of the error if there was one. Otherwise null.
-   */
-  public Throwable getCause() {
-    return cause;
-  }
-
-  /**
-   * Handles a HttpRequest. Does some state maintenance before moving forward.
-   * @param httpRequest
+   * Handles a {@link HttpRequest}. Does some state maintenance before moving forward or handles the request
+   * immediately.
+   * @param httpRequest - the {@link HttpRequest} that needs to be handled.
    * @throws RestServiceException
    */
   private void handleRequest(HttpRequest httpRequest)
       throws RestServiceException {
     if (request == null) {
-      request = httpRequest;
-      restResponseHandler.setContentType("text/plain");
+      request = new NettyRequestMetadata(httpRequest);
+      restResponseHandler.setContentType("text/plain; charset=UTF-8");
       if (IMMEDIATE_FLUSH_AND_CLOSE_URI.equals(request.getUri())) {
         restResponseHandler.flush();
         restResponseHandler.close();
+      } else if (ON_ERROR_WITH_GOOD_INPUT_URI.equals(request.getUri())) {
+        restResponseHandler
+            .onError(request, new RestServiceException(ON_ERROR_WITH_GOOD_INPUT_URI, RestServiceErrorCode.BadRequest));
+      } else if (ON_ERROR_WITH_BAD_INPUT_URI.equals(request.getUri())) {
+        restResponseHandler.onError(request, null);
+      } else if (WRITE_AFTER_CLOSE_URI.equals(request.getUri())) {
+        restResponseHandler.close();
+        // write something. It should fail.
+        restResponseHandler.addToResponseBody(WRITE_AFTER_CLOSE_URI.getBytes(), true);
+      } else if (MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI.equals(request.getUri())) {
+        restResponseHandler.flush();
+        restResponseHandler.setContentType("text/plain; charset=UTF-8");
       }
     } else {
-      throw new RestServiceException(
-          "Received duplicate request. Old request - " + request + ". New request - " + httpRequest,
-          RestServiceErrorCode.DuplicateRequest);
+      restResponseHandler.close();
     }
   }
 
   /**
-   * Handles a HttpContent. Checks state before moving forward
-   * @param httpContent
+   * Handles a {@link HttpContent}. Checks state and echoes back the content.
+   * @param httpContent - the {@link HttpContent} that needs to be handled.
    * @throws RestServiceException
    */
   private void handleContent(HttpContent httpContent)
       throws RestServiceException {
     if (request != null) {
-      byte[] content = httpContent.content().array();
       boolean isLast = httpContent instanceof LastHttpContent;
-
-      restResponseHandler.addToResponseBody(content, isLast);
+      restResponseHandler.addToResponseBody(httpContent.content().array(), isLast);
       if (isLast) {
         restResponseHandler.flush();
         restResponseHandler.close();

@@ -10,8 +10,8 @@ import com.github.ambry.clustermap.ClusterMap;
  * induce errors and test error handling in the layers above {@link BlobStorageService}.
  */
 public class MockBlobStorageService implements BlobStorageService {
-  public static String OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION = "throwHandlingRuntimeException";
-  public static String OPERATION_THROW_HANDLING_REST_EXCEPTION = "throwHandlingRestException";
+  public static String OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION = "blobStorageThrowHandlingRuntimeException";
+  public static String OPERATION_THROW_HANDLING_REST_EXCEPTION = "blobStorageThrowHandlingRestException";
 
   public MockBlobStorageService(ClusterMap clusterMap) {
     // This constructor is around so that this can be instantiated from the NioServerFactory.
@@ -92,13 +92,17 @@ public class MockBlobStorageService implements BlobStorageService {
   private void echoRestMethod(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     RestResponseHandler restResponseHandler = restRequestInfo.getRestResponseHandler();
-    if (restRequestInfo.getRestRequestContent() == null) {
+    RestRequestContent content = restRequestInfo.getRestRequestContent();
+    if (content == null) {
       RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      restResponseHandler.setContentType("text/plain");
+      restResponseHandler.setContentType("text/plain; charset=UTF-8");
       restResponseHandler.addToResponseBody(restMethod.toString().getBytes(), true);
-    } else if (restRequestInfo.getRestRequestContent().isLast()) {
-      restResponseHandler.flush();
-      restResponseHandler.close();
+    } else {
+      restResponseHandler.addToResponseBody(content.getBytes(), content.isLast());
+      if (content.isLast()) {
+        restResponseHandler.flush();
+        restResponseHandler.close();
+      }
     }
   }
 }
