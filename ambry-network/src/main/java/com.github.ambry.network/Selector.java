@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.EOFException;
 import java.io.IOException;
@@ -64,14 +63,11 @@ public class Selector implements Selectable {
   private final Time time;
   private final NetworkMetrics metrics;
   private AtomicLong activeConnections;
-  private final int processorId;
-  private final SocketRequestResponseChannel socketRequestResponseChannel;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time, int processorId,
-      SocketRequestResponseChannel socketRequestResponseChannel)
+  public Selector(NetworkMetrics metrics, Time time)
       throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
@@ -83,8 +79,6 @@ public class Selector implements Selectable {
     this.metrics = metrics;
     this.activeConnections = new AtomicLong(0);
     this.metrics.initializeSelectorMetricsIfRequired(activeConnections);
-    this.processorId = processorId;
-    this.socketRequestResponseChannel = socketRequestResponseChannel;
   }
 
   /**
@@ -142,6 +136,10 @@ public class Selector implements Selectable {
     activeConnections.set(this.keys.size());
   }
 
+  /**
+   * Disconnect any connections for the given id (if there are any). The disconnection is asynchronous and will not be
+   * processed until the next {@link #poll(long, List) poll()} call.
+   */
   @Override
   public void disconnect(String connectionId) {
     SelectionKey key = this.keys.get(connectionId);
@@ -150,11 +148,17 @@ public class Selector implements Selectable {
     }
   }
 
+  /**
+   * Interrupt the selector if it is blocked waiting to do I/O.
+   */
   @Override
   public void wakeup() {
     nioSelector.wakeup();
   }
 
+  /**
+   * Close this selector and all associated connections
+   */
   @Override
   public void close() {
     for (SelectionKey key : this.nioSelector.keys()) {
@@ -185,12 +189,25 @@ public class Selector implements Selectable {
     }
   }
 
-
+  /**
+   * Do whatever I/O can be done on each connection without blocking. This includes completing connections, completing
+   * disconnections, initiating new sends, or making progress on in-progress sends or receives.
+   * <p>
+   *
+   * When this call is completed the user can check for completed sends, receives, connections or disconnects using
+   * {@link #completedSends()}, {@link #completedReceives()}, {@link #connected()}, {@link #disconnected()}. These
+   * lists will be cleared at the beginning of each {@link #poll(long, List)} call and repopulated by the call if any
+   * completed I/O.
+   *
+   * @param timeout The amount of time to wait, in milliseconds. If negative, wait indefinitely.
+   *
+   * @throws IOException If a send is given for which we have no existing connection or for which there is
+   *         already an in-progress send
+   */
   @Override
   public void poll(long timeout)
       throws IOException {
-    List<NetworkSend> sends = new ArrayList<NetworkSend>();
-    poll(timeout, sends);
+    poll(timeout, null);
   }
 
   /**
@@ -216,18 +233,20 @@ public class Selector implements Selectable {
     clear();
 
     // register for write interest on any new sends
-    for (NetworkSend send : sends) {
-      SelectionKey key = keyForId(send.getConnectionId());
-      Transmissions lastTransmission = transmissions(key);
-      if (lastTransmission.hasSend()) {
-        throw new IllegalStateException(
-            "Attempt to begin a send operation with prior send operation still in progress.");
-      }
-      lastTransmission.send = send;
-      try {
-        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-      } catch (CancelledKeyException e) {
-        close(key);
+    if (sends != null) {
+      for (NetworkSend send : sends) {
+        SelectionKey key = keyForId(send.getConnectionId());
+        Transmissions lastTransmission = transmissions(key);
+        if (lastTransmission.hasSend()) {
+          throw new IllegalStateException(
+              "Attempt to begin a send operation with prior send operation still in progress.");
+        }
+        lastTransmission.send = send;
+        try {
+          key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+        } catch (CancelledKeyException e) {
+          close(key);
+        }
       }
     }
 
@@ -371,7 +390,7 @@ public class Selector implements Selectable {
   /**
    * Get the selection key associated with this numeric id
    */
-  private SelectionKey keyForId(String id) {
+  public SelectionKey keyForId(String id) {
     SelectionKey key = this.keys.get(id);
     if (key == null) {
       throw new IllegalStateException(
@@ -381,6 +400,9 @@ public class Selector implements Selectable {
     return key;
   }
 
+  /**
+   * Process connections that have finished their handshake
+   */
   private void handleConnect(SelectionKey key, Transmissions transmissions)
       throws IOException {
     SocketChannel socketChannel = channel(key);
@@ -391,7 +413,7 @@ public class Selector implements Selectable {
     this.metrics.initializeSelectorNodeMetricIfRequired(transmissions.remoteHostName, transmissions.remotePort);
   }
 
-  /*
+  /**
    * Process reads from ready sockets
    */
   private void read(SelectionKey key, Transmissions transmissions)
@@ -413,16 +435,11 @@ public class Selector implements Selectable {
       metrics.selectorBytesReceivedCount.inc(bytesRead);
 
       if (transmissions.receive.getReceivedBytes().isReadComplete()) {
-        SocketServerRequest req = new SocketServerRequest(processorId, key,
-            new ByteBufferInputStream(transmissions.receive.getReceivedBytes().getPayload()));
-        socketRequestResponseChannel.sendRequest(req);
         this.completedReceives.add(transmissions.receive);
         metrics.updateNodeResponseMetric(transmissions.remoteHostName, transmissions.remotePort,
             transmissions.receive.getReceivedBytes().getPayload().limit(),
             time.milliseconds() - transmissions.receive.getReceiveStartTimeInMs());
         transmissions.clearReceive();
-        // mute the key, no need to wake up the selector just yet
-        //key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
       }
     } finally {
       if (logger.isTraceEnabled()) {
@@ -432,7 +449,7 @@ public class Selector implements Selectable {
     }
   }
 
-  /*
+  /**
    * Process writes to ready sockets
    */
   private void write(SelectionKey key, Transmissions transmissions)
@@ -455,8 +472,6 @@ public class Selector implements Selectable {
           logger.trace("Finished writing, registering for read on connection {}",
               socketChannel.socket().getRemoteSocketAddress());
         }
-        networkSend.onSendComplete();
-        metrics.sendInFlight.dec();
         this.completedSends.add(transmissions.send);
         transmissions.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);

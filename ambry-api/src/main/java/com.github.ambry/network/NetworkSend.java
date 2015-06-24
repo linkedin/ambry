@@ -10,5 +10,4 @@ public interface NetworkSend {
   Send getPayload();
 
   void onSendComplete();
-
 }

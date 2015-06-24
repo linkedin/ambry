@@ -23,8 +23,8 @@ import static org.junit.Assert.assertTrue;
 
 
 /**
-* A set of tests for the selector. These use a test harness that runs a simple socket server that echos back responses.
-*/
+ * A set of tests for the selector. These use a test harness that runs a simple socket server that echos back responses.
+ */
 public class SelectorTest {
 
   private static final int BUFFER_SIZE = 4 * 1024;
@@ -38,8 +38,8 @@ public class SelectorTest {
     this.server = new EchoServer();
     this.server.start();
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
-    this.selector = new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()),
-        SystemTime.getInstance(), 0, socketRequestResponseChannel);
+    this.selector =
+        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()), SystemTime.getInstance());
   }
 
   @After
@@ -117,7 +117,8 @@ public class SelectorTest {
   @Test(expected = IOException.class)
   public void testNoRouteToHost()
       throws Exception {
-    selector.connect("testNoRouteToHost", new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    selector
+        .connect("testNoRouteToHost", new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
   }
 
   /**
@@ -167,7 +168,6 @@ public class SelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        socketRequestResponseChannel.receiveRequest();
         String[] pieces = asString(receive).split("-");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
@@ -220,7 +220,6 @@ public class SelectorTest {
     while (true) {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
-        socketRequestResponseChannel.receiveRequest();
         if (receive.getConnectionId() == connectionId) {
           return asString(receive);
         }

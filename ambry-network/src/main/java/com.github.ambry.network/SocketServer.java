@@ -2,8 +2,10 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -279,7 +281,7 @@ class Acceptor extends AbstractServerThread {
     socketChannel.socket().setTcpNoDelay(true);
     socketChannel.socket().setSendBufferSize(sendBufferSize);
     logger.trace("Accepted connection from {} on {}. sendBufferSize "
-        + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
+            + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
         socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(),
         recvBufferSize);
@@ -311,7 +313,7 @@ class Processor extends AbstractServerThread {
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
     this.metrics = metrics;
-    selector = new Selector(metrics, SystemTime.getInstance(), id, this.channel);
+    selector = new Selector(metrics, SystemTime.getInstance());
   }
 
   public void run() {
@@ -323,6 +325,22 @@ class Processor extends AbstractServerThread {
         // register any new responses for writing
         processNewResponses();
         selector.poll(300);
+
+        // handle completed receives
+        List<NetworkReceive> completedReceives = selector.completedReceives();
+        for (NetworkReceive networkReceive : completedReceives) {
+          SelectionKey key = selector.keyForId(networkReceive.getConnectionId());
+          SocketServerRequest req = new SocketServerRequest(id, key,
+              new ByteBufferInputStream(networkReceive.getReceivedBytes().getPayload()));
+          channel.sendRequest(req);
+        }
+
+        // handle completed sends
+        List<NetworkSend> completedSends = selector.completedSends();
+        for (NetworkSend networkSend : completedSends) {
+          networkSend.onSendComplete();
+          metrics.sendInFlight.dec();
+        }
       }
     } catch (Exception e) {
       logger.error("Error while shutting down processor thread {}", e);
@@ -369,7 +387,7 @@ class Processor extends AbstractServerThread {
     wakeup();
   }
 
-  /*
+  /**
    * Close all open connections
    */
   private void closeAll() {
