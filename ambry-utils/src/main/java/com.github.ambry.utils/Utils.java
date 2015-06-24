@@ -531,9 +531,7 @@ public class Utils {
    */
   public static byte[] readBytesFromStream(DataInputStream stream, int size)
       throws IOException {
-    byte[] outputBytes = new byte[size];
-    readBytesFromStream(stream, outputBytes, 0, size);
-    return outputBytes;
+    return readBytesFromStream(stream, new byte[size], 0, size);
   }
 
   /**
@@ -544,9 +542,10 @@ public class Utils {
    * @param data byte[] into which the data has to be written
    * @param offset starting offset in the byte[] at which the data has to be written to
    * @param size length of bytes to be read from the stream
+   * @return byte[] which has the data that is read from the stream. Same as @param data
    * @throws IOException
    */
-  public static void readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
+  public static byte[] readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
       throws IOException {
     int read = 0;
     while (read < size) {
@@ -557,5 +556,6 @@ public class Utils {
       read += sizeRead;
       offset += sizeRead;
     }
+    return data;
   }
 }

@@ -73,7 +73,11 @@ public class ClusterMapManager implements ClusterMap {
   @Override
   public PartitionId getPartitionIdFromStream(DataInputStream stream)
       throws IOException {
-    return partitionLayout.getPartition(stream);
+    PartitionId partitionId = partitionLayout.getPartition(stream);
+    if (partitionId == null) {
+      throw new IOException("Partition id from stream is null");
+    }
+    return partitionId;
   }
 
   @Override
