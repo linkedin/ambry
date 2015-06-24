@@ -5,7 +5,6 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
-import com.codahale.metrics.Timer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

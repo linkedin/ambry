@@ -49,7 +49,7 @@ class SocketServerRequest implements Request {
 }
 
 // The response at the network layer
-class SocketServerResponse implements Response {
+class SocketServerResponse implements Response, NetworkSend {
 
   private final int processor;
   private final Request request;
@@ -63,6 +63,11 @@ class SocketServerResponse implements Response {
     this.output = output;
     this.processor = ((SocketServerRequest) request).getProcessor();
     this.metrics = metrics;
+  }
+
+  @Override
+  public String getConnectionId() {
+    return null;
   }
 
   public Send getPayload() {
