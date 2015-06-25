@@ -1116,14 +1116,14 @@ public class PersistentIndex {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
-          if (!hardDelete()) {
+          if (!hardDelete(false)) {
             logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
                 dataDir, endToken);
             metrics.hardDeleteIncompleteRecoveryCount.inc();
             break;
           }
           logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
-        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken));
+        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running);
       }
     }
 
@@ -1180,10 +1180,11 @@ public class PersistentIndex {
      * Gets a view of the records in the log for those messages and calls cleanup to get the appropriate replacement
      * records, and then replaces the records in the log with the corresponding replacement records.
      * @param messageInfoList: The messages to be hard deleted in the log.
+     * @param throttle: Whether throttling should be done or not.
      * @return true if all the messages were processed, false otherwise: that is, if the caller will need to retry
      *         some or all the messages in the list.
      */
-    private boolean performHardDeletes(List<MessageInfo> messageInfoList)
+    private boolean performHardDeletes(List<MessageInfo> messageInfoList, boolean throttle)
         throws StoreException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
@@ -1211,7 +1212,9 @@ public class PersistentIndex {
             log.writeFrom(hardDeleteInfo.getChannel(), offsetToWriteAt, hardDeleteInfo.getSize());
             metrics.hardDeleteDoneCount.inc(1);
             try {
-              throttler.maybeThrottle(hardDeleteInfo.getSize());
+              if (throttle) {
+                throttler.maybeThrottle(hardDeleteInfo.getSize());
+              }
             } catch (InterruptedException e) {
               logger.info("Caught interrupted exception");
             }
@@ -1244,9 +1247,10 @@ public class PersistentIndex {
      *    - all the hard deletes till point S' have been flushed in the log; and
      *    - ongoing hard deletes are between S' and E, so during recovery this is the range to be recovered.
      *
+     * @param throttle whether throttling should be done or not.
      * @return true if the token moved forward, false otherwise.
      */
-    private boolean hardDelete() {
+    private boolean hardDelete(boolean throttle) {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
@@ -1255,7 +1259,7 @@ public class PersistentIndex {
           endToken = info.getFindToken();
           if (!endToken.equals(startToken)) {
             persistCleanupToken(); // this is to persist the end token before performing the writes to the log.
-            if (info.getMessageEntries().isEmpty() || performHardDeletes(info.getMessageEntries())) {
+            if (info.getMessageEntries().isEmpty() || performHardDeletes(info.getMessageEntries(), throttle)) {
               startToken = endToken;
             }
             return true;
@@ -1296,7 +1300,7 @@ public class PersistentIndex {
     public void run() {
       try {
         while (running) {
-          if (!hardDelete()) {
+          if (!hardDelete(true)) {
             isCaughtUp = true;
             try {
               Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
