@@ -14,6 +14,7 @@ import java.io.FileOutputStream;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1057,7 +1058,7 @@ public class PersistentIndex {
         config.storeDeletedMessageRetentionDays * SystemTime.getInstance().SecsPerDay;
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-    boolean running = true;
+    AtomicBoolean running = new AtomicBoolean(true);
     boolean isCaughtUp = false;
 
     //how long to sleep if token does not advance.
@@ -1123,7 +1124,7 @@ public class PersistentIndex {
             break;
           }
           logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
-        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running);
+        } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running.get());
       }
     }
 
@@ -1205,7 +1206,7 @@ public class PersistentIndex {
         Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
-        while (hardDeleteIterator.hasNext() && running) {
+        while (hardDeleteIterator.hasNext() && running.get()) {
           HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           long offsetToWriteAt = readOptionsIterator.next().getOffset();
           if (hardDeleteInfo != null) {
@@ -1299,7 +1300,7 @@ public class PersistentIndex {
 
     public void run() {
       try {
-        while (running) {
+        while (running.get()) {
           if (!hardDelete(true)) {
             isCaughtUp = true;
             try {
@@ -1319,8 +1320,8 @@ public class PersistentIndex {
 
     public void shutDown()
         throws InterruptedException, StoreException, IOException {
-      if (running) {
-        running = false;
+      if (running.get()) {
+        running.set(false);
         hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
         shutdownLatch.await();
         persistCleanupToken();
@@ -1328,7 +1329,7 @@ public class PersistentIndex {
     }
 
     public void close() {
-      running = false;
+      running.set(false);
       shutdownLatch.countDown();
     }
   }
