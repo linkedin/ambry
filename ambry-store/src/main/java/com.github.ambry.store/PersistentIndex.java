@@ -1180,8 +1180,10 @@ public class PersistentIndex {
      * Gets a view of the records in the log for those messages and calls cleanup to get the appropriate replacement
      * records, and then replaces the records in the log with the corresponding replacement records.
      * @param messageInfoList: The messages to be hard deleted in the log.
+     * @return true if all the messages were processed, false otherwise: that is, if the caller will need to retry
+     *         some or all the messages in the list.
      */
-    private void performHardDeletes(List<MessageInfo> messageInfoList)
+    private boolean performHardDeletes(List<MessageInfo> messageInfoList)
         throws StoreException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
@@ -1202,7 +1204,7 @@ public class PersistentIndex {
         Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
-        while (hardDeleteIterator.hasNext()) {
+        while (hardDeleteIterator.hasNext() && running) {
           HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           long offsetToWriteAt = readOptionsIterator.next().getOffset();
           if (hardDeleteInfo != null) {
@@ -1211,11 +1213,16 @@ public class PersistentIndex {
             try {
               throttler.maybeThrottle(hardDeleteInfo.getSize());
             } catch (InterruptedException e) {
-              logger.error("Caught interrupted exception, continuing ");
+              logger.info("Caught interrupted exception");
             }
           } else {
             metrics.hardDeleteFailedCount.inc(1);
           }
+        }
+        if (hardDeleteIterator.hasNext()) {
+          return false;
+        } else {
+          return true;
         }
       } catch (IOException e) {
         throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
@@ -1252,10 +1259,9 @@ public class PersistentIndex {
           endToken = info.getFindToken();
           if (!endToken.equals(startToken)) {
             persistCleanupToken(); // this is to persist the end token before performing the writes to the log.
-            if (!info.getMessageEntries().isEmpty()) {
-              performHardDeletes(info.getMessageEntries());
+            if (info.getMessageEntries().isEmpty() || performHardDeletes(info.getMessageEntries())) {
+              startToken = endToken;
             }
-            startToken = endToken;
             return true;
           }
         } catch (Exception e) {
