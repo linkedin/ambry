@@ -5,9 +5,9 @@ package com.github.ambry.network;
  */
 public interface NetworkSend {
 
-  String getConnectionId();
+  public String getConnectionId();
 
-  Send getPayload();
+  public Send getPayload();
 
-  void onSendComplete();
+  public void onSendComplete();
 }

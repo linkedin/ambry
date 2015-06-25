@@ -23,15 +23,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A selector interface for doing non-blocking multi-connection network I/O.
+ * A selector doing non-blocking multi-connection network I/O.
  * <p>
- * This class works with {@link BoundedByteBufferSend} and {@link BoundedByteBufferReceive} to
- * transmit network requests and responses.
+ * This class works with {@link NetworkSend} and {@link NetworkReceive} to transmit network requests and responses.
  * <p>
  * A connection can be added to the selector by doing
  *
  * <pre>
- * long id = selector.connect(new InetSocketAddress(&quot;google.com&quot;, server.port), 64000, 64000);
+ * selector.connect("connectionId", new InetSocketAddress(&quot;google.com&quot;, server.port), 64000, 64000);
  * </pre>
  *
  * The connect call does not block on the creation of the TCP connection, so the connect method only begins initiating
@@ -87,10 +86,10 @@ public class Selector implements Selectable {
    * <p>
    * Note that this call only initiates the connection, which will be completed on a future {@link #poll(long)}
    * call. Check {@link #connected()} to see which (if any) connections have completed after a given poll call.
+   * @param connectionId The connection Id to identify this connection
    * @param address The address to connect to
    * @param sendBufferSize The send buffer for the new connection
    * @param receiveBufferSize The receive buffer for the new connection
-   * @return The id for the connection that was created
    * @throws IllegalStateException if there is already a connection for that id
    * @throws IOException if DNS resolution fails on the hostname or if the server is down
    */
@@ -138,7 +137,7 @@ public class Selector implements Selectable {
 
   /**
    * Disconnect any connections for the given id (if there are any). The disconnection is asynchronous and will not be
-   * processed until the next {@link #poll(long, List) poll()} call.
+   * processed until the next {@link #poll(long) poll()} call.
    */
   @Override
   public void disconnect(String connectionId) {
@@ -196,7 +195,7 @@ public class Selector implements Selectable {
    *
    * When this call is completed the user can check for completed sends, receives, connections or disconnects using
    * {@link #completedSends()}, {@link #completedReceives()}, {@link #connected()}, {@link #disconnected()}. These
-   * lists will be cleared at the beginning of each {@link #poll(long, List)} call and repopulated by the call if any
+   * lists will be cleared at the beginning of each {@link #poll(long)} call and repopulated by the call if any
    * completed I/O.
    *
    * @param timeout The amount of time to wait, in milliseconds. If negative, wait indefinitely.
