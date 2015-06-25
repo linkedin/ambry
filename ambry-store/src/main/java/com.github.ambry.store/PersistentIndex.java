@@ -1219,11 +1219,7 @@ public class PersistentIndex {
             metrics.hardDeleteFailedCount.inc(1);
           }
         }
-        if (hardDeleteIterator.hasNext()) {
-          return false;
-        } else {
-          return true;
-        }
+        return !hardDeleteIterator.hasNext();
       } catch (IOException e) {
         throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
       }
