@@ -1126,7 +1126,7 @@ public class PersistentIndex {
             }
             logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
           } catch (InterruptedException e) {
-            logger.info("Received interrupted exception.");
+            throw new StoreException("Unexpected interrupted exception during recovery", e, StoreErrorCodes.Unknown_Error);
           }
         } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running.get());
       }
@@ -1264,13 +1264,17 @@ public class PersistentIndex {
             startToken = endToken;
             return true;
           }
-        } catch (IOException e) {
-          throw new StoreException(e, StoreErrorCodes.IOError);
         } catch (InterruptedException e) {
           throw e;
+        } catch (StoreException e) {
+          metrics.hardDeleteExceptionsCount.inc();
+          throw e;
+        } catch (IOException e) {
+          metrics.hardDeleteExceptionsCount.inc();
+          throw new StoreException(e, StoreErrorCodes.IOError);
         } catch (Exception e) {
           metrics.hardDeleteExceptionsCount.inc();
-          logger.error("Caught exception: ", e);
+          throw new StoreException(e, StoreErrorCodes.Unknown_Error);
         } finally {
           context.stop();
         }
@@ -1302,6 +1306,7 @@ public class PersistentIndex {
       return isCaughtUp;
     }
 
+    @Override
     public void run() {
       try {
         while (running.get()) {
