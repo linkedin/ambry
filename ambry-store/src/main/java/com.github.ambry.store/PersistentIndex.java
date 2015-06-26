@@ -1248,7 +1248,8 @@ public class PersistentIndex {
      * @param throttle whether throttling should be done or not.
      * @return true if the token moved forward, false otherwise.
      */
-    private boolean hardDelete(boolean throttle) throws IOException, StoreException, InterruptedException {
+    private boolean hardDelete(boolean throttle)
+        throws StoreException, InterruptedException {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
@@ -1263,6 +1264,13 @@ public class PersistentIndex {
             startToken = endToken;
             return true;
           }
+        } catch (IOException e) {
+          throw new StoreException(e, StoreErrorCodes.IOError);
+        } catch (InterruptedException e) {
+          throw e;
+        } catch (Exception e) {
+          metrics.hardDeleteExceptionsCount.inc();
+          logger.error("Caught exception: ", e);
         } finally {
           context.stop();
         }
@@ -1295,22 +1303,25 @@ public class PersistentIndex {
     }
 
     public void run() {
-      while (running.get()) {
-        try {
-          if (!hardDelete(true)) {
-            isCaughtUp = true;
-            Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
-          } else if (isCaughtUp) {
-            isCaughtUp = false;
-            logger.info("Resumed hard deletes for {} after having caught up", dataDir);
+      try {
+        while (running.get()) {
+          try {
+            if (!hardDelete(true)) {
+              isCaughtUp = true;
+              Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
+            } else if (isCaughtUp) {
+              isCaughtUp = false;
+              logger.info("Resumed hard deletes for {} after having caught up", dataDir);
+            }
+          } catch (InterruptedException e) {
+            logger.info("Caught interrupted exception during hard delete", e);
+          } catch (StoreException e) {
+            logger.error("Caught store exception: ", e);
           }
-        } catch (InterruptedException e) {
-          logger.info("Caught interrupted exception");
-        } catch (Exception e) {
-          logger.error("Caught exception: ", e);
         }
+      } finally {
+        close();
       }
-      close();
     }
 
     public void shutDown()
