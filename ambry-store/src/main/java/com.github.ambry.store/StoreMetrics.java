@@ -33,9 +33,11 @@ public class StoreMetrics {
   public final Counter hardDeleteDoneCount;
   public final Counter hardDeleteFailedCount;
   public final Counter hardDeleteIncompleteRecoveryCount;
+  public final Counter hardDeleteExceptionsCount;
   public Gauge<Long> currentCapacityUsed;
   public Gauge<Long> currentHardDeleteProgress;
-  public Gauge<Boolean> hardDeleteThreadRunning;
+  public Gauge<Long> hardDeleteThreadRunning;
+  public Gauge<Long> hardDeleteCaughtUp;
   public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
   public Gauge<Double> percentageHardDeleteCompleted;
@@ -72,6 +74,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteFailedCount"));
     hardDeleteIncompleteRecoveryCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteIncompleteRecoveryCount"));
+    hardDeleteExceptionsCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteExceptionsCount"));
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 
@@ -111,13 +115,22 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, name + "-percentageHardDeleteCompleted"),
         percentageHardDeleteCompleted);
 
-    hardDeleteThreadRunning = new Gauge<Boolean>() {
+    hardDeleteThreadRunning = new Gauge<Long>() {
       @Override
-      public Boolean getValue() {
-        return index.hardDeleteThreadRunning();
+      public Long getValue() {
+        return index.hardDeleteThreadRunning() ? 1L : 0L;
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteThreadRunning"),
         hardDeleteThreadRunning);
+
+    hardDeleteCaughtUp = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return index.hardDeleteCaughtUp() ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteCaughtUp"),
+        hardDeleteCaughtUp);
   }
 }
