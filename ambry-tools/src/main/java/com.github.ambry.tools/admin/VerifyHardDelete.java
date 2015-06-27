@@ -40,10 +40,12 @@ public class VerifyHardDelete {
   ClusterMap map;
   String outFile;
   String dataDir;
+  String oldDataDir;
 
-  public VerifyHardDelete(ClusterMap map, String dataDir, String outFile) {
+  public VerifyHardDelete(ClusterMap map, String dataDir, String oldDataDir, String outFile) {
     this.map = map;
     this.dataDir = dataDir;
+    this.oldDataDir = oldDataDir;
     this.outFile = outFile;
   }
 
@@ -99,14 +101,15 @@ public class VerifyHardDelete {
 
   public static void main(String args[]) {
     try {
-      String basePath = "/Users/pnarayan/workspace/harddelete/run";
+      String basePath = "/home/pnarayan/run";
       String hardwareLayoutPath = basePath + "/HardwareLayoutEI.json";
       String partitionLayoutPath = basePath + "/PartitionLayoutEI.json";
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
-      String dataDir = basePath + "/101";
+      String dataDir = basePath + "/104";
+      String oldDataDir = dataDir + "_old";
       String outFile = "/tmp/results.txt";
-      VerifyHardDelete hardDeleteVerifier = new VerifyHardDelete(map, dataDir, outFile);
+      VerifyHardDelete hardDeleteVerifier = new VerifyHardDelete(map, dataDir, oldDataDir, outFile);
       hardDeleteVerifier.verifyHardDeletes();
       //hardDeleteVerifier.shutdown();
     } catch (Exception e) {
@@ -250,7 +253,7 @@ public class VerifyHardDelete {
     return lastEligibleSegmentEndOffset;
   }
 
-  private boolean verifyData(byte[] arr, boolean isHardDeleted, String type)
+  private boolean verifyData(byte[] arr, boolean isHardDeleted, String type, byte[] old_arr)
       throws Exception {
     boolean allzeros = true;
     for (int i = 0; i < arr.length; i++) {
@@ -261,12 +264,27 @@ public class VerifyHardDelete {
     }
 
     if (isHardDeleted && !allzeros) {
-      System.err.println("Hard deleted blob's " + type + " is not all zeros");
+      System.err.println("--------");
+      System.err.println(type + "Hard deleted blob is not all zeros");
+      System.err.println("--------");
       return false;
     }
-    if (!isHardDeleted && allzeros) {
-      //System.err.println("Not hard deleted blob's " + type + " is all zeros");
-      return false;
+    if (!isHardDeleted && old_arr != null) {
+      /* Compare arr and old_arr */
+      if (arr.length != old_arr.length) {
+        System.err.println("--------");
+        System.err.println(type + "Old data length is different from new data length");
+        System.err.println("--------");
+        return false;
+      }
+      for (int i = 0; i < arr.length; i++) {
+        if (arr[i] != old_arr[i]) {
+          System.err.println("--------");
+          System.err.println(type + "Old data is different from new data, starting at index: " + i);
+          System.err.println("--------");
+          return false;
+        }
+      }
     }
     return true;
   }
@@ -296,20 +314,34 @@ public class VerifyHardDelete {
       // 2. Scan the log and check against blobMap
       final String Log_File = "log_current";
       // map of blob to offset in log.
-      HashMap<BlobId, ArrayList<Long>> logBlobMap = new HashMap<BlobId, ArrayList<Long>>();
+      //HashMap<BlobId, ArrayList<Long>> logBlobMap = new HashMap<BlobId, ArrayList<Long>>();
 
       File logFile = new File(dataDir, Log_File);
       RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
       InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+
+
+      RandomAccessFile oldRandomAccessFile = null;
+      InputStream oldStreamlog = null;
+      if (!oldDataDir.isEmpty()) {
+        File oldLogFile = new File(oldDataDir, Log_File);
+        oldRandomAccessFile = new RandomAccessFile(oldLogFile, "r");
+        oldStreamlog = Channels.newInputStream(oldRandomAccessFile.getChannel());
+      }
+
       long currentOffset = 0;
       System.out.println("Starting scan from offset 0");
       boolean invalidEntriesInlog = false;
+      long duplicatePuts = 0;
       long unDeletedPuts = 0;
       long hardDeletedPuts = 0;
       long deletes = 0;
+      long mismatchWithOldErrorCount = 0;
+      long notHardDeletedErrorCount = 0;
       while (currentOffset < lastEligibleSegmentEndOffset) {
-        long tempCurrentOffset = currentOffset;
+        boolean mismatchWithOld = false;
         try {
+          oldRandomAccessFile.seek(randomAccessFile.getFilePointer());
           short version = randomAccessFile.readShort();
           if (version == 1) {
             ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
@@ -318,30 +350,40 @@ public class VerifyHardDelete {
             buffer.clear();
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+
+            /* Verify that the header is the same in old and new log files */
+            if (!oldDataDir.isEmpty()) {
+              ByteBuffer oldBuffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+              oldRandomAccessFile.read(oldBuffer.array(), 0, oldBuffer.capacity());
+              mismatchWithOld = !verifyData(buffer.array(), false, "HEADER", oldBuffer.array());
+            }
+
             // read blob id
             BlobId id;
             try {
               id = new BlobId(new DataInputStream(streamlog), map);
+              if (!oldDataDir.isEmpty()) {
+                BlobId old_id = new BlobId(new DataInputStream(oldStreamlog), map);
+                if (old_id.compareTo(id) != 0) {
+                  mismatchWithOld = true;
+                }
+              }
             } catch (IOException e) {
               invalidEntriesInlog = true;
-              randomAccessFile.seek(++tempCurrentOffset);
-              currentOffset = tempCurrentOffset;
+              randomAccessFile.seek(++currentOffset);
               continue;
             } catch (IllegalArgumentException e) {
               invalidEntriesInlog = true;
-              randomAccessFile.seek(++tempCurrentOffset);
-              currentOffset = tempCurrentOffset;
+              randomAccessFile.seek(++currentOffset);
               continue;
             }
 
-            //blobId = "Id - " + id.getID();
             IndexValue indexValue = blobMap.get(id);
             boolean isHardDeleted;
             if (indexValue == null) {
               System.err.println("Key in log not found in index: " + id);
               invalidEntriesInlog = true;
-              randomAccessFile.seek(++tempCurrentOffset);
-              currentOffset = tempCurrentOffset;
+              randomAccessFile.seek(++currentOffset);
               continue;
             } else if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               isHardDeleted = true;
@@ -350,35 +392,41 @@ public class VerifyHardDelete {
             }
             if (header.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              boolean print = false;
-              ArrayList<Long> value = logBlobMap.get(id);
-              if (value != null) {
-                System.err.println("Key already present in the log at: " + value);
-                System.err.println("This additional entry is in the log at: " + currentOffset);
-                print = true;
-                value.add(currentOffset);
-              } else {
-                value = new ArrayList<Long>();
-                value.add(new Long(currentOffset));
-                logBlobMap.put(id, value);
-              }
               BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
               ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-              if (!verifyData(metadata.array(), isHardDeleted, "metadata")) {
-                if (indexValue.getOffset() != indexValue.getOriginalMessageOffset()) {
-                  System.err.println("Offset in index: " + indexValue.getOffset() + " Original offset in index: " +
-                      indexValue.getOriginalMessageOffset() + " Offset in log: " + currentOffset);
+              BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
+              BlobProperties oldProps = null;
+              ByteBuffer oldMetadata = null;
+              BlobOutput oldOutput = null;
+              if (!oldDataDir.isEmpty()) {
+                //oldRandomAccessFile.seek(randomAccessFile.getFilePointer());
+                oldProps = MessageFormatRecord.deserializeBlobProperties(oldStreamlog);
+                oldMetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
+                oldOutput = MessageFormatRecord.deserializeBlob(oldStreamlog);
+              }
+
+              if (oldProps != null && props.toString().compareTo(oldProps.toString()) != 0) {
+                System.err.println("Blob properties mismatch");
+                mismatchWithOld = true;
+              }
+
+              if (!verifyData(metadata.array(), isHardDeleted, "metadata", oldMetadata != null ? oldMetadata.array() : null)) {
+                if (isHardDeleted && indexValue.getOffset() == indexValue.getOriginalMessageOffset()) {
+                  System.err.println("Hard deleted blob is not actually hard deleted, and the offset in index is the offset in log");
+                  notHardDeletedErrorCount++;
+                } else {
+                  duplicatePuts++;
                 }
               }
 
-              BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
-
               if (!verifyData(Utils
                   .readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0, (int) output.getSize()),
-                  isHardDeleted, "content")) {
-                if (indexValue.getOffset() != indexValue.getOriginalMessageOffset()) {
-                  System.err.println("Offset: " + indexValue.getOffset() + " Original offset: " +
-                      indexValue.getOriginalMessageOffset() + " Actual log offset: " + currentOffset);
+                  isHardDeleted, "content", oldOutput == null? null : Utils.readBytesFromStream(oldOutput.getStream(), new byte[(int) oldOutput.getSize()], 0, (int) oldOutput.getSize()))) {
+                if (isHardDeleted && indexValue.getOffset() == indexValue.getOriginalMessageOffset()) {
+                  System.err.println("Hard deleted blob is not actually hard deleted, and the offset in index is the offset in log");
+                  notHardDeletedErrorCount++;
+                } else {
+                  duplicatePuts++;
                 }
               }
               if (isHardDeleted) {
@@ -395,15 +443,21 @@ public class VerifyHardDelete {
             currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
           } else {
             invalidEntriesInlog = true;
-            randomAccessFile.seek(++tempCurrentOffset);
-            currentOffset = tempCurrentOffset;
+            randomAccessFile.seek(++currentOffset);
           }
         } catch (Exception e) {
           System.out.println("Received exception" + e);
+        } finally {
+          if (mismatchWithOld) {
+            mismatchWithOldErrorCount++;
+          }
         }
       }
       String msg = ("\n============");
       msg += "\ninvalidEntriesInlog? " + (invalidEntriesInlog ? "Yes" : "No");
+      msg += "\nmismatchWithOldErrorCount: " + mismatchWithOldErrorCount;
+      msg += "\nnotHardDeletedErrorCount: " + notHardDeletedErrorCount;
+      msg += "\nduplicatePuts: " + duplicatePuts;
       msg += "\nundeleted Put Records: " + unDeletedPuts;
       msg += "\nhard deleted Put Records: " + hardDeletedPuts;
       msg += "\nDelete Records: " + deletes;
