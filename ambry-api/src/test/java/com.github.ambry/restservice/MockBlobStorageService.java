@@ -98,10 +98,12 @@ public class MockBlobStorageService implements BlobStorageService {
       restResponseHandler.setContentType("text/plain; charset=UTF-8");
       restResponseHandler.addToResponseBody(restMethod.toString().getBytes(), true);
     } else {
-      restResponseHandler.addToResponseBody(content.getBytes(), content.isLast());
+      byte[] contentBytes = new byte[content.getContentSize()];
+      content.getBytes(0, contentBytes, 0, content.getContentSize());
+      restResponseHandler.addToResponseBody(contentBytes, content.isLast());
       if (content.isLast()) {
         restResponseHandler.flush();
-        restResponseHandler.close();
+        restResponseHandler.onRequestComplete(null, false);
       }
     }
   }

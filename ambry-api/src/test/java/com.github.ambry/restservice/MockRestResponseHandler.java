@@ -1,6 +1,7 @@
 package com.github.ambry.restservice;
 
 import java.io.ByteArrayOutputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -33,15 +34,13 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public static String RESPONSE_HEADERS_KEY = "responseHeaders";
   public static String CONTENT_TYPE_HEADER_KEY = "contentType";
   public static String ERROR_MESSAGE_KEY = "errorMessage";
-
   public static String STATUS_OK = "OK";
   public static String STATUS_ERROR = "Error";
 
-  private boolean channelActive = true;
-  private boolean errorSent = false;
-  private boolean responseMetadataFinalized = false;
-  private boolean responseMetadataFlushed = false;
-
+  private AtomicBoolean channelActive = new AtomicBoolean(true);
+  private AtomicBoolean requestComplete = new AtomicBoolean(false);
+  private AtomicBoolean responseMetadataFinalized = new AtomicBoolean(false);
+  private AtomicBoolean responseMetadataFlushed = new AtomicBoolean(false);
   private final JSONObject responseMetadata = new JSONObject();
   private final ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
   private final StringBuilder bodyStringBuilder = new StringBuilder();
@@ -55,7 +54,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public synchronized void addToResponseBody(byte[] data, boolean isLast)
       throws RestServiceException {
     verifyChannelActive();
-    responseMetadataFinalized = true;
+    responseMetadataFinalized.set(true);
     bodyBytes.write(data, 0, data.length);
   }
 
@@ -63,52 +62,44 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public synchronized void flush()
       throws RestServiceException {
     verifyChannelActive();
-    responseMetadataFinalized = true;
-    responseMetadataFlushed = true;
+    responseMetadataFinalized.set(true);
+    responseMetadataFlushed.set(true);
     bodyStringBuilder.append(bodyBytes.toString());
     bodyBytes.reset();
   }
 
   @Override
-  public synchronized void close()
-      throws RestServiceException {
-    channelActive = false;
-  }
-
-  @Override
-  public synchronized void onError(RestRequestMetadata restRequestMetadata, Throwable cause) {
-    if (!errorSent) {
-      if (!responseMetadataFinalized) {
-        try {
+  public synchronized void onRequestComplete(Throwable cause, boolean forceClose) {
+    if (requestComplete.compareAndSet(false, true)) {
+      try {
+        if (!responseMetadataFinalized.get() && cause != null) {
           setContentType("text/plain; charset=UTF-8");
           responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_ERROR);
           responseMetadata.put(ERROR_MESSAGE_KEY, cause.toString());
-          flush();
-          close();
-          responseMetadataFinalized = true;
-          errorSent = true;
-        } catch (JSONException e) {
-          // nothing to do
-        } catch (RestServiceException e) {
-          // nothing to do
+          responseMetadataFinalized.set(true);
+        } else if (cause != null) {
+          throw new IllegalStateException("Discovered that a responseMetadata had already been sent to the client when"
+              + " attempting to send an error responseMetadata. The original cause of error follows: ", cause);
         }
-      } else {
-        throw new IllegalStateException("Discovered that a responseMetadata had already been sent to the client when" +
-            " attempting to send an error responseMetadata. This indicates a bad state transition. The request" +
-            " metadata is " + restRequestMetadata + ". The original cause of error follows: ", cause);
+        flush();
+        close();
+      } catch (JSONException e) {
+        // nothing to do
+      } catch (RestServiceException e) {
+        // nothing to do
       }
     }
   }
 
   @Override
-  public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
-    // nothing to do
+  public boolean isRequestComplete() {
+    return requestComplete.get();
   }
 
   @Override
   public synchronized void setContentType(String type)
       throws RestServiceException {
-    if (!responseMetadataFinalized) {
+    if (!responseMetadataFinalized.get()) {
       try {
         if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
           responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
@@ -118,20 +109,28 @@ public class MockRestResponseHandler implements RestResponseHandler {
         throw new RestServiceException("Unable to set content type", RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      throw new IllegalStateException("Trying to change responseMetadata after it has been written to channel");
+      throw new RestServiceException("Trying to change responseMetadata after it has been written to channel",
+          RestServiceErrorCode.IllegalResponseMetadataStateTransition);
     }
+  }
+
+  private void close()
+      throws RestServiceException {
+    channelActive.set(false);
   }
 
   /**
    * Verify that channel is still active.
    */
-  private void verifyChannelActive() {
-    if (!channelActive) {
-      throw new IllegalStateException("Channel has already been closed before write");
+  private void verifyChannelActive()
+      throws RestServiceException {
+    if (!channelActive.get()) {
+      throw new RestServiceException("Channel has already been closed before write",
+          RestServiceErrorCode.ChannelAlreadyClosed);
     }
   }
 
-  // mock responseMetadata handler specific functions (for testing)
+  // MockRestResponseHandler specific functions (for testing)
 
   /**
    * Gets the current responseMetadata whether it has been flushed or not (Might not be the final response metadata).
@@ -146,7 +145,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
    * @return  - get response metadata if flushed.
    */
   public synchronized JSONObject getFlushedResponseMetadata() {
-    if (responseMetadataFlushed) {
+    if (responseMetadataFlushed.get()) {
       return getResponseMetadata();
     }
     return null;
@@ -177,6 +176,6 @@ public class MockRestResponseHandler implements RestResponseHandler {
    * @return - true if active, false if not
    */
   public synchronized boolean getChannelActive() {
-    return channelActive;
+    return channelActive.get();
   }
 }

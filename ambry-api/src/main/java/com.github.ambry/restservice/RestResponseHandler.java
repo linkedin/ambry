@@ -22,6 +22,8 @@ public interface RestResponseHandler {
    * This method might not have sent data to the wire upon return. The byte array provided as argument might still be in
    * use.
    * <p/>
+   * If the write fails sometime in the future, the channel may be closed.
+   * <p/>
    * Be sure to call {@link RestResponseHandler#flush()} once you want to send all pending data to the actual transport.
    * @param data - the bytes of data that need to be written.
    * @param isLast - whether this is the last piece of the response.
@@ -39,42 +41,34 @@ public interface RestResponseHandler {
       throws RestServiceException;
 
   /**
-   * Closes the channel. No further communication will be possible.
+   * Notifies that request handling is complete (successfully or unsuccessfully) and tasks that need to be done after
+   * handling of a request is complete can proceed (e.g. cleanup code + closing of connection if not keepalive).
    * <p/>
-   * No response will be sent if neither a response body was constructed (i.e if there were no
-   * {@link RestResponseHandler#addToResponseBody(byte[], boolean)} calls) nor a {@link RestResponseHandler#flush()} was
-   * called.
+   * If cause is not not null, then it indicates that there was an error while handling the request and cause defines
+   * the error that occurred. The expectation is that an appropriate error response will be constructed, returned to the
+   * client if possible and the connection closed (if required).
    * <p/>
-   * Any pending writes (that are not already flushed) might be discarded.
-   * @throws RestServiceException
-   */
-  public void close()
-      throws RestServiceException;
-
-  /**
-   * Notifies the RestResponseHandler that an error has occurred in handling the request.
+   * It is possible that the connection might be closed/severed before this is called. Therefore this function needs to
+   * always check if the channel of communication with the client is still open if it wants to send data.
    * <p/>
-   * The expectation is that an appropriate error response will be constructed, returned to the client and the
-   * connection closed (if required).
-   * @param restRequestMetadata - the metadata of the request that failed.
-   * @param cause - the cause of the error.
-   */
-  public void onError(RestRequestMetadata restRequestMetadata, Throwable cause);
-
-  /**
-   * Notifies that request handling is complete and tasks that need to be done after handling of a request is complete
-   * can proceed.
-   * <p/>
-   * Any cleanup code is expected to go here but no data can be sent to the client since the connection might be
-   * closed/severed before this is called.
-   * <p/>
-   * A request is considered to be complete when all the {@link RestRequestInfo}s associated with the request have been
-   * acknowledged as handled and no more {@link RestRequestInfo}s associated with the same request are expected.
+   * A request is considered to be complete when no more {@link RestRequestInfo}s associated with the same request are
+   * expected at the {@link NioServer} (they might still be in the other layers) or if there was an error while
+   * handling the request or if the client timed out.
    * <p/>
    * This is (has to be) called regardless of the request being concluded successfully or unsuccessfully
    * (e.g. connection interruption).
+   * <p/>
+   * This operation has to be idempotent.
+   * @param cause - if an error occurred, the cause of the error. Otherwise null.
+   * @param forceClose - whether the connection needs to be forcibly closed.
    */
-  public void onRequestComplete(RestRequestMetadata restRequestMetadata);
+  public void onRequestComplete(Throwable cause, boolean forceClose);
+
+  /**
+   * Returns completion status of the request represented by the given {@link RestRequestMetadata}.
+   * @return
+   */
+  public boolean isRequestComplete();
 
   // Header helper functions.
   //

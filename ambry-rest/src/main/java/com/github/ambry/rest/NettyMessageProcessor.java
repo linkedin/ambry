@@ -44,7 +44,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  * lower layers. Therefore a {@link RestRequestHandler} is obtained at the beginning of the request, used for all parts
  * of the request and discarded only when the request is complete.
  * 3. {@link RestResponseHandler} that needs to be bundled with all request parts so that the underlying layers can
- * reply to the client - Similar to the {@link RestRequestHandler}, a {@link RestResponseHandler} needs to maintained
+ * reply to the client - Similar to the {@link RestRequestHandler}, a {@link RestResponseHandler} needs to be maintained
  * for the lifetime of a request. This should be a Netty specific implementation ({@link NettyResponseHandler}).
  * <p/>
  * Every time a new channel is created, Netty creates instances of all handlers in its pipeline. Since this class is one
@@ -60,16 +60,14 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final NettyMetrics nettyMetrics;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  // Each of these live through the lifetime of a request.
-  // TODO: when we support keepalive, we need to clear some of these and repopulate them once a request is finished.
   private ChannelHandlerContext ctx = null;
   private RestRequestMetadata request = null;
   private RestRequestHandler requestHandler = null;
   private RestResponseHandler responseHandler = null;
 
-  public NettyMessageProcessor(RestRequestHandlerController requestHandlerController, NettyMetrics nettyMetrics) {
-    this.requestHandlerController = requestHandlerController;
+  public NettyMessageProcessor(NettyMetrics nettyMetrics, RestRequestHandlerController requestHandlerController) {
     this.nettyMetrics = nettyMetrics;
+    this.requestHandlerController = requestHandlerController;
   }
 
   /**
@@ -108,7 +106,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
 
   /**
    * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed. Any tasks
-   * at this point of time cannot communicate with the client.
+   * that are performed at this point in time cannot communicate with the client.
    * <p/>
    * This is called exactly once in the lifetime of the channel. If there is no keepalive, this will be called
    * after one request (since the channel lives to serve exactly one request). If there is keepalive, this will be
@@ -119,19 +117,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
-    // TODO: once we support keepalive, we need to do this at the end of a request too.
-    try {
-      if (requestHandler != null) {
-        requestHandler.onRequestComplete(request);
-      }
-
-      if (responseHandler != null) {
-        responseHandler.onRequestComplete(request);
-      }
-    } catch (Exception e) {
-      logger.error("Unable to perform cleanup tasks. Swallowing exception..", e);
-      nettyMetrics.channelInactiveTasksFailureCount.inc();
-    }
+    onRequestComplete(null, true);
   }
 
   /**
@@ -148,20 +134,12 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
-    try {
-      if (responseHandler != null) {
-        responseHandler.onError(request, cause);
-      } else {
-        //TODO: metric
-        logger.error("No response handler found while trying to relay error message. Reporting "
-            + HttpResponseStatus.INTERNAL_SERVER_ERROR);
-        sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
-      }
-    } catch (Exception e) {
-      //TODO: metric
-      logger.error("Caught exception while trying to handle an error", e);
+    if (responseHandler == null) {
+      logger.error("No response handler found while trying to relay error message. Reporting "
+          + HttpResponseStatus.INTERNAL_SERVER_ERROR);
       sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
     }
+    onRequestComplete(cause, false);
   }
 
   /**
@@ -174,29 +152,17 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object event)
       throws Exception {
-
     // NOTE: This is specifically in place to handle connections that close unexpectedly from the client side.
     // Even in that situation, any cleanup code that we have in the handlers will have to be called (when
     // channelInactive() is called as a result of the close). This ensures that multiple chunk requests that a handler
     // may be tracking is cleaned up properly. We need this especially because request handlers handle multiple requests
     // at the same time and may evolve to have some sort of state for each connection.
-
-    // TODO: This needs a unit test - I do not have any idea how to test it currently
-    if (event instanceof IdleStateEvent) {
-      IdleStateEvent e = (IdleStateEvent) event;
-      if (e.state() == IdleState.ALL_IDLE) {
-        logger.error("Connection timed out. Closing channel");
-        // close() triggers channelInactive() that will trigger onRequestComplete() of the request and response handlers
-        if (responseHandler != null) {
-          responseHandler.close();
-        } else {
-          ctx.close();
-        }
-      } else {
-        logger.error("Unrecognized idle state event - " + e.state());
+    if (event instanceof IdleStateEvent && ((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
+      logger.error("Connection idle for too long. Closing channel");
+      if (responseHandler == null) {
+        ctx.close();
       }
-    } else {
-      logger.error("Unrecognized user event - " + event);
+      onRequestComplete(null, true);
     }
   }
 
@@ -297,12 +263,32 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   }
 
   /**
-   * Logs errors and tracks metrics.
+   * Logs errors and tracks metrics when handling fails.
    * @param e - the Exception that occurred.
    */
   private void recordHandlingError(Exception e) {
     logger.error("Handling error for request - " + request.getUri(), e);
     nettyMetrics.handleRequestFailureCount.inc();
+  }
+
+  /**
+   * Performs tasks that need to be performed when the request is complete. If the request failed, the cause of
+   * failure should be forwarded.
+   * @param cause - the cause of failure if handling failed, null otherwise.
+   * @param forceClose - whether the connection needs to be forcibly closed.
+   */
+  private void onRequestComplete(Throwable cause, boolean forceClose) {
+    try {
+      if (responseHandler != null && !responseHandler.isRequestComplete()) {
+        responseHandler.onRequestComplete(cause, forceClose);
+      }
+      if (requestHandler != null) {
+        requestHandler.onRequestComplete(request);
+      }
+    } catch (Exception e) {
+      logger.error("Caught exception while trying to perform tasks on request complete. Swallowing..", e);
+      nettyMetrics.onRequestCompleteTasksFailure.inc();
+    }
   }
 
   /**

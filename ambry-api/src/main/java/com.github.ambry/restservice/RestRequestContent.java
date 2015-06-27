@@ -18,10 +18,23 @@ public interface RestRequestContent {
   public boolean isLast();
 
   /**
-   * Get the underlying content as a byte array.
-   * @return - the underlying content as a byte array.
+   * Gets the size of the content.
+   * @return size of content.
    */
-  public byte[] getBytes();
+  public int getContentSize();
+
+  /**
+   * Transfers the content of specified length in the form of bytes starting at the specified absolute srcIndex to the
+   * destination starting at the specified absolute dstIndex.
+   * <p/>
+   * Will throw exceptions if srcIndex < 0, dstIndex < 0, length < 0, src does not have enough data or if dst does not
+   * have enough space.
+   * @param srcIndex
+   * @param dst
+   * @param dstIndex
+   * @param length
+   */
+  public void getBytes(int srcIndex, byte[] dst, int dstIndex, int length);
 
   /**
    * If the underlying content is reference counted, increase the reference count so that the it is not lost to

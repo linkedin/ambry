@@ -41,13 +41,10 @@ import org.slf4j.LoggerFactory;
  * {@link RestRequestHandlerController} and {@link com.github.ambry.restservice.RestRequestHandler}.
  */
 public class RestServer {
-  // Tracks completion of shutdown.
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
-
-  // component instances.
   private final BlobStorageService blobStorageService;
   private final RestRequestHandlerController requestHandlerController;
   private final NioServer nioServer;
@@ -60,16 +57,13 @@ public class RestServer {
     try {
       restServerConfig = new RestServerConfig(verifiableProperties);
       restServerMetrics = new RestServerMetrics(metricRegistry);
-
-      // create instances of components.
       BlobStorageServiceFactory blobStorageServiceFactory = Utils
-          .getObj(restServerConfig.getBlobStorageServiceFactory(), verifiableProperties, metricRegistry, clusterMap);
+          .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, metricRegistry, clusterMap);
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
       requestHandlerController =
-          new RequestHandlerController(restServerConfig.getRequestHandlerCount(), restServerMetrics,
-              blobStorageService);
+          new RequestHandlerController(restServerConfig.restRequestHandlerCount, restServerMetrics, blobStorageService);
       NioServerFactory nioServerFactory = Utils
-          .getObj(restServerConfig.getNioServerFactory(), verifiableProperties, metricRegistry,
+          .getObj(restServerConfig.restNioServerFactory, verifiableProperties, metricRegistry,
               requestHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
@@ -88,12 +82,10 @@ public class RestServer {
       throws InstantiationException {
     try {
       logger.info("Starting RestServer..");
-
       // ordering is important.
       blobStorageService.start();
       requestHandlerController.start();
       nioServer.start();
-
       logger.info("RestServer has started");
     } catch (Exception e) {
       logger.error("Error during start ", e);
@@ -102,17 +94,15 @@ public class RestServer {
   }
 
   /**
-   * Shuts down up all the components. Returns when shutdown is FULLY complete.
+   * Shuts down all the components. Returns when shutdown is FULLY complete.
    */
   public void shutdown() {
     logger.info("Shutting down RestServer..");
-
     //ordering is important.
     nioServer.shutdown();
     requestHandlerController.shutdown();
     blobStorageService.shutdown();
     shutdownLatch.countDown();
-
     logger.info("RestServer shutdown complete");
   }
 

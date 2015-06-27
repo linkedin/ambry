@@ -15,33 +15,36 @@ public class MockRestRequestContent implements RestRequestContent {
   public static String CONTENT_KEY = "content";
   public static String IS_LAST_KEY = "isLast";
 
-  private final JSONObject data;
+  private final boolean isLast;
+  private final byte[] content;
 
   public MockRestRequestContent(JSONObject data)
       throws InstantiationException {
-    if (data.has(IS_LAST_KEY) && data.has(CONTENT_KEY)) {
-      this.data = data;
-    } else {
-      throw new InstantiationException("Given JSONObject cannot be converted to MockRestRequestContent");
+    try {
+      if (data.has(IS_LAST_KEY) && data.has(CONTENT_KEY)) {
+        isLast = data.getBoolean(IS_LAST_KEY);
+        content = data.get(CONTENT_KEY).toString().getBytes();
+      } else {
+        throw new InstantiationException("Given JSONObject cannot be converted to MockRestRequestContent");
+      }
+    } catch (JSONException e) {
+      throw new InstantiationException("Could not retrieve some keys from the JSONObject " + e);
     }
   }
 
   @Override
   public boolean isLast() {
-    try {
-      return data.getBoolean(IS_LAST_KEY);
-    } catch (JSONException e) {
-      return false;
-    }
+    return isLast;
   }
 
   @Override
-  public byte[] getBytes() {
-    try {
-      return data.get(CONTENT_KEY).toString().getBytes();
-    } catch (JSONException e) {
-      return null;
-    }
+  public int getContentSize() {
+    return content.length;
+  }
+
+  @Override
+  public void getBytes(int srcIndex, byte[] dst, int dstIndex, int length) {
+    System.arraycopy(content, srcIndex, dst, dstIndex, length);
   }
 
   @Override

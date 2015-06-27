@@ -11,10 +11,9 @@ import com.codahale.metrics.MetricRegistry;
  */
 class NettyMetrics {
   //errors
-  // TODO: expansion and documentation in another commit.
   public final Counter badRequestErrorCount;
   public final Counter channelActiveTasksFailureCount;
-  public final Counter channelInactiveTasksFailureCount;
+  public final Counter onRequestCompleteTasksFailure;
   public final Counter duplicateRequestErrorCount;
   public final Counter errorStateCount;
   public final Counter handleRequestFailureCount;
@@ -25,7 +24,6 @@ class NettyMetrics {
   public final Counter unknownExceptionCount;
   public final Counter unknownHttpObjectErrorCount;
   public final Counter unknownRestExceptionCount;
-
   public final Counter channelOperationAfterCloseErrorCount;
   public final Counter deadResponseAccess;
 
@@ -35,8 +33,8 @@ class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "badRequestErrorCount"));
     channelActiveTasksFailureCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "channelActiveTasksFailureCount"));
-    channelInactiveTasksFailureCount =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "channelInactiveTasksFailureCount"));
+    onRequestCompleteTasksFailure =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "onRequestCompleteTasksFailure"));
     duplicateRequestErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "duplicateRequestErrorCount"));
     errorStateCount = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "errorStateCount"));
@@ -54,10 +52,8 @@ class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownExceptionCount"));
     unknownHttpObjectErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownHttpObjectErrorCount"));
-
     unknownRestExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "unknownRestExceptionCount"));
-
     channelOperationAfterCloseErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "channelOperationAfterCloseErrorCount"));
     deadResponseAccess = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "deadResponseAccess"));

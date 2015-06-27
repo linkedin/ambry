@@ -165,7 +165,6 @@ class CommunicationHandler extends SimpleChannelInboundHandler<Object> {
   @Override
   public void channelActive(ChannelHandlerContext ctx)
       throws Exception {
-    // TODO: This can be upgraded later to allow async pushing but this will do for now.
     while (!contentQueue.isEmpty()) {
       ctx.writeAndFlush(contentQueue.remove());
     }

@@ -70,7 +70,7 @@ public class NettyMessageProcessorTest {
     String lastContent = "@@randomLastContent@@@";
 
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(requestHandlerController, new NettyMetrics(new MetricRegistry()));
+        new NettyMessageProcessor(new NettyMetrics(new MetricRegistry()), requestHandlerController);
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     channel.writeInbound(createRequest(HttpMethod.GET, "/"));
     channel.writeInbound(createContent(content, false));
@@ -119,14 +119,14 @@ public class NettyMessageProcessorTest {
     // content without request.
     String content = "@@randomContent@@@";
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(requestHandlerController, new NettyMetrics(new MetricRegistry()));
+        new NettyMessageProcessor(new NettyMetrics(new MetricRegistry()), requestHandlerController);
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     channel.writeInbound(createContent(content, true));
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
 
     // wrong HTTPObject.
-    processor = new NettyMessageProcessor(requestHandlerController, new NettyMetrics(new MetricRegistry()));
+    processor = new NettyMessageProcessor(new NettyMetrics(new MetricRegistry()), requestHandlerController);
     channel = new EmbeddedChannel(processor);
     channel.writeInbound(new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK));
     response = (HttpResponse) channel.readOutbound();
@@ -178,7 +178,7 @@ public class NettyMessageProcessorTest {
   // channelActiveTasksFailureTest() helpers.
   private void doChannelActiveTasksFailureTest() {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(requestHandlerController, new NettyMetrics(new MetricRegistry()));
+        new NettyMessageProcessor(new NettyMetrics(new MetricRegistry()), requestHandlerController);
     // throws when channelActive() is called.
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -189,7 +189,7 @@ public class NettyMessageProcessorTest {
   private void doRequestHandlerExceptionTest(String uri, HttpResponseStatus expectedStatus)
       throws JSONException {
     NettyMessageProcessor processor =
-        new NettyMessageProcessor(requestHandlerController, new NettyMetrics(new MetricRegistry()));
+        new NettyMessageProcessor(new NettyMetrics(new MetricRegistry()), requestHandlerController);
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     channel.writeInbound(createRequest(HttpMethod.GET, uri));
     // first outbound has to be response.

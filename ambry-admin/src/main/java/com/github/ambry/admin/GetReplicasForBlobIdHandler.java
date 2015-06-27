@@ -19,8 +19,8 @@ import org.json.JSONObject;
  * Performs the custom {@link AdminOperationType#getReplicasForBlobId} operation supported by the admin.
  */
 class GetReplicasForBlobIdHandler {
-  static String BLOB_ID_KEY = "blobId";
-  static String REPLICAS_KEY = "replicas";
+  protected static String BLOB_ID_KEY = "blobId";
+  protected static String REPLICAS_KEY = "replicas";
 
   /**
    * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
@@ -43,7 +43,7 @@ class GetReplicasForBlobIdHandler {
       responseHandler.addToResponseBody(replicaStr.getBytes(), true);
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.flush();
-      responseHandler.close();
+      responseHandler.onRequestComplete(null, false);
     }
   }
 

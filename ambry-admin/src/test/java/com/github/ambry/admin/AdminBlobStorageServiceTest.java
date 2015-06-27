@@ -109,11 +109,15 @@ public class AdminBlobStorageServiceTest {
    * @throws RestServiceException
    * @throws URISyntaxException
    */
-  @Test(expected = IllegalStateException.class)
+  @Test
   public void handleGetTest()
       throws JSONException, RestServiceException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.GET, "/", new JSONObject());
-    adminBlobStorageService.handleGet(restRequestInfo);
+    try {
+      adminBlobStorageService.handleGet(restRequestInfo);
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
+    }
   }
 
   /**
@@ -122,11 +126,15 @@ public class AdminBlobStorageServiceTest {
    * @throws RestServiceException
    * @throws URISyntaxException
    */
-  @Test(expected = IllegalStateException.class)
+  @Test
   public void handlePostTest()
       throws JSONException, RestServiceException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.POST, "/", new JSONObject());
-    adminBlobStorageService.handlePost(restRequestInfo);
+    try {
+      adminBlobStorageService.handlePost(restRequestInfo);
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
+    }
   }
 
   /**
@@ -135,11 +143,15 @@ public class AdminBlobStorageServiceTest {
    * @throws RestServiceException
    * @throws URISyntaxException
    */
-  @Test(expected = IllegalStateException.class)
+  @Test
   public void handleDeleteTest()
       throws JSONException, RestServiceException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.DELETE, "/", new JSONObject());
-    adminBlobStorageService.handleDelete(restRequestInfo);
+    try {
+      adminBlobStorageService.handleDelete(restRequestInfo);
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
+    }
   }
 
   /**
@@ -148,11 +160,15 @@ public class AdminBlobStorageServiceTest {
    * @throws RestServiceException
    * @throws URISyntaxException
    */
-  @Test(expected = IllegalStateException.class)
+  @Test
   public void handleHeadTest()
       throws JSONException, RestServiceException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.HEAD, "/", new JSONObject());
-    adminBlobStorageService.handleHead(restRequestInfo);
+    try {
+      adminBlobStorageService.handleHead(restRequestInfo);
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
+    }
   }
 
   /**
@@ -261,8 +277,8 @@ public class AdminBlobStorageServiceTest {
           createRestRequestInfo(RestMethod.GET, "unknownOperation?dummyParam=dummyValue", null);
       adminBlobStorageService.handleGet(restRequestInfo);
       fail("Exception should have been thrown because an unknown operation has been specified");
-    } catch (IllegalStateException e) {
-      // expected. TODO: This will change once we implement GET of blob
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
     }
   }
 
@@ -282,8 +298,8 @@ public class AdminBlobStorageServiceTest {
       RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.GET, "/", null);
       adminBlobStorageService.handleGet(restRequestInfo);
       fail("Exception should have been thrown because no operation has been specified");
-    } catch (IllegalStateException e) {
-      // expected. TODO: This will change once we implement GET of blob
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedOperation, e.getErrorCode());
     }
   }
 

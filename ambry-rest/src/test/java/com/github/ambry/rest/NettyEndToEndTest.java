@@ -129,9 +129,9 @@ public class NettyEndToEndTest {
   @Test
   public void requestHandlerControllerFailureTest()
       throws Exception {
-    // Start a new NettyServer (on a different port) with a new RequestHandlerController.
+    // Start a new NettyServer (on a different nettyServerPort) with a new RequestHandlerController.
     Properties properties = new Properties();
-    properties.setProperty(NettyConfig.PORT_KEY, NETTY_SERVER_ALTERNATE_PORT);
+    properties.setProperty("netty.server.port", NETTY_SERVER_ALTERNATE_PORT);
     RestRequestHandlerController handlerController = createRestRequestHandlerController();
     NioServer server = createNettyServer(handlerController, properties);
     server.start();

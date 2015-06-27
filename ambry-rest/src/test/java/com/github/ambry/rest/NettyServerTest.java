@@ -57,11 +57,11 @@ public class NettyServerTest {
       throws InstantiationException, IOException {
     Properties properties = new Properties();
     // Should be int. So will throw at instantiation.
-    properties.setProperty(NettyConfig.PORT_KEY, "abcd");
+    properties.setProperty("netty.server.port", "abcd");
     NioServer nioServer = null;
     try {
       nioServer = getNettyServer(properties);
-      fail("NettyServer instantiation should have failed because of bad port value");
+      fail("NettyServer instantiation should have failed because of bad nettyServerPort value");
     } catch (NumberFormatException e) {
       // nothing to do. expected.
     } finally {
@@ -71,11 +71,11 @@ public class NettyServerTest {
     }
 
     // Should be > 0. So will throw at start().
-    properties.setProperty(NettyConfig.PORT_KEY, "-1");
+    properties.setProperty("netty.server.port", "-1");
     nioServer = getNettyServer(properties);
     try {
       nioServer.start();
-      fail("NettyServer start() should have failed because of bad port value");
+      fail("NettyServer start() should have failed because of bad nettyServerPort value");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     } finally {

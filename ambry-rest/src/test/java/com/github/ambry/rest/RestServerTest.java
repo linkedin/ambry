@@ -27,8 +27,7 @@ public class RestServerTest {
       throws InstantiationException, InterruptedException, IOException {
     Properties properties = new Properties();
     // no defaults defined for BlobStorageServiceFactory so need to define it here.
-    properties.setProperty(RestServerConfig.BLOB_STORAGE_SERVICE_FACTORY,
-        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -51,8 +50,7 @@ public class RestServerTest {
       throws InstantiationException, InterruptedException, IOException {
     Properties properties = new Properties();
     // no defaults defined for BlobStorageServiceFactory so need to define it here.
-    properties.setProperty(RestServerConfig.BLOB_STORAGE_SERVICE_FACTORY,
-        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
@@ -83,15 +81,13 @@ public class RestServerTest {
   public void startShutdownTestWithBadComponent()
       throws Exception {
     Properties properties = new Properties();
-    properties.setProperty(RestServerConfig.BLOB_STORAGE_SERVICE_FACTORY,
-        "com.github.ambry.restservice.MockBlobStorageServiceFactory");
-    properties.setProperty(RestServerConfig.NIO_SERVER_FACTORY, "com.github.ambry.restservice.MockNioServerFactory");
+    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.nio.server.factory", "com.github.ambry.restservice.MockNioServerFactory");
     // makes MockNioServer throw exceptions.
     properties.setProperty(MockNioServerFactory.IS_FAULTY_KEY, "true");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
-
     RestServer server = new RestServer(verifiableProperties, metricRegistry, clusterMap);
     try {
       server.start();
@@ -99,7 +95,12 @@ public class RestServerTest {
     } catch (InstantiationException e) {
       // nothing to do. expected.
     } finally {
-      server.shutdown();
+      try {
+        server.shutdown();
+        fail("RestServer shutdown should have failed.");
+      } catch (RuntimeException e) {
+        // nothing to do. expected.
+      }
     }
   }
 
@@ -150,7 +151,7 @@ public class RestServerTest {
   private void badNioServerClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty(RestServerConfig.NIO_SERVER_FACTORY, "non.existent.nio.server.factory");
+    properties.setProperty("rest.nio.server.factory", "non.existent.nio.server.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
@@ -161,7 +162,7 @@ public class RestServerTest {
 
     properties = new Properties();
     // invalid NioServerFactory.
-    properties.setProperty(RestServerConfig.NIO_SERVER_FACTORY, "com.github.ambry.rest.RestServer");
+    properties.setProperty("rest.nio.server.factory", "com.github.ambry.rest.RestServer");
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
@@ -178,7 +179,7 @@ public class RestServerTest {
   private void badBlobStorageServiceClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty(RestServerConfig.BLOB_STORAGE_SERVICE_FACTORY, "non.existent.blob.storage.service.factory");
+    properties.setProperty("rest.blob.storage.service.factory", "non.existent.blob.storage.service.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
@@ -189,7 +190,7 @@ public class RestServerTest {
 
     properties = new Properties();
     // invalid BlobStorageServiceFactory.
-    properties.setProperty(RestServerConfig.BLOB_STORAGE_SERVICE_FACTORY, "com.github.ambry.rest.RestServer");
+    properties.setProperty("rest.blob.storage.service.factory", "com.github.ambry.rest.RestServer");
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());

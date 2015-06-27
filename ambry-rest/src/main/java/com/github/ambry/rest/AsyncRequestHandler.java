@@ -2,11 +2,16 @@ package com.github.ambry.rest;
 
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.RestMethod;
+import com.github.ambry.restservice.RestRequestContent;
 import com.github.ambry.restservice.RestRequestHandler;
 import com.github.ambry.restservice.RestRequestInfo;
 import com.github.ambry.restservice.RestRequestMetadata;
+import com.github.ambry.restservice.RestResponseHandler;
 import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -38,31 +43,35 @@ class AsyncRequestHandler implements RestRequestHandler {
 
   private final Thread dequeuedRequestHandlerThread;
   private final DequeuedRequestHandler dequeuedRequestHandler;
+  private final ConcurrentHashMap<RestRequestMetadata, Boolean> requestsInFlight =
+      new ConcurrentHashMap<RestRequestMetadata, Boolean>();
   private final LinkedBlockingQueue<RestRequestInfo> restRequestInfoQueue = new LinkedBlockingQueue<RestRequestInfo>();
   private final RestServerMetrics restServerMetrics;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public AsyncRequestHandler(BlobStorageService blobStorageService, RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
-    dequeuedRequestHandler = new DequeuedRequestHandler(blobStorageService, restRequestInfoQueue, restServerMetrics);
+    dequeuedRequestHandler =
+        new DequeuedRequestHandler(blobStorageService, restRequestInfoQueue, requestsInFlight, restServerMetrics);
     dequeuedRequestHandlerThread = new Thread(dequeuedRequestHandler);
   }
 
   @Override
   public void start()
       throws InstantiationException {
-    logger.info("Starting AsyncRequestHandler..");
-    dequeuedRequestHandlerThread.start();
-    logger.info("AsyncRequestHandler has started");
+    if (!dequeuedRequestHandlerThread.isAlive()) {
+      logger.info("Starting AsyncRequestHandler..");
+      dequeuedRequestHandlerThread.start();
+      logger.info("AsyncRequestHandler has started");
+    }
   }
 
   /**
-   * Attempts to shutdown the AsyncRequestHandler gracefully by introducing poison into the queue. All
-   * {@link RestRequestInfo}s before the poison get handled before shutdown occurs. Any {@link RestRequestInfo}s
-   * enqueued after the poison are not processed.
+   * Attempts to shutdown the AsyncRequestHandler gracefully by introducing {@link PoisonInfo} into the queue. Any
+   * resources held by the {@link RestRequestInfo}s queued after the poison are released.
    * <p/>
    * If the graceful shutdown fails, then a shutdown is forced. Any outstanding {@link RestRequestInfo}s are not
-   * handled.
+   * handled and resources held by them are not released.
    * @throws RestServiceException
    */
   @Override
@@ -114,16 +123,14 @@ class AsyncRequestHandler implements RestRequestHandler {
       }
       queue(restRequestInfo);
     } else {
-      throw new RestServiceException("Requests cannot be handled because the DequeuedRequestHandler is not alive",
+      throw new RestServiceException("Requests cannot be handled because the DequeuedRequestHandler is not available",
           RestServiceErrorCode.RequestHandlerUnavailable);
     }
   }
 
   @Override
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
-    if (restRequestMetadata != null) {
-      restRequestMetadata.release();
-    }
+    dequeuedRequestHandler.onRequestComplete(restRequestMetadata);
   }
 
   /**
@@ -133,29 +140,41 @@ class AsyncRequestHandler implements RestRequestHandler {
    */
   private void queue(RestRequestInfo restRequestInfo)
       throws RestServiceException {
+    boolean releaseContent = false;
+    if (restRequestInfo.getRestRequestContent() != null) {
+      // Since we are going to handle this async, we need to make sure this object is not recycled.
+      // It is released in DequeuedRequestHandler::handleRequest() once the handling is complete.
+      // If the offer fails, we release immediately.
+      restRequestInfo.getRestRequestContent().retain();
+    } else if (restRequestInfo.getRestRequestMetadata() != null) {
+      // This is the first part of a new request.
+      // Since we are going to handle this async, we need to make sure this object is not recycled.
+      // It is released in onRequestComplete() once we know that we are not going to use it anymore.
+      // If the offer fails, the request will error out and onRequestComplete() will still be called. So
+      // there is no need to release right away.
+      restRequestInfo.getRestRequestMetadata().retain();
+      if (requestsInFlight.putIfAbsent(restRequestInfo.getRestRequestMetadata(), true) != null) {
+        logger.error("A request already seems to be marked as in-flight when the first RestRequestInfo was seen");
+      }
+    }
     try {
-      if (restRequestInfoQueue.offer(restRequestInfo, OFFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-        if (restRequestInfo.getRestRequestContent() != null) {
-          // Since we are going to handle this async, we need to make sure this object is not recycled.
-          // It is released in DequeuedRequestHandler::handleRequest() once the handling is complete.
-          restRequestInfo.getRestRequestContent().retain();
-        } else if (restRequestInfo.getRestRequestMetadata() != null) {
-          // This is the first part of a new request.
-          // Since we are going to handle this async, we need to make sure this object is not recycled.
-          // It is released in onRequestComplete() once we know that we are not going to use it anymore.
-          restRequestInfo.getRestRequestMetadata().retain();
-        }
-      } else {
+      if (!restRequestInfoQueue.offer(restRequestInfo, OFFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+        releaseContent = true;
         restServerMetrics.handlerQueueOfferTookTooLongErrorCount.inc();
         logger.error("Was not able to enqueue RestRequestInfo within " + OFFER_TIMEOUT_SECONDS + " seconds");
         throw new RestServiceException("Attempt to queue restRequestInfo timed out",
             RestServiceErrorCode.RestRequestInfoQueueingFailure);
       }
     } catch (InterruptedException e) {
+      releaseContent = true;
       restServerMetrics.handlerQueueOfferInterruptedErrorCount.inc();
       logger.error("Enqueueing of RestRequestInfo was interrupted", e);
       throw new RestServiceException("Attempt to queue restRequestInfo interrupted", e,
           RestServiceErrorCode.RestRequestInfoQueueingFailure);
+    } finally {
+      if (releaseContent && restRequestInfo.getRestRequestContent() != null) {
+        restRequestInfo.getRestRequestContent().release();
+      }
     }
   }
 
@@ -180,15 +199,18 @@ class AsyncRequestHandler implements RestRequestHandler {
 class DequeuedRequestHandler implements Runnable {
   private final BlobStorageService blobStorageService;
   private final LinkedBlockingQueue<RestRequestInfo> restRequestInfoQueue;
+  private final ConcurrentHashMap<RestRequestMetadata, Boolean> requestsInFlight;
   private final RestServerMetrics restServerMetrics;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicBoolean forceShutdown = new AtomicBoolean(false);
+  private final AtomicBoolean shutdownReady = new AtomicBoolean(false);
 
   public DequeuedRequestHandler(BlobStorageService blobStorageService,
-      LinkedBlockingQueue<RestRequestInfo> restRequestInfoQueue, RestServerMetrics restServerMetrics) {
+      LinkedBlockingQueue<RestRequestInfo> restRequestInfoQueue,
+      ConcurrentHashMap<RestRequestMetadata, Boolean> requestsInFlight, RestServerMetrics restServerMetrics) {
     this.blobStorageService = blobStorageService;
     this.restRequestInfoQueue = restRequestInfoQueue;
+    this.requestsInFlight = requestsInFlight;
     this.restServerMetrics = restServerMetrics;
   }
 
@@ -197,31 +219,38 @@ class DequeuedRequestHandler implements Runnable {
    */
   @Override
   public void run() {
-    while (!forceShutdown.get()) {
+    while (!shutdownReady.get()) {
       try {
         RestRequestInfo restRequestInfo = null;
         try {
           restRequestInfo = restRequestInfoQueue.take();
           if (restRequestInfo instanceof PoisonInfo) {
             restRequestInfo.onCompleted(null);
+            emptyQueue();
             break;
           }
           handleRequest(restRequestInfo);
-          doHandlingSuccessTasks(restRequestInfo);
+          onHandlingComplete(restRequestInfo, null);
         } catch (InterruptedException ie) {
           restServerMetrics.handlerQueueTakeInterruptedErrorCount.inc();
           logger.error("Wait for data in restRequestInfoQueue was interrupted - " + ie);
         } catch (Exception e) {
           restServerMetrics.handlerRequestInfoProcessingFailureErrorCount.inc();
           logger.error("Exception while trying to process element in restRequestInfoQueue", e);
-          doHandlingFailureTasks(restRequestInfo, e);
+          onHandlingComplete(restRequestInfo, e);
         }
       } catch (Exception e) {
         // net that needs to catch all Exceptions - DequeuedRequestHandler cannot go down.
-        //TODO: metric
       }
     }
     shutdownLatch.countDown();
+  }
+
+  public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
+    if (restRequestMetadata != null && requestsInFlight.remove(restRequestMetadata) != null) {
+      // NOTE: some of this code might be relevant to emptyQueue() also.
+      restRequestMetadata.release();
+    }
   }
 
   /**
@@ -260,39 +289,6 @@ class DequeuedRequestHandler implements Runnable {
   }
 
   /**
-   * Do tasks that are required to be done on {@link RestRequestInfo} handling success.
-   * @param restRequestInfo - The {@link RestRequestInfo} whose handling succeeded.
-   */
-  private void doHandlingSuccessTasks(RestRequestInfo restRequestInfo) {
-    try {
-      restRequestInfo.onCompleted(null);
-    } catch (Exception e) {
-      logger.error("Exception while trying to do processing success tasks", e);
-    }
-  }
-
-  /**
-   * Do tasks that are required to be done on {@link RestRequestInfo} handling failure.
-   * @param restRequestInfo - The {@link RestRequestInfo} whose handling failed.
-   * @param e - the reason for the failure.
-   */
-  private void doHandlingFailureTasks(RestRequestInfo restRequestInfo, Exception e) {
-    if (restRequestInfo != null) {
-      try {
-        restRequestInfo.onCompleted(e);
-        if (restRequestInfo.getRestResponseHandler() != null) {
-          restRequestInfo.getRestResponseHandler().onError(restRequestInfo.getRestRequestMetadata(), e);
-        } else {
-          logger.error("No error response was sent because there is no response handler."
-              + " The connection to the client might still be open");
-        }
-      } catch (Exception ee) {
-        logger.error("Exception while trying to do processing failure tasks", ee);
-      }
-    }
-  }
-
-  /**
    * Marks that shutdown is required. When this function returns, shutdown need NOT be complete. Instead, shutdown
    * is guaranteed to happen as soon as the processing of the current {@link RestRequestInfo} is complete. If an
    * immediate shutdown is desired, the thread running the DequeuedRequestHandler should be interrupted.
@@ -300,7 +296,7 @@ class DequeuedRequestHandler implements Runnable {
    * All {@link RestRequestInfo}s still in the queue will be left unhandled.
    */
   public void shutdownNow() {
-    forceShutdown.set(true);
+    shutdownReady.set(true);
   }
 
   /**
@@ -313,6 +309,56 @@ class DequeuedRequestHandler implements Runnable {
   public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
     return shutdownLatch.await(timeout, timeUnit);
+  }
+
+  /**
+   * Do tasks that are required to be done on completion of {@link RestRequestInfo} handling.
+   * @param restRequestInfo - The {@link RestRequestInfo} whose handling completed.
+   * @param e - If handling failed, the reason for failure. If handling succeeded, null.
+   */
+  private void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
+    if (restRequestInfo != null) {
+      try {
+        restRequestInfo.onCompleted(e);
+        RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
+        if (e != null && responseHandler != null) {
+          responseHandler.onRequestComplete(e, false);
+        } else if (e != null) {
+          logger.error("No error response was sent because there is no response handler."
+              + " The connection to the client might still be open. Exception that occurred follows", e);
+        }
+        if (responseHandler != null && responseHandler.isRequestComplete()) {
+          onRequestComplete(restRequestInfo.getRestRequestMetadata());
+        }
+      } catch (Exception ee) {
+        logger.error("Exception while trying to do onHandlingComplete tasks. Original exception also attached", ee, e);
+      }
+    }
+  }
+
+  /**
+   * Empties the remaining {@link RestRequestInfo}s in the queue and releases resources held by them.
+   * <p/>
+   * The implementation releases {@link RestRequestContent} immediately if not null. Since multiple
+   * {@link RestRequestInfo} might share the same {@link RestRequestMetadata}, it maintains a map of all seen
+   * {@link RestRequestMetadata} and releases them at the end.
+   */
+  private void emptyQueue() {
+    RestRequestInfo dequeuedPart = restRequestInfoQueue.poll();
+    while (dequeuedPart != null) {
+      RestRequestMetadata metadata = dequeuedPart.getRestRequestMetadata();
+      RestRequestContent content = dequeuedPart.getRestRequestContent();
+      if (content != null) {
+        content.release();
+      }
+      requestsInFlight.putIfAbsent(metadata, true);
+      dequeuedPart = restRequestInfoQueue.poll();
+    }
+    Iterator<Map.Entry<RestRequestMetadata, Boolean>> requestMetadata = requestsInFlight.entrySet().iterator();
+    while (requestMetadata.hasNext()) {
+      requestMetadata.next().getKey().release();
+      requestMetadata.remove();
+    }
   }
 }
 

@@ -51,7 +51,11 @@ public class NettyRequestContentTest {
   // helpers
   // conversionWithGoodInputTest() helpers
   private void validateContent(NettyRequestContent nettyContent, String contentStr, boolean isLast) {
-    assertEquals("Content mismatch", contentStr, new String(nettyContent.getBytes()));
+    int contentSize = nettyContent.getContentSize();
+    assertEquals("Content size mismatch", contentStr.length(), contentSize);
+    byte[] contentBytes = new byte[contentSize];
+    nettyContent.getBytes(0, contentBytes, 0, contentSize);
+    assertEquals("Content mismatch", contentStr, new String(contentBytes));
     assertEquals("Last status mismatch", isLast, nettyContent.isLast());
   }
 }

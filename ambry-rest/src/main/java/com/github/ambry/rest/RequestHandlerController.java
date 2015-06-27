@@ -23,7 +23,6 @@ class RequestHandlerController implements RestRequestHandlerController {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerMetrics restServerMetrics;
   private final List<RestRequestHandler> requestHandlers = new ArrayList<RestRequestHandler>();
-  // index that is needed to track the handing out of AsyncRequestHandler instances.
   private final AtomicInteger currIndex = new AtomicInteger(0);
 
   public RequestHandlerController(int handlerCount, RestServerMetrics restServerMetrics,
@@ -51,10 +50,6 @@ class RequestHandlerController implements RestRequestHandlerController {
   public RestRequestHandler getRequestHandler()
       throws RestServiceException {
     try {
-      // Alternative: Can have an implementation where we check queue sizes and then return the one with the least
-      // occupancy.
-      //
-      // This function is thread-safe.
       int index = currIndex.getAndIncrement();
       RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
       return requestHandler;

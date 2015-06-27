@@ -3,10 +3,13 @@ package com.github.ambry.restservice;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
- * This object represents a bunch of information about a particular piece of a request.
+ * This object contains information about a particular piece of a request that is independently enough to determine the
+ * operation that needs to be performed, the subject of the operation and a way to return a response to the original
+ * caller.
  * <p/>
  * It provides information to associate the piece (represented by {@link RestRequestContent} to the larger request of
  * which it is a part through the {@link RestRequestMetadata} and a reference to a {@link RestResponseHandler} through
@@ -19,7 +22,8 @@ public class RestRequestInfo {
   private final RestRequestMetadata restRequestMetadata;
   private final RestRequestContent restRequestContent;
   private final RestResponseHandler restResponseHandler;
-
+  private final AtomicBoolean operationComplete = new AtomicBoolean(false);
+  private Exception handlingException = null;
   private final List<RestRequestInfoEventListener> listeners =
       Collections.synchronizedList(new ArrayList<RestRequestInfoEventListener>());
 
@@ -62,10 +66,21 @@ public class RestRequestInfo {
    * Register to be notified about handling results for this RestRequestInfo.
    * @param restRequestInfoEventListener
    */
-  public void addListener(RestRequestInfoEventListener restRequestInfoEventListener) {
+  public RestRequestInfo addListener(RestRequestInfoEventListener restRequestInfoEventListener) {
     if (restRequestInfoEventListener != null) {
-      listeners.add(restRequestInfoEventListener);
+      if (operationComplete.get()) {
+        restRequestInfoEventListener.onCompleted(this, handlingException);
+      } else {
+        synchronized (listeners) {
+          if (operationComplete.get()) {
+            restRequestInfoEventListener.onCompleted(this, handlingException);
+          } else {
+            listeners.add(restRequestInfoEventListener);
+          }
+        }
+      }
     }
+    return this;
   }
 
   /**
@@ -75,8 +90,11 @@ public class RestRequestInfo {
    */
   public void onCompleted(Exception e) {
     synchronized (listeners) {
-      for (RestRequestInfoEventListener listener : listeners) {
-        listener.onCompleted(this, e);
+      handlingException = e;
+      if (operationComplete.compareAndSet(false, true)) {
+        for (RestRequestInfoEventListener listener : listeners) {
+          listener.onCompleted(this, e);
+        }
       }
     }
   }

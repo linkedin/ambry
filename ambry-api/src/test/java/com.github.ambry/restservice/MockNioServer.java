@@ -17,12 +17,15 @@ public class MockNioServer implements NioServer {
   public void start()
       throws InstantiationException {
     if (isFaulty) {
-      throw new InstantiationException("Faulty rest server startup failed");
+      throw new InstantiationException("This is a faulty MockNioServer");
     }
   }
 
   @Override
   public void shutdown() {
+    if (isFaulty) {
+      throw new RuntimeException("This is a faulty MockNioServer");
+    }
   }
 
   /**

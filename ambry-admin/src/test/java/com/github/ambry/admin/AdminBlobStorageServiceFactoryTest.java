@@ -44,7 +44,7 @@ public class AdminBlobStorageServiceFactoryTest {
    * @throws IOException
    */
   @Test
-  public void getNettyServerWithBadInputTest()
+  public void getAdminBlobStorageServiceWithBadInputTest()
       throws IOException {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();

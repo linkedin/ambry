@@ -11,11 +11,9 @@ import com.codahale.metrics.MetricRegistry;
  * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
 class RestServerMetrics {
-  // TODO: expansion and documentation in another commit
   // errors
   // RequestHandlerController
   public final Counter handlerControllerHandlerSelectionErrorCount;
-
   // AsyncRequestHandler
   public final Counter handlerQueueOfferTookTooLongErrorCount;
   public final Counter handlerQueueOfferInterruptedErrorCount;
@@ -30,7 +28,6 @@ class RestServerMetrics {
   public RestServerMetrics(MetricRegistry metricRegistry) {
     handlerControllerHandlerSelectionErrorCount =
         metricRegistry.counter(MetricRegistry.name(RequestHandlerController.class, "handlerSelectionErrorCount"));
-
     handlerQueueOfferTookTooLongErrorCount = metricRegistry
         .counter(MetricRegistry.name(AsyncRequestHandler.class, "handlerQueueOfferTookTooLongErrorCount"));
     handlerQueueOfferInterruptedErrorCount = metricRegistry

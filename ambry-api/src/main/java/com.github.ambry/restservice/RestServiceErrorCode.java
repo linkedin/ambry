@@ -29,6 +29,10 @@ public enum RestServiceErrorCode {
    */
   UnsupportedHttpMethod,
   /**
+   * Client has requested for an operation that is not supported by the {@link BlobStorageService}.
+   */
+  UnsupportedOperation,
+  /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
    */
@@ -36,7 +40,7 @@ public enum RestServiceErrorCode {
   /**
    * Indicates that an operation is being performed upon a channel that has been closed already.
    */
-  ChannelPreviouslyClosed,
+  ChannelAlreadyClosed,
   /**
    * Indicates that a state transition while generating response metadata is invalid.
    */

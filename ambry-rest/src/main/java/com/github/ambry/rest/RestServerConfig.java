@@ -14,16 +14,12 @@ import com.github.ambry.config.VerifiableProperties;
  * required for {@link RestServer} and presents them for retrieval through defined APIs.
  */
 class RestServerConfig {
-  protected static String BLOB_STORAGE_SERVICE_FACTORY = "rest.blob.storage.service.factory";
-  protected static String NIO_SERVER_FACTORY = "rest.nio.server.factory";
-  protected static String REQUEST_HANDLER_COUNT_KEY = "rest.request.handler.count";
-
   /**
    * The {@link com.github.ambry.restservice.BlobStorageServiceFactory} that needs to be used by the {@link RestServer}
    * for bootstrapping the {@link com.github.ambry.restservice.BlobStorageService}.
    */
   @Config("rest.blob.storage.service.factory")
-  private final String blobStorageServiceFactory;
+  public final String restBlobStorageServiceFactory;
 
   /**
    * The {@link com.github.ambry.restservice.NioServerFactory} that needs to be used by the {@link RestServer} for
@@ -31,7 +27,7 @@ class RestServerConfig {
    */
   @Config("rest.nio.server.factory")
   @Default("com.github.ambry.rest.NettyServerFactory")
-  private final String nioServerFactory;
+  public final String restNioServerFactory;
 
   /**
    * The number of {@link com.github.ambry.restservice.RestRequestHandler} instances that need to be started by the
@@ -39,23 +35,12 @@ class RestServerConfig {
    */
   @Config("rest.request.handler.count")
   @Default("5")
-  private final int requestHandlerCount;
-
-  String getBlobStorageServiceFactory() {
-    return blobStorageServiceFactory;
-  }
-
-  String getNioServerFactory() {
-    return nioServerFactory;
-  }
-
-  public int getRequestHandlerCount() {
-    return requestHandlerCount;
-  }
+  public final int restRequestHandlerCount;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    blobStorageServiceFactory = verifiableProperties.getString(BLOB_STORAGE_SERVICE_FACTORY);
-    nioServerFactory = verifiableProperties.getString(NIO_SERVER_FACTORY, "com.github.ambry.rest.NettyServerFactory");
-    requestHandlerCount = verifiableProperties.getInt(REQUEST_HANDLER_COUNT_KEY, 5);
+    restBlobStorageServiceFactory = verifiableProperties.getString("rest.blob.storage.service.factory");
+    restNioServerFactory =
+        verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
+    restRequestHandlerCount = verifiableProperties.getInt("rest.request.handler.count", 5);
   }
 }

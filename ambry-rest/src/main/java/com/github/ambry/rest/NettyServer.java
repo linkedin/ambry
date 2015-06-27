@@ -53,18 +53,20 @@ class NettyServer implements NioServer {
   @Override
   public void start()
       throws InstantiationException {
-    logger.info("Starting NettyServer..");
-    try {
-      nettyServerDeployerThread.start();
-      long startWaitSecs = nettyConfig.getStartupWaitSeconds();
-      if (!(nettyServerDeployer.awaitStartup(startWaitSecs, TimeUnit.SECONDS))) {
-        throw new InstantiationException("NettyServer failed to start in " + startWaitSecs + " seconds");
-      } else if (nettyServerDeployer.getException() != null) {
-        throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
+    if (!nettyServerDeployerThread.isAlive()) {
+      logger.info("Starting NettyServer..");
+      try {
+        nettyServerDeployerThread.start();
+        if (!(nettyServerDeployer.awaitStartup(nettyConfig.nettyServerStartupWaitSeconds, TimeUnit.SECONDS))) {
+          throw new InstantiationException(
+              "NettyServer failed to start in " + nettyConfig.nettyServerStartupWaitSeconds + " seconds");
+        } else if (nettyServerDeployer.getException() != null) {
+          throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
+        }
+      } catch (InterruptedException e) {
+        logger.error("NettyServer start await was interrupted. It might not have started", e);
+        throw new InstantiationException("Netty server start might have failed - " + e);
       }
-    } catch (InterruptedException e) {
-      logger.error("NettyServer start await was interrupted. It might not have started", e);
-      throw new InstantiationException("Netty server start might have failed - " + e);
     }
   }
 
@@ -94,9 +96,8 @@ class NettyServerDeployer implements Runnable {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
     this.requestHandlerController = requestHandlerController;
-
-    bossGroup = new NioEventLoopGroup(nettyConfig.getBossThreadCount());
-    workerGroup = new NioEventLoopGroup(nettyConfig.getWorkerThreadCount());
+    bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
+    workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
   }
 
   @Override
@@ -106,7 +107,7 @@ class NettyServerDeployer implements Runnable {
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
       b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
-          .option(ChannelOption.SO_BACKLOG, nettyConfig.getSoBacklog()).handler(new LoggingHandler(LogLevel.INFO))
+          .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog).handler(new LoggingHandler(LogLevel.INFO))
           .childHandler(new ChannelInitializer<SocketChannel>() {
             @Override
             public void initChannel(SocketChannel ch)
@@ -114,16 +115,16 @@ class NettyServerDeployer implements Runnable {
               ch.pipeline()
                   // for http encoding/decoding.
                   .addLast("codec", new HttpServerCodec())
-                      // for chunking. TODO: this is not leveraged by us yet. We will do it when doing GET blob.
+                      // for chunking.
                   .addLast("chunker", new ChunkedWriteHandler())
                       // for detecting connections that have been idle too long - probably because of an error.
-                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.getIdleTimeSeconds()))
+                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                       // custom processing class that interfaces with a BlobStorageService.
-                  .addLast("processor", new NettyMessageProcessor(requestHandlerController, nettyMetrics));
+                  .addLast("processor", new NettyMessageProcessor(nettyMetrics, requestHandlerController));
             }
           });
-      ChannelFuture f = b.bind(nettyConfig.getPort()).sync();
-      logger.info("NettyServer has started on port " + nettyConfig.getPort());
+      ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
+      logger.info("NettyServer has started on port " + nettyConfig.nettyServerPort);
 
       // let the parent know that startup is complete and so that it can proceed.
       startupDone.countDown();

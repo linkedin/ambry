@@ -29,6 +29,8 @@ public interface RestRequestHandler {
 
   /**
    * Does shutdown tasks for the RestRequestHandler. When the function returns, shutdown is FULLY complete.
+   * <p/>
+   * The {@link NioServer} is expected to have stopped queueing new requests before this function is called.
    */
   public void shutdown();
 
@@ -59,6 +61,8 @@ public interface RestRequestHandler {
    * <p/>
    * This is (has to be) called regardless of the request being concluded successfully or unsuccessfully
    * (e.g. connection interruption).
+   * <p/>
+   * This operation has to be idempotent.
    * @param restRequestMetadata - the metadata of the request that just completed.
    * @throws Exception
    */

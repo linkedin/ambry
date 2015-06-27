@@ -13,10 +13,9 @@ import org.json.JSONObject;
 
 /**
  * Performs the custom {@link AdminOperationType#echo} operation supported by the admin.
- *
  */
 class EchoHandler {
-  static String TEXT_KEY = "text";
+  protected static String TEXT_KEY = "text";
 
   /**
    * Handles {@link AdminOperationType#echo} operations.
@@ -38,7 +37,7 @@ class EchoHandler {
       responseHandler.addToResponseBody(echoStr.getBytes(), true);
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.flush();
-      responseHandler.close();
+      responseHandler.onRequestComplete(null, false);
     }
   }
 

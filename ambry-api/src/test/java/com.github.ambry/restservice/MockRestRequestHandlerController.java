@@ -43,15 +43,12 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
 
   @Override
   public void shutdown() {
-    if (!isFaulty) {
-      if (restRequestHandlers.size() > 0) {
-        for (int i = 0; i < restRequestHandlers.size(); i++) {
-          restRequestHandlers.get(i).shutdown();
-          restRequestHandlers.remove(i);
-        }
+    if (!isFaulty && restRequestHandlers.size() > 0) {
+      for (int i = 0; i < restRequestHandlers.size(); i++) {
+        restRequestHandlers.get(i).shutdown();
+        restRequestHandlers.remove(i);
       }
     }
-    // else faulty, so ignore shutdown.
   }
 
   @Override

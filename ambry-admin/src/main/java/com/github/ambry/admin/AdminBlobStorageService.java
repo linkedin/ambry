@@ -4,6 +4,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.restservice.BlobStorageService;
 import com.github.ambry.restservice.RestRequestInfo;
 import com.github.ambry.restservice.RestRequestMetadata;
+import com.github.ambry.restservice.RestServiceErrorCode;
 import com.github.ambry.restservice.RestServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,23 +52,30 @@ class AdminBlobStorageService implements BlobStorageService {
         GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap);
         break;
       default:
-        throw new IllegalStateException("Blob GET not implemented");
+        throw new RestServiceException("Unsupported operation for Admin service",
+            RestServiceErrorCode.UnsupportedOperation);
     }
   }
 
   @Override
-  public void handlePost(RestRequestInfo restRequestInfo) {
-    throw new IllegalStateException("handleGet() not implemented in " + this.getClass().getSimpleName());
+  public void handlePost(RestRequestInfo restRequestInfo)
+      throws RestServiceException {
+    throw new RestServiceException("Unsupported operation for Admin service",
+        RestServiceErrorCode.UnsupportedOperation);
   }
 
   @Override
-  public void handleDelete(RestRequestInfo restRequestInfo) {
-    throw new IllegalStateException("handleDelete() not implemented in " + this.getClass().getSimpleName());
+  public void handleDelete(RestRequestInfo restRequestInfo)
+      throws RestServiceException {
+    throw new RestServiceException("Unsupported operation for Admin service",
+        RestServiceErrorCode.UnsupportedOperation);
   }
 
   @Override
-  public void handleHead(RestRequestInfo restRequestInfo) {
-    throw new IllegalStateException("handleHead() not implemented in " + this.getClass().getSimpleName());
+  public void handleHead(RestRequestInfo restRequestInfo)
+      throws RestServiceException {
+    throw new RestServiceException("Unsupported operation for Admin service",
+        RestServiceErrorCode.UnsupportedOperation);
   }
 
   /**
