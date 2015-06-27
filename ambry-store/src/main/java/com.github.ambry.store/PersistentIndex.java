@@ -11,10 +11,12 @@ import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.channels.ClosedChannelException;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -448,7 +450,7 @@ public class PersistentIndex {
    * @throws StoreException
    */
   public BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions)
-      throws StoreException {
+      throws StoreException, ClosedChannelException {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -463,6 +465,8 @@ public class PersistentIndex {
               hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
           return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
               deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
+        } catch (ClosedChannelException e) {
+          throw e;
         } catch (IOException e) {
           throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
               StoreErrorCodes.IOError);
@@ -1049,9 +1053,9 @@ public class PersistentIndex {
      * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
      * flushed, this is used to set startTokenSafeToPersist.
      */
-    FindToken startToken;
+    AtomicReference<FindToken> startToken;
     FindToken startTokenBeforeLogFlush;
-    FindToken startTokenSafeToPersist;
+    AtomicReference<FindToken> startTokenSafeToPersist;
     FindToken endToken;
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     private final int messageRetentionSeconds =
@@ -1066,6 +1070,8 @@ public class PersistentIndex {
 
     HardDeleteThread(Throttler throttler) {
       this.throttler = throttler;
+      startToken = new AtomicReference<FindToken>();
+      startTokenSafeToPersist = new AtomicReference<FindToken>();
     }
 
     /**
@@ -1084,7 +1090,7 @@ public class PersistentIndex {
           short version = stream.readShort();
           switch (version) {
             case 0:
-              startToken = StoreFindToken.fromBytes(stream, factory);
+              startToken.set(StoreFindToken.fromBytes(stream, factory));
               endTokenForRecovery = StoreFindToken.fromBytes(stream, factory);
               break;
             default:
@@ -1095,7 +1101,7 @@ public class PersistentIndex {
           if (crc != stream.readLong()) {
             logger.error("Crc check does not match for cleanup token file for dataDir {}, creating a clean one ",
                 dataDir);
-            startToken = new StoreFindToken();
+            startToken.set(new StoreFindToken());
             endTokenForRecovery = new StoreFindToken();
           }
         } catch (IOException e) {
@@ -1104,10 +1110,11 @@ public class PersistentIndex {
           stream.close();
         }
       } else {
-        startToken = new StoreFindToken();
+        startToken.set(new StoreFindToken());
         endTokenForRecovery = new StoreFindToken();
       }
-      startTokenBeforeLogFlush = startTokenSafeToPersist = startToken;
+      startTokenBeforeLogFlush = startToken.get();
+      startTokenSafeToPersist.set(startToken.get());
 
       /* perform hard deletes if endTokenForRecovery is ahead of the start token. startToken and endToken could be more
          than one scan size apart as they get modified at different frequencies (endToken during hardDelete() and
@@ -1137,7 +1144,7 @@ public class PersistentIndex {
      */
     private void preLogFlush() {
       /* Save the current start token before the log gets flushed */
-      startTokenBeforeLogFlush = startToken;
+      startTokenBeforeLogFlush = startToken.get();
     }
 
     /**
@@ -1145,7 +1152,7 @@ public class PersistentIndex {
      */
     private void postLogFlush() {
       /* start token saved before the flush is now safe to be persisted */
-      startTokenSafeToPersist = startTokenBeforeLogFlush;
+      startTokenSafeToPersist.set(startTokenBeforeLogFlush);
     }
 
     private void persistCleanupToken()
@@ -1163,7 +1170,7 @@ public class PersistentIndex {
       try {
         // write the current version
         writer.writeShort(version);
-        writer.write(startTokenSafeToPersist.toBytes());
+        writer.write(startTokenSafeToPersist.get().toBytes());
         writer.write(endToken.toBytes());
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
@@ -1188,7 +1195,7 @@ public class PersistentIndex {
      * @param throttle: Whether throttling should be done or not.
      */
     private void performHardDeletes(List<MessageInfo> messageInfoList, boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException, InterruptedException, ClosedChannelException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
@@ -1221,6 +1228,8 @@ public class PersistentIndex {
             metrics.hardDeleteFailedCount.inc(1);
           }
         }
+      } catch (ClosedChannelException e) {
+        throw e;
       } catch (IOException e) {
         throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
       }
@@ -1249,11 +1258,11 @@ public class PersistentIndex {
      * @return true if the token moved forward, false otherwise.
      */
     private boolean hardDelete(boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException, InterruptedException, ClosedChannelException {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
-          FindInfo info = findDeletedEntriesSince(startToken, scanSizeInBytes,
+          FindInfo info = findDeletedEntriesSince(startToken.get(), scanSizeInBytes,
               SystemTime.getInstance().seconds() - messageRetentionSeconds);
           endToken = info.getFindToken();
           if (!endToken.equals(startToken)) {
@@ -1261,10 +1270,12 @@ public class PersistentIndex {
             if (!info.getMessageEntries().isEmpty()) {
               performHardDeletes(info.getMessageEntries(), throttle);
             }
-            startToken = endToken;
+            startToken.set(endToken);
             return true;
           }
         } catch (InterruptedException e) {
+          throw e;
+        } catch (ClosedChannelException e) {
           throw e;
         } catch (StoreException e) {
           metrics.hardDeleteExceptionsCount.inc();
@@ -1288,7 +1299,7 @@ public class PersistentIndex {
      * index based, this is at segment granularity.
      */
     public long getProgress() {
-      StoreFindToken token = (StoreFindToken) startToken;
+      StoreFindToken token = (StoreFindToken) startToken.get();
       if (token.isUninitialized()) {
         return 0;
       } else if (token.getOffset() != StoreFindToken.Uninitialized_Offset) {
@@ -1319,7 +1330,13 @@ public class PersistentIndex {
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
             }
           } catch (InterruptedException e) {
-            logger.info("Caught interrupted exception during hard delete", e);
+            if (running.get()) {
+              logger.info("Caught interrupted exception during hard delete", e);
+            }
+          } catch (ClosedChannelException e) {
+            if (running.get()) {
+              logger.info("Caught closed channel exception during hard delete", e);
+            }
           } catch (StoreException e) {
             logger.error("Caught store exception: ", e);
           }
