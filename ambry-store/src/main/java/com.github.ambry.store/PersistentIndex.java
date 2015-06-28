@@ -1240,16 +1240,17 @@ public class PersistentIndex {
         }
       } catch (InterruptedException e) {
         if (running.get()) {
-          throw new StoreException("Got interrupted as store is shutting down", StoreErrorCodes.Store_Shutting_Down);
-        } else {
           throw new StoreException("Got interrupted during hard deletes", StoreErrorCodes.Unknown_Error);
+        } else {
+          throw new StoreException("Got interrupted as store is shutting down", StoreErrorCodes.Store_Shutting_Down);
         }
       } catch (IOException e) {
         if (e instanceof ClosedChannelException && !running.get()) {
           throw new StoreException("Caught closed channel exception during shutdown", e,
               StoreErrorCodes.Store_Shutting_Down);
+        } else {
+          throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
         }
-        throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
       }
     }
 
