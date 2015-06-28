@@ -12,9 +12,9 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import org.slf4j.Logger;
@@ -183,7 +183,11 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               "Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
       }
     } catch (Exception e) {
-      logger.error("Exception when reading blob", e);
+      if (e instanceof ClosedChannelException) {
+        logger.info("Received closed channel exception during hard delete");
+      } else {
+        logger.error("Exception when reading blob: ", e);
+      }
     }
     return hardDeleteInfo;
   }
