@@ -1125,18 +1125,14 @@ public class PersistentIndex {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
-          try {
-            FindToken before = startToken.get();
-            if (!hardDelete(false)) {
-              logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
-                  dataDir, endToken);
-              metrics.hardDeleteIncompleteRecoveryCount.inc();
-              break;
-            }
-            logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, before, endToken);
-          } catch (InterruptedException e) {
-            throw new StoreException("Unexpected interrupted exception during recovery", e, StoreErrorCodes.Unknown_Error);
+          FindToken before = startToken.get();
+          if (!hardDelete(false)) {
+            logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
+                dataDir, endToken);
+            metrics.hardDeleteIncompleteRecoveryCount.inc();
+            break;
           }
+          logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, before, endToken);
         } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running.get());
       }
     }
@@ -1197,7 +1193,7 @@ public class PersistentIndex {
      * @param throttle: Whether throttling should be done or not.
      */
     private void performHardDeletes(List<MessageInfo> messageInfoList, boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
@@ -1242,6 +1238,12 @@ public class PersistentIndex {
             }
           }
         }
+      } catch (InterruptedException e) {
+        if (running.get()) {
+          throw new StoreException("Got interrupted as store is shutting down", StoreErrorCodes.Store_Shutting_Down);
+        } else {
+          throw new StoreException("Got interrupted during hard deletes", StoreErrorCodes.Unknown_Error);
+        }
       } catch (IOException e) {
         if (e instanceof ClosedChannelException && !running.get()) {
           throw new StoreException("Caught closed channel exception during shutdown", e,
@@ -1274,7 +1276,7 @@ public class PersistentIndex {
      * @return true if the token moved forward, false otherwise.
      */
     private boolean hardDelete(boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
