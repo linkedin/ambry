@@ -38,10 +38,11 @@ public class BlobStore implements Store {
   private FileLock fileLock;
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
+  private MessageStoreHardDelete hardDelete;
   private StoreMetrics metrics;
 
   public BlobStore(StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
-      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery) {
+      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete) {
     this.metrics = new StoreMetrics(dataDir, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
@@ -49,6 +50,7 @@ public class BlobStore implements Store {
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
     this.recovery = recovery;
+    this.hardDelete = hardDelete;
   }
 
   @Override
@@ -82,7 +84,7 @@ public class BlobStore implements Store {
               ". Another process or thread is using this directory.", StoreErrorCodes.Initialization_Error);
         }
         log = new Log(dataDir, capacityInBytes, metrics);
-        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, metrics);
+        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);
@@ -108,7 +110,7 @@ public class BlobStore implements Store {
       for (StoreKey key : ids) {
         BlobReadOptions readInfo = index.getBlobReadInfo(key, storeGetOptions);
         readOptions.add(readInfo);
-        indexMessages.put(key, new MessageInfo(key, readInfo.getSize(), readInfo.getTTL()));
+        indexMessages.put(key, readInfo.getMessageInfo());
       }
 
       MessageReadSet readSet = log.getView(readOptions);
@@ -195,7 +197,7 @@ public class BlobStore implements Store {
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
-      long indexEndOffsetBeforeCheck   = index.getCurrentEndOffset();
+      long indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {

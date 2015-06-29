@@ -17,4 +17,5 @@ deploy
 .gradle
 */build/
 out/
+jars/
 

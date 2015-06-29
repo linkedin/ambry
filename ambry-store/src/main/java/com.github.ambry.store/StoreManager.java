@@ -28,9 +28,10 @@ public class StoreManager {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
+  private MessageStoreHardDelete hardDelete;
 
   public StoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-      StoreKeyFactory factory, MessageStoreRecovery recovery) {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete) {
     this.config = config;
     this.scheduler = scheduler;
     this.registry = registry;
@@ -38,6 +39,7 @@ public class StoreManager {
     this.stores = new ConcurrentHashMap<PartitionId, Store>();
     this.factory = factory;
     this.recovery = recovery;
+    this.hardDelete = hardDelete;
   }
 
   public void start()
@@ -52,7 +54,7 @@ public class StoreManager {
       }
       Store store =
           new BlobStore(config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityInBytes(), factory,
-              recovery);
+              recovery, hardDelete);
       store.start();
       stores.put(replica.getPartitionId(), store);
     }

@@ -228,6 +228,8 @@ public final class ReplicationManager {
   private final NotificationSystem notification;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateIntraDC;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
+  private final StoreKeyFactory storeKeyFactory;
+  private final MetricRegistry metricRegistry;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -240,13 +242,15 @@ public final class ReplicationManager {
 
     try {
       this.replicationConfig = replicationConfig;
+      this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicationIntraDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfIntraDCReplicaThreads);
       this.replicationInterDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfInterDCReplicaThreads);
       this.replicationMetrics =
-          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads);
+          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads,
+              clusterMap.getReplicaIds(dataNode));
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -257,6 +261,7 @@ public final class ReplicationManager {
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
+      this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
 
@@ -480,7 +485,8 @@ public final class ReplicationManager {
       }
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
-              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
+              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
       replicaThreadList.add(replicaThread);
     }
   }

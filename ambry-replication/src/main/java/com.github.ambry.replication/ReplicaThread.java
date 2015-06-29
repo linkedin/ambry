@@ -1,5 +1,6 @@
 package com.github.ambry.replication;
 
+import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -9,6 +10,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.commons.BlobId;
@@ -31,6 +33,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
@@ -66,11 +69,15 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final StoreKeyFactory storeKeyFactory;
+  private final boolean validateMessageStream;
+  private final MetricRegistry metricRegistry;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
-      ReplicationMetrics replicationMetrics, NotificationSystem notification) {
+      ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
+      boolean validateMessageStream, MetricRegistry metricRegistry) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -83,6 +90,9 @@ class ReplicaThread implements Runnable {
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
     this.needToWaitForReplicaLag = true;
+    this.storeKeyFactory = storeKeyFactory;
+    this.validateMessageStream = validateMessageStream;
+    this.metricRegistry = metricRegistry;
   }
 
   public String getName() {
@@ -228,37 +238,47 @@ class ReplicaThread implements Runnable {
     if (replicasToReplicatePerNode.size() > 0) {
       try {
         DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-        ReplicaMetadataResponse response = getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
+        ReplicaMetadataResponse response =
+            getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo);
+        long startTimeInMs = SystemTime.getInstance().milliseconds();
         needToWaitForReplicaLag = true;
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
-          ReplicaMetadataResponseInfo replicaMetadataResponseInfo = response.getReplicaMetadataResponseInfoList().get(i);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              response.getReplicaMetadataResponseInfoList().get(i);
           if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
             try {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               checkNeedWaitTime(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
-              Set<StoreKey> missingStoreKeys = getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
+              Set<StoreKey> missingStoreKeys =
+                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
                   remoteNode, remoteColo);
-              ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
+              ExchangeMetadataResponse exchangeMetadataResponse =
+                  new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             } catch (Exception e) {
               replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
               logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
                   " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
-              ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
+              ExchangeMetadataResponse exchangeMetadataResponse =
+                  new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             }
           } else {
             replicationMetrics.updateMetadataRequestError(remoteReplicaInfo);
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
-            ExchangeMetadataResponse exchangeMetadataResponse = new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
+            ExchangeMetadataResponse exchangeMetadataResponse =
+                new ExchangeMetadataResponse(replicaMetadataResponseInfo.getError());
             exchangeMetadataResponseList.add(exchangeMetadataResponse);
           }
         }
+        long processMetadataResponseTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+        logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}", remoteNode, threadName,
+            processMetadataResponseTimeInMs);
       } finally {
         if (remoteColo) {
           replicationMetrics.interColoMetadataExchangeCount.inc();
@@ -292,7 +312,8 @@ class ReplicaThread implements Runnable {
       throws IOException, StoreException, MessageFormatException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
-      if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size() || replicasToReplicatePerNode.size() == 0) {
+      if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
+          || replicasToReplicatePerNode.size() == 0) {
         throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size() +
             " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size() +
             " should be the same and greater than zero");
@@ -327,6 +348,7 @@ class ReplicaThread implements Runnable {
   private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode, boolean remoteColo)
       throws ReplicationException, IOException {
+    long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -341,7 +363,6 @@ class ReplicaThread implements Runnable {
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,
         replicationConfig.replicationFetchSizeInBytes);
-    long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     connectedChannel.send(request);
     ChannelOutput channelOutput = connectedChannel.receive();
     ByteBufferInputStream byteBufferInputStream =
@@ -442,8 +463,9 @@ class ReplicaThread implements Runnable {
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
+            notification
+                .onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), messageInfo.getStoreKey().getID(),
+                    BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
@@ -454,8 +476,9 @@ class ReplicaThread implements Runnable {
               .trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}", remoteNode,
                   threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
+            notification
+                .onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), messageInfo.getStoreKey().getID(),
+                    BlobReplicaSourceType.REPAIRED);
           }
         } else if (messageInfo.isExpired()) {
           // if the remote replica has an object that is expired, it is not considered missing locally
@@ -601,9 +624,28 @@ class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              MessageFormatWriteSet writeset =
-                  new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
-              remoteReplicaInfo.getLocalStore().put(writeset);
+              MessageFormatWriteSet writeset = null;
+              if (validateMessageStream) {
+                MessageSievingInputStream validMessageDetectionInputStream =
+                    new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
+                        metricRegistry);
+                if (validMessageDetectionInputStream.hasInvalidMessages()) {
+                  replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
+                  logger.error("Out of " + (messageInfoList.size()) + " messages, " +
+                      (messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size())
+                      + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
+                }
+                messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+                if (messageInfoList.size() == 0) {
+                  logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
+                } else {
+                  writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+                  remoteReplicaInfo.getLocalStore().put(writeset);
+                }
+              } else {
+                writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
+                remoteReplicaInfo.getLocalStore().put(writeset);
+              }
 
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();

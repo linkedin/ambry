@@ -255,7 +255,7 @@ public class BlobValidator {
     }
     System.out.println("\nSummary ");
     for (ReplicaResponse response : responseMap.keySet()) {
-      System.out.println(response + ": " + responseMap.get(response));
+      System.out.println(response.getErrorCode() + ": " + responseMap.get(response));
     }
     resultMap.put(blobId, responseMap);
   }
@@ -273,8 +273,8 @@ public class BlobValidator {
     for (BlobId blobId : resultMap.keySet()) {
       Map<ReplicaResponse, ArrayList<ReplicaId>> resultSet = resultMap.get(blobId);
       System.out.println(blobId + " : " + resultSet.keySet());
-      for (Object result : resultSet.keySet()) {
-        System.out.println(result + " -> " + resultSet.get(result));
+      for (ReplicaResponse result : resultSet.keySet()) {
+        System.out.println(result.getErrorCode() + " -> " + resultSet.get(result));
       }
       System.out.println();
     }
@@ -308,7 +308,7 @@ public class BlobValidator {
     }
     System.out.println("\nSummary ");
     for (ReplicaResponse response : responseMap.keySet()) {
-      System.out.println(response + ": " + responseMap.get(response));
+      System.out.println(response.getErrorCode() + ": " + responseMap.get(response));
     }
     resultMap.put(blobId, responseMap);
   }
