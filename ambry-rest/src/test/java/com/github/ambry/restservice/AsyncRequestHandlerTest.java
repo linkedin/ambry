@@ -1,20 +1,7 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.MockRestRequestContent;
-import com.github.ambry.restservice.MockRestRequestMetadata;
-import com.github.ambry.restservice.MockRestResponseHandler;
-import com.github.ambry.restservice.RestMethod;
-import com.github.ambry.restservice.RestRequestContent;
-import com.github.ambry.restservice.RestRequestHandler;
-import com.github.ambry.restservice.RestRequestInfo;
-import com.github.ambry.restservice.RestRequestInfoEventListener;
-import com.github.ambry.restservice.RestRequestMetadata;
-import com.github.ambry.restservice.RestServiceErrorCode;
-import com.github.ambry.restservice.RestServiceException;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;

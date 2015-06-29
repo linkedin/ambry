@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;

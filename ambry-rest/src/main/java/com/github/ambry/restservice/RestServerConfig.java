@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -26,7 +26,7 @@ class RestServerConfig {
    * bootstrapping the {@link com.github.ambry.restservice.NioServer}.
    */
   @Config("rest.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyServerFactory")
+  @Default("com.github.ambry.restservice.NettyServerFactory")
   public final String restNioServerFactory;
 
   /**
@@ -40,7 +40,7 @@ class RestServerConfig {
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restBlobStorageServiceFactory = verifiableProperties.getString("rest.blob.storage.service.factory");
     restNioServerFactory =
-        verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
+        verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.restservice.NettyServerFactory");
     restRequestHandlerCount = verifiableProperties.getInt("rest.request.handler.count", 5);
   }
 }

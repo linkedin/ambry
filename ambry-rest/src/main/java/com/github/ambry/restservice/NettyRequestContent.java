@@ -1,6 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.RestRequestContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;

@@ -1,10 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.RestRequestHandler;
-import com.github.ambry.restservice.RestRequestHandlerController;
-import com.github.ambry.restservice.RestServiceErrorCode;
-import com.github.ambry.restservice.RestServiceException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;

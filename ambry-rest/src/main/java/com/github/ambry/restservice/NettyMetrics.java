@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;

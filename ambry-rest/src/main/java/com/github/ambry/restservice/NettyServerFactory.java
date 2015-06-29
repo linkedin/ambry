@@ -1,10 +1,7 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.NioServer;
-import com.github.ambry.restservice.NioServerFactory;
-import com.github.ambry.restservice.RestRequestHandlerController;
 
 
 /**

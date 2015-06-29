@@ -1,7 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.NioServer;
-import com.github.ambry.restservice.RestRequestHandlerController;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;

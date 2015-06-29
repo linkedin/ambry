@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;

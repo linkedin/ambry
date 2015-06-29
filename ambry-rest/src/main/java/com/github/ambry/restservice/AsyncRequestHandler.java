@@ -1,14 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.RestMethod;
-import com.github.ambry.restservice.RestRequestContent;
-import com.github.ambry.restservice.RestRequestHandler;
-import com.github.ambry.restservice.RestRequestInfo;
-import com.github.ambry.restservice.RestRequestMetadata;
-import com.github.ambry.restservice.RestResponseHandler;
-import com.github.ambry.restservice.RestServiceErrorCode;
-import com.github.ambry.restservice.RestServiceException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

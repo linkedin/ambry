@@ -1,13 +1,8 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.NioServer;
-import com.github.ambry.restservice.RestMethod;
-import com.github.ambry.restservice.RestRequestHandlerController;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpContent;

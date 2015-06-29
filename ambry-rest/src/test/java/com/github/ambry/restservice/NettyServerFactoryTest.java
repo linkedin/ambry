@@ -1,13 +1,8 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.MockBlobStorageService;
-import com.github.ambry.restservice.NioServer;
-import com.github.ambry.restservice.NioServerFactory;
-import com.github.ambry.restservice.RestRequestHandlerController;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;

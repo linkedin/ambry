@@ -1,8 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.RestResponseHandler;
-import com.github.ambry.restservice.RestServiceErrorCode;
-import com.github.ambry.restservice.RestServiceException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -328,7 +325,7 @@ class NettyResponseHandler implements RestResponseHandler {
 }
 
 /**
- * Class that tracks multiple writes and takes actions on completion on those writes.
+ * Class that tracks multiple writes and takes actions on completion of those writes.
  * <p/>
  * Currently closes the connection on write failure.
  */

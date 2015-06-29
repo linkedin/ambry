@@ -11,5 +11,5 @@ include 'ambry-api',
         'ambry-tools',
         'ambry-metrics',
         'ambry-protocol',
-        'ambry-rest',
+        'ambry-restservice',
         'ambry-admin'

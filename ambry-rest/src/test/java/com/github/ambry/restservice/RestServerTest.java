@@ -1,11 +1,9 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.MockBlobStorageServiceFactory;
-import com.github.ambry.restservice.MockNioServerFactory;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -162,7 +160,7 @@ public class RestServerTest {
 
     properties = new Properties();
     // invalid NioServerFactory.
-    properties.setProperty("rest.nio.server.factory", "com.github.ambry.rest.RestServer");
+    properties.setProperty("rest.nio.server.factory", "com.github.ambry.restservice.RestServer");
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());
@@ -190,7 +188,7 @@ public class RestServerTest {
 
     properties = new Properties();
     // invalid BlobStorageServiceFactory.
-    properties.setProperty("rest.blob.storage.service.factory", "com.github.ambry.rest.RestServer");
+    properties.setProperty("rest.blob.storage.service.factory", "com.github.ambry.restservice.RestServer");
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MetricRegistry(), new MockClusterMap());

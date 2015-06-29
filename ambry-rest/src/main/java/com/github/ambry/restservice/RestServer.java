@@ -1,13 +1,8 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.restservice.BlobStorageService;
-import com.github.ambry.restservice.BlobStorageServiceFactory;
-import com.github.ambry.restservice.NioServer;
-import com.github.ambry.restservice.NioServerFactory;
-import com.github.ambry.restservice.RestRequestHandlerController;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
@@ -67,7 +62,7 @@ public class RestServer {
               requestHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
-      throw new InstantiationException("Error while creating rest server components - " + e);
+      throw new InstantiationException("Error while creating RestServer components - " + e);
     }
     if (blobStorageService == null || requestHandlerController == null || nioServer == null) {
       throw new InstantiationException("Failed to instantiate one of the components of RestServer");

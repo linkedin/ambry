@@ -1,12 +1,5 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
-import com.github.ambry.restservice.RestRequestHandler;
-import com.github.ambry.restservice.RestRequestHandlerController;
-import com.github.ambry.restservice.RestRequestInfo;
-import com.github.ambry.restservice.RestRequestMetadata;
-import com.github.ambry.restservice.RestResponseHandler;
-import com.github.ambry.restservice.RestServiceErrorCode;
-import com.github.ambry.restservice.RestServiceException;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;

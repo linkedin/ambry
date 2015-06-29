@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;

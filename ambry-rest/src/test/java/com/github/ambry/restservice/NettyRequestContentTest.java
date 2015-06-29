@@ -1,4 +1,4 @@
-package com.github.ambry.rest;
+package com.github.ambry.restservice;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
