@@ -147,7 +147,8 @@ public class SelectorTest {
     // create connections
     InetSocketAddress addr = new InetSocketAddress("localhost", server.port);
     for (int i = 0; i < conns; i++) {
-      selector.connect("" + i, addr, BUFFER_SIZE, BUFFER_SIZE);
+      String connectionId = "connectionId_" + i;
+      selector.connect(connectionId, addr, BUFFER_SIZE, BUFFER_SIZE);
     }
 
     // send echo requests and receive responses
@@ -156,7 +157,8 @@ public class SelectorTest {
     int responseCount = 0;
     List<NetworkSend> sends = new ArrayList<NetworkSend>();
     for (int i = 0; i < conns; i++) {
-      sends.add(createSend("" + i, i + "-" + 0));
+      String connectionId = "connectionId_" + i;
+      sends.add(createSend(connectionId, connectionId + "-" + 0));
     }
 
     // loop until we complete all requests
@@ -173,9 +175,10 @@ public class SelectorTest {
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
         assertEquals("Check that the receive has kindly been rewound", 0,
             receive.getReceivedBytes().getPayload().position());
-        assertEquals("Check the request counter", responses[Integer.parseInt(receive.getConnectionId())],
+        int index = Integer.parseInt(receive.getConnectionId().split("_")[1]);
+        assertEquals("Check the request counter", responses[index],
             Integer.parseInt(pieces[1]));
-        responses[Integer.parseInt(receive.getConnectionId())]++; // increment the expected counter
+        responses[index]++; // increment the expected counter
         responseCount++;
       }
 
@@ -183,9 +186,11 @@ public class SelectorTest {
       sends.clear();
       for (NetworkSend send : selector.completedSends()) {
         String dest = send.getConnectionId();
-        requests[Integer.parseInt(dest)]++;
-        if (requests[Integer.parseInt(dest)] < reqs) {
-          sends.add(createSend(dest, dest + "-" + requests[Integer.parseInt(dest)]));
+        String[] pieces = dest.split("_");
+        int index = Integer.parseInt(pieces[1]);
+        requests[index]++;
+        if (requests[index] < reqs) {
+          sends.add(createSend(dest, dest + "-" + requests[index]));
         }
       }
     }

@@ -10,4 +10,6 @@ public interface NetworkSend {
   public Send getPayload();
 
   public void onSendComplete();
+
+  public long getSendStartTimeInMs();
 }

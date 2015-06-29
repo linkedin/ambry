@@ -101,6 +101,11 @@ class SocketServerResponse implements Response, NetworkSend {
       metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - startSendTimeInMs);
     }
   }
+
+  @Override
+  public long getSendStartTimeInMs() {
+    return startSendTimeInMs;
+  }
 }
 
 interface ResponseListener {

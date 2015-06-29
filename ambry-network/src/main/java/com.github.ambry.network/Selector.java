@@ -279,11 +279,11 @@ public class Selector implements Selectable {
             throw new IllegalStateException("Unrecognized key state for processor thread.");
           }
         } catch (IOException e) {
-          String desc = socketDescription(channel(key));
+          String socketDescription = socketDescription(channel(key));
           if (e instanceof EOFException || e instanceof ConnectException) {
-            logger.error("Connection {} disconnected", desc, e);
+            logger.error("Connection {} disconnected", socketDescription, e);
           } else {
-            logger.warn("Error in I/O with connection to {}", desc, e);
+            logger.warn("Error in I/O with connection to {}", socketDescription, e);
           }
           close(key);
         } catch (Throwable e) {
@@ -297,6 +297,9 @@ public class Selector implements Selectable {
     this.metrics.selectorIOTime.update(endIo);
   }
 
+  /**
+   * Generate the description for a SocketChannel
+   */
   private String socketDescription(SocketChannel channel) {
     Socket socket = channel.socket();
     if (socket == null) {
@@ -472,6 +475,9 @@ public class Selector implements Selectable {
               socketChannel.socket().getRemoteSocketAddress());
         }
         this.completedSends.add(transmissions.send);
+        metrics.updateNodeRequestMetric(transmissions.remoteHostName, transmissions.remotePort,
+            transmissions.send.getPayload().sizeInBytes(),
+            time.nanoseconds() - transmissions.send.getSendStartTimeInMs());
         transmissions.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
         //key.interestOps(SelectionKey.OP_READ);
@@ -502,35 +508,35 @@ public class Selector implements Selectable {
    * The id, hostname, port and in-progress send and receive associated with a connection
    */
   private static class Transmissions {
-    public String connectionId;
-    public String remoteHostName;
-    public int remotePort;
-    public NetworkSend send = null;
-    public NetworkReceive receive = null;
+    private String connectionId;
+    private String remoteHostName;
+    private int remotePort;
+    private NetworkSend send = null;
+    private NetworkReceive receive = null;
 
-    public Transmissions(String connectionId, String remoteHostName, int remotePort) {
+    private Transmissions(String connectionId, String remoteHostName, int remotePort) {
       this.connectionId = connectionId;
       this.remoteHostName = remoteHostName;
       this.remotePort = remotePort;
     }
 
-    public String getConnectionId() {
+    private String getConnectionId() {
       return connectionId;
     }
 
-    public boolean hasSend() {
+    private boolean hasSend() {
       return send != null;
     }
 
-    public void clearSend() {
+    private void clearSend() {
       send = null;
     }
 
-    public boolean hasReceive() {
+    private boolean hasReceive() {
       return receive != null;
     }
 
-    public void clearReceive() {
+    private void clearReceive() {
       receive = null;
     }
   }

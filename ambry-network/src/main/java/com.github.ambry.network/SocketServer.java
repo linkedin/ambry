@@ -343,7 +343,7 @@ class Processor extends AbstractServerThread {
         }
       }
     } catch (Exception e) {
-      logger.error("Error while shutting down processor thread {}", e);
+      logger.error("Error in processor thread {}", e);
     } finally {
       logger.debug("Closing server socket and selector.");
       closeAll();
