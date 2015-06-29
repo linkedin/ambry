@@ -163,7 +163,7 @@ project(':ambry-protocol') {
     }
 }
 
-project(':ambry-restservice') {
+project(':ambry-rest') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
