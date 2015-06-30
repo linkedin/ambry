@@ -16,7 +16,6 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1054,9 +1053,9 @@ public class PersistentIndex {
      * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
      * flushed, this is used to set startTokenSafeToPersist.
      */
-    AtomicReference<FindToken> startToken;
+    FindToken startToken;
     FindToken startTokenBeforeLogFlush;
-    AtomicReference<FindToken> startTokenSafeToPersist;
+    FindToken startTokenSafeToPersist;
     FindToken endToken;
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     private final int messageRetentionSeconds =
@@ -1071,8 +1070,6 @@ public class PersistentIndex {
 
     HardDeleteThread(Throttler throttler) {
       this.throttler = throttler;
-      startToken = new AtomicReference<FindToken>();
-      startTokenSafeToPersist = new AtomicReference<FindToken>();
     }
 
     /**
@@ -1091,7 +1088,7 @@ public class PersistentIndex {
           short version = stream.readShort();
           switch (version) {
             case 0:
-              startToken.set(StoreFindToken.fromBytes(stream, factory));
+              startToken = StoreFindToken.fromBytes(stream, factory);
               endTokenForRecovery = StoreFindToken.fromBytes(stream, factory);
               break;
             default:
@@ -1102,7 +1099,7 @@ public class PersistentIndex {
           if (crc != stream.readLong()) {
             logger.error("Crc check does not match for cleanup token file for dataDir {}, creating a clean one ",
                 dataDir);
-            startToken.set(new StoreFindToken());
+            startToken = new StoreFindToken();
             endTokenForRecovery = new StoreFindToken();
           }
         } catch (IOException e) {
@@ -1111,11 +1108,11 @@ public class PersistentIndex {
           stream.close();
         }
       } else {
-        startToken.set(new StoreFindToken());
+        startToken = new StoreFindToken();
         endTokenForRecovery = new StoreFindToken();
       }
-      startTokenBeforeLogFlush = startToken.get();
-      startTokenSafeToPersist.set(startToken.get());
+      startTokenBeforeLogFlush = startToken;
+      startTokenSafeToPersist = startToken;
 
       /* perform hard deletes if endTokenForRecovery is ahead of the start token. startToken and endToken could be more
          than one scan size apart as they get modified at different frequencies (endToken during hardDelete() and
@@ -1125,7 +1122,7 @@ public class PersistentIndex {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
-          FindToken before = startToken.get();
+          FindToken before = startToken;
           if (!hardDelete(false)) {
             logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
                 dataDir, endToken);
@@ -1142,7 +1139,7 @@ public class PersistentIndex {
      */
     private void preLogFlush() {
       /* Save the current start token before the log gets flushed */
-      startTokenBeforeLogFlush = startToken.get();
+      startTokenBeforeLogFlush = startToken;
     }
 
     /**
@@ -1150,7 +1147,7 @@ public class PersistentIndex {
      */
     private void postLogFlush() {
       /* start token saved before the flush is now safe to be persisted */
-      startTokenSafeToPersist.set(startTokenBeforeLogFlush);
+      startTokenSafeToPersist = startTokenBeforeLogFlush;
     }
 
     private void persistCleanupToken()
@@ -1168,7 +1165,7 @@ public class PersistentIndex {
       try {
         // write the current version
         writer.writeShort(version);
-        writer.write(startTokenSafeToPersist.get().toBytes());
+        writer.write(startTokenSafeToPersist.toBytes());
         writer.write(endToken.toBytes());
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
@@ -1211,6 +1208,7 @@ public class PersistentIndex {
               logger.error(
                   "Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
                   info.getStoreKey(), e);
+              metrics.hardDeleteExceptionsCount.inc();
             }
           }
         }
@@ -1281,7 +1279,7 @@ public class PersistentIndex {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
-          FindInfo info = findDeletedEntriesSince(startToken.get(), scanSizeInBytes,
+          FindInfo info = findDeletedEntriesSince(startToken, scanSizeInBytes,
               SystemTime.getInstance().seconds() - messageRetentionSeconds);
           endToken = info.getFindToken();
           if (!endToken.equals(startToken)) {
@@ -1289,7 +1287,7 @@ public class PersistentIndex {
             if (!info.getMessageEntries().isEmpty()) {
               performHardDeletes(info.getMessageEntries(), throttle);
             }
-            startToken.set(endToken);
+            startToken = endToken;
             return true;
           }
         } catch (StoreException e) {
@@ -1313,7 +1311,7 @@ public class PersistentIndex {
      * index based, this is at segment granularity.
      */
     public long getProgress() {
-      StoreFindToken token = (StoreFindToken) startToken.get();
+      StoreFindToken token = (StoreFindToken) startToken;
       if (token.isUninitialized()) {
         return 0;
       } else if (token.getOffset() != StoreFindToken.Uninitialized_Offset) {
