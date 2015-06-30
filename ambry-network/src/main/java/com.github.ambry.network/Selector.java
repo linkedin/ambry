@@ -233,19 +233,9 @@ public class Selector implements Selectable {
 
     // register for write interest on any new sends
     if (sends != null) {
-      for (NetworkSend send : sends) {
-        SelectionKey key = keyForId(send.getConnectionId());
-        Transmissions lastTransmission = transmissions(key);
-        if (lastTransmission.hasSend()) {
-          throw new IllegalStateException(
-              "Attempt to begin a send operation with prior send operation still in progress.");
-        }
-        lastTransmission.send = send;
-        try {
-          key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-        } catch (CancelledKeyException e) {
-          close(key);
-        }
+      for (NetworkSend networkSend : sends) {
+        SelectionKey key = keyForId(networkSend.getConnectionId());
+        send(key, networkSend);
       }
     }
 
