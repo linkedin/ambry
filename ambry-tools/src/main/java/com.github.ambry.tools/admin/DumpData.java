@@ -24,8 +24,11 @@ import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -92,9 +95,10 @@ public class DumpData {
               .describedAs("partition_layout").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to be performed - DumpLog or DumpIndex or DumpReplicatoken or CompareIndexToLog")
-          .withRequiredArg().describedAs("The type of Operation to be performed").ofType(String.class)
-          .defaultsTo("log");
+          "The type of operation to be performed - DumpLog or DumpIndex or DumpIndexesForReplica or " +
+              "DumpActiveBlobsFromIndex or DumpActiveBlobsForReplica or DumpNRandomActiveBlobsForReplica or " +
+              "DumpReplicatoken or CompareIndexToLog").withRequiredArg()
+          .describedAs("The type of Operation to be " + "performed").ofType(String.class).defaultsTo("log");
 
       ArgumentAcceptingOptionSpec<String> listOfBlobs =
           parser.accepts("listOfBlobs", "List Of Blobs to look for during log/index dump").withRequiredArg()
@@ -113,13 +117,24 @@ public class DumpData {
               .withRequiredArg().describedAs("log_file_to_dump").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> outFileOpt =
-          parser.accepts("outFile", "Output file to redirect the output ")
-              .withRequiredArg().describedAs("outFile").ofType(String.class);
+          parser.accepts("outFile", "Output file to redirect the output ").withRequiredArg().describedAs("outFile")
+              .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> replicaRootDirectoryOpt = parser.accepts("replicaRootDirectory",
+          "Root directory of the replica which contains all the index files to be dumped").withRequiredArg()
+          .describedAs("replicaRootDirectory").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> activeBlobsCountOpt =
+          parser.accepts("activeBlobsCount", "Total number of random active blobs(index msgs) to be dumped")
+              .withRequiredArg().describedAs("activeBlobsCount").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> excludeMiscLoggingOpt =
+          parser.accepts("excludeMiscLogging", "Whether to exclude miscellaneous logging during dumping or not")
+              .withRequiredArg().describedAs("excludeMiscLogging").defaultsTo("false").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
-      listOpt.add(fileToReadOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
@@ -141,6 +156,11 @@ public class DumpData {
       String endOffsetStr = options.valueOf(endOffsetOpt);
       String logFileToDump = options.valueOf(logFileToCompareOpt);
       String outFile = options.valueOf(outFileOpt);
+      String activeBlobsCountStr = options.valueOf(activeBlobsCountOpt);
+      int activeBlobsCount = (activeBlobsCountStr == null || activeBlobsCountStr.equalsIgnoreCase("")) ? -1
+          : Integer.parseInt(activeBlobsCountStr);
+      String replicaRootDirectory = options.valueOf(replicaRootDirectoryOpt);
+      boolean excludeMiscLogging = Boolean.parseBoolean(options.valueOf(excludeMiscLoggingOpt));
 
       long startOffset = -1;
       long endOffset = -1;
@@ -164,13 +184,28 @@ public class DumpData {
       System.out.println("File to read " + fileToRead);
       System.out.println("Type of Operation " + typeOfOperation);
 
-      File file = new File(fileToRead);
       DumpData dumpData = new DumpData(outFile, map);
       if (typeOfOperation.compareTo("DumpIndex") == 0) {
+        File file = new File(fileToRead);
         dumpData.dumpIndex(file, null, null, blobs, null);
+      } else if (typeOfOperation.compareTo("DumpIndexesForReplica") == 0) {
+        dumpData.dumpIndexesForReplica(replicaRootDirectory, (blobList != null) ? blobs : null);
+      } else if (typeOfOperation.compareTo("DumpActiveBlobsFromIndex") == 0) {
+        File file = new File(fileToRead);
+        dumpData.dumpActiveBlobsFromIndex(file, (blobList != null) ? blobs : null, excludeMiscLogging);
+      } else if (typeOfOperation.compareTo("DumpActiveBlobsForReplica") == 0) {
+        dumpData.dumpActiveBlobsForReplica(replicaRootDirectory, (blobList != null) ? blobs : null, excludeMiscLogging);
+      } else if (typeOfOperation.compareTo("DumpNRandomActiveBlobsForReplica") == 0) {
+        if(activeBlobsCount == -1) {
+          throw new IllegalArgumentException("Active Blobs count should be set");
+        }
+        dumpData.dumpNRandomActiveBlobsForReplica(replicaRootDirectory, (blobList != null) ? blobs : null,
+            activeBlobsCount, excludeMiscLogging);
       } else if (typeOfOperation.compareTo("DumpLog") == 0) {
+        File file = new File(fileToRead);
         dumpData.dumpLog(file, startOffset, endOffset, blobs, filter);
       } else if (typeOfOperation.compareTo("DumpReplicatoken") == 0) {
+        File file = new File(fileToRead);
         dumpData.dumpReplicaToken(file);
       } else if (typeOfOperation.compareTo("CompareIndexToLog") == 0) {
         dumpData.compareIndexEntriestoLogContent(logFileToDump);
@@ -208,8 +243,8 @@ public class DumpData {
           String msg =
               "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
                   + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
-                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index)
-                  + " LiveUntil " + blobValue.getTimeToLiveInMs();
+                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil " + blobValue
+                  .getTimeToLiveInMs();
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
           if (blobIdToStatusMap == null) {
@@ -226,7 +261,7 @@ public class DumpData {
                 mapValue.addDeletedOrExpired(replica);
               } else {
                 mapValue.addAvailable(replica);
-                if(mapValue.getDeletedOrExpired().contains(replica)){
+                if (mapValue.getDeletedOrExpired().contains(replica)) {
                   logOutput("Put Record found after delete record for " + replica);
                 }
               }
@@ -248,6 +283,147 @@ public class DumpData {
       logOutput("Exception thrown " + exception);
     }
     return numberOfKeysProcessed;
+  }
+
+  public void dumpIndexesForReplica(String replicaRootDirectory, ArrayList<String> blobList) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    logOutput("Root directory for replica : " + replicaRootDirectory);
+    for (File indexFile : replicaDirectory.listFiles()) {
+      totalKeysProcessed += dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, null);
+    }
+    logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+  }
+
+  public void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList, boolean excludeMiscLogging) {
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    long totalKeysProcessed =
+        dumpActiveBlobsFromIndex(indexFileToDump, "Not Known", blobList, blobIdToBlobMessageMap, excludeMiscLogging);
+    for (String blobId : blobIdToBlobMessageMap.keySet()) {
+      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed " + totalKeysProcessed);
+    }
+  }
+
+  public long dumpActiveBlobsFromIndex(File indexFileToDump, String replica, ArrayList<String> blobList,
+      ConcurrentHashMap<String, String> blobIdToBlobMessageMap, boolean excludeMiscLogging) {
+    long numberOfKeysProcessed = 0;
+    try {
+      DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
+      if (!excludeMiscLogging) {
+        logOutput("Dumping index " + indexFileToDump.getName() + " for " + replica);
+      }
+      short version = stream.readShort();
+      if (!excludeMiscLogging) {
+        logOutput("version " + version);
+      }
+      if (version == 0) {
+        int keysize = stream.readInt();
+        int valueSize = stream.readInt();
+        long fileEndPointer = stream.readLong();
+        if (!excludeMiscLogging) {
+          logOutput("key size " + keysize);
+          logOutput("value size " + valueSize);
+          logOutput("file end pointer " + fileEndPointer);
+        }
+        int Crc_Size = 8;
+        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
+        while (stream.available() > Crc_Size) {
+          StoreKey key = storeKeyFactory.getStoreKey(stream);
+          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+          stream.read(value);
+          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          String msg =
+              "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
+                  + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
+                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil " + blobValue
+                  .getTimeToLiveInMs();
+          boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
+          numberOfKeysProcessed++;
+
+          if (blobList == null || blobList.contains(key.toString())) {
+            if (blobIdToBlobMessageMap.containsKey(key.toString())) {
+              if (isDeleted || blobValue.isExpired()) {
+                blobIdToBlobMessageMap.remove(key.toString());
+              } else {
+                if (!excludeMiscLogging) {
+                  logOutput("Duplicate put record found for " + key.toString());
+                }
+              }
+            } else {
+              if (!(isDeleted || blobValue.isExpired())) {
+                blobIdToBlobMessageMap.put(key.toString(), msg);
+              }
+            }
+          }
+          if (keysize != key.sizeInBytes()) {
+            if (!excludeMiscLogging) {
+              logOutput("KeySize mismatch for key " + key);
+            }
+          }
+        }
+        if (!excludeMiscLogging) {
+          logOutput("crc " + stream.readLong());
+          logOutput("Total number of keys processed " + numberOfKeysProcessed);
+        }
+      }
+    } catch (IOException ioException) {
+      if (!excludeMiscLogging) {
+        logOutput("IOException thrown " + ioException);
+      }
+    } catch (Exception exception) {
+      if (!excludeMiscLogging) {
+        logOutput("Exception thrown " + exception);
+      }
+    }
+    return numberOfKeysProcessed;
+  }
+
+  public void dumpActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList,
+      boolean excludeMiscLogging) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    for (File indexFile : replicaDirectory.listFiles()) {
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, replicaDirectory.getName(), blobList, blobIdToBlobMessageMap,
+              excludeMiscLogging);
+    }
+
+    for (String blobId : blobIdToBlobMessageMap.keySet()) {
+      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+    }
+  }
+
+  public void dumpNRandomActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList, int activeBlobsCount,
+      boolean excludeMiscLogging) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    for (File indexFile : replicaDirectory.listFiles()) {
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, replicaDirectory.getName(), blobList, blobIdToBlobMessageMap,
+              excludeMiscLogging);
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+    }
+    int size = (activeBlobsCount > blobIdToBlobMessageMap.size()) ? blobIdToBlobMessageMap.size() : activeBlobsCount;
+    Random random = new Random();
+    if (!excludeMiscLogging) {
+      logOutput("Total keys to be dumped " + size);
+    }
+    List<String> keys = new ArrayList<String>(blobIdToBlobMessageMap.keySet());
+    int randomCount = 0;
+    while (randomCount < size) {
+      logOutput(blobIdToBlobMessageMap.get(keys.get(random.nextInt(keys.size()))));
+      randomCount++;
+    }
   }
 
   public void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter)
@@ -315,8 +491,7 @@ public class DumpData {
                     messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
               }
             } else {
-              logOutput(
-                  messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+              logOutput(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
             }
           } else {
             if (filter) {
@@ -363,8 +538,8 @@ public class DumpData {
   }
 
   public void dumpReplicaToken(File replicaTokenFile)
-      throws IOException, NoSuchMethodException, InstantiationException, IllegalAccessException,
-             ClassNotFoundException, InvocationTargetException {
+      throws IOException, NoSuchMethodException, InstantiationException, IllegalAccessException, ClassNotFoundException,
+             InvocationTargetException {
     logOutput("Dumping replica token");
     DataInputStream stream = new DataInputStream(new FileInputStream(replicaTokenFile));
     short version = stream.readShort();
@@ -394,7 +569,6 @@ public class DumpData {
         logOutput("crc " + stream.readLong());
     }
   }
-
 
   public void compareIndexEntriestoLogContent(String logFileToDump)
       throws Exception {
@@ -510,12 +684,12 @@ public class DumpData {
     return false;
   }
 
-  public synchronized  void logOutput(String msg) {
+  public synchronized void logOutput(String msg) {
     try {
       if (outFile == null) {
         System.out.println(msg);
       } else {
-          fileWriter.write(msg + "\n");
+        fileWriter.write(msg + "\n");
       }
     } catch (IOException e) {
       System.out.println("IOException while trying to write to File");
