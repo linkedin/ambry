@@ -86,10 +86,10 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
 }
 
 class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
-  private Logger logger = LoggerFactory.getLogger(getClass());
-  private int readSetIndex = 0;
   private final MessageReadSet readSet;
   private final StoreKeyFactory storeKeyFactory;
+  private Logger logger = LoggerFactory.getLogger(getClass());
+  private int readSetIndex = 0;
 
   public BlobStoreHardDeleteIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     this.readSet = readSet;
@@ -179,8 +179,9 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           }
           break;
         default:
-          throw new IllegalStateException(
-              "Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
+          throw new MessageFormatException(
+              "Unknown header version during hard delete " + version + " storeKey " + readSet.getKeyAt(readSetIndex),
+              MessageFormatErrorCodes.Unknown_Format_Version);
       }
     } catch (Exception e) {
       if (e instanceof ClosedChannelException) {

@@ -1122,14 +1122,14 @@ public class PersistentIndex {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
-          FindToken before = startToken;
+          FindToken fromToken = startToken;
           if (!hardDelete(false)) {
             logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
                 dataDir, endToken);
             metrics.hardDeleteIncompleteRecoveryCount.inc();
             break;
           }
-          logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, before, endToken);
+          logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, fromToken, endToken);
         } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running.get());
       }
     }
