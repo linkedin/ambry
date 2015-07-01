@@ -54,15 +54,24 @@ class NettyServer implements NioServer {
     if (!nettyServerDeployerThread.isAlive()) {
       logger.info("Starting NettyServer..");
       try {
+        long startupBeginTime = System.currentTimeMillis();
         nettyServerDeployerThread.start();
         if (!(nettyServerDeployer.awaitStartup(nettyConfig.nettyServerStartupWaitSeconds, TimeUnit.SECONDS))) {
-          throw new InstantiationException(
-              "NettyServer failed to start in " + nettyConfig.nettyServerStartupWaitSeconds + " seconds");
+          String errMsg = "NettyServer failed to start in " + nettyConfig.nettyServerStartupWaitSeconds + " seconds";
+          logger.error(errMsg);
+          nettyMetrics.nettyServerStartupFailure.inc();
+          throw new InstantiationException(errMsg);
         } else if (nettyServerDeployer.getException() != null) {
+          nettyMetrics.nettyServerStartupFailure.inc();
           throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
+        } else {
+          long startupTime = System.currentTimeMillis() - startupBeginTime;
+          logger.info("NettyServer has started on port {} in {} ms", nettyConfig.nettyServerPort, startupTime);
+          nettyMetrics.nettyServerStartupTime.update(startupTime);
         }
       } catch (InterruptedException e) {
         logger.error("NettyServer start await was interrupted. It might not have started", e);
+        nettyMetrics.nettyServerStartupFailure.inc();
         throw new InstantiationException("Netty server start might have failed - " + e);
       }
     }
@@ -113,23 +122,21 @@ class NettyServerDeployer implements Runnable {
               ch.pipeline()
                   // for http encoding/decoding.
                   .addLast("codec", new HttpServerCodec())
-                      // for chunking.
+                  // for chunking.
                   .addLast("chunker", new ChunkedWriteHandler())
-                      // for detecting connections that have been idle too long - probably because of an error.
+                  // for detecting connections that have been idle too long - probably because of an error.
                   .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                      // custom processing class that interfaces with a BlobStorageService.
-                  .addLast("processor", new NettyMessageProcessor(nettyMetrics, requestHandlerController));
+                  // custom processing class that interfaces with a BlobStorageService.
+                  .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController));
             }
           });
       ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
-      logger.info("NettyServer has started on port " + nettyConfig.nettyServerPort);
-
       // let the parent know that startup is complete and so that it can proceed.
       startupDone.countDown();
       // this is blocking
       f.channel().closeFuture().sync();
     } catch (Exception e) {
-      logger.error("Netty server start failed", e);
+      logger.error("While stating NettyServerDeployer: Exception", e);
       exception = e;
       startupDone.countDown();
     }
@@ -161,18 +168,22 @@ class NettyServerDeployer implements Runnable {
   public void shutdown() {
     if (!bossGroup.isTerminated() || !workerGroup.isTerminated()) {
       logger.info("Shutting down NettyServer..");
+      long shutdownBeginTime = System.currentTimeMillis();
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
       try {
         // magic number
         if (workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
-          logger.info("NettyServer shutdown complete");
+          long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
+          logger.info("NettyServer shutdown complete in {} ms", shutdownTime);
+          nettyMetrics.nettyServerShutdownTime.update(shutdownTime);
         } else {
-          logger.error("NettyServer shutdown failed after waiting for 60 seconds");
+          logger.error("NettyServer shutdown failed after waiting for 30 seconds");
+          nettyMetrics.nettyServerShutdownFailure.inc();
         }
       } catch (InterruptedException e) {
-        logger.error("Termination await interrupted while attempting to shutdown NettyServer. Shutdown may have been"
-            + " unsuccessful", e);
+        logger.error("NettyServer termination await was interrupted. Shutdown may have been unsuccessful", e);
+        nettyMetrics.nettyServerShutdownFailure.inc();
       }
     }
   }

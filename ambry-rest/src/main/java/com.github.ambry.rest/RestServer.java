@@ -47,6 +47,7 @@ public class RestServer {
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
     if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
+      logger.error("While trying to instantiate RestServer: Some of the received arguments are null");
       throw new InstantiationException("Received some null arguments while instantiating RestServer");
     }
     try {
@@ -62,9 +63,11 @@ public class RestServer {
               requestHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
-      throw new InstantiationException("Error while creating RestServer components - " + e);
+      logger.error("While trying to instantiate RestServer: Exception", e);
+      throw new InstantiationException("Exception while creating RestServer components - " + e);
     }
     if (blobStorageService == null || requestHandlerController == null || nioServer == null) {
+      logger.error("While trying to instantiate RestServer: Failed to instantiate one of the components");
       throw new InstantiationException("Failed to instantiate one of the components of RestServer");
     }
   }
@@ -77,14 +80,18 @@ public class RestServer {
       throws InstantiationException {
     try {
       logger.info("Starting RestServer..");
+      long startupBeginTime = System.currentTimeMillis();
       // ordering is important.
       blobStorageService.start();
       requestHandlerController.start();
       nioServer.start();
-      logger.info("RestServer has started");
+      long startupTime = System.currentTimeMillis() - startupBeginTime;
+      logger.info("RestServer has started in {} ms", startupTime);
+      restServerMetrics.restServerStartTimeInMs.update(startupTime);
     } catch (Exception e) {
-      logger.error("Error during start ", e);
-      throw new InstantiationException("Error during start " + e);
+      logger.error("While trying to start RestServer: Exception", e);
+      restServerMetrics.restServerStartFailure.inc();
+      throw new InstantiationException("Exception during RestServer start " + e);
     }
   }
 
@@ -93,12 +100,15 @@ public class RestServer {
    */
   public void shutdown() {
     logger.info("Shutting down RestServer..");
+    long shutdownBeginTime = System.currentTimeMillis();
     //ordering is important.
     nioServer.shutdown();
     requestHandlerController.shutdown();
     blobStorageService.shutdown();
+    long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
+    logger.info("RestServer shutdown complete in {} ms", shutdownTime);
+    restServerMetrics.restServerShutdownTimeInMs.update(shutdownTime);
     shutdownLatch.countDown();
-    logger.info("RestServer shutdown complete");
   }
 
   /**

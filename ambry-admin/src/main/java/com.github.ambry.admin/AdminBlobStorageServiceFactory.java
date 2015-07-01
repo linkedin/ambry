@@ -5,6 +5,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -17,6 +19,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       ClusterMap clusterMap)
@@ -26,6 +29,8 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
     } else {
+      logger.error("While trying to instantiate AdminBlobStorageServiceFactory: Some of the arguments received are" +
+          " null");
       throw new InstantiationException("One of the received arguments is null");
     }
   }

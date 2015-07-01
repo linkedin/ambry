@@ -27,6 +27,8 @@ class RequestHandlerController implements RestRequestHandlerController {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
     } else {
+      logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
+          handlerCount);
       throw new InstantiationException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
     }
   }
@@ -34,7 +36,7 @@ class RequestHandlerController implements RestRequestHandlerController {
   @Override
   public void start()
       throws InstantiationException {
-    logger.info("Starting RequestHandlerController..");
+    logger.info("Starting RequestHandlerController with {} request handler(s)..", requestHandlers.size());
     for (int i = 0; i < requestHandlers.size(); i++) {
       requestHandlers.get(i).start();
     }
@@ -49,6 +51,7 @@ class RequestHandlerController implements RestRequestHandlerController {
       RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
       return requestHandler;
     } catch (Exception e) {
+      logger.error("While trying to select a RestRequestHandler: Exception", e);
       restServerMetrics.requestHandlerControllerHandlerSelectionError.inc();
       throw new RestServiceException("Error while trying to pick a handler to return", e,
           RestServiceErrorCode.RequestHandlerSelectionError);

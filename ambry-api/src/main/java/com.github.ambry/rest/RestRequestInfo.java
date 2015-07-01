@@ -121,8 +121,8 @@ public class RestRequestInfo {
 
   @Override
   public String toString() {
-    return "Request metadata: " + restRequestMetadata != null ? restRequestMetadata.toString() : "null" +
-        " Request content: " + restRequestContent != null ? restRequestContent.toString() : "null" +
-        " Response handler: " + restResponseHandler != null ? restResponseHandler.toString() : "null";
+    return "Request metadata: " + (restRequestMetadata != null ? restRequestMetadata.toString() : "null") +
+        " Request content: " + (restRequestContent != null ? restRequestContent.toString() : "null") +
+        " Response handler: " + (restResponseHandler != null ? restResponseHandler.toString() : "null");
   }
 }
