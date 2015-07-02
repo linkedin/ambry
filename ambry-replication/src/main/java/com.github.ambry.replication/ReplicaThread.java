@@ -631,6 +631,9 @@ class ReplicaThread implements Runnable {
                         metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
                   replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
+                  logger.error("Out of " + (messageInfoList.size()) + " messages, " +
+                      (messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size())
+                      + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
                 if (messageInfoList.size() == 0) {

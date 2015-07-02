@@ -12,6 +12,7 @@ public enum StoreErrorCodes {
   Already_Exist,
   Store_Not_Started,
   Store_Already_Started,
+  Store_Shutting_Down,
   Illegal_Index_Operation,
   Illegal_Index_State,
   Index_Creation_Failure,

@@ -33,6 +33,7 @@ public class StoreMetrics {
   public final Counter hardDeleteDoneCount;
   public final Counter hardDeleteFailedCount;
   public final Counter hardDeleteIncompleteRecoveryCount;
+  public final Counter hardDeleteExceptionsCount;
   public Gauge<Long> currentCapacityUsed;
   public Gauge<Long> currentHardDeleteProgress;
   public Gauge<Long> hardDeleteThreadRunning;
@@ -73,6 +74,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteFailedCount"));
     hardDeleteIncompleteRecoveryCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteIncompleteRecoveryCount"));
+    hardDeleteExceptionsCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "-hardDeleteExceptionsCount"));
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "-segmentSizeForExists"));
   }
 
