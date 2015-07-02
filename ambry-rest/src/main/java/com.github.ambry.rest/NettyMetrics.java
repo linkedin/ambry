@@ -121,8 +121,7 @@ class NettyMetrics {
     nettyServerShutdownFailure =
         metricRegistry.counter(MetricRegistry.name(NettyServer.class, "NettyServerShutdownFailure"));
 
-    nettyServerStartupTime =
-        metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerStartupTime"));
+    nettyServerStartupTime = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerStartupTime"));
     nettyServerShutdownTime =
         metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerShutdownTime"));
   }

@@ -147,14 +147,16 @@ class AsyncRequestHandler implements RestRequestHandler {
       throws RestServiceException {
     boolean offerFailed = false;
     if (restRequestInfo.isFirstPart()) {
+      restServerMetrics.asyncRequestHandlerRequestArrivalRate.mark();
       // This is the first part of a new request.
       // Since we are going to handle this async, we need to make sure the RestRequestMetadata is not recycled.
       // It is released in onRequestComplete() once we know that we are not going to use it anymore.
       // If the offer fails, the request will error out and onRequestComplete() will still be called. So
       // there is no need to release right away even on error.
       restRequestInfo.getRestRequestMetadata().retain();
-      restServerMetrics.asyncRequestHandlerRequestArrivalRate.mark();
-      if (requestsInFlight.putIfAbsent(restRequestInfo.getRestRequestMetadata(), true) != null) {
+      if (requestsInFlight.putIfAbsent(restRequestInfo.getRestRequestMetadata(), true) == null) {
+        restServerMetrics.asyncRequestHandlerRequestsInFlight.update(requestsInFlight.size());
+      } else {
         logger.error("A request seems to be marked as in-flight before the first RestRequestInfo was seen");
         restServerMetrics.asyncRequestHandlerRequestAlreadyInFlight.inc();
       }
@@ -176,6 +178,7 @@ class AsyncRequestHandler implements RestRequestHandler {
             RestServiceErrorCode.RestRequestInfoQueueingFailure);
       } else {
         restServerMetrics.asyncRequestHandlerQueueingRate.mark();
+        restServerMetrics.asyncRequestHandlerQueueOccupancy.update(restRequestInfoQueue.size());
       }
     } catch (InterruptedException e) {
       offerFailed = true;
@@ -184,12 +187,10 @@ class AsyncRequestHandler implements RestRequestHandler {
       throw new RestServiceException("Attempt to queue restRequestInfo interrupted", e,
           RestServiceErrorCode.RestRequestInfoQueueingFailure);
     } finally {
-      restServerMetrics.asyncRequestHandlerQueueOccupancy.update(restRequestInfoQueue.size());
-      restServerMetrics.asyncRequestHandlerRequestsInFlight.update(requestsInFlight.size());
       if (offerFailed) {
         queuingTimeTracker.stopTracking(restRequestInfo, false);
-        if(restRequestInfo.getRestRequestContent() != null) {
-        restRequestInfo.getRestRequestContent().release();
+        if (restRequestInfo.getRestRequestContent() != null) {
+          restRequestInfo.getRestRequestContent().release();
         }
       }
     }
@@ -261,7 +262,7 @@ class DequeuedRequestHandler implements Runnable {
           logger.error("While trying to dequeue RestRequestInfo: Interrupted exception", e);
           restServerMetrics.dequeuedRequestHandlerQueueTakeInterrupted.inc();
         } catch (Exception e) {
-          if(!(e instanceof RestServiceException)) {
+          if (!(e instanceof RestServiceException)) {
             logger.error("While trying to handle dequeued RestRequestInfo: Handling exception", e);
           }
           restServerMetrics.dequeuedRequestHandlerRestRequestInfoHandlingFailure.inc();
@@ -277,16 +278,12 @@ class DequeuedRequestHandler implements Runnable {
 
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
     if (restRequestMetadata != null) {
-      restServerMetrics.dequeuedRequestHandlerRequestCompletionRate.mark();
       if (requestsInFlight.remove(restRequestMetadata) != null) {
+        restServerMetrics.dequeuedRequestHandlerRequestCompletionRate.mark();
+        restServerMetrics.asyncRequestHandlerRequestsInFlight.update(requestsInFlight.size());
         // NOTE: some of this code might be relevant to emptyQueue() also.
         restRequestMetadata.release();
-      } else {
-        logger.error(
-            "While trying to do onRequestComplete tasks: Request not marked as in flight when completion announced");
-        restServerMetrics.dequeuedRequestHandlerCompleteRequestNotMarkedInFlight.inc();
       }
-      restServerMetrics.asyncRequestHandlerRequestsInFlight.update(requestsInFlight.size());
     }
   }
 
@@ -381,7 +378,7 @@ class DequeuedRequestHandler implements Runnable {
    * {@link RestRequestMetadata} and releases them at the end.
    */
   private void emptyQueue() {
-    if(restRequestInfoQueue.size() > 0) {
+    if (restRequestInfoQueue.size() > 0) {
       logger.error("While shutting down DequeuedRequestHandler: There are {} residual RestRequestInfos in queue",
           restRequestInfoQueue.size());
       restServerMetrics.asyncRequestHandlerResidualQueueSize.inc(restRequestInfoQueue.size());
@@ -445,7 +442,7 @@ class QueuingTimeTracker {
    */
   public void stopTracking(RestRequestInfo restRequestInfo, boolean record) {
     Long queueStartTime = queueTimes.remove(restRequestInfo);
-    if(queueStartTime != null && record) {
+    if (queueStartTime != null && record) {
       restServerMetrics.asyncRequestHandlerQueueTimeInMs.update(System.currentTimeMillis() - queueStartTime);
     }
   }

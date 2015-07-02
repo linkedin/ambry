@@ -93,8 +93,8 @@ class NettyResponseHandler implements RestResponseHandler {
           nettyMetrics.requestFailure.inc();
           ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
           if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
-            logger.error("While trying to send error response to client on channel {}: Write exception encountered." +
-                "Both write and original exceptions follow", ctx.channel(), errorResponseWrite.cause(), cause);
+            logger.error("While trying to send error response to client on channel {}: Write exception encountered."
+                + "Both write and original exceptions follow", ctx.channel(), errorResponseWrite.cause(), cause);
             nettyMetrics.errorSendingFailure.inc();
             // close the connection anyway so that the client knows something went wrong.
           }
@@ -248,8 +248,8 @@ class NettyResponseHandler implements RestResponseHandler {
   private void verifyResponseAlive()
       throws RestServiceException {
     if (responseMetadataWritten.get()) {
-      logger.trace(
-          "While trying to verify if response metadata can be modified : Response data already written to " + "channel");
+      logger.trace("While trying to verify if response metadata can be modified : Response data already written to "
+          + "channel");
       nettyMetrics.deadResponseAccess.inc();
       throw new RestServiceException("Response metadata has already been written to channel",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
@@ -342,8 +342,7 @@ class NettyResponseHandler implements RestResponseHandler {
  */
 class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final ConcurrentHashMap<ChannelFuture, Long> writeFutures =
-      new ConcurrentHashMap<ChannelFuture, Long>();
+  private final ConcurrentHashMap<ChannelFuture, Long> writeFutures = new ConcurrentHashMap<ChannelFuture, Long>();
   private final NettyMetrics nettyMetrics;
 
   public ChannelWriteResultListener(NettyMetrics nettyMetrics) {
@@ -375,7 +374,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
   public void operationComplete(ChannelFuture future) {
     Long writeStartTime = writeFutures.remove(future);
     if (writeStartTime != null) {
-      if(!future.isSuccess()) {
+      if (!future.isSuccess()) {
         future.channel().close();
         logger.error("While trying to write to channel {}: Write failed due to exception. Channel closed",
             future.channel(), future.cause());

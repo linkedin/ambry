@@ -142,7 +142,7 @@ public class NettyMessageProcessorTest {
   private EmbeddedChannel createChannel() {
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
     NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(new Properties()));
-    NettyMessageProcessor processor =  new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController);
+    NettyMessageProcessor processor = new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController);
     return new EmbeddedChannel(processor);
   }
 

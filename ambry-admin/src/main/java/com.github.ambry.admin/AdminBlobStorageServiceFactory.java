@@ -29,8 +29,8 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
     } else {
-      logger.error("While trying to instantiate AdminBlobStorageServiceFactory: Some of the arguments received are" +
-          " null");
+      logger.error(
+          "While trying to instantiate AdminBlobStorageServiceFactory: Some of the arguments received are null");
       throw new InstantiationException("One of the received arguments is null");
     }
   }

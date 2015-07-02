@@ -122,11 +122,11 @@ class NettyServerDeployer implements Runnable {
               ch.pipeline()
                   // for http encoding/decoding.
                   .addLast("codec", new HttpServerCodec())
-                  // for chunking.
+                      // for chunking.
                   .addLast("chunker", new ChunkedWriteHandler())
-                  // for detecting connections that have been idle too long - probably because of an error.
+                      // for detecting connections that have been idle too long - probably because of an error.
                   .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                  // custom processing class that interfaces with a BlobStorageService.
+                      // custom processing class that interfaces with a BlobStorageService.
                   .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController));
             }
           });

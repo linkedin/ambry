@@ -41,7 +41,6 @@ class RestServerMetrics {
   public final Counter dequeuedRequestHandlerRestRequestInfoHandlingFailure;
   public final Counter dequeuedRequestHandlerQueueTakeInterrupted;
   public final Counter dequeuedRequestHandlerUnexpectedException;
-  public final Counter dequeuedRequestHandlerCompleteRequestNotMarkedInFlight;
   public final Counter dequeuedRequestHandlerHandlingCompleteTasksFailure;
   public final Counter restServerStartFailure;
 
@@ -82,8 +81,8 @@ class RestServerMetrics {
         .counter(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerRequestAlreadyInFlight"));
     asyncRequestHandlerShutdownFailure =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerShutdownFailure"));
-    asyncRequestHandlerResidualQueueSize = metricRegistry
-        .counter(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerResidualQueueSize"));
+    asyncRequestHandlerResidualQueueSize =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerResidualQueueSize"));
     dequeuedRequestHandlerUnknownRestMethod = metricRegistry
         .counter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerUnknownRestMethod"));
     dequeuedRequestHandlerRestRequestInfoHandlingFailure = metricRegistry.counter(
@@ -92,8 +91,6 @@ class RestServerMetrics {
         .counter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerQueueTakeInterrupted"));
     dequeuedRequestHandlerUnexpectedException = metricRegistry
         .counter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerUnexpectedException"));
-    dequeuedRequestHandlerCompleteRequestNotMarkedInFlight = metricRegistry.counter(
-        MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerCompleteRequestNotMarkedInFlight"));
     dequeuedRequestHandlerHandlingCompleteTasksFailure = metricRegistry.counter(
         MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerHandlingCompleteTasksFailure"));
     restServerStartFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerStartFailure"));

@@ -139,8 +139,8 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     nettyMetrics.handleRequestFailure.inc();
     if (responseHandler == null) {
       logger.error(
-          "While trying to inform client of exception caught on channel {}: No RestResponseHandler. Original cause " +
-              "of error follows", ctx.channel(), cause);
+          "While trying to inform client of exception caught on channel {}: No RestResponseHandler. Original cause "
+              + "of error follows", ctx.channel(), cause);
       nettyMetrics.missingResponseHandler.inc();
       sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
     }
@@ -268,8 +268,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         requestHandler.onRequestComplete(request);
       }
     } catch (Exception e) {
-      logger.error("While trying to perform onRequestComplete tasks on channel {} for request {}: Exception. " +
-          "Swallowing..", ctx.channel(), request, e);
+      logger.error(
+          "While trying to perform onRequestComplete tasks on channel {} for request {}: Exception. " + "Swallowing..",
+          ctx.channel(), request, e);
       nettyMetrics.processorRequestCompleteTasksFailure.inc();
     }
   }
