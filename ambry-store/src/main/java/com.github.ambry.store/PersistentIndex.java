@@ -11,6 +11,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.channels.ClosedChannelException;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
@@ -463,6 +464,9 @@ public class PersistentIndex {
               hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
           return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
               deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
+        } catch (ClosedChannelException e) {
+          throw new StoreException("Received close channel exception when reading delete blob info from the log " +
+              dataDir, StoreErrorCodes.Store_Shutting_Down);
         } catch (IOException e) {
           throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
               StoreErrorCodes.IOError);
@@ -1107,7 +1111,8 @@ public class PersistentIndex {
         startToken = new StoreFindToken();
         endTokenForRecovery = new StoreFindToken();
       }
-      startTokenBeforeLogFlush = startTokenSafeToPersist = startToken;
+      startTokenBeforeLogFlush = startToken;
+      startTokenSafeToPersist = startToken;
 
       /* perform hard deletes if endTokenForRecovery is ahead of the start token. startToken and endToken could be more
          than one scan size apart as they get modified at different frequencies (endToken during hardDelete() and
@@ -1117,17 +1122,14 @@ public class PersistentIndex {
         logger.info("Index : {} hard delete recovery startToken {} endTokenForRecovery {}", dataDir, startToken,
             endTokenForRecovery);
         do {
-          try {
-            if (!hardDelete(false)) {
-              logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
-                  dataDir, endToken);
-              metrics.hardDeleteIncompleteRecoveryCount.inc();
-              break;
-            }
-            logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, startToken, endToken);
-          } catch (InterruptedException e) {
-            throw new StoreException("Unexpected interrupted exception during recovery", e, StoreErrorCodes.Unknown_Error);
+          FindToken fromToken = startToken;
+          if (!hardDelete(false)) {
+            logger.warn("Index : {} hard delete did not advance beyond endToken {}, skipping rest of the recovery",
+                dataDir, endToken);
+            metrics.hardDeleteIncompleteRecoveryCount.inc();
+            break;
           }
+          logger.info("Index : {} hard deleted from startToken {} to endToken {}", dataDir, fromToken, endToken);
         } while (endTokenForRecovery.greaterThan((StoreFindToken) endToken) && running.get());
       }
     }
@@ -1188,18 +1190,26 @@ public class PersistentIndex {
      * @param throttle: Whether throttling should be done or not.
      */
     private void performHardDeletes(List<MessageInfo> messageInfoList, boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
         List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(messageInfoList.size());
         for (MessageInfo info : messageInfoList) {
+          if (!running.get()) {
+            throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.Store_Shutting_Down);
+          }
           try {
             BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
             readOptions.add(readInfo);
           } catch (StoreException e) {
-            logger.error(
-                "Failed to read blob info for blobid {} during hard deletes, ignoring the blob. Caught exception {}",
-                info.getStoreKey(), e);
+            if (e.getErrorCode() == StoreErrorCodes.Store_Shutting_Down) {
+              throw e;
+            } else {
+              logger.error(
+                  "Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
+                  info.getStoreKey(), e);
+              metrics.hardDeleteExceptionsCount.inc();
+            }
           }
         }
 
@@ -1218,11 +1228,27 @@ public class PersistentIndex {
                 throttler.maybeThrottle(hardDeleteInfo.getSize());
               }
           } else {
-            metrics.hardDeleteFailedCount.inc(1);
+            if (running.get()) {
+              metrics.hardDeleteFailedCount.inc(1);
+            } else {
+              throw new StoreException("Aborting hard deletes as store is shutting down",
+                  StoreErrorCodes.Store_Shutting_Down);
+            }
           }
         }
+      } catch (InterruptedException e) {
+        if (running.get()) {
+          throw new StoreException("Got interrupted during hard deletes", StoreErrorCodes.Unknown_Error);
+        } else {
+          throw new StoreException("Got interrupted as store is shutting down", StoreErrorCodes.Store_Shutting_Down);
+        }
       } catch (IOException e) {
-        throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
+        if (e instanceof ClosedChannelException && !running.get()) {
+          throw new StoreException("Caught closed channel exception during shutdown", e,
+              StoreErrorCodes.Store_Shutting_Down);
+        } else {
+          throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
+        }
       }
     }
 
@@ -1249,7 +1275,7 @@ public class PersistentIndex {
      * @return true if the token moved forward, false otherwise.
      */
     private boolean hardDelete(boolean throttle)
-        throws StoreException, InterruptedException {
+        throws StoreException {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
@@ -1264,17 +1290,14 @@ public class PersistentIndex {
             startToken = endToken;
             return true;
           }
-        } catch (InterruptedException e) {
-          throw e;
         } catch (StoreException e) {
-          metrics.hardDeleteExceptionsCount.inc();
+          if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
+            metrics.hardDeleteExceptionsCount.inc();
+          }
           throw e;
         } catch (IOException e) {
           metrics.hardDeleteExceptionsCount.inc();
           throw new StoreException(e, StoreErrorCodes.IOError);
-        } catch (Exception e) {
-          metrics.hardDeleteExceptionsCount.inc();
-          throw new StoreException(e, StoreErrorCodes.Unknown_Error);
         } finally {
           context.stop();
         }
@@ -1318,10 +1341,14 @@ public class PersistentIndex {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
             }
-          } catch (InterruptedException e) {
-            logger.info("Caught interrupted exception during hard delete", e);
           } catch (StoreException e) {
-            logger.error("Caught store exception: ", e);
+            if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
+              logger.error("Caught store exception: ", e);
+            } else {
+              logger.trace("Caught exception during hard deletes", e);
+            }
+          } catch (InterruptedException e) {
+            logger.trace("Caught exception during hard deletes", e);
           }
         }
       } finally {
