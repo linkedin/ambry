@@ -233,24 +233,24 @@ public class BlobValidator {
       Map<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>> resultMap) {
     Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      ReplicaResponse response = null;
+      ServerErrorCode serverErrorCode = null;
       try {
         ServerErrorCode errorCode = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
             replicaId.getDataNodeId().getPort(), expiredBlobs);
-        response = new ReplicaResponse(errorCode);
+        serverErrorCode = errorCode;
       } catch (MessageFormatException e) {
-        response = new ReplicaResponse(ServerErrorCode.Data_Corrupt);
+        serverErrorCode = ServerErrorCode.Data_Corrupt;
       } catch (IOException e) {
-        response = new ReplicaResponse(ServerErrorCode.IO_Error);
+        serverErrorCode = ServerErrorCode.IO_Error;
       } catch (Exception e) {
-        response = new ReplicaResponse(ServerErrorCode.Unknown_Error);
+        serverErrorCode = ServerErrorCode.Unknown_Error;
       }
-      if (responseMap.containsKey(response.getErrorCode())) {
-        responseMap.get(response.getErrorCode()).add(replicaId);
+      if (responseMap.containsKey(serverErrorCode)) {
+        responseMap.get(serverErrorCode).add(replicaId);
       } else {
         ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
         replicaList.add(replicaId);
-        responseMap.put(response.getErrorCode(), replicaList);
+        responseMap.put(serverErrorCode, replicaList);
       }
     }
     System.out.println("\nSummary ");
@@ -285,24 +285,24 @@ public class BlobValidator {
     Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
       if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
-        ReplicaResponse response = null;
+        ServerErrorCode serverErrorCode = null;
         try {
           ServerErrorCode errorCode = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
               replicaId.getDataNodeId().getPort(), expiredBlobs);
-          response = new ReplicaResponse(errorCode);
+          serverErrorCode = errorCode;
         } catch (MessageFormatException e) {
-          response = new ReplicaResponse(ServerErrorCode.Data_Corrupt);
+          serverErrorCode = ServerErrorCode.Data_Corrupt;
         } catch (IOException e) {
-          response = new ReplicaResponse(ServerErrorCode.IO_Error);
+          serverErrorCode = ServerErrorCode.IO_Error;
         } catch (Exception e) {
-          response = new ReplicaResponse(ServerErrorCode.Unknown_Error);
+          serverErrorCode = ServerErrorCode.Unknown_Error;
         }
-        if (responseMap.containsKey(response.getErrorCode())) {
-          responseMap.get(response.getErrorCode()).add(replicaId);
+        if (responseMap.containsKey(serverErrorCode)) {
+          responseMap.get(serverErrorCode).add(replicaId);
         } else {
           ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
           replicaList.add(replicaId);
-          responseMap.put(response.getErrorCode(), replicaList);
+          responseMap.put(serverErrorCode, replicaList);
         }
       }
     }
@@ -512,38 +512,5 @@ public class BlobValidator {
       return null;
     }
     return getResponse;
-  }
-
-  class ReplicaResponse {
-    public ServerErrorCode errorCode;
-    public String exception;
-
-    public ReplicaResponse(ServerErrorCode errorCode) {
-      this.errorCode = errorCode;
-      this.exception = null;
-    }
-
-    public ReplicaResponse(String exception) {
-      this.exception = exception;
-      this.errorCode = null;
-    }
-
-    public ServerErrorCode getErrorCode() {
-      return this.errorCode;
-    }
-
-    public String getException() {
-      return this.exception;
-    }
-
-    public boolean equals(ReplicaResponse that) {
-      if (this.errorCode != null && that.getErrorCode() != null) {
-        return this.errorCode.equals(that.getErrorCode());
-      } else if (this.exception != null && that.getErrorCode() != null) {
-        return this.exception.equals(that.getException());
-      } else {
-        return false;
-      }
-    }
   }
 }
