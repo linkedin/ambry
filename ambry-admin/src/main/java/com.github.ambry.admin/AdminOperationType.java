@@ -1,8 +1,5 @@
 package com.github.ambry.admin;
 
-import com.github.ambry.rest.RestRequestMetadata;
-
-
 /**
  * Enumerates the different custom operations that the admin supports.
  */
