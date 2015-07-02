@@ -246,7 +246,7 @@ public class SelectorTest {
     buf.putLong(s.getBytes().length + 8);
     buf.put(s.getBytes());
     buf.flip();
-    return new MocNetworkSend(connectionId, new BoundedByteBufferSend(buf), SystemTime.getInstance());
+    return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), SystemTime.getInstance());
   }
 
   private String asString(NetworkReceive receive) {

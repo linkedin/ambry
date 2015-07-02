@@ -47,9 +47,10 @@ public class SocketRequestResponseChannelTest {
     try {
       SocketRequestResponseChannel channel = new SocketRequestResponseChannel(2, 10);
       Integer key = new Integer(5);
+      String connectionId = "test_connectionId";
       ByteBuffer buffer = ByteBuffer.allocate(1000);
       new Random().nextBytes(buffer.array());
-      channel.sendRequest(new SocketServerRequest(0, key, new ByteBufferInputStream(buffer)));
+      channel.sendRequest(new SocketServerRequest(0, key, connectionId, new ByteBufferInputStream(buffer)));
       SocketServerRequest request = (SocketServerRequest) channel.receiveRequest();
       Assert.assertEquals(request.getProcessor(), 0);
       Assert.assertEquals((Integer) request.getRequestKey(), key);

@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.List;
 import org.slf4j.Logger;
@@ -303,7 +304,7 @@ class Processor extends AbstractServerThread {
   private final int maxRequestSize;
   private final SocketRequestResponseChannel channel;
   private final int id;
-  private final NetworkMetrics metrics;
+  private final Time time;
   private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
   private final Selector selector;
 
@@ -312,8 +313,8 @@ class Processor extends AbstractServerThread {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
-    this.metrics = metrics;
-    selector = new Selector(metrics, SystemTime.getInstance());
+    this.time = SystemTime.getInstance();
+    selector = new Selector(metrics, time);
   }
 
   public void run() {
@@ -329,17 +330,11 @@ class Processor extends AbstractServerThread {
         // handle completed receives
         List<NetworkReceive> completedReceives = selector.completedReceives();
         for (NetworkReceive networkReceive : completedReceives) {
-          SelectionKey key = selector.keyForId(networkReceive.getConnectionId());
-          SocketServerRequest req = new SocketServerRequest(id, key,
+          String connectionId = networkReceive.getConnectionId();
+          SelectionKey key = selector.keyForId(connectionId);
+          SocketServerRequest req = new SocketServerRequest(id, key, connectionId,
               new ByteBufferInputStream(networkReceive.getReceivedBytes().getPayload()));
           channel.sendRequest(req);
-        }
-
-        // handle completed sends
-        List<NetworkSend> completedSends = selector.completedSends();
-        for (NetworkSend networkSend : completedSends) {
-          networkSend.onSendComplete();
-          metrics.sendInFlight.dec();
         }
       }
     } catch (Exception e) {
@@ -356,9 +351,9 @@ class Processor extends AbstractServerThread {
     SocketServerResponse curr = (SocketServerResponse) channel.receiveResponse(id);
     while (curr != null) {
       curr.onDequeueFromResponseQueue();
-      curr.onSendStart();
       SocketServerRequest request = (SocketServerRequest) curr.getRequest();
       SelectionKey key = (SelectionKey) request.getRequestKey();
+      String connectionId = request.getConnectionId();
       try {
         if (curr.getPayload() == null) {
           // We should never need to send an empty response. If the payload is empty, we will assume error
@@ -367,8 +362,8 @@ class Processor extends AbstractServerThread {
           selector.close(key);
         } else {
           logger.trace("Socket server received response to send, registering for write: {}", curr);
-          selector.send(key, curr);
-          metrics.sendInFlight.inc();
+          NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), time);
+          selector.send(key, networkSend);
         }
       } catch (CancelledKeyException e) {
         logger.debug("Ignoring response for closed socket.");

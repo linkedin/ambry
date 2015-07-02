@@ -177,10 +177,15 @@ public class Selector implements Selectable {
    */
   public void send(SelectionKey key, NetworkSend send) {
     Transmissions transmissions = transmissions(key);
+    if (transmissions == null || !transmissions.connectionId.equalsIgnoreCase(send.getConnectionId())) {
+      throw new IllegalStateException(
+          "Attempt to begin a send operation with a closed connection or re-established connection.");
+    }
     if (transmissions.hasSend()) {
       throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
     }
     transmissions.send = send;
+    metrics.sendInFlight.inc();
     try {
       key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
     } catch (CancelledKeyException e) {
@@ -428,7 +433,7 @@ public class Selector implements Selectable {
 
       if (transmissions.receive.getReceivedBytes().isReadComplete()) {
         this.completedReceives.add(transmissions.receive);
-        metrics.updateNodeResponseMetric(transmissions.remoteHostName, transmissions.remotePort,
+        metrics.updateNodeReceiveMetric(transmissions.remoteHostName, transmissions.remotePort,
             transmissions.receive.getReceivedBytes().getPayload().limit(),
             time.milliseconds() - transmissions.receive.getReceiveStartTimeInMs());
         transmissions.clearReceive();
@@ -449,8 +454,7 @@ public class Selector implements Selectable {
     long startTimeToWriteInMs = time.milliseconds();
     try {
       SocketChannel socketChannel = channel(key);
-      NetworkSend networkSend = transmissions.send;
-      Send send = networkSend.getPayload();
+      Send send = transmissions.send.getPayload();
       if (send == null) {
         throw new IllegalStateException("Registered for write interest but no response attached to key.");
       }
@@ -465,9 +469,9 @@ public class Selector implements Selectable {
               socketChannel.socket().getRemoteSocketAddress());
         }
         this.completedSends.add(transmissions.send);
-        metrics.updateNodeRequestMetric(transmissions.remoteHostName, transmissions.remotePort,
-            transmissions.send.getPayload().sizeInBytes(),
-            time.nanoseconds() - transmissions.send.getSendStartTimeInMs());
+        metrics.sendInFlight.dec();
+        metrics.updateNodeSendMetric(transmissions.remoteHostName, transmissions.remotePort, send.sizeInBytes(),
+            time.milliseconds() - transmissions.send.getSendStartTimeInMs());
         transmissions.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
         //key.interestOps(SelectionKey.OP_READ);
