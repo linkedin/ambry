@@ -44,7 +44,8 @@ class AdminBlobStorageService implements BlobStorageService {
     RestRequestMetadata restRequestMetadata = restRequestInfo.getRestRequestMetadata();
     logger.trace("Handling GET request - {}", restRequestMetadata.getUri());
     try {
-      AdminOperationType operationType = getOperationType(restRequestMetadata);
+      String operationInUri = getOperationFromRequestUri(restRequestMetadata);
+      AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
       switch (operationType) {
         case echo:
           EchoHandler.handleRequest(restRequestInfo, adminMetrics);
@@ -55,7 +56,7 @@ class AdminBlobStorageService implements BlobStorageService {
         default:
           logger.debug("While trying to perform GET: Unsupported operation type - {}", operationType);
           adminMetrics.unsupportedGetOperation.inc();
-          throw new RestServiceException("Unsupported operation (" + operationType + ") for Admin service",
+          throw new RestServiceException("Unsupported operation (" + operationInUri + ") for Admin service",
               RestServiceErrorCode.UnsupportedOperation);
       }
     } finally {
@@ -106,14 +107,8 @@ class AdminBlobStorageService implements BlobStorageService {
    * @param restRequestMetadata
    * @return
    */
-  private AdminOperationType getOperationType(RestRequestMetadata restRequestMetadata) {
+  private String getOperationFromRequestUri(RestRequestMetadata restRequestMetadata) {
     String path = restRequestMetadata.getPath();
-    path = path.startsWith("/") ? path.substring(1, path.length()) : path;
-    logger.trace("Operation requested in URI - {}", path);
-    try {
-      return AdminOperationType.valueOf(path);
-    } catch (IllegalArgumentException e) {
-      return AdminOperationType.unknown;
-    }
+    return (path.startsWith("/") ? path.substring(1, path.length()) : path);
   }
 }
