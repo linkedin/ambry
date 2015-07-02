@@ -129,8 +129,11 @@ public class DumpData {
               .withRequiredArg().describedAs("activeBlobsCount").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> excludeMiscLoggingOpt =
-          parser.accepts("excludeMiscLogging", "Whether to exclude miscellaneous logging during dumping or not")
-              .withRequiredArg().describedAs("excludeMiscLogging").defaultsTo("false").ofType(String.class);
+          parser.accepts("excludeMiscLogging", "Whether to exclude miscellaneous logging during dumping or not. " +
+              "For instance, during dumping indexes, we also dump information about index files being dumped, file size, " +
+              "key size, value size, crc values and so on, apart from actual blob info. This argument will exclude all those" +
+              " misc logging and just output blob information alone").withRequiredArg().describedAs("excludeMiscLogging")
+              .defaultsTo("false").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
