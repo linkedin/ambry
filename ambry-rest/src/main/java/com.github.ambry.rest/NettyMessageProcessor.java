@@ -64,7 +64,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
     this.requestHandlerController = requestHandlerController;
-    logger.debug("NettyMessageProcessor created");
+    logger.trace("NettyMessageProcessor created");
     nettyMetrics.processorCreationRate.mark();
   }
 
@@ -86,6 +86,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void channelActive(ChannelHandlerContext ctx)
       throws RestServiceException {
+    logger.trace("Channel {} with remote address {} active", ctx.channel(), ctx.channel().remoteAddress());
     this.ctx = ctx;
     // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
     // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
@@ -100,7 +101,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       nettyMetrics.channelActiveTasksFailure.inc();
       throw new RestServiceException(msg, RestServiceErrorCode.ChannelActiveTasksFailure);
     }
-    logger.debug("New channel active - {}", ctx.channel());
     nettyMetrics.channelCreationRate.mark();
   }
 
@@ -117,7 +117,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
-    logger.debug("Channel inactive - {}", ctx.channel());
+    logger.trace("Channel {} with remote address {} inactive", ctx.channel(), ctx.channel().remoteAddress());
     nettyMetrics.channelDestructionRate.mark();
     onRequestComplete(null, true);
   }
@@ -136,6 +136,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
+    logger.trace("Caught exception in channel {}", ctx.channel(), cause);
     nettyMetrics.handleRequestFailure.inc();
     if (responseHandler == null) {
       logger.error(
@@ -222,6 +223,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     if (request == null) {
       nettyMetrics.requestArrivalRate.mark();
       request = new NettyRequestMetadata(httpRequest);
+      logger.trace("Received new request - {}", request);
       requestHandler.handleRequest(new RestRequestInfo(request, null, responseHandler, true));
     } else {
       // We have received a duplicate request. This shouldn't happen and there is no good way to deal with it. So
@@ -244,6 +246,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private void handleContent(HttpContent httpContent)
       throws RestServiceException {
     if (request != null) {
+      logger.trace("Received content for request - {}", request);
       requestHandler.handleRequest(new RestRequestInfo(request, new NettyRequestContent(httpContent), responseHandler));
     } else {
       logger.error("While trying to handle a HttpContent on channel {}: Received content without a request",
@@ -261,6 +264,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   private void onRequestComplete(Throwable cause, boolean forceClose) {
     try {
+      logger.trace("Request {} is complete", request);
       if (responseHandler != null) {
         responseHandler.onRequestComplete(cause, forceClose);
       }
@@ -285,6 +289,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     if (ctx.channel().isActive()) {
+      logger.trace("Sending error response {} because a RestResponseHandler is unavailable", msg);
       ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     } else {
       logger.error("While trying to send error to client on channel {}: Channel inactive", ctx.channel());

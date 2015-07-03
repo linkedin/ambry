@@ -33,16 +33,19 @@ class EchoHandler {
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, AdminMetrics adminMetrics)
       throws RestServiceException {
-    logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.isFirstPart()) {
+      logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.echoRate.mark();
+      long startTime = System.currentTimeMillis();
       String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
       responseHandler.setContentType("application/json");
       responseHandler.addToResponseBody(echoStr.getBytes(), true);
       responseHandler.flush();
+      adminMetrics.echoTimeInMs.update(System.currentTimeMillis() - startTime);
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
+      logger.trace("Finished handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
 

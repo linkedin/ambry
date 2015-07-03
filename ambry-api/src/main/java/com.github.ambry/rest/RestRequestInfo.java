@@ -109,6 +109,7 @@ public class RestRequestInfo {
    * @param e - the {@link Exception} that caused the handling to fail.
    */
   public void onHandlingComplete(Exception e) {
+    logger.trace("Firing onHandlingComplete() for listeners");
     synchronized (listeners) {
       handlingException = e;
       if (operationComplete.compareAndSet(false, true)) {

@@ -39,9 +39,9 @@ class GetReplicasForBlobIdHandler {
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, ClusterMap clusterMap, AdminMetrics adminMetrics)
       throws RestServiceException {
-    logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.isFirstPart()) {
+      logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.getReplicasForBlobIdRate.mark();
       long startTime = System.currentTimeMillis();
       String replicaStr =
@@ -52,6 +52,7 @@ class GetReplicasForBlobIdHandler {
       adminMetrics.getReplicasForBlobIdTimeInMs.update(System.currentTimeMillis() - startTime);
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
+      logger.trace("Finished handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
 

@@ -177,6 +177,7 @@ class AsyncRequestHandler implements RestRequestHandler {
         throw new RestServiceException("Attempt to queue RestRequestInfo timed out",
             RestServiceErrorCode.RestRequestInfoQueueingFailure);
       } else {
+        logger.trace("Queued RestRequestInfo - {}", restRequestInfo);
         restServerMetrics.asyncRequestHandlerQueueingRate.mark();
         restServerMetrics.asyncRequestHandlerQueueOccupancy.update(restRequestInfoQueue.size());
       }
@@ -273,6 +274,7 @@ class DequeuedRequestHandler implements Runnable {
         restServerMetrics.dequeuedRequestHandlerUnexpectedException.inc();
       }
     }
+    logger.trace("DequeuedRequestHandler stopped");
     shutdownLatch.countDown();
   }
 
@@ -283,6 +285,7 @@ class DequeuedRequestHandler implements Runnable {
         restServerMetrics.asyncRequestHandlerRequestsInFlight.update(requestsInFlight.size());
         // NOTE: some of this code might be relevant to emptyQueue() also.
         restRequestMetadata.release();
+        logger.trace("Request completed - {}", restRequestMetadata);
       }
     }
   }
@@ -297,6 +300,7 @@ class DequeuedRequestHandler implements Runnable {
       throws RestServiceException {
     try {
       RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+      logger.trace("RestMethod {} for RestRequestInfo {}", restMethod, restRequestInfo);
       switch (restMethod) {
         case GET:
           blobStorageService.handleGet(restRequestInfo);
@@ -366,6 +370,7 @@ class DequeuedRequestHandler implements Runnable {
         if (responseHandler.isRequestComplete()) {
           onRequestComplete(restRequestInfo.getRestRequestMetadata());
         }
+        logger.trace("Handling of RestRequestInfo {} completed (Exception, if any, attached)", restRequestInfo, e);
       }
     }
   }
@@ -385,12 +390,12 @@ class DequeuedRequestHandler implements Runnable {
       RestRequestInfo dequeuedPart = restRequestInfoQueue.poll();
       while (dequeuedPart != null) {
         queuingTimeTracker.stopTracking(dequeuedPart, false);
-        RestRequestMetadata metadata = dequeuedPart.getRestRequestMetadata();
-        RestRequestContent content = dequeuedPart.getRestRequestContent();
-        if (content != null) {
-          content.release();
+        if (dequeuedPart.getRestRequestContent() != null) {
+          dequeuedPart.getRestRequestContent().release();
         }
-        requestsInFlight.putIfAbsent(metadata, true);
+        if(dequeuedPart.isFirstPart()) {
+          requestsInFlight.putIfAbsent(dequeuedPart.getRestRequestMetadata(), true);
+        }
         dequeuedPart = restRequestInfoQueue.poll();
       }
     }
@@ -420,6 +425,7 @@ class PoisonInfo extends RestRequestInfo {
 class QueuingTimeTracker {
   private final ConcurrentHashMap<RestRequestInfo, Long> queueTimes = new ConcurrentHashMap<RestRequestInfo, Long>();
   private final RestServerMetrics restServerMetrics;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public QueuingTimeTracker(RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
@@ -443,7 +449,9 @@ class QueuingTimeTracker {
   public void stopTracking(RestRequestInfo restRequestInfo, boolean record) {
     Long queueStartTime = queueTimes.remove(restRequestInfo);
     if (queueStartTime != null && record) {
-      restServerMetrics.asyncRequestHandlerQueueTimeInMs.update(System.currentTimeMillis() - queueStartTime);
+      long queueingTime = System.currentTimeMillis() - queueStartTime;
+      restServerMetrics.asyncRequestHandlerQueueTimeInMs.update(queueingTime);
+      logger.trace("RestRequestInfo {} spent {} ms in the queue", restRequestInfo, queueingTime);
     }
   }
 }

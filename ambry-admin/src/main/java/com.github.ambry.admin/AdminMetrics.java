@@ -26,6 +26,7 @@ class AdminMetrics {
 
   // Latencies
   // GetReplicasForBlobIdHandler
+  public final Histogram echoTimeInMs;
   public final Histogram getReplicasForBlobIdTimeInMs;
 
   // Errors
@@ -57,6 +58,7 @@ class AdminMetrics {
     getReplicasForBlobIdRate =
         metricRegistry.meter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdRate"));
 
+    echoTimeInMs = metricRegistry.histogram(MetricRegistry.name(EchoHandler.class, "EchoTimeInMs"));
     getReplicasForBlobIdTimeInMs = metricRegistry
         .histogram(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdTimeInMs"));
 

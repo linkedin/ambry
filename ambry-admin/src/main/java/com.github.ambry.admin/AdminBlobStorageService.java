@@ -45,6 +45,7 @@ class AdminBlobStorageService implements BlobStorageService {
     logger.trace("Handling GET request - {}", restRequestMetadata.getUri());
     try {
       String operationInUri = getOperationFromRequestUri(restRequestMetadata);
+      logger.trace("GET operation requested - {}", operationInUri);
       AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
       switch (operationType) {
         case echo:
