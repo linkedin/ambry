@@ -464,9 +464,6 @@ public class PersistentIndex {
               hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
           return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
               deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
-        } catch (ClosedChannelException e) {
-          throw new StoreException("Received close channel exception when reading delete blob info from the log " +
-              dataDir, StoreErrorCodes.Store_Shutting_Down);
         } catch (IOException e) {
           throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
               StoreErrorCodes.IOError);
@@ -1064,6 +1061,7 @@ public class PersistentIndex {
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     AtomicBoolean running = new AtomicBoolean(true);
     boolean isCaughtUp = false;
+    boolean isWaiting = false;
 
     //how long to sleep if token does not advance.
     private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
@@ -1202,14 +1200,10 @@ public class PersistentIndex {
             BlobReadOptions readInfo = getBlobReadInfo(info.getStoreKey(), getOptions);
             readOptions.add(readInfo);
           } catch (StoreException e) {
-            if (e.getErrorCode() == StoreErrorCodes.Store_Shutting_Down) {
-              throw e;
-            } else {
-              logger.error(
-                  "Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
-                  info.getStoreKey(), e);
-              metrics.hardDeleteExceptionsCount.inc();
-            }
+            logger.error(
+                "Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
+                info.getStoreKey(), e);
+            metrics.hardDeleteExceptionsCount.inc();
           }
         }
 
@@ -1219,6 +1213,10 @@ public class PersistentIndex {
         Iterator<BlobReadOptions> readOptionsIterator = readOptions.iterator();
 
         while (hardDeleteIterator.hasNext()) {
+          if (!running.get()) {
+            throw new StoreException("Aborting hard deletes as store is shutting down",
+                StoreErrorCodes.Store_Shutting_Down);
+          }
           HardDeleteInfo hardDeleteInfo = hardDeleteIterator.next();
           long offsetToWriteAt = readOptionsIterator.next().getOffset();
           if (hardDeleteInfo != null) {
@@ -1230,9 +1228,6 @@ public class PersistentIndex {
           } else {
             if (running.get()) {
               metrics.hardDeleteFailedCount.inc(1);
-            } else {
-              throw new StoreException("Aborting hard deletes as store is shutting down",
-                  StoreErrorCodes.Store_Shutting_Down);
             }
           }
         }
@@ -1336,7 +1331,14 @@ public class PersistentIndex {
           try {
             if (!hardDelete(true)) {
               isCaughtUp = true;
-              Thread.sleep(hardDeleterSleepTimeWhenCaughtUpMs);
+              synchronized (hardDeleteThread) {
+                if (!running.get()) {
+                  break;
+                }
+                isWaiting = true;
+                hardDeleteThread.wait(hardDeleterSleepTimeWhenCaughtUpMs);
+                isWaiting = false;
+              }
             } else if (isCaughtUp) {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
@@ -1360,7 +1362,12 @@ public class PersistentIndex {
         throws InterruptedException, StoreException, IOException {
       if (running.get()) {
         running.set(false);
-        hardDeleteThread.interrupt(); //if it is sleeping, interrupt so it quits sooner.
+        synchronized (hardDeleteThread) {
+          if (isWaiting) {
+            hardDeleteThread.notify();
+          }
+        }
+        throttler.awake();
         shutdownLatch.await();
         persistCleanupToken();
       }
