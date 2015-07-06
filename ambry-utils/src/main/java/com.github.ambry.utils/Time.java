@@ -29,5 +29,10 @@ public abstract class Time {
 
   public abstract void sleep(long ms)
       throws InterruptedException;
+
+  public abstract void wait(Object o, long ms)
+      throws InterruptedException;
+
+  public abstract void notify(Object o);
 }
 

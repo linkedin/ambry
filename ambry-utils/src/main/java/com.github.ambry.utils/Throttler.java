@@ -15,6 +15,9 @@ public class Throttler {
   private long checkIntervalMs;
   private boolean throttleDown;
   private Object lock = new Object();
+  private Object waitGuard = new Object();
+  private int awakeCount = 0;
+  private boolean waiting = false;
   private long periodStartNs;
   private double observedSoFar;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -35,6 +38,10 @@ public class Throttler {
     this.periodStartNs = time.nanoseconds();
   }
 
+  /**
+   * Throttle if required
+   * @param observed the newly observed units since the last time this method was called.
+   */
   public void maybeThrottle(double observed)
       throws InterruptedException {
     synchronized (lock) {
@@ -55,11 +62,33 @@ public class Throttler {
           if (sleepTime > 0) {
             logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",
                 rateInSecs, desiredRatePerSec, sleepTime);
-            time.sleep(sleepTime);
+            synchronized (waitGuard) {
+              // If an awake has already been called, do not wait.
+              if (awakeCount == 0) {
+                waiting = true;
+                time.wait(waitGuard, sleepTime);
+                waiting = false;
+              }
+              if (awakeCount > 0) {
+                awakeCount--;
+              }
+            }
           }
         }
         periodStartNs = now;
         observedSoFar = 0;
+      }
+    }
+  }
+
+  /**
+   * Awake the throttler if it is currently in the midst of throttling.
+   */
+  public void awake() {
+    synchronized (waitGuard) {
+      awakeCount++;
+      if (waiting) {
+        time.notify(waitGuard);
       }
     }
   }

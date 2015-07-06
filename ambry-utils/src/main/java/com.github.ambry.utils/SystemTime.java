@@ -14,20 +14,35 @@ public class SystemTime extends Time {
   private SystemTime() {
   }
 
+  @Override
   public long milliseconds() {
     return System.currentTimeMillis();
   }
 
+  @Override
   public long nanoseconds() {
     return System.nanoTime();
   }
 
+  @Override
   public long seconds() {
     return System.currentTimeMillis()/MsPerSec;
   }
 
+  @Override
   public void sleep(long ms)
       throws InterruptedException {
     Thread.sleep(ms);
+  }
+
+  @Override
+  public void wait(Object o, long ms)
+    throws InterruptedException {
+    o.wait(ms);
+  }
+
+  @Override
+  public void notify(Object o) {
+    o.notify();
   }
 }
