@@ -82,7 +82,10 @@ public class Throttler {
   }
 
   /**
-   * Awake the throttler if it is currently in the midst of throttling.
+   * Awake the throttler. The effect of an invocation of this call is either a prevention or an interruption of
+   * throttling. The semantics of this method allows it to be called even before maybeThrottle(). If that happens, then
+   * the next call to maybeThrottle() that could otherwise have resulted in throttling will end up not throttling. On
+   * the other hand, if the throttler is in the midst of throttling, it will be prematurely woken up.
    */
   public void awake() {
     synchronized (waitGuard) {
