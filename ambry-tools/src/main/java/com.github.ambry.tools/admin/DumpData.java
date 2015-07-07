@@ -24,11 +24,14 @@ import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -130,10 +133,12 @@ public class DumpData {
 
       ArgumentAcceptingOptionSpec<String> excludeMiscLoggingOpt =
           parser.accepts("excludeMiscLogging", "Whether to exclude miscellaneous logging during dumping or not. " +
-              "For instance, during dumping indexes, we also dump information about index files being dumped, file size, " +
-              "key size, value size, crc values and so on, apart from actual blob info. This argument will exclude all those" +
-              " misc logging and just output blob information alone").withRequiredArg().describedAs("excludeMiscLogging")
-              .defaultsTo("false").ofType(String.class);
+              "For instance, during dumping indexes, we also dump information about index files being dumped, file size, "
+              +
+              "key size, value size, crc values and so on, apart from actual blob info. This argument will exclude all those"
+              +
+              " misc logging and just output blob information alone").withRequiredArg()
+              .describedAs("excludeMiscLogging").defaultsTo("false").ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -190,20 +195,30 @@ public class DumpData {
       DumpData dumpData = new DumpData(outFile, map);
       if (typeOfOperation.compareTo("DumpIndex") == 0) {
         File file = new File(fileToRead);
-        dumpData.dumpIndex(file, null, null, blobs, null);
+        AtomicLong totalPutRecords = new AtomicLong(0);
+        AtomicLong totalDeleteRecords = new AtomicLong(0);
+        AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+        AtomicLong totalDeleteBeforePutRecords = new AtomicLong(0);
+        AtomicLong totalPutAfterDeleteRecords = new AtomicLong(0);
+        AtomicLong totalDuplicateDeleteRecords = new AtomicLong(0);
+        dumpData.dumpIndex(file, null, null, (filter) ? blobs : null, null, totalPutRecords, totalDeleteRecords,
+            totalDuplicatePutRecords, totalDeleteBeforePutRecords, totalPutAfterDeleteRecords,
+            totalDuplicateDeleteRecords, false);
       } else if (typeOfOperation.compareTo("DumpIndexesForReplica") == 0) {
-        dumpData.dumpIndexesForReplica(replicaRootDirectory, (blobList != null) ? blobs : null);
+        dumpData.dumpIndexesForReplica(replicaRootDirectory, (blobList != null) ? blobs : null, excludeMiscLogging);
       } else if (typeOfOperation.compareTo("DumpActiveBlobsFromIndex") == 0) {
         File file = new File(fileToRead);
         dumpData.dumpActiveBlobsFromIndex(file, (blobList != null) ? blobs : null, excludeMiscLogging);
       } else if (typeOfOperation.compareTo("DumpActiveBlobsForReplica") == 0) {
         dumpData.dumpActiveBlobsForReplica(replicaRootDirectory, (blobList != null) ? blobs : null, excludeMiscLogging);
       } else if (typeOfOperation.compareTo("DumpNRandomActiveBlobsForReplica") == 0) {
-        if(activeBlobsCount == -1) {
+        if (activeBlobsCount == -1) {
           throw new IllegalArgumentException("Active Blobs count should be set");
         }
-        dumpData.dumpNRandomActiveBlobsForReplica(replicaRootDirectory, (blobList != null) ? blobs : null,
-            activeBlobsCount, excludeMiscLogging);
+        long totalBlobsDumped = dumpData
+            .dumpNRandomActiveBlobsForReplica(replicaRootDirectory, (blobList != null) ? blobs : null, activeBlobsCount,
+                excludeMiscLogging);
+        dumpData.logOutput("Total Blobs Dumped " + totalBlobsDumped);
       } else if (typeOfOperation.compareTo("DumpLog") == 0) {
         File file = new File(fileToRead);
         dumpData.dumpLog(file, startOffset, endOffset, blobs, filter);
@@ -221,7 +236,315 @@ public class DumpData {
     }
   }
 
+  public long dumpBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
+      ConcurrentHashMap<String, IndexRecord> blobIdToBlobMessageMap, boolean excludeMiscLogging) {
+    long numberOfKeysProcessed = 0;
+    try {
+      DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
+      short version = stream.readShort();
+      if (!excludeMiscLogging) {
+        logOutput("version " + version);
+      }
+      if (version == 0) {
+        int keysize = stream.readInt();
+        int valueSize = stream.readInt();
+        long fileEndPointer = stream.readLong();
+        if (!excludeMiscLogging) {
+          logOutput("key size " + keysize);
+          logOutput("value size " + valueSize);
+          logOutput("file end pointer " + fileEndPointer);
+        }
+        int Crc_Size = 8;
+        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
+        while (stream.available() > Crc_Size) {
+          StoreKey key = storeKeyFactory.getStoreKey(stream);
+          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+          stream.read(value);
+          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          String msg =
+              "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
+                  + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
+                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil " + blobValue
+                  .getTimeToLiveInMs();
+          boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
+          numberOfKeysProcessed++;
+
+          if (blobList == null || blobList.contains(key.toString())) {
+            blobIdToBlobMessageMap.put(key.toString(), new IndexRecord(msg, isDeleted, blobValue.isExpired()));
+          }
+        }
+        if (!excludeMiscLogging) {
+          logOutput("crc " + stream.readLong());
+          logOutput("Total number of keys processed " + numberOfKeysProcessed);
+        }
+      }
+    } catch (IOException ioException) {
+      if (!excludeMiscLogging) {
+        logOutput("IOException thrown " + ioException);
+      }
+    } catch (Exception exception) {
+      if (!excludeMiscLogging) {
+        logOutput("Exception thrown " + exception);
+      }
+    }
+    return numberOfKeysProcessed;
+  }
+
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalPutRecords,
+      AtomicLong totalDeleteRecords, AtomicLong totalDuplicatePutRecords, AtomicLong totalDeleteBeforePutRecords,
+      AtomicLong totalPutAfterDeleteRecords, AtomicLong totalDuplicateDeleteRecords, boolean excludeMiscLogging) {
+    ConcurrentHashMap<String, IndexRecord> blobToMessageMap = new ConcurrentHashMap<String, IndexRecord>();
+    if (!excludeMiscLogging) {
+      logOutput("Dumping index " + indexFileToDump.getName() + " for " + replica);
+    }
+    long blobsProcessed = dumpBlobsFromIndex(indexFileToDump, blobList, blobToMessageMap, false);
+
+    for (String key : blobToMessageMap.keySet()) {
+      IndexRecord indexRecord = blobToMessageMap.get(key);
+      if (blobIdToStatusMap == null) {
+        if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
+          logOutput(indexRecord.getMessage());
+          if (indexRecord.isDeleted() || indexRecord.isExpired()) {
+            totalDeleteRecords.incrementAndGet();
+          } else {
+            totalPutRecords.incrementAndGet();
+          }
+        }
+      } else {
+        if (blobIdToStatusMap.containsKey(key)) {
+          BlobStatus mapValue = blobIdToStatusMap.get(key);
+          if (indexRecord.isDeleted() || indexRecord.isExpired()) {
+            if (mapValue.getAvailable().contains(replica)) {
+              totalDeleteRecords.incrementAndGet();
+            } else if (mapValue.getDeletedOrExpired().contains(replica)) {
+              totalDuplicateDeleteRecords.incrementAndGet();
+            }
+            mapValue.addDeletedOrExpired(replica);
+          } else {
+            if (mapValue.getDeletedOrExpired().contains(replica)) {
+              if (!excludeMiscLogging) {
+                logOutput("Put Record found after delete record for " + replica);
+              }
+              totalPutAfterDeleteRecords.incrementAndGet();
+            }
+            if (mapValue.getAvailable().contains(replica)) {
+              if (!excludeMiscLogging) {
+                logOutput("Duplicate Put record found for " + replica);
+              }
+              totalDuplicatePutRecords.incrementAndGet();
+            }
+            mapValue.addAvailable(replica);
+          }
+        } else {
+          BlobStatus mapValue =
+              new BlobStatus(replica, indexRecord.isDeleted() || indexRecord.isExpired(), replicaList);
+          blobIdToStatusMap.put(key, mapValue);
+          if (indexRecord.isDeleted()) {
+            if (!excludeMiscLogging) {
+              logOutput("Delete record found before Put record for " + key);
+            }
+            totalDeleteBeforePutRecords.incrementAndGet();
+          } else {
+            totalPutRecords.incrementAndGet();
+          }
+        }
+      }
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Put Records for index file " + indexFileToDump + " " + totalPutRecords.get());
+      logOutput("Total Delete Records for index file " + indexFileToDump + " " + totalDeleteRecords.get());
+      logOutput("Total Duplicate Put Records for index file " + indexFileToDump + " " + totalDuplicatePutRecords.get());
+      logOutput("Total Delete before Put Records for index file " + indexFileToDump + " " + totalDeleteBeforePutRecords
+          .get());
+      logOutput(
+          "Total Put after Delete Records for index file " + indexFileToDump + " " + totalPutAfterDeleteRecords.get());
+    }
+    return blobsProcessed;
+  }
+
+  public void dumpIndexesForReplica(String replicaRootDirectory, ArrayList<String> blobList,
+      boolean excludeMiscLogging) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    logOutput("Root directory for replica : " + replicaRootDirectory);
+    AtomicLong totalPutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteBeforePutRecords = new AtomicLong(0);
+    AtomicLong totalPutAfterDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicateDeleteRecords = new AtomicLong(0);
+    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
+
+    for (File indexFile : replicaDirectory.listFiles()) {
+      logOutput("Dumping index " + indexFile + " for replica " + replicaDirectory.getName());
+      totalKeysProcessed +=
+          dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, blobIdToStatusMap, totalPutRecords,
+              totalDeleteRecords, totalDuplicatePutRecords, totalDeleteBeforePutRecords, totalPutAfterDeleteRecords,
+              totalDuplicateDeleteRecords, excludeMiscLogging);
+    }
+    long totalActiveRecords = 0;
+    for (String key : blobIdToStatusMap.keySet()) {
+      BlobStatus blobStatus = blobIdToStatusMap.get(key);
+      logOutput(key + " : " + blobStatus.toString());
+      if (!blobStatus.isDeletedOrExpired) {
+        totalActiveRecords++;
+      }
+    }
+    logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+    logOutput("Total Put Records " + totalPutRecords.get());
+    logOutput("Total Delete Records " + totalDeleteRecords.get());
+    logOutput("Total Active Records " + totalActiveRecords);
+    logOutput("Total Duplicate Put Records " + totalDuplicatePutRecords.get());
+    logOutput("Total Delete before Put Records " + totalDeleteBeforePutRecords.get());
+    logOutput("Total Put after Delete Records " + totalPutAfterDeleteRecords.get());
+    logOutput("Total Duplicate Delete Records " + totalDuplicateDeleteRecords.get());
+  }
+
+  public void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList, boolean excludeMiscLogging) {
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    if (!excludeMiscLogging) {
+      logOutput("Dumping index " + indexFileToDump);
+    }
+    AtomicLong totalPutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteBeforePutOrDuplicateDeleteRecords = new AtomicLong(0);
+    long totalKeysProcessed =
+        dumpActiveBlobsFromIndex(indexFileToDump, blobList, blobIdToBlobMessageMap, excludeMiscLogging, totalPutRecords,
+            totalDeleteRecords, totalDuplicatePutRecords, totalDeleteBeforePutOrDuplicateDeleteRecords);
+    for (String blobId : blobIdToBlobMessageMap.keySet()) {
+      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed for index file " + indexFileToDump + " " + totalKeysProcessed);
+      logOutput("Total Put Records for index file " + indexFileToDump + " " + totalPutRecords.get());
+      logOutput("Total Delete Records for index file " + indexFileToDump + " " + totalDeleteRecords.get());
+      logOutput("Total Active Records for index file " + indexFileToDump + " " + blobIdToBlobMessageMap.size());
+      logOutput("Total Duplicate Put Records for index file " + indexFileToDump + " " + totalDuplicatePutRecords.get());
+      logOutput("Total Delete before Put Or duplicate Delete Records for index file " + indexFileToDump + " "
+          + totalDeleteBeforePutOrDuplicateDeleteRecords.get());
+    }
+  }
+
+  public long dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
+      ConcurrentHashMap<String, String> blobIdToBlobMessageMap, boolean excludeMiscLogging, AtomicLong totalPutRecords,
+      AtomicLong totalDeleteRecords, AtomicLong totalDuplicatePutRecords,
+      AtomicLong totalDeleteBeforePutOrDuplicateDeleteRecords) {
+    ConcurrentHashMap<String, IndexRecord> blobToMessageMapForIndexFile = new ConcurrentHashMap<String, IndexRecord>();
+
+    long blobsProcessed =
+        dumpBlobsFromIndex(indexFileToDump, blobList, blobToMessageMapForIndexFile, excludeMiscLogging);
+    for (String key : blobToMessageMapForIndexFile.keySet()) {
+      IndexRecord indexRecord = blobToMessageMapForIndexFile.get(key);
+      if (blobIdToBlobMessageMap.containsKey(key)) {
+        if (indexRecord.isDeleted() || indexRecord.isExpired()) {
+          blobIdToBlobMessageMap.remove(key);
+          totalDeleteRecords.incrementAndGet();
+        } else {
+          if (!excludeMiscLogging) {
+            logOutput("Found duplicate put record for " + key);
+          }
+          totalDuplicatePutRecords.incrementAndGet();
+        }
+      } else {
+        if (!(indexRecord.isDeleted() || indexRecord.isExpired())) {
+          blobIdToBlobMessageMap.put(key, indexRecord.getMessage());
+          totalPutRecords.incrementAndGet();
+        } else {
+          if (indexRecord.isDeleted()) {
+            if (!excludeMiscLogging) {
+              logOutput("Either duplicate delete record or delete record w/o a put record found for " + key);
+            }
+            totalDeleteBeforePutOrDuplicateDeleteRecords.incrementAndGet();
+          } else if (indexRecord.isExpired()) {
+            // should I increment putRecords count for an expired blob?
+          }
+        }
+      }
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Put Records " + totalPutRecords.get());
+      logOutput("Total Delete Records " + totalDeleteRecords.get());
+      logOutput("Total Duplicate Put Records " + totalDuplicatePutRecords.get());
+      logOutput(
+          "Total Delete before Put or duplicate Delete Records " + totalDeleteBeforePutOrDuplicateDeleteRecords.get());
+    }
+    return blobsProcessed;
+  }
+
+  public void dumpActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList,
+      boolean excludeMiscLogging) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    AtomicLong totalPutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteBeforePutOrDuplicateDeleteRecords = new AtomicLong(0);
+    for (File indexFile : replicaDirectory.listFiles()) {
+      if (!excludeMiscLogging) {
+        logOutput("Dumping index " + indexFile.getName() + " for " + replicaDirectory.getName());
+      }
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToBlobMessageMap, excludeMiscLogging, totalPutRecords,
+              totalDeleteRecords, totalDuplicatePutRecords, totalDeleteBeforePutOrDuplicateDeleteRecords);
+    }
+
+    for (String blobId : blobIdToBlobMessageMap.keySet()) {
+      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+      logOutput("Total Put Records " + totalPutRecords.get());
+      logOutput("Total Delete Records " + totalDeleteRecords.get());
+      logOutput("Total Duplicate Put Records " + totalDuplicatePutRecords.get());
+      logOutput(
+          "Total Delete before Put or duplicate Delete Records " + totalDeleteBeforePutOrDuplicateDeleteRecords.get());
+    }
+  }
+
+  public long dumpNRandomActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList,
+      long activeBlobsCount, boolean excludeMiscLogging) {
+    long totalKeysProcessed = 0;
+    File replicaDirectory = new File(replicaRootDirectory);
+    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
+    AtomicLong totalPutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteBeforePutOrDuplicateDeleteRecords = new AtomicLong(0);
+    for (File indexFile : replicaDirectory.listFiles()) {
+      if (!excludeMiscLogging) {
+        logOutput("Dumping index " + indexFile.getName() + " for " + replicaDirectory.getName());
+      }
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToBlobMessageMap, excludeMiscLogging, totalPutRecords,
+              totalDeleteRecords, totalDuplicatePutRecords, totalDeleteBeforePutOrDuplicateDeleteRecords);
+    }
+    if (!excludeMiscLogging) {
+      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
+      logOutput("Total Put Records " + totalPutRecords.get());
+      logOutput("Total Delete Records " + totalDeleteRecords.get());
+      logOutput("Total Duplicate Put Records " + totalDuplicatePutRecords.get());
+      logOutput(
+          "Total Delete before Put or duplicate Delete Records " + totalDeleteBeforePutOrDuplicateDeleteRecords.get());
+    }
+    long totalBlobsToBeDumped =
+        (activeBlobsCount > blobIdToBlobMessageMap.size()) ? blobIdToBlobMessageMap.size() : activeBlobsCount;
+    if (!excludeMiscLogging) {
+      logOutput("Total blobs to be dumped " + totalBlobsToBeDumped);
+    }
+    List<String> keys = new ArrayList<String>(blobIdToBlobMessageMap.keySet());
+    int randomCount = 0;
+    while (randomCount < totalBlobsToBeDumped) {
+      Collections.shuffle(keys);
+      logOutput(blobIdToBlobMessageMap.get(keys.remove(0)));
+      randomCount++;
+    }
+    return totalBlobsToBeDumped;
+  }
+
+  /*public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
       ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap) {
     long numberOfKeysProcessed = 0;
     try {
@@ -286,148 +609,7 @@ public class DumpData {
       logOutput("Exception thrown " + exception);
     }
     return numberOfKeysProcessed;
-  }
-
-  public void dumpIndexesForReplica(String replicaRootDirectory, ArrayList<String> blobList) {
-    long totalKeysProcessed = 0;
-    File replicaDirectory = new File(replicaRootDirectory);
-    logOutput("Root directory for replica : " + replicaRootDirectory);
-    for (File indexFile : replicaDirectory.listFiles()) {
-      totalKeysProcessed += dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, null);
-    }
-    logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
-  }
-
-  public void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList, boolean excludeMiscLogging) {
-    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
-    long totalKeysProcessed =
-        dumpActiveBlobsFromIndex(indexFileToDump, "Not Known", blobList, blobIdToBlobMessageMap, excludeMiscLogging);
-    for (String blobId : blobIdToBlobMessageMap.keySet()) {
-      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
-    }
-    if (!excludeMiscLogging) {
-      logOutput("Total Keys processed " + totalKeysProcessed);
-    }
-  }
-
-  public long dumpActiveBlobsFromIndex(File indexFileToDump, String replica, ArrayList<String> blobList,
-      ConcurrentHashMap<String, String> blobIdToBlobMessageMap, boolean excludeMiscLogging) {
-    long numberOfKeysProcessed = 0;
-    try {
-      DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
-      if (!excludeMiscLogging) {
-        logOutput("Dumping index " + indexFileToDump.getName() + " for " + replica);
-      }
-      short version = stream.readShort();
-      if (!excludeMiscLogging) {
-        logOutput("version " + version);
-      }
-      if (version == 0) {
-        int keysize = stream.readInt();
-        int valueSize = stream.readInt();
-        long fileEndPointer = stream.readLong();
-        if (!excludeMiscLogging) {
-          logOutput("key size " + keysize);
-          logOutput("value size " + valueSize);
-          logOutput("file end pointer " + fileEndPointer);
-        }
-        int Crc_Size = 8;
-        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
-        while (stream.available() > Crc_Size) {
-          StoreKey key = storeKeyFactory.getStoreKey(stream);
-          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
-          stream.read(value);
-          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
-          String msg =
-              "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
-                  + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
-                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil " + blobValue
-                  .getTimeToLiveInMs();
-          boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-          numberOfKeysProcessed++;
-
-          if (blobList == null || blobList.contains(key.toString())) {
-            if (blobIdToBlobMessageMap.containsKey(key.toString())) {
-              if (isDeleted || blobValue.isExpired()) {
-                blobIdToBlobMessageMap.remove(key.toString());
-              } else {
-                if (!excludeMiscLogging) {
-                  logOutput("Duplicate put record found for " + key.toString());
-                }
-              }
-            } else {
-              if (!(isDeleted || blobValue.isExpired())) {
-                blobIdToBlobMessageMap.put(key.toString(), msg);
-              }
-            }
-          }
-          if (keysize != key.sizeInBytes()) {
-            if (!excludeMiscLogging) {
-              logOutput("KeySize mismatch for key " + key);
-            }
-          }
-        }
-        if (!excludeMiscLogging) {
-          logOutput("crc " + stream.readLong());
-          logOutput("Total number of keys processed " + numberOfKeysProcessed);
-        }
-      }
-    } catch (IOException ioException) {
-      if (!excludeMiscLogging) {
-        logOutput("IOException thrown " + ioException);
-      }
-    } catch (Exception exception) {
-      if (!excludeMiscLogging) {
-        logOutput("Exception thrown " + exception);
-      }
-    }
-    return numberOfKeysProcessed;
-  }
-
-  public void dumpActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList,
-      boolean excludeMiscLogging) {
-    long totalKeysProcessed = 0;
-    File replicaDirectory = new File(replicaRootDirectory);
-    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
-    for (File indexFile : replicaDirectory.listFiles()) {
-      totalKeysProcessed +=
-          dumpActiveBlobsFromIndex(indexFile, replicaDirectory.getName(), blobList, blobIdToBlobMessageMap,
-              excludeMiscLogging);
-    }
-
-    for (String blobId : blobIdToBlobMessageMap.keySet()) {
-      logOutput(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
-    }
-    if (!excludeMiscLogging) {
-      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
-    }
-  }
-
-  public void dumpNRandomActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList, int activeBlobsCount,
-      boolean excludeMiscLogging) {
-    long totalKeysProcessed = 0;
-    File replicaDirectory = new File(replicaRootDirectory);
-    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<String, String>();
-    for (File indexFile : replicaDirectory.listFiles()) {
-      totalKeysProcessed +=
-          dumpActiveBlobsFromIndex(indexFile, replicaDirectory.getName(), blobList, blobIdToBlobMessageMap,
-              excludeMiscLogging);
-    }
-    if (!excludeMiscLogging) {
-      logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
-    }
-    int size = (activeBlobsCount > blobIdToBlobMessageMap.size()) ? blobIdToBlobMessageMap.size() : activeBlobsCount;
-    Random random = new Random();
-    if (!excludeMiscLogging) {
-      logOutput("Total keys to be dumped " + size);
-    }
-    List<String> keys = new ArrayList<String>(blobIdToBlobMessageMap.keySet());
-    int randomCount = 0;
-    while (randomCount < size) {
-      logOutput(blobIdToBlobMessageMap.get(keys.get(random.nextInt(keys.size()))));
-      randomCount++;
-    }
-  }
+  }                       */
 
   public void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter)
       throws IOException {
@@ -707,6 +889,30 @@ public class DumpData {
       }
     } catch (IOException IOException) {
       System.out.println("IOException while trying to close File " + outFile);
+    }
+  }
+
+  class IndexRecord {
+    String message;
+    boolean isDeleted;
+    boolean isExpired;
+
+    public IndexRecord(String msg, boolean isDeleted, boolean isExpired) {
+      this.message = msg;
+      this.isDeleted = isDeleted;
+      this.isExpired = isExpired;
+    }
+
+    String getMessage() {
+      return message;
+    }
+
+    boolean isDeleted() {
+      return isDeleted;
+    }
+
+    boolean isExpired() {
+      return isExpired;
     }
   }
 }

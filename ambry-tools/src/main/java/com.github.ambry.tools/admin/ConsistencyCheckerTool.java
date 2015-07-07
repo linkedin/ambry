@@ -40,7 +40,7 @@ public class ConsistencyCheckerTool {
   FileWriter fileWriter;
   String outFile;
 
-  public ConsistencyCheckerTool(ClusterMap map){
+  public ConsistencyCheckerTool(ClusterMap map) {
     this.map = map;
   }
 
@@ -160,7 +160,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
 
   private boolean includeAcceptableInconsistentBlobs;
 
-  public BlobConsistencyCheckerTool(ClusterMap map, boolean includeAcceptableInconsistentBlobs){
+  public BlobConsistencyCheckerTool(ClusterMap map, boolean includeAcceptableInconsistentBlobs) {
     super(map);
     this.includeAcceptableInconsistentBlobs = includeAcceptableInconsistentBlobs;
   }
@@ -194,14 +194,27 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       throws IOException, InterruptedException {
     DumpData dumpData = new DumpData(outFile, fileWriter, map);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
+    AtomicLong totalPutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicatePutRecords = new AtomicLong(0);
+    AtomicLong totalDeleteBeforePutRecords = new AtomicLong(0);
+    AtomicLong totalPutAfterDeleteRecords = new AtomicLong(0);
+    AtomicLong totalDuplicateDeleteRecords = new AtomicLong(0);
     for (File replica : replicas) {
       Thread thread = new Thread(
           new ReplicaProcessorForBlobs(replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
-              countDownLatch));
+              countDownLatch, totalPutRecords, totalDeleteRecords, totalDuplicatePutRecords,
+              totalDeleteBeforePutRecords, totalPutAfterDeleteRecords, totalDuplicateDeleteRecords));
       thread.start();
       thread.join();
     }
     countDownLatch.await();
+    logOutput("Total Keys Processed " + totalKeysProcessed.get());
+    logOutput("Total Put Records " + totalPutRecords.get());
+    logOutput("Total Delete Records " + totalDeleteRecords.get());
+    logOutput("Total Duplicate Put Records " + totalDuplicatePutRecords.get());
+    logOutput("Total Delete before Put Records " + totalDeleteBeforePutRecords.get());
+    logOutput("Total Put after Delete Records " + totalPutAfterDeleteRecords.get());
   }
 
   private boolean populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap,
@@ -241,7 +254,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
     }
     logOutput("Real Inconsistent blobs count :" + realInconsistentBlobs);
 
-    if(realInconsistentBlobs > 0) {
+    if (realInconsistentBlobs > 0) {
       return false;
     }
     return true;
@@ -255,16 +268,30 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
     AtomicLong totalKeysProcessed;
     DumpData dumpData;
     CountDownLatch countDownLatch;
+    AtomicLong totalPutRecords;
+    AtomicLong totalDeleteRecords;
+    AtomicLong totalDuplicatePutRecords;
+    AtomicLong totalDeleteBeforePutRecords;
+    AtomicLong totalPutAfterDeleteRecords;
+    AtomicLong totalDuplicateDeleteRecords;
 
     public ReplicaProcessorForBlobs(File rootDirectory, ArrayList<String> replicaList,
         ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
-        CountDownLatch countDownLatch) {
+        CountDownLatch countDownLatch, AtomicLong totalPutRecords, AtomicLong totalDeleteRecords,
+        AtomicLong totalDuplicatePutRecords, AtomicLong totalDeleteBeforePutRecords,
+        AtomicLong totalPutAfterDeleteRecords, AtomicLong totalDuplicateDeleteRecords) {
       this.rootDirectory = rootDirectory;
       this.replicaList = replicaList;
       this.blobIdToStatusMap = blobIdToStatusMap;
       this.totalKeysProcessed = totalKeysProcessed;
       this.dumpData = dumpData;
       this.countDownLatch = countDownLatch;
+      this.totalPutRecords = totalPutRecords;
+      this.totalDeleteRecords = totalDeleteRecords;
+      this.totalDuplicatePutRecords = totalDuplicatePutRecords;
+      this.totalDeleteBeforePutRecords = totalDeleteBeforePutRecords;
+      this.totalPutAfterDeleteRecords = totalPutAfterDeleteRecords;
+      this.totalDuplicateDeleteRecords = totalDuplicateDeleteRecords;
     }
 
     public void run() {
@@ -272,7 +299,9 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       long keysProcessedforReplica = 0;
       for (File indexFile : indexFiles) {
         keysProcessedforReplica += dumpData
-            .dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(), blobIdToStatusMap);
+            .dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(), blobIdToStatusMap,
+                totalPutRecords, totalDeleteRecords, totalDuplicatePutRecords, totalDeleteBeforePutRecords,
+                totalPutAfterDeleteRecords, totalDuplicateDeleteRecords, true);
       }
       logOutput("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
       totalKeysProcessed.addAndGet(keysProcessedforReplica);
@@ -283,7 +312,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
 
 class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
 
-  public IndexConsistencyCheckerTool(ClusterMap map){
+  public IndexConsistencyCheckerTool(ClusterMap map) {
     super(map);
   }
 
@@ -293,7 +322,7 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     boolean isConsistent = true;
     File rootDir = new File(directoryForConsistencyCheck);
     logOutput("Root directory for Partition is " + rootDir);
-    for(File replicaFolder : rootDir.listFiles()) {
+    for (File replicaFolder : rootDir.listFiles()) {
       try {
         isConsistent = checkSingleReplica(replicaFolder) && isConsistent;
       } catch (Exception e) {
@@ -303,7 +332,8 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     return isConsistent;
   }
 
-  public boolean checkSingleReplica(File replicaFolder) throws Exception {
+  public boolean checkSingleReplica(File replicaFolder)
+      throws Exception {
     boolean isConsistent = true;
     File[] indexFiles = replicaFolder.listFiles();
     Arrays.sort(indexFiles, new IndexFileNameComparator());
@@ -311,10 +341,9 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     logOutput("------- Processing " + replicaFolder.getName() + " -------");
     String lastProcessedIndexFileName = null;
     long lastLogOffsetEnd = 0;
-    for(File indexFile : indexFiles) {
+    for (File indexFile : indexFiles) {
       long logOffsetStart = getLogOffsetStart(indexFile);
-      isConsistent = validateValues(logOffsetStart, lastLogOffsetEnd,
-          indexFile.getName(), lastProcessedIndexFileName);
+      isConsistent = validateValues(logOffsetStart, lastLogOffsetEnd, indexFile.getName(), lastProcessedIndexFileName);
       lastLogOffsetEnd = getLogOffsetEnd(indexFile);
       lastProcessedIndexFileName = indexFile.getName();
     }
@@ -322,13 +351,13 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     return isConsistent;
   }
 
-  private boolean validateValues(long logOffsetStart, long lastLogOffsetEnd,
-      String currentIndexFileName, String lastProcessedIndexFileName){
+  private boolean validateValues(long logOffsetStart, long lastLogOffsetEnd, String currentIndexFileName,
+      String lastProcessedIndexFileName) {
     long difference = logOffsetStart - lastLogOffsetEnd;
-    if(difference > 0) {
-      logOutput("Difference of " + difference + " between "
-          + lastProcessedIndexFileName + " and " + currentIndexFileName
-          + ". (" + lastLogOffsetEnd + ", " + logOffsetStart + ")");
+    if (difference > 0) {
+      logOutput(
+          "Difference of " + difference + " between " + lastProcessedIndexFileName + " and " + currentIndexFileName
+              + ". (" + lastLogOffsetEnd + ", " + logOffsetStart + ")");
       if (difference % DELETE_RECORD_SIZE != 0) {
         logOutput("The difference " + difference + " is not a multiple of delete record size");
       }
@@ -337,12 +366,13 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     return true;
   }
 
-  private long getLogOffsetStart(File indexFile){
+  private long getLogOffsetStart(File indexFile) {
     String name = indexFile.getName();
     return Long.parseLong(name.substring(0, name.indexOf("_")));
   }
 
-  private long getLogOffsetEnd(File indexFile) throws Exception {
+  private long getLogOffsetEnd(File indexFile)
+      throws Exception {
     long fileEndPointer;
     DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
     short version = stream.readShort();
@@ -354,7 +384,6 @@ class IndexConsistencyCheckerTool extends ConsistencyCheckerTool {
     }
     return fileEndPointer;
   }
-
 
   static class IndexFileNameComparator implements Comparator {
     public int compare(Object o1, Object o2) {
