@@ -281,7 +281,7 @@ public class Selector implements Selectable {
             logger.warn("Error in I/O with connection to {}", socketDescription, e);
           }
           close(key);
-        } catch (Throwable e) {
+        } catch (Exception e) {
           logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
           close(key);
         }
@@ -414,7 +414,7 @@ public class Selector implements Selectable {
    * Process reads from ready sockets
    */
   private void read(SelectionKey key, Transmissions transmissions)
-      throws InterruptedException, IOException {
+      throws IOException {
     long startTimeToReadInMs = time.milliseconds();
     try {
       if (!transmissions.hasReceive()) {

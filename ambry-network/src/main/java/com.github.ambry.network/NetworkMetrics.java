@@ -115,7 +115,7 @@ public class NetworkMetrics {
     public final Counter bytesReceivedCount;
 
     public SelectorNodeMetric(MetricRegistry registry, String hostname, int port) {
-      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-RequestCount"));
+      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-SendCount"));
       bytesSentLatency =
           registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesSentLatencyInMs"));
       bytesReceivedLatency =
