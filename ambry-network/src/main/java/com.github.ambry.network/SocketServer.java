@@ -407,7 +407,7 @@ class Processor extends AbstractServerThread {
   }
 
   /**
-   * Wakeup the thread for selection.
+   * Wakes up the thread for selection.
    */
   public void wakeup() {
     selector.wakeup();

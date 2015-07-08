@@ -22,9 +22,9 @@ public interface Selectable {
       throws IOException;
 
   /**
-   * Begin disconnecting the connection identified by the given id
+   * Begin disconnecting the connection identified by the given connection id
    */
-  public void disconnect(String id);
+  public void disconnect(String connectionId);
 
   /**
    * Wakeup this selector if it is blocked on I/O
@@ -43,7 +43,7 @@ public interface Selectable {
   public void close();
 
   /**
-   * Initiate any sends provided, and make progress on any other I/O operations in-flight (connections,
+   * Firstly initiate any sends provided, and then make progress on any other I/O operations in-flight (connections,
    * disconnections, existing sends, and receives)
    * @param timeoutMs The amount of time to block if there is nothing to do in ms
    * @param sends The new sends to initiate
@@ -53,8 +53,7 @@ public interface Selectable {
       throws IOException;
 
   /**
-   * Initiate any sends provided, and make progress on any other I/O operations in-flight (connections,
-   * disconnections, existing sends, and receives)
+   * Make progress on any I/O operations in-flight (connections, disconnections, existing sends, and receives)
    * @param timeoutMs The amount of time to block if there is nothing to do in ms
    * @throws IOException
    */

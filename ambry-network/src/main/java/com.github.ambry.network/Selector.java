@@ -93,11 +93,11 @@ public class Selector implements Selectable {
     int localPort = socket.getLocalPort();
     String remoteHost = socket.getInetAddress().getHostAddress();
     int remotePort = socket.getPort();
-    long postFix = IdGenerator.getAndIncrement();
-    StringBuilder stringBuilder = new StringBuilder();
-    stringBuilder.append(localHost).append(":").append(localPort).append("-").append(remoteHost).append(":")
-        .append(remotePort).append("_").append(postFix);
-    return stringBuilder.toString();
+    long connectionIdSuffix = IdGenerator.getAndIncrement();
+    StringBuilder connectionIdBuilder = new StringBuilder();
+    connectionIdBuilder.append(localHost).append(":").append(localPort).append("-").append(remoteHost).append(":")
+        .append(remotePort).append("_").append(connectionIdSuffix);
+    return connectionIdBuilder.toString();
   }
 
   /**
@@ -235,10 +235,10 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Do whatever I/O can be done on each connection without blocking. This includes completing connections, completing
-   * disconnections, initiating new sends, or making progress on in-progress sends or receives.
+   * Firstly initiate the provided sends. Then do whatever I/O can be done on each connection without blocking.
+   * This includes completing connections, completing disconnections, initiating new sends,
+   * or making progress on in-progress sends or receives.
    * <p>
-   * The provided sends will be started.
    *
    * When this call is completed the user can check for completed sends, receives, connections or disconnects using
    * {@link #completedSends()}, {@link #completedReceives()}, {@link #connected()}, {@link #disconnected()}. These
