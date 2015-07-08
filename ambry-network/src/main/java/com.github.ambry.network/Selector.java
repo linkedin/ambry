@@ -308,7 +308,7 @@ public class Selector implements Selectable {
       this.metrics.selectorIORate.inc();
     }
     long endIo = time.milliseconds();
-    this.metrics.selectorIOTime.update(endIo);
+    this.metrics.selectorIOTime.update(endIo - endSelect);
   }
 
   /**
