@@ -54,13 +54,14 @@ public class Selector implements Selectable {
   private static final Logger logger = LoggerFactory.getLogger(Selector.class);
 
   private final java.nio.channels.Selector nioSelector;
-  private final Map<String, SelectionKey> keys;
+  private final Map<String, SelectionKey> keyMap;
   private final List<NetworkSend> completedSends;
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
   private final Time time;
   private final NetworkMetrics metrics;
+  private final AtomicLong IdGenerator;
   private AtomicLong activeConnections;
 
   /**
@@ -70,14 +71,33 @@ public class Selector implements Selectable {
       throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
-    this.keys = new HashMap<String, SelectionKey>();
+    this.keyMap = new HashMap<String, SelectionKey>();
     this.completedSends = new ArrayList<NetworkSend>();
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
     this.metrics = metrics;
+    this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
     this.metrics.initializeSelectorMetricsIfRequired(activeConnections);
+  }
+
+  /**
+   * Generate an unique connection id
+   * @param channel The channel between two hosts
+   * @return The id for the connection that was created
+   */
+  private String generateConnectionId(SocketChannel channel) {
+    Socket socket = channel.socket();
+    String localHost = socket.getLocalAddress().getHostAddress();
+    int localPort = socket.getLocalPort();
+    String remoteHost = socket.getInetAddress().getHostAddress();
+    int remotePort = socket.getPort();
+    long postFix = IdGenerator.getAndIncrement();
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder.append(localHost).append(":").append(localPort).append("-").append(remoteHost).append(":")
+        .append(remotePort).append("_").append(postFix);
+    return stringBuilder.toString();
   }
 
   /**
@@ -86,20 +106,16 @@ public class Selector implements Selectable {
    * <p>
    * Note that this call only initiates the connection, which will be completed on a future {@link #poll(long)}
    * call. Check {@link #connected()} to see which (if any) connections have completed after a given poll call.
-   * @param connectionId The connection Id to identify this connection
    * @param address The address to connect to
    * @param sendBufferSize The send buffer for the new connection
    * @param receiveBufferSize The receive buffer for the new connection
+   * @return The id for the connection that was created
    * @throws IllegalStateException if there is already a connection for that id
    * @throws IOException if DNS resolution fails on the hostname or if the server is down
    */
   @Override
-  public void connect(String connectionId, InetSocketAddress address, int sendBufferSize, int receiveBufferSize)
+  public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize)
       throws IOException {
-    if (this.keys.containsKey(connectionId)) {
-      throw new IllegalStateException("There is already a connection for id " + connectionId);
-    }
-
     SocketChannel channel = SocketChannel.open();
     channel.configureBlocking(false);
     Socket socket = channel.socket();
@@ -116,10 +132,12 @@ public class Selector implements Selectable {
       channel.close();
       throw e;
     }
+    String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
     key.attach(new Transmissions(connectionId, address.getHostName(), address.getPort()));
-    this.keys.put(connectionId, key);
-    activeConnections.set(this.keys.size());
+    this.keyMap.put(connectionId, key);
+    activeConnections.set(this.keyMap.size());
+    return connectionId;
   }
 
   /**
@@ -127,12 +145,17 @@ public class Selector implements Selectable {
    * Use this on server-side, when a connection is accepted by a different thread but processed by the Selector
    * Note that we are not checking if the connection id is valid - since the connection already exists
    */
-  public void register(String connectionId, String remoteHostName, int remotePort, SocketChannel channel)
+  public String register(SocketChannel channel)
       throws ClosedChannelException {
+    Socket socket = channel.socket();
+    String remoteHost = socket.getInetAddress().getHostAddress();
+    int remotePort = socket.getPort();
+    String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
-    key.attach(new Transmissions(connectionId, remoteHostName, remotePort));
-    this.keys.put(connectionId, key);
-    activeConnections.set(this.keys.size());
+    key.attach(new Transmissions(connectionId, remoteHost, remotePort));
+    this.keyMap.put(connectionId, key);
+    activeConnections.set(this.keyMap.size());
+    return connectionId;
   }
 
   /**
@@ -141,7 +164,7 @@ public class Selector implements Selectable {
    */
   @Override
   public void disconnect(String connectionId) {
-    SelectionKey key = this.keys.get(connectionId);
+    SelectionKey key = this.keyMap.get(connectionId);
     if (key != null) {
       key.cancel();
     }
@@ -172,15 +195,11 @@ public class Selector implements Selectable {
 
   /**
    * Queue the given request for sending in the subsequent {@poll(long)} calls
-   * @param key The SelectionKey
    * @param send The NetworkSend that is ready to be sent
    */
-  public void send(SelectionKey key, NetworkSend send) {
+  public void send(NetworkSend send) {
+    SelectionKey key = keyForId(send.getConnectionId());
     Transmissions transmissions = transmissions(key);
-    if (transmissions == null || !transmissions.connectionId.equalsIgnoreCase(send.getConnectionId())) {
-      throw new IllegalStateException(
-          "Attempt to begin a send operation with a closed connection or re-established connection.");
-    }
     if (transmissions.hasSend()) {
       throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
     }
@@ -189,6 +208,7 @@ public class Selector implements Selectable {
     try {
       key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
     } catch (CancelledKeyException e) {
+      logger.debug("Ignoring response for closed socket.");
       close(key);
     }
   }
@@ -203,15 +223,15 @@ public class Selector implements Selectable {
    * lists will be cleared at the beginning of each {@link #poll(long)} call and repopulated by the call if any
    * completed I/O.
    *
-   * @param timeout The amount of time to wait, in milliseconds. If negative, wait indefinitely.
+   * @param timeoutMs The amount of time to wait, in milliseconds. If negative, wait indefinitely.
    *
    * @throws IOException If a send is given for which we have no existing connection or for which there is
    *         already an in-progress send
    */
   @Override
-  public void poll(long timeout)
+  public void poll(long timeoutMs)
       throws IOException {
-    poll(timeout, null);
+    poll(timeoutMs, null);
   }
 
   /**
@@ -225,28 +245,27 @@ public class Selector implements Selectable {
    * lists will be cleared at the beginning of each {@link #poll(long, List)} call and repopulated by the call if any
    * completed I/O.
    *
-   * @param timeout The amount of time to wait, in milliseconds. If negative, wait indefinitely.
+   * @param timeoutMs The amount of time to wait, in milliseconds. If negative, wait indefinitely.
    * @param sends The list of new sends to begin
    *
    * @throws IOException If a send is given for which we have no existing connection or for which there is
    *         already an in-progress send
    */
   @Override
-  public void poll(long timeout, List<NetworkSend> sends)
+  public void poll(long timeoutMs, List<NetworkSend> sends)
       throws IOException {
     clear();
 
     // register for write interest on any new sends
     if (sends != null) {
       for (NetworkSend networkSend : sends) {
-        SelectionKey key = keyForId(networkSend.getConnectionId());
-        send(key, networkSend);
+        send(networkSend);
       }
     }
 
     // check ready keys
     long startSelect = time.milliseconds();
-    int readyKeys = select(timeout);
+    int readyKeys = select(timeoutMs);
     long endSelect = time.milliseconds();
     this.metrics.selectorSelectTime.update(endSelect - startSelect);
     this.metrics.selectorSelectRate.inc();
@@ -359,17 +378,25 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Begin closing this connection
+   * Begin closing this connection by given connection id
    */
-  public void close(SelectionKey key) {
+  @Override
+  public void close(String connectionId) {
+    SelectionKey key = keyForId(connectionId);
+    close(key);
+  }
+
+  /**
+   * Begin closing this connection by given key
+   */
+  private void close(SelectionKey key) {
     SocketChannel socketChannel = channel(key);
     Transmissions transmissions = transmissions(key);
-
     if (transmissions != null) {
       logger.debug("Closing connection from {}", transmissions.connectionId);
       this.disconnected.add(transmissions.connectionId);
-      this.keys.remove(transmissions.connectionId);
-      activeConnections.set(this.keys.size());
+      this.keyMap.remove(transmissions.connectionId);
+      activeConnections.set(this.keyMap.size());
       transmissions.clearReceive();
       transmissions.clearSend();
     }
@@ -387,12 +414,12 @@ public class Selector implements Selectable {
   /**
    * Get the selection key associated with this numeric id
    */
-  public SelectionKey keyForId(String id) {
-    SelectionKey key = this.keys.get(id);
+  private SelectionKey keyForId(String id) {
+    SelectionKey key = this.keyMap.get(id);
     if (key == null) {
       throw new IllegalStateException(
           "Attempt to write to socket for which there is no open connection. Connection id " + id
-              + " existing connections " + keys.keySet().toString());
+              + " existing connections " + keyMap.keySet().toString());
     }
     return key;
   }
@@ -439,10 +466,8 @@ public class Selector implements Selectable {
         transmissions.clearReceive();
       }
     } finally {
-      if (logger.isTraceEnabled()) {
-        long readTime = time.milliseconds() - startTimeToReadInMs;
-        logger.trace("SocketServer time spent on read per key {} = {}", transmissions.connectionId, readTime);
-      }
+      long readTime = time.milliseconds() - startTimeToReadInMs;
+      logger.trace("SocketServer time spent on read per key {} = {}", transmissions.connectionId, readTime);
     }
   }
 
@@ -454,33 +479,29 @@ public class Selector implements Selectable {
     long startTimeToWriteInMs = time.milliseconds();
     try {
       SocketChannel socketChannel = channel(key);
-      Send send = transmissions.send.getPayload();
+      NetworkSend networkSend = transmissions.send;
+      Send send = networkSend.getPayload();
       if (send == null) {
         throw new IllegalStateException("Registered for write interest but no response attached to key.");
       }
       send.writeTo(socketChannel);
-      if (logger.isTraceEnabled()) {
-        logger.trace("Bytes written to {} using key ", socketChannel.socket().getRemoteSocketAddress(), key);
-      }
+      logger.trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
+          transmissions.connectionId);
 
       if (send.isSendComplete()) {
-        if (logger.isTraceEnabled()) {
-          logger.trace("Finished writing, registering for read on connection {}",
-              socketChannel.socket().getRemoteSocketAddress());
-        }
-        this.completedSends.add(transmissions.send);
+        logger.trace("Finished writing, registering for read on connection {}",
+            socketChannel.socket().getRemoteSocketAddress());
+        networkSend.onSendComplete();
+        this.completedSends.add(networkSend);
         metrics.sendInFlight.dec();
         metrics.updateNodeSendMetric(transmissions.remoteHostName, transmissions.remotePort, send.sizeInBytes(),
-            time.milliseconds() - transmissions.send.getSendStartTimeInMs());
+            time.milliseconds() - networkSend.getSendStartTimeInMs());
         transmissions.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
-        //key.interestOps(SelectionKey.OP_READ);
       }
     } finally {
-      if (logger.isTraceEnabled()) {
-        long writeTime = time.milliseconds() - startTimeToWriteInMs;
-        logger.trace("SocketServer time spent on write per key {} = {}", transmissions.connectionId, writeTime);
-      }
+      long writeTime = time.milliseconds() - startTimeToWriteInMs;
+      logger.trace("SocketServer time spent on write per key {} = {}", transmissions.connectionId, writeTime);
     }
   }
 

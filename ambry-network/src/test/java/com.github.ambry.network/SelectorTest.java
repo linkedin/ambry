@@ -55,10 +55,8 @@ public class SelectorTest {
   @Test
   public void testServerDisconnect()
       throws Exception {
-    String connectionId = "testServerDisconnect_Hello";
-
     // connect and do a simple request
-    blockingConnect(connectionId);
+    String connectionId = blockingConnect();
     assertEquals("hello", blockingRequest(connectionId, "hello"));
 
     // disconnect
@@ -68,8 +66,7 @@ public class SelectorTest {
     }
 
     // reconnect and do another request
-    connectionId = "testServerDisconnect_Hello2";
-    blockingConnect(connectionId);
+    connectionId = blockingConnect();
     assertEquals("hello", blockingRequest(connectionId, "hello"));
   }
 
@@ -79,15 +76,13 @@ public class SelectorTest {
   @Test
   public void testClientDisconnect()
       throws Exception {
-    String connectionId = "testClientDisconnect_Hello1";
-    blockingConnect(connectionId);
+    String connectionId = blockingConnect();
     selector.disconnect(connectionId);
     selector.poll(10, asList(createSend(connectionId, "hello1")));
     assertEquals("Request should not have succeeded", 0, selector.completedSends().size());
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
     assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
-    connectionId = "testClientDisconnect_Hello2";
-    blockingConnect(connectionId);
+    connectionId = blockingConnect();
     assertEquals("hello2", blockingRequest(connectionId, "hello2"));
   }
 
@@ -97,8 +92,7 @@ public class SelectorTest {
   @Test(expected = IllegalStateException.class)
   public void testCantSendWithInProgress()
       throws Exception {
-    String connectionId = "testCantSendWithInProgress_test1";
-    blockingConnect(connectionId);
+    String connectionId = blockingConnect();
     selector.poll(1000L, asList(createSend(connectionId, "test1"), createSend(connectionId, "test2")));
   }
 
@@ -117,8 +111,7 @@ public class SelectorTest {
   @Test(expected = IOException.class)
   public void testNoRouteToHost()
       throws Exception {
-    selector
-        .connect("testNoRouteToHost", new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
   }
 
   /**
@@ -127,8 +120,7 @@ public class SelectorTest {
   @Test
   public void testConnectionRefused()
       throws Exception {
-    String connectionId = "testConnectionRefused";
-    selector.connect(connectionId, new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE);
     while (selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -146,9 +138,10 @@ public class SelectorTest {
 
     // create connections
     InetSocketAddress addr = new InetSocketAddress("localhost", server.port);
+    ArrayList<String> connectionIds = new ArrayList<String>();
     for (int i = 0; i < conns; i++) {
-      String connectionId = "connectionId_" + i;
-      selector.connect(connectionId, addr, BUFFER_SIZE, BUFFER_SIZE);
+      String connectionId = selector.connect(addr, BUFFER_SIZE, BUFFER_SIZE);
+      connectionIds.add(connectionId);
     }
 
     // send echo requests and receive responses
@@ -157,8 +150,8 @@ public class SelectorTest {
     int responseCount = 0;
     List<NetworkSend> sends = new ArrayList<NetworkSend>();
     for (int i = 0; i < conns; i++) {
-      String connectionId = "connectionId_" + i;
-      sends.add(createSend(connectionId, connectionId + "-" + 0));
+      String connectionId = connectionIds.get(i);
+      sends.add(createSend(connectionId, connectionId + "&" + 0));
     }
 
     // loop until we complete all requests
@@ -170,7 +163,7 @@ public class SelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        String[] pieces = asString(receive).split("-");
+        String[] pieces = asString(receive).split("&");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
         assertEquals("Check that the receive has kindly been rewound", 0,
@@ -190,7 +183,7 @@ public class SelectorTest {
         int index = Integer.parseInt(pieces[1]);
         requests[index]++;
         if (requests[index] < reqs) {
-          sends.add(createSend(dest, dest + "-" + requests[index]));
+          sends.add(createSend(dest, dest + "&" + requests[index]));
         }
       }
     }
@@ -202,8 +195,7 @@ public class SelectorTest {
   @Test
   public void testSendLargeRequest()
       throws Exception {
-    String connectionId = "testSendLargeRequest";
-    blockingConnect(connectionId);
+    String connectionId = blockingConnect();
     String big = randomString(10 * BUFFER_SIZE, new Random());
     assertEquals(big, blockingRequest(connectionId, big));
   }
@@ -214,8 +206,7 @@ public class SelectorTest {
   @Test
   public void testEmptyRequest()
       throws Exception {
-    String connectionId = "testEmptyRequest";
-    blockingConnect(connectionId);
+    String connectionId = blockingConnect();
     assertEquals("", blockingRequest(connectionId, ""));
   }
 
@@ -233,12 +224,13 @@ public class SelectorTest {
   }
 
   /* connect and wait for the connection to complete */
-  private void blockingConnect(String connectionId)
+  private String blockingConnect()
       throws IOException {
-    selector.connect(connectionId, new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }
+    return connectionId;
   }
 
   private NetworkSend createSend(String connectionId, String s) {
@@ -246,7 +238,7 @@ public class SelectorTest {
     buf.putLong(s.getBytes().length + 8);
     buf.put(s.getBytes());
     buf.flip();
-    return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), SystemTime.getInstance());
+    return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), null, SystemTime.getInstance());
   }
 
   private String asString(NetworkReceive receive) {

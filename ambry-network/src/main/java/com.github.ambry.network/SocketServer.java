@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
-import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
@@ -198,6 +197,7 @@ class Acceptor extends AbstractServerThread {
   private final int recvBufferSize;
   private final ServerSocketChannel serverChannel;
   private final java.nio.channels.Selector nioSelector;
+  private static final long selectTimeOutMs = 500;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize)
@@ -220,7 +220,7 @@ class Acceptor extends AbstractServerThread {
       startupComplete();
       int currentProcessor = 0;
       while (isRunning()) {
-        int ready = nioSelector.select(500);
+        int ready = nioSelector.select(selectTimeOutMs);
         if (ready > 0) {
           Set<SelectionKey> keys = nioSelector.selectedKeys();
           Iterator<SelectionKey> iter = keys.iterator();
@@ -307,6 +307,7 @@ class Processor extends AbstractServerThread {
   private final Time time;
   private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
   private final Selector selector;
+  private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics)
       throws IOException {
@@ -325,14 +326,13 @@ class Processor extends AbstractServerThread {
         configureNewConnections();
         // register any new responses for writing
         processNewResponses();
-        selector.poll(300);
+        selector.poll(pollTimeoutMs);
 
         // handle completed receives
         List<NetworkReceive> completedReceives = selector.completedReceives();
         for (NetworkReceive networkReceive : completedReceives) {
           String connectionId = networkReceive.getConnectionId();
-          SelectionKey key = selector.keyForId(connectionId);
-          SocketServerRequest req = new SocketServerRequest(id, key, connectionId,
+          SocketServerRequest req = new SocketServerRequest(id, connectionId,
               new ByteBufferInputStream(networkReceive.getReceivedBytes().getPayload()));
           channel.sendRequest(req);
         }
@@ -352,22 +352,18 @@ class Processor extends AbstractServerThread {
     while (curr != null) {
       curr.onDequeueFromResponseQueue();
       SocketServerRequest request = (SocketServerRequest) curr.getRequest();
-      SelectionKey key = (SelectionKey) request.getRequestKey();
       String connectionId = request.getConnectionId();
       try {
         if (curr.getPayload() == null) {
           // We should never need to send an empty response. If the payload is empty, we will assume error
           // and close the connection
           logger.trace("Socket server received no response and hence closing the connection");
-          selector.close(key);
+          selector.close(connectionId);
         } else {
           logger.trace("Socket server received response to send, registering for write: {}", curr);
-          NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), time);
-          selector.send(key, networkSend);
+          NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), curr.getMetrics(), time);
+          selector.send(networkSend);
         }
-      } catch (CancelledKeyException e) {
-        logger.debug("Ignoring response for closed socket.");
-        selector.close(key);
       } finally {
         curr = (SocketServerResponse) channel.receiveResponse(id);
       }
@@ -397,12 +393,7 @@ class Processor extends AbstractServerThread {
     while (newConnections.size() > 0) {
       SocketChannel channel = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id, channel.socket().getRemoteSocketAddress());
-      String localHost = channel.socket().getLocalAddress().getHostAddress();
-      int localPort = channel.socket().getLocalPort();
-      String remoteHost = channel.socket().getInetAddress().getHostAddress();
-      int remotePort = channel.socket().getPort();
-      String connectionId = localHost + ":" + localPort + "-" + remoteHost + ":" + remotePort;
-      selector.register(connectionId, remoteHost, remotePort, channel);
+      selector.register(channel);
     }
   }
 

@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 
 
@@ -22,10 +23,13 @@ public class NetworkSend {
    */
   private final long sendStartTimeInMs;
 
-  public NetworkSend(String connectionId, Send payload, Time time) {
+  private final NetworkRequestMetrics metrics;
+
+  public NetworkSend(String connectionId, Send payload, NetworkRequestMetrics metrics, Time time) {
     this.connectionId = connectionId;
     this.payload = payload;
     this.sendStartTimeInMs = time.milliseconds();
+    this.metrics = metrics;
   }
 
   public long getSendStartTimeInMs() {
@@ -38,5 +42,11 @@ public class NetworkSend {
 
   public Send getPayload() {
     return payload;
+  }
+
+  public void onSendComplete() {
+    if (metrics != null) {
+      metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - sendStartTimeInMs);
+    }
   }
 }

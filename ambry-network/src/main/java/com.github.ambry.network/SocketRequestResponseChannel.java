@@ -14,20 +14,18 @@ import java.io.IOException;
 // The request at the network layer
 class SocketServerRequest implements Request {
   private final int processor;
-  private final Object requestKey;
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServerRequest(int processor, Object requestKey, String connectionId, InputStream input)
+  public SocketServerRequest(int processor, String connectionId, InputStream input)
       throws IOException {
     this.processor = processor;
-    this.requestKey = requestKey;
     this.connectionId = connectionId;
     this.input = input;
     this.startTimeInMs = SystemTime.getInstance().milliseconds();
-    logger.trace("Processor {} received request : {}", processor, requestKey);
+    logger.trace("Processor {} received request : {}", processor, connectionId);
   }
 
   @Override
@@ -42,10 +40,6 @@ class SocketServerRequest implements Request {
 
   public int getProcessor() {
     return processor;
-  }
-
-  public Object getRequestKey() {
-    return requestKey;
   }
 
   public String getConnectionId() {
@@ -89,6 +83,10 @@ class SocketServerResponse implements Response {
     if (metrics != null) {
       metrics.updateResponseQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
     }
+  }
+
+  public NetworkRequestMetrics getMetrics() {
+    return metrics;
   }
 }
 
