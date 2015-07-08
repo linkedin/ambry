@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * A connection can be added to the selector by doing
  *
  * <pre>
- * selector.connect("connectionId", new InetSocketAddress(&quot;google.com&quot;, server.port), 64000, 64000);
+ * selector.connect("connectionId", new InetSocketAddress(&quot;linkedin.com&quot;, server.port), 64000, 64000);
  * </pre>
  *
  * The connect call does not block on the creation of the TCP connection, so the connect method only begins initiating
@@ -195,15 +195,15 @@ public class Selector implements Selectable {
 
   /**
    * Queue the given request for sending in the subsequent {@poll(long)} calls
-   * @param send The NetworkSend that is ready to be sent
+   * @param networkSend The NetworkSend that is ready to be sent
    */
-  public void send(NetworkSend send) {
-    SelectionKey key = keyForId(send.getConnectionId());
+  public void send(NetworkSend networkSend) {
+    SelectionKey key = keyForId(networkSend.getConnectionId());
     Transmissions transmissions = transmissions(key);
     if (transmissions.hasSend()) {
       throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
     }
-    transmissions.send = send;
+    transmissions.send = networkSend;
     metrics.sendInFlight.inc();
     try {
       key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
