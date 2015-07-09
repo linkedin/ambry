@@ -5,7 +5,6 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
-import com.codahale.metrics.Timer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -89,18 +88,17 @@ public class NetworkMetrics {
     }
   }
 
-  public void updateNodeRequestMetric(String hostName, int port, long bytesSentCount, long timeTakenToSendInMs) {
+  public void updateNodeSendMetric(String hostName, int port, long bytesSentCount, long timeTakenToSendInMs) {
     if (!selectorNodeMetricMap.containsKey(hostName + port)) {
       throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
     }
     SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
-    nodeMetric.requestCount.inc();
+    nodeMetric.sendCount.inc();
     nodeMetric.bytesSentCount.inc(bytesSentCount);
     nodeMetric.bytesSentLatency.update(timeTakenToSendInMs);
   }
 
-  public void updateNodeResponseMetric(String hostName, int port, long bytesReceivedCount,
-      long timeTakenToReceiveInMs) {
+  public void updateNodeReceiveMetric(String hostName, int port, long bytesReceivedCount, long timeTakenToReceiveInMs) {
     if (!selectorNodeMetricMap.containsKey(hostName + port)) {
       throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
     }
@@ -110,14 +108,14 @@ public class NetworkMetrics {
   }
 
   class SelectorNodeMetric {
-    public final Counter requestCount;
+    public final Counter sendCount;
     public final Histogram bytesSentLatency;
     public final Histogram bytesReceivedLatency;
     public final Counter bytesSentCount;
     public final Counter bytesReceivedCount;
 
     public SelectorNodeMetric(MetricRegistry registry, String hostname, int port) {
-      requestCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-RequestCount"));
+      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-SendCount"));
       bytesSentLatency =
           registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesSentLatencyInMs"));
       bytesReceivedLatency =
