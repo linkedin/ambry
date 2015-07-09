@@ -1061,7 +1061,6 @@ public class PersistentIndex {
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     AtomicBoolean running = new AtomicBoolean(true);
     boolean isCaughtUp = false;
-    boolean isWaiting = false;
 
     //how long to sleep if token does not advance.
     private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
@@ -1335,9 +1334,7 @@ public class PersistentIndex {
                 if (!running.get()) {
                   break;
                 }
-                isWaiting = true;
                 hardDeleteThread.wait(hardDeleterSleepTimeWhenCaughtUpMs);
-                isWaiting = false;
               }
             } else if (isCaughtUp) {
               isCaughtUp = false;
@@ -1363,9 +1360,7 @@ public class PersistentIndex {
       if (running.get()) {
         running.set(false);
         synchronized (hardDeleteThread) {
-          if (isWaiting) {
-            hardDeleteThread.notify();
-          }
+          hardDeleteThread.notify();
         }
         throttler.disable();
         throttler.awake();
