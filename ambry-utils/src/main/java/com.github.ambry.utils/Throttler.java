@@ -1,12 +1,13 @@
 package com.github.ambry.utils;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * A class to measure and throttle the rate of some process. The throttler takes a desired rate-per-second
- * (the units of the process don't matter, it could be bytes or a count of some other thing), and will sleep for
+ * (the units of the process do not matter, it could be bytes or a count of some other thing), and will sleep for
  * an appropriate amount of time when maybeThrottle() is called to attain the desired rate.
  */
 public class Throttler {
@@ -16,12 +17,11 @@ public class Throttler {
   private boolean throttleDown;
   private Object lock = new Object();
   private Object waitGuard = new Object();
-  private int awakeCount = 0;
-  private boolean waiting = false;
   private long periodStartNs;
   private double observedSoFar;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private Time time;
+  private AtomicBoolean enabled;
 
   /**
    * @param desiredRatePerSec: The rate we want to hit in units/sec
@@ -36,6 +36,7 @@ public class Throttler {
     this.time = time;
     this.observedSoFar = 0.0;
     this.periodStartNs = time.nanoseconds();
+    this.enabled = new AtomicBoolean(true);
   }
 
   /**
@@ -64,13 +65,8 @@ public class Throttler {
                 rateInSecs, desiredRatePerSec, sleepTime);
             synchronized (waitGuard) {
               // If an awake has already been called, do not wait.
-              if (awakeCount == 0) {
-                waiting = true;
+              if (enabled.get()) {
                 time.wait(waitGuard, sleepTime);
-                waiting = false;
-              }
-              if (awakeCount > 0) {
-                awakeCount--;
               }
             }
           }
@@ -82,17 +78,25 @@ public class Throttler {
   }
 
   /**
-   * Awake the throttler. The effect of an invocation of this call is either a prevention or an interruption of
-   * throttling. The semantics of this method allows it to be called even before maybeThrottle(). If that happens, then
-   * the next call to maybeThrottle() that could otherwise have resulted in throttling will end up not throttling. On
-   * the other hand, if the throttler is in the midst of throttling, it will be prematurely woken up.
+   * Awake the throttler if it is in the midst of throttling.
    */
   public void awake() {
     synchronized (waitGuard) {
-      awakeCount++;
-      if (waiting) {
-        time.notify(waitGuard);
-      }
+      waitGuard.notify();
     }
+  }
+
+  /**
+   * Enable the throttler. Note that this is the default state at creation time.
+   */
+  public void enable() {
+    enabled.set(true);
+  }
+
+  /**
+   * Disable the throttler. No throttling will be done in the calls to maybeThrottle() unless a call to enable() is made.
+   */
+  public void disable() {
+    enabled.set(false);
   }
 }

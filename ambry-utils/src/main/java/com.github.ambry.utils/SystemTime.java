@@ -40,9 +40,4 @@ public class SystemTime extends Time {
     throws InterruptedException {
     o.wait(ms);
   }
-
-  @Override
-  public void notify(Object o) {
-    o.notify();
-  }
 }

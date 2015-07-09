@@ -104,7 +104,7 @@ public class PersistentIndex {
       this.config = config;
       persistor = new IndexPersistor();
       hardDeleter =
-          new HardDeleteThread(new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance()));
+          new HardDeleteThread();
       this.hardDelete = hardDelete;
       storeJournalFactory = Utils.getObj(config.storeJournalFactory);
       /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
@@ -1066,8 +1066,8 @@ public class PersistentIndex {
     //how long to sleep if token does not advance.
     private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
 
-    HardDeleteThread(Throttler throttler) {
-      this.throttler = throttler;
+    HardDeleteThread() {
+      this.throttler = new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance());
     }
 
     /**
@@ -1185,9 +1185,9 @@ public class PersistentIndex {
      * Gets a view of the records in the log for those messages and calls cleanup to get the appropriate replacement
      * records, and then replaces the records in the log with the corresponding replacement records.
      * @param messageInfoList: The messages to be hard deleted in the log.
-     * @param throttle: Whether throttling should be done or not.
+     * @param doThrottling: Whether throttling is enabled or not.
      */
-    private void performHardDeletes(List<MessageInfo> messageInfoList, boolean throttle)
+    private void performHardDeletes(List<MessageInfo> messageInfoList, boolean doThrottling)
         throws StoreException {
       try {
         EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
@@ -1222,7 +1222,7 @@ public class PersistentIndex {
           if (hardDeleteInfo != null) {
             log.writeFrom(hardDeleteInfo.getChannel(), offsetToWriteAt, hardDeleteInfo.getSize());
             metrics.hardDeleteDoneCount.inc(1);
-              if (throttle) {
+              if (doThrottling) {
                 throttler.maybeThrottle(hardDeleteInfo.getSize());
               }
           } else {
@@ -1367,6 +1367,7 @@ public class PersistentIndex {
             hardDeleteThread.notify();
           }
         }
+        throttler.disable();
         throttler.awake();
         shutdownLatch.await();
         persistCleanupToken();

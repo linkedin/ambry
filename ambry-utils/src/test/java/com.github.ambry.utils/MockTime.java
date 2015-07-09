@@ -37,8 +37,4 @@ public class MockTime extends Time {
     throws InterruptedException {
     sleep(ms);
   }
-
-  @Override
-  public void notify(Object o) {
-  }
 }
