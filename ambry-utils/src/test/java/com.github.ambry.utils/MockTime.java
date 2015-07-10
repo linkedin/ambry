@@ -31,4 +31,10 @@ public class MockTime extends Time {
       throw new IllegalArgumentException();
     }
   }
+
+  @Override
+  public void wait(Object o, long ms)
+    throws InterruptedException {
+    sleep(ms);
+  }
 }
