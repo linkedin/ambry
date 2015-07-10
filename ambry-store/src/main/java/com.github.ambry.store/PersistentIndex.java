@@ -1227,9 +1227,7 @@ public class PersistentIndex {
                 throttler.maybeThrottle(hardDeleteInfo.getSize());
               }
           } else {
-            if (running.get()) {
-              metrics.hardDeleteFailedCount.inc(1);
-            }
+            metrics.hardDeleteFailedCount.inc(1);
           }
         }
       } catch (InterruptedException e) {
