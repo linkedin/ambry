@@ -46,6 +46,7 @@ public class BlobStatus {
     this.deletedOrExpired.add(replica);
     this.isDeletedOrExpired = true;
     this.unavailable.remove(replica);
+    this.available.remove(replica);
   }
 
   boolean getIsDeletedOrExpired() {

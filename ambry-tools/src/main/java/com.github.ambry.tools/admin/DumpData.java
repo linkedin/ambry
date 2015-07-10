@@ -191,7 +191,7 @@ public class DumpData {
       DumpData dumpData = new DumpData(outFile, map);
       if (typeOfOperation.compareTo("DumpIndex") == 0) {
         File file = new File(fileToRead);
-        dumpData.dumpIndex(file, null, null, (filter) ? blobs : null, null, new BlobStats(), false);
+        dumpData.dumpIndex(file, null, null, (filter) ? blobs : null, null, new IndexStats(), false);
       } else if (typeOfOperation.compareTo("DumpIndexesForReplica") == 0) {
         dumpData.dumpIndexesForReplica(replicaRootDirectory, (blobList != null) ? blobs : null, excludeMiscLogging);
       } else if (typeOfOperation.compareTo("DumpActiveBlobsFromIndex") == 0) {
@@ -279,7 +279,7 @@ public class DumpData {
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
-      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, BlobStats blobStats, boolean excludeMiscLogging) {
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, IndexStats blobStats, boolean excludeMiscLogging) {
     ConcurrentHashMap<String, IndexRecord> blobIdToMessageMapPerIndexFile =
         new ConcurrentHashMap<String, IndexRecord>();
     if (!excludeMiscLogging) {
@@ -357,7 +357,7 @@ public class DumpData {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
     logOutput("Root directory for replica : " + replicaRootDirectory);
-    BlobStats blobStats = new BlobStats();
+    IndexStats blobStats = new IndexStats();
     ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
 
     for (File indexFile : replicaDirectory.listFiles()) {

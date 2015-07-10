@@ -3,7 +3,7 @@ package com.github.ambry.tools.admin;
 import java.util.concurrent.atomic.AtomicLong;
 
 
-public class BlobStats {
+public class IndexStats {
   private AtomicLong totalPutRecords = new AtomicLong(0);
   private AtomicLong totalDeleteRecords = new AtomicLong(0);
   private AtomicLong totalDuplicatePutRecords = new AtomicLong(0);

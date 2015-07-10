@@ -194,7 +194,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       throws IOException, InterruptedException {
     DumpData dumpData = new DumpData(outFile, fileWriter, map);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
-    BlobStats blobStats = new BlobStats();
+    IndexStats blobStats = new IndexStats();
     for (File replica : replicas) {
       Thread thread = new Thread(
           new ReplicaProcessorForBlobs(replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
@@ -263,11 +263,11 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
     AtomicLong totalKeysProcessed;
     DumpData dumpData;
     CountDownLatch countDownLatch;
-    BlobStats blobStats;
+    IndexStats blobStats;
 
     public ReplicaProcessorForBlobs(File rootDirectory, ArrayList<String> replicaList,
         ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
-        CountDownLatch countDownLatch, BlobStats blobStats) {
+        CountDownLatch countDownLatch, IndexStats blobStats) {
       this.rootDirectory = rootDirectory;
       this.replicaList = replicaList;
       this.blobIdToStatusMap = blobIdToStatusMap;
