@@ -29,11 +29,11 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   }
 
   public long getOffset() {
-    return this.offset;
+    return offset;
   }
 
   public long getSize() {
-    return this.size;
+    return size;
   }
 
   public long getTTL() {
@@ -42,6 +42,14 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 
   public StoreKey getStoreKey() {
     return storeKey;
+  }
+
+  public MessageInfo getMessageInfo() {
+    return new MessageInfo(storeKey, size, ttl);
+  }
+
+  public boolean validateFileEndOffset(long fileEndOffset) {
+    return offset + size <= fileEndOffset;
   }
 
   @Override
@@ -67,11 +75,10 @@ class StoreMessageReadSet implements MessageReadSet {
 
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {
-      if (readOption.getOffset() + readOption.getSize() > fileEndPosition) {
+      if (!readOption.validateFileEndOffset(fileEndPosition)) {
         throw new IllegalArgumentException("Invalid offset size pairs");
       }
-      logger.trace("MessageReadSet entry file: {} offset: {} size: {} ", file.getAbsolutePath(), readOption.getOffset(),
-          readOption.getSize());
+      logger.trace("MessageReadSet entry file: {} readOption: {} ", file.getAbsolutePath(), readOption);
     }
     this.readOptions = readOptions;
     this.fileChannel = fileChannel;
@@ -85,10 +92,9 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     long startOffset = readOptions.get(index).getOffset() + relativeOffset;
-    logger.trace("Blob Message Read Set position {} count {}", startOffset,
-        Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset));
-    long written = fileChannel
-        .transferTo(startOffset, Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset), channel);
+    long sizeToRead = Math.min(maxSize, readOptions.get(index).getSize() - relativeOffset);
+    logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
+    long written = fileChannel.transferTo(startOffset, sizeToRead, channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, file.getAbsolutePath());
     return written;
   }

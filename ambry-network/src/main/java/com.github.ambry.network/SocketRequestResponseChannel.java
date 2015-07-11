@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-import com.github.ambry.metrics.MetricsHistogram;
 import com.github.ambry.utils.SystemTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,18 +14,18 @@ import java.io.IOException;
 // The request at the network layer
 class SocketServerRequest implements Request {
   private final int processor;
-  private final Object requestKey;
+  private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServerRequest(int processor, Object requestKey, InputStream input)
+  public SocketServerRequest(int processor, String connectionId, InputStream input)
       throws IOException {
     this.processor = processor;
-    this.requestKey = requestKey;
+    this.connectionId = connectionId;
     this.input = input;
     this.startTimeInMs = SystemTime.getInstance().milliseconds();
-    logger.trace("Processor {} received request : {}", processor, requestKey);
+    logger.trace("Processor {} received request : {}", processor, connectionId);
   }
 
   @Override
@@ -43,8 +42,8 @@ class SocketServerRequest implements Request {
     return processor;
   }
 
-  public Object getRequestKey() {
-    return requestKey;
+  public String getConnectionId() {
+    return connectionId;
   }
 }
 
@@ -56,7 +55,6 @@ class SocketServerResponse implements Response {
   private final Send output;
   private final NetworkRequestMetrics metrics;
   private long startQueueTimeInMs;
-  private long startSendTimeInMs;
 
   public SocketServerResponse(Request request, Send output, NetworkRequestMetrics metrics) {
     this.request = request;
@@ -81,20 +79,14 @@ class SocketServerResponse implements Response {
     this.startQueueTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
-  public void onSendStart() {
-    this.startSendTimeInMs = SystemTime.getInstance().milliseconds();
-  }
-
   public void onDequeueFromResponseQueue() {
     if (metrics != null) {
       metrics.updateResponseQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
     }
   }
 
-  public void onSendComplete() {
-    if (metrics != null) {
-      metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - startSendTimeInMs);
-    }
+  public NetworkRequestMetrics getMetrics() {
+    return metrics;
   }
 }
 

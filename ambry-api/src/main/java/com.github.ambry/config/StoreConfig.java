@@ -62,6 +62,27 @@ public class StoreConfig {
   @Default("0.01")
   public final double storeIndexBloomMaxFalsePositiveProbability;
 
+  /**
+   * How long (in days) a key must be in deleted state before it is hard deleted.
+   */
+  @Config("store.deleted.message.retention.days")
+  @Default("7")
+  public final int storeDeletedMessageRetentionDays;
+
+  /**
+   * The rate of I/O allowed for hard deletes.
+   */
+  @Config("store.hard.delete.bytes.per.sec")
+  @Default("1*1024*1024")
+  public final int storeHardDeleteBytesPerSec;
+
+  /**
+   * Whether hard deletes are to be enabled or not
+   */
+  @Config("store.enable.hard.delete")
+  @Default("false")
+  public final boolean storeEnableHardDelete;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -71,9 +92,13 @@ public class StoreConfig {
     storeIndexMaxNumberOfInmemElements = verifiableProperties.getInt("store.index.max.number.of.inmem.elements", 10000);
     storeIndexBloomMaxFalsePositiveProbability =
         verifiableProperties.getDoubleInRange("store.index.bloom.max.false.positive.probability", 0.01, 0.0, 1.0);
-    storeJournalFactory = verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
+    storeJournalFactory =
+        verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
+    storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
+    storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
+    storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
   }
 }
 

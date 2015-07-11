@@ -15,47 +15,6 @@ import java.util.Random;
 
 public class MessageFormatInputStreamTest {
 
-  public static class MockId extends StoreKey {
-
-    String id;
-
-    public MockId(String id) {
-      this.id = id;
-    }
-
-    @Override
-    public byte[] toBytes() {
-      ByteBuffer idBuf = ByteBuffer.allocate(2 + id.getBytes().length);
-      idBuf.putShort(sizeInBytes());
-      idBuf.put(id.getBytes());
-      return idBuf.array();
-    }
-
-    @Override
-    public String getID() {
-      return toString();
-    }
-
-    @Override
-    public short sizeInBytes() {
-      return (short) (2 + id.length());
-    }
-
-    @Override
-    public int compareTo(StoreKey o) {
-      if (o == null) {
-        throw new NullPointerException("input argument null");
-      }
-      MockId other = (MockId) o;
-      return id.compareTo(other.id);
-    }
-
-    @Override
-    public String toString() {
-      return id;
-    }
-  }
-
   @Test
   public void messageFormatBlobPropertiesTest()
       throws IOException, MessageFormatException {

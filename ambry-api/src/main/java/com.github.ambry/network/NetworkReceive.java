@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 
 
@@ -11,7 +10,7 @@ public class NetworkReceive {
   /**
    * The connection Id which is used for this request
    */
-  private final long connectionId;
+  private final String connectionId;
   /**
    * The bytes received from the destination
    */
@@ -20,15 +19,15 @@ public class NetworkReceive {
   /**
    * The start time of when the receive started
    */
-  private final long receiveStartTimeInNanos;
+  private final long receiveStartTimeInMs;
 
-  public NetworkReceive(long connectionId, BoundedByteBufferReceive receivedBytes, Time time) {
+  public NetworkReceive(String connectionId, BoundedByteBufferReceive receivedBytes, Time time) {
     this.connectionId = connectionId;
     this.receivedBytes = receivedBytes;
-    this.receiveStartTimeInNanos = time.nanoseconds();
+    this.receiveStartTimeInMs = time.milliseconds();
   }
 
-  public long getConnectionId() {
+  public String getConnectionId() {
     return connectionId;
   }
 
@@ -36,7 +35,7 @@ public class NetworkReceive {
     return receivedBytes;
   }
 
-  public long getReceiveStartTimeInNanos() {
-    return receiveStartTimeInNanos;
+  public long getReceiveStartTimeInMs() {
+    return receiveStartTimeInMs;
   }
 }

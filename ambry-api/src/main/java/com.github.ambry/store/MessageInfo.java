@@ -17,7 +17,7 @@ public class MessageInfo {
   }
 
   public MessageInfo(StoreKey key, long size, boolean deleted) {
-    this(key, size, deleted, -1);
+    this(key, size, deleted, Utils.Infinite_Time);
   }
 
   public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
@@ -28,7 +28,7 @@ public class MessageInfo {
   }
 
   public MessageInfo(StoreKey key, long size) {
-    this(key, size, -1);
+    this(key, size, Utils.Infinite_Time);
   }
 
   public StoreKey getStoreKey() {

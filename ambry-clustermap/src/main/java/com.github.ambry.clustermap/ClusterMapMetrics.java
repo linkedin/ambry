@@ -35,6 +35,8 @@ class ClusterMapMetrics {
   public final Gauge<Long> partitionsReadWrite;
   public final Gauge<Long> partitionsReadOnly;
 
+  public final Gauge<Boolean> isMajorityReplicasDown;
+
   public final Gauge<Long> rawCapacityInBytes;
   public final Gauge<Long> allocatedRawCapacityInBytes;
   public final Gauge<Long> allocatedUsableCapacityInBytes;
@@ -150,6 +152,15 @@ class ClusterMapMetrics {
     registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadWritePartitions"), partitionsReadWrite);
     registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadOnlyPartitions"), partitionsReadOnly);
 
+    this.isMajorityReplicasDown = new Gauge<Boolean>() {
+      @Override
+      public Boolean getValue() {
+        return isMajorityOfReplicasDown();
+      }
+    };
+    registry.register(MetricRegistry.name(ClusterMap.class, "isMajorityReplicasDown"),
+        isMajorityReplicasDown);
+
     this.rawCapacityInBytes = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -211,6 +222,25 @@ class ClusterMapMetrics {
     };
     registry.register(MetricRegistry.name(ClusterMap.class, metricName), diskState);
     dataNodeStateList.add(diskState);
+  }
+
+  private boolean isMajorityOfReplicasDown() {
+    boolean isMajorityReplicasDown = false;
+    for (PartitionId partition : partitionLayout.getPartitions()) {
+      List<ReplicaId> replicas = partition.getReplicaIds();
+      int replicaCount = replicas.size();
+      int downReplicas = 0;
+      for (ReplicaId replicaId : replicas) {
+        if (replicaId.isDown()) {
+          downReplicas++;
+        }
+      }
+      if (downReplicas > replicaCount / 2) {
+        isMajorityReplicasDown = true;
+        break;
+      }
+    }
+    return isMajorityReplicasDown;
   }
 
   private long getHardwareLayoutVersion() {

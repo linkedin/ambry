@@ -228,6 +228,8 @@ public final class ReplicationManager {
   private final NotificationSystem notification;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateIntraDC;
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
+  private final StoreKeyFactory storeKeyFactory;
+  private final MetricRegistry metricRegistry;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -240,13 +242,15 @@ public final class ReplicationManager {
 
     try {
       this.replicationConfig = replicationConfig;
+      this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       this.replicationIntraDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfIntraDCReplicaThreads);
       this.replicationInterDCThreads =
           new ArrayList<ReplicaThread>(replicationConfig.replicationNumOfInterDCReplicaThreads);
       this.replicationMetrics =
-          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads);
+          new ReplicationMetrics(metricRegistry, replicationIntraDCThreads, replicationInterDCThreads,
+              clusterMap.getReplicaIds(dataNode));
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
       this.clusterMap = clusterMap;
@@ -257,6 +261,7 @@ public final class ReplicationManager {
       List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
+      this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
 
@@ -414,7 +419,7 @@ public final class ReplicationManager {
         replicaThread.shutdown();
       }
       // persist replica tokens
-      persistor.write();
+      persistor.write(true);
     } catch (Exception e) {
       logger.error("Error shutting down replica manager {}", e);
       throw new ReplicationException("Error shutting down replica manager");
@@ -451,7 +456,7 @@ public final class ReplicationManager {
     if (replicasToReplicate.size() == 0) {
       logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
       return;
-    } else  if (replicasToReplicate.size() < numberOfReplicaThreads) {
+    } else if (replicasToReplicate.size() < numberOfReplicaThreads) {
       logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
           numberOfReplicaThreads, replicasToReplicate.size());
       numberOfReplicaThreads = replicasToReplicate.size();
@@ -480,7 +485,8 @@ public final class ReplicationManager {
       }
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
-              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification);
+              correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
       replicaThreadList.add(replicaThread);
     }
   }
@@ -572,7 +578,7 @@ public final class ReplicationManager {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
-      persistor.write(mountPath);
+      persistor.write(mountPath, false);
     }
   }
 
@@ -581,7 +587,7 @@ public final class ReplicationManager {
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
 
-    private void write(String mountPath)
+    private void write(String mountPath, boolean shuttingDown)
         throws IOException, ReplicationException {
       long writeStartTimeMs = SystemTime.getInstance().milliseconds();
       File temp = new File(mountPath, replicaTokenFileName + ".tmp");
@@ -606,6 +612,9 @@ public final class ReplicationManager {
               writer.writeLong(remoteReplica.getTotalBytesReadFromLocalStore());
               writer.write(tokenToPersist.toBytes());
               remoteReplica.onTokenPersisted();
+              if (shuttingDown) {
+                logger.info("Persisting token {}", tokenToPersist);
+              }
             }
           }
         }
@@ -630,20 +639,21 @@ public final class ReplicationManager {
     /**
      * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
      * path to a file. The file is saved on the corresponding mount path
+     * @param shuttingDown indicates whether this is being called as part of shut down
      */
 
-    private void write()
+    private void write(boolean shuttingDown)
         throws IOException, ReplicationException {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        write(mountPath);
+        write(mountPath, shuttingDown);
       }
     }
 
     public void run() {
       try {
-        write();
+        write(false);
       } catch (Exception e) {
-        logger.info("Error while persisting the replica tokens {}", e);
+        logger.error("Error while persisting the replica tokens {}", e);
       }
     }
   }

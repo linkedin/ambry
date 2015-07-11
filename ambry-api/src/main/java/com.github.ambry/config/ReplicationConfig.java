@@ -71,6 +71,13 @@ public class ReplicationConfig {
   @Default("5242880")
   public final long replicationMaxLagForWaitTimeInBytes;
 
+  /**
+   * Whether message stream should be tested for validity so that only valid ones are considered during replication
+   */
+  @Config("replication.validate.message.stream")
+  @Default("false")
+  public final boolean replicationValidateMessageStream;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -91,5 +98,6 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
+    replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
   }
 }

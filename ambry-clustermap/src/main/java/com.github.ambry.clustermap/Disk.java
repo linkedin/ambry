@@ -16,8 +16,8 @@ import java.io.File;
  */
 public class Disk implements DiskId {
   // Hard-code disk capacity limits in bytes for validation
-  private static final long MinCapacityInBytes = 10 * 1024 * 1024 * 1024L;
-  private static final long MaxCapacityInBytes = 1024 * 1024 * 1024 * 1024L; // 1 PB
+  private static final long MinCapacityInBytes = 10L * 1024 * 1024 * 1024;
+  private static final long MaxCapacityInBytes = 10L * 1024 * 1024 * 1024 * 1024; // 10 TB
 
   private final DataNode dataNode;
   private final String mountPath;

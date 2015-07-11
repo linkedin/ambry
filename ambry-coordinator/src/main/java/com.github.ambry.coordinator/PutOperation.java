@@ -93,6 +93,11 @@ final public class PutOperation extends Operation {
       case Blob_Already_Exists:
         CoordinatorException e =
             new CoordinatorException("BlobId already exists.", CoordinatorError.UnexpectedInternalError);
+        if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenterName)) {
+          context.getCoordinatorMetrics().blobAlreadyExistsInLocalColoError.inc();
+        } else {
+          context.getCoordinatorMetrics().blobAlreadyExistsInRemoteColoError.inc();
+        }
         logger.error(context + " Put issued to BlobId " + blobId + " that already exists on ReplicaId " + replicaId, e);
         throw e;
       /*

@@ -10,10 +10,12 @@ target/
 *.iml
 *.ipr
 *.iws
+*.jar
 */.cache
 deploy
 *~
 .gradle
 */build/
 out/
+jars/
 

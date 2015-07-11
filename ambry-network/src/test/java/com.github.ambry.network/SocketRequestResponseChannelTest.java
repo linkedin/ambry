@@ -1,7 +1,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -47,12 +47,13 @@ public class SocketRequestResponseChannelTest {
     try {
       SocketRequestResponseChannel channel = new SocketRequestResponseChannel(2, 10);
       Integer key = new Integer(5);
+      String connectionId = "test_connectionId";
       ByteBuffer buffer = ByteBuffer.allocate(1000);
       new Random().nextBytes(buffer.array());
-      channel.sendRequest(new SocketServerRequest(0, key, new ByteBufferInputStream(buffer)));
+      channel.sendRequest(new SocketServerRequest(0, connectionId, new ByteBufferInputStream(buffer)));
       SocketServerRequest request = (SocketServerRequest) channel.receiveRequest();
       Assert.assertEquals(request.getProcessor(), 0);
-      Assert.assertEquals((Integer) request.getRequestKey(), key);
+      Assert.assertEquals(request.getConnectionId(), connectionId);
       InputStream stream = request.getInputStream();
       for (int i = 0; i < 1000; i++) {
         Assert.assertEquals((byte) stream.read(), buffer.array()[i]);

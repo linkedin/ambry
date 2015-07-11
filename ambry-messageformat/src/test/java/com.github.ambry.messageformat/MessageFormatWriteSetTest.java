@@ -38,6 +38,13 @@ public class MessageFormatWriteSetTest {
       channel.read(buf);
     }
 
+    @Override
+    public void writeFrom(ReadableByteChannel channel, long offset, long size)
+        throws IOException {
+      buf.position((int)offset);
+      channel.read(buf);
+    }
+
     public ByteBuffer getBuffer() {
       buf.flip();
       return buf;
@@ -48,17 +55,19 @@ public class MessageFormatWriteSetTest {
   public void writeSetTest()
       throws IOException {
     byte[] buf = new byte[2000];
-    MessageInfo info1 = new MessageInfo(new MessageFormatInputStreamTest.MockId("id1"), 1000, 123);
-    MessageInfo info2 = new MessageInfo(new MessageFormatInputStreamTest.MockId("id2"), 1000, 123);
+    MessageInfo info1 = new MessageInfo(new MockId("id1"), 1000, 123);
+    MessageInfo info2 = new MessageInfo(new MockId("id2"), 1000, 123);
     List<MessageInfo> infoList = new ArrayList<MessageInfo>();
     infoList.add(info1);
     infoList.add(info2);
+    ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
     MessageFormatWriteSet set =
-        new MessageFormatWriteSet(new ByteBufferInputStream(ByteBuffer.wrap(buf)), infoList, false);
+        new MessageFormatWriteSet(byteBufferInputStream, infoList, false);
     MockWrite write = new MockWrite(2000);
     long written = set.writeTo(write);
     Assert.assertEquals(written, 2000);
     Assert.assertEquals(write.getBuffer().limit(), 2000);
     Assert.assertArrayEquals(write.getBuffer().array(), buf);
   }
+
 }

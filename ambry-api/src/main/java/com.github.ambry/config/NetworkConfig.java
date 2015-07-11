@@ -45,14 +45,14 @@ public class NetworkConfig {
    * The SO_SNDBUFF buffer of the socket sever sockets
    */
   @Config("socket.send.buffer.bytes")
-  @Default("102400")
+  @Default("1048576")
   public final int socketSendBufferBytes;
 
   /**
    * The SO_RCVBUFF buffer of the socket sever sockets
    */
   @Config("socket.receive.buffer.bytes")
-  @Default("102400")
+  @Default("1048576")
   public final int socketReceiveBufferBytes;
 
   /**
@@ -68,8 +68,8 @@ public class NetworkConfig {
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
     port = verifiableProperties.getInt("port", 6667);
     hostName = verifiableProperties.getString("host.name", "localhost");
-    socketSendBufferBytes = verifiableProperties.getInt("socket.send.buffer.bytes", 100 * 1024);
-    socketReceiveBufferBytes = verifiableProperties.getInt("socket.receive.buffer.bytes", 100 * 1024);
+    socketSendBufferBytes = verifiableProperties.getInt("socket.send.buffer.bytes", 1 * 1024 * 1024);
+    socketReceiveBufferBytes = verifiableProperties.getInt("socket.receive.buffer.bytes", 1 * 1024 * 1024);
     socketRequestMaxBytes =
         verifiableProperties.getIntInRange("socket.request.max.bytes", 100 * 1024 * 1024, 1, Integer.MAX_VALUE);
     queuedMaxRequests = verifiableProperties.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);

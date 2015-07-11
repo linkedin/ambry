@@ -3,6 +3,7 @@ package com.github.ambry.tools.perf;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.store.FileSpan;
 import com.github.ambry.store.IndexEntry;
@@ -36,7 +37,7 @@ class BlobIndexMetrics extends PersistentIndex {
       AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
       StoreKeyFactory factory)
       throws StoreException {
-    super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(),
+    super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
         new StoreMetrics(datadir, new MetricRegistry()));
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);

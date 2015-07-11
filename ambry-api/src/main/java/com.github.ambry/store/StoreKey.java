@@ -23,4 +23,10 @@ public abstract class StoreKey implements Comparable<StoreKey> {
    * @return the key in String form
    */
   public abstract String getID();
+
+  /**
+   * Get a long form of the key for printing.
+   * @return the long form of the key
+   */
+  public abstract String getLongForm();
 }

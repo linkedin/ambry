@@ -33,6 +33,13 @@ public class Utils {
   public static final long Infinite_Time = -1;
 
   // The read*String methods assume that the underlying stream is blocking
+
+  /**
+   * Reads a String whose length is a short from the given input stream
+   * @param input The input stream from which to read the String from
+   * @return The String read from the stream
+   * @throws IOException
+   */
   public static String readShortString(DataInputStream input)
       throws IOException {
     Short size = input.readShort();
@@ -54,6 +61,12 @@ public class Utils {
     return new String(bytes, "UTF-8");
   }
 
+  /**
+   * Reads a String whose length is an int from the given input stream
+   * @param input The input stream from which to read the String from
+   * @return The String read from the stream
+   * @throws IOException
+   */
   public static String readIntString(DataInputStream input)
       throws IOException {
     int size = input.readInt();
@@ -75,6 +88,12 @@ public class Utils {
     return new String(bytes, "UTF-8");
   }
 
+  /**
+   *
+   * @param input
+   * @return
+   * @throws IOException
+   */
   public static ByteBuffer readIntBuffer(DataInputStream input)
       throws IOException {
     int size = input.readInt();
@@ -96,6 +115,12 @@ public class Utils {
     return buffer;
   }
 
+  /**
+   *
+   * @param input
+   * @return
+   * @throws IOException
+   */
   public static ByteBuffer readShortBuffer(DataInputStream input)
       throws IOException {
     short size = input.readShort();
@@ -177,6 +202,10 @@ public class Utils {
 
   /**
    * Open a channel for the given file
+   * @param file
+   * @param mutable
+   * @return
+   * @throws FileNotFoundException
    */
   public static FileChannel openChannel(File file, boolean mutable)
       throws FileNotFoundException {
@@ -189,6 +218,12 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className.
+   * @param className
+   * @param <T>
+   * @return
+   * @throws ClassNotFoundException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
    */
   public static <T> T getObj(String className)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException {
@@ -197,6 +232,15 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with an arg
+   * @param className
+   * @param arg
+   * @param <T>
+   * @return
+   * @throws ClassNotFoundException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
+   * @throws NoSuchMethodException
+   * @throws InvocationTargetException
    */
   public static <T> T getObj(String className, Object arg)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
@@ -211,6 +255,16 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with two args
+   * @param className
+   * @param arg1
+   * @param arg2
+   * @param <T>
+   * @return
+   * @throws ClassNotFoundException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
+   * @throws NoSuchMethodException
+   * @throws InvocationTargetException
    */
   public static <T> T getObj(String className, Object arg1, Object arg2)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
@@ -226,6 +280,17 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with three args
+   * @param className
+   * @param arg1
+   * @param arg2
+   * @param arg3
+   * @param <T>
+   * @return
+   * @throws ClassNotFoundException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
+   * @throws NoSuchMethodException
+   * @throws InvocationTargetException
    */
   public static <T> T getObj(String className, Object arg1, Object arg2, Object arg3)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
@@ -242,6 +307,8 @@ public class Utils {
 
   /**
    * Compute the hash code for the given items
+   * @param items
+   * @return
    */
   public static int hashcode(Object[] items) {
     if (items == null) {
@@ -451,5 +518,44 @@ public class Utils {
       return Infinite_Time;
     }
     return epochTimeInMs + (deltaTimeInSeconds * Time.MsPerSec);
+  }
+
+  /**
+   * Read "size" length of bytes from stream to a byte array. If "size" length of bytes can't be read because the end of
+   * the stream has been reached, IOException is thrown. This method blocks until input data is available, the end of
+   * the stream is detected, or an exception is thrown.
+   * @param stream from which data to be read from
+   * @param size max length of bytes to be read from the stream.
+   * @return byte[] which has the data that is read from the stream
+   * @throws IOException
+   */
+  public static byte[] readBytesFromStream(DataInputStream stream, int size)
+      throws IOException {
+    byte[] outputBytes = new byte[size];
+    readBytesFromStream(stream, outputBytes, 0, size);
+    return outputBytes;
+  }
+
+  /**
+   * Read "size" length of bytes from stream to a byte array starting at the given offset in the byte[]. If "size"
+   * length of bytes can't be read because the end of the stream has been reached, IOException is thrown. This method
+   * blocks until input data is available, the end of the stream is detected, or an exception is thrown.
+   * @param stream from which data to be read from
+   * @param data byte[] into which the data has to be written
+   * @param offset starting offset in the byte[] at which the data has to be written to
+   * @param size length of bytes to be read from the stream
+   * @throws IOException
+   */
+  public static void readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
+      throws IOException {
+    int read = 0;
+    while (read < size) {
+      int sizeRead = stream.read(data, offset, size - read);
+      if (sizeRead == 0 || sizeRead == -1) {
+        throw new IOException("Total size read " + read + " is less than the size to be read " + size);
+      }
+      read += sizeRead;
+      offset += sizeRead;
+    }
   }
 }
