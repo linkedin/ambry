@@ -59,35 +59,34 @@ public class TestUtils {
     return jsonArray;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, HardwareState hardwareState, JSONArray disks)
+  public static JSONObject getJsonDataNode(String hostname, int port, HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
-    jsonObject.put("sslport", sslPort);
     jsonObject.put("hardwareState", hardwareState);
     jsonObject.put("disks", disks);
     return jsonObject;
   }
 
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
-  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
+  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i , hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, hardwareState, disks));
     }
     return jsonArray;
   }
 
   // Does not increment basePort for each data node...
-  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
+  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -244,9 +243,9 @@ public class TestUtils {
       return getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
     }
 
-    protected JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks)
+    protected JSONArray getDataNodes(int basePort, JSONArray disks)
         throws JSONException {
-      return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE, disks);
+      return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, HardwareState.AVAILABLE, disks);
     }
 
     protected JSONArray getDatacenters()
@@ -255,10 +254,9 @@ public class TestUtils {
       List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
       int curBasePort = basePort;
-      int sslPort = curBasePort + 1000;
       for (int i = 0; i < datacenterCount; i++) {
         names.add(i, "DC" + i);
-        dataNodes.add(i, getDataNodes(curBasePort, sslPort, getDisks()));
+        dataNodes.add(i, getDataNodes(curBasePort, getDisks()));
         curBasePort += dataNodeCount;
       }
 

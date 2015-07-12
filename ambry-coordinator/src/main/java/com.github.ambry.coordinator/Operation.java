@@ -15,9 +15,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -49,11 +47,9 @@ public abstract class Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
   protected CoordinatorError currentError;
   protected CoordinatorError resolvedError;
-  protected ArrayList<String> sslEnabledColos;
 
   public Operation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy,
-      ArrayList<String> sslEnabledColos) {
+      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -66,7 +62,6 @@ public abstract class Operation {
 
     this.responseQueue = new ArrayBlockingQueue<OperationResponse>(operationPolicy.getReplicaIdCount());
     this.requestsInFlight = new HashSet<ReplicaId>();
-    this.sslEnabledColos = sslEnabledColos;
   }
 
   protected abstract OperationRequest makeOperationRequest(ReplicaId replicaId);
@@ -245,19 +240,17 @@ abstract class OperationRequest implements Runnable {
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
   private ResponseHandler responseHandler;
-  private boolean sslEnabled;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected OperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, boolean sslEnabled) {
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
-    this.sslEnabled = sslEnabled;
     this.responseHandler = context.getResponseHandler();
   }
 
@@ -280,16 +273,9 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
-      if(!sslEnabled) {
-        connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                context.getConnectionPoolCheckoutTimeout());
-      }
-      else{
-        connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
-                context.getConnectionPoolCheckoutTimeout());
-      }
+      connectedChannel = connectionPool
+          .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
+              context.getConnectionPoolCheckoutTimeout());
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
       logger.trace("{} {} receiving response", context, replicaId);

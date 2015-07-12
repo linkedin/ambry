@@ -8,7 +8,6 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
-import java.util.ArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,24 +26,17 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobUserMetadataOperation(String datacenterName, ConnectionPool connectionPool,
-      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap,
-      ArrayList<String> sslEnabledColos)
+      ExecutorService requesterPool, OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobUserMetadata, sslEnabledColos);
+        MessageFormatFlags.BlobUserMetadata);
     this.userMetadata = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    if(!sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-          makeGetRequest(), clusterMap, this, false);
-    }
-    else {
-      return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-          makeGetRequest(), clusterMap, this, true);
-    }
+    return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
+        makeGetRequest(), clusterMap, this);
   }
 
   public ByteBuffer getUserMetadata()
@@ -71,9 +63,8 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
 
   protected GetBlobUserMetadataOperationRequest(ConnectionPool connectionPool,
       BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
-      RequestOrResponse request, ClusterMap clusterMap, GetBlobUserMetadataOperation getBlobUserMetadataOperation,
-      boolean sslEnabled) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap, sslEnabled);
+      RequestOrResponse request, ClusterMap clusterMap, GetBlobUserMetadataOperation getBlobUserMetadataOperation) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobUserMetadataOperation = getBlobUserMetadataOperation;
     this.logger.trace("Created GetBlobUserMetadataOperationRequest for " + replicaId);
   }

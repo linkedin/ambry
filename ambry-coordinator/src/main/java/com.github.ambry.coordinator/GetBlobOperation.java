@@ -9,7 +9,6 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
-import java.util.ArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,23 +26,17 @@ final public class GetBlobOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, ArrayList<String> sslEnabledColos)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.Blob, sslEnabledColos);
+        MessageFormatFlags.Blob);
     this.blobOutput = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    if(!sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new GetBlobOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, makeGetRequest(),
-        clusterMap, this, false);
-    }
-    else{
-      return new GetBlobOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, makeGetRequest(),
-          clusterMap, this, true);
-    }
+    return new GetBlobOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, makeGetRequest(),
+        clusterMap, this);
   }
 
   public BlobOutput getBlobOutput()
@@ -70,8 +63,8 @@ final class GetBlobOperationRequest extends GetOperationRequest {
 
   protected GetBlobOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
       OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap,
-      GetBlobOperation getBlobOperation, boolean sslEnabled) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap, sslEnabled);
+      GetBlobOperation getBlobOperation) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobOperation = getBlobOperation;
     logger.trace("Created GetBlobOperationRequest for " + replicaId);
   }

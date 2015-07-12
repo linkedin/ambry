@@ -3,7 +3,6 @@ package com.github.ambry.replication;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
-import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -231,7 +230,6 @@ public final class ReplicationManager {
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<String> sslEnabledColos;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -266,10 +264,6 @@ public final class ReplicationManager {
       this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      this.sslEnabledColos = new ArrayList<String>();
-      String sslEnabledColosString = replicationConfig.replicationsslEnabledColos;
-      String[] sslEnabledColosArray = sslEnabledColosString.split(",");
-      this.sslEnabledColos.addAll(Arrays.asList(sslEnabledColosArray));
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -492,7 +486,7 @@ public final class ReplicationManager {
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry, sslEnabledColos);
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
       replicaThreadList.add(replicaThread);
     }
   }

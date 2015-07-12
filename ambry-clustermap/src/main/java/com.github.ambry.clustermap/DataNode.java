@@ -25,7 +25,6 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
-  private final int sslPort;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -41,7 +40,6 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.sslPort = jsonObject.getInt("sslport");
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
           .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
@@ -91,11 +89,6 @@ public class DataNode extends DataNodeId {
   @Override
   public int getPort() {
     return port;
-  }
-
-  @Override
-  public int getSSLPort() {
-    return sslPort;
   }
 
   @Override
@@ -154,17 +147,11 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validatePorts() {
+  protected void validatePort() {
     if (port < MinPort) {
       throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
     } else if (port > MaxPort) {
       throw new IllegalStateException("Invalid port: " + port + " is less than " + MaxPort);
-    }
-
-    if (sslPort < MinPort) {
-      throw new IllegalStateException("Invalid sslport: " + sslPort + " is less than " + MinPort);
-    } else if (sslPort > MaxPort) {
-      throw new IllegalStateException("Invalid sslport: " + sslPort + " is less than " + MaxPort);
     }
   }
 
@@ -172,7 +159,7 @@ public class DataNode extends DataNodeId {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostname();
-    validatePorts();
+    validatePort();
     for (Disk disk : disks) {
       disk.validate();
     }
@@ -181,7 +168,7 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port).put("sslport", sslPort)
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port)
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
@@ -193,7 +180,6 @@ public class DataNode extends DataNodeId {
   @Override
   public String toString() {
     return "DataNode[" + getHostname() + ":" + getPort() + "]";
-    // should sslport be added to toString() will all the metrics be affected?
   }
 
   @Override
@@ -210,7 +196,6 @@ public class DataNode extends DataNodeId {
     if (port != dataNode.port) {
       return false;
     }
-
     return hostname.equals(dataNode.hostname);
   }
 
