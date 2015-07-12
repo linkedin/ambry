@@ -1638,6 +1638,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public int getSSLPort() {
+      return 0;
+    }
+
+    @Override
     public HardwareState getState() {
       throw new IllegalStateException("Should not be invoked.");
     }

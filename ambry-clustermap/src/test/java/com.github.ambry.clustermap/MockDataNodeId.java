@@ -8,12 +8,14 @@ import java.util.List;
 
 public class MockDataNodeId extends DataNodeId {
   int port;
+  int sslPort;
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
 
-  public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
+  public MockDataNodeId(int port, int sslPort, List<String> mountPaths, String dataCenter) {
     this.port = port;
+    this.sslPort = sslPort;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
   }
@@ -26,6 +28,11 @@ public class MockDataNodeId extends DataNodeId {
   @Override
   public int getPort() {
     return port;
+  }
+
+  @Override
+  public int getSSLPort() {
+    return sslPort;
   }
 
   @Override
