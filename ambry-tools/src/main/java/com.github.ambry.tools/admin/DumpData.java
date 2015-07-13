@@ -279,7 +279,7 @@ public class DumpData {
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
-      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, IndexStats blobStats, boolean excludeMiscLogging) {
+      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean excludeMiscLogging) {
     ConcurrentHashMap<String, IndexRecord> blobIdToMessageMapPerIndexFile =
         new ConcurrentHashMap<String, IndexRecord>();
     if (!excludeMiscLogging) {
@@ -293,9 +293,9 @@ public class DumpData {
         if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
           logOutput(indexRecord.getMessage());
           if (indexRecord.isDeleted() || indexRecord.isExpired()) {
-            blobStats.incrementTotalDeleteRecords();
+            indexStats.incrementTotalDeleteRecords();
           } else {
-            blobStats.incrementTotalPutRecords();
+            indexStats.incrementTotalPutRecords();
           }
         }
       } else {
@@ -303,9 +303,9 @@ public class DumpData {
           BlobStatus mapValue = blobIdToStatusMap.get(key);
           if (indexRecord.isDeleted() || indexRecord.isExpired()) {
             if (mapValue.getAvailable().contains(replica)) {
-              blobStats.incrementTotalDeleteRecords();
+              indexStats.incrementTotalDeleteRecords();
             } else if (mapValue.getDeletedOrExpired().contains(replica)) {
-              blobStats.incrementTotalDuplicateDeleteRecords();
+              indexStats.incrementTotalDuplicateDeleteRecords();
             }
             mapValue.addDeletedOrExpired(replica);
           } else {
@@ -313,13 +313,13 @@ public class DumpData {
               if (!excludeMiscLogging) {
                 logOutput("Put Record found after delete record for " + replica);
               }
-              blobStats.incrementTotalPutAfterDeleteRecords();
+              indexStats.incrementTotalPutAfterDeleteRecords();
             }
             if (mapValue.getAvailable().contains(replica)) {
               if (!excludeMiscLogging) {
                 logOutput("Duplicate Put record found for " + replica);
               }
-              blobStats.incrementTotalDuplicatePutRecords();
+              indexStats.incrementTotalDuplicatePutRecords();
             }
             mapValue.addAvailable(replica);
           }
@@ -331,22 +331,22 @@ public class DumpData {
             if (!excludeMiscLogging) {
               logOutput("Delete record found before Put record for " + key);
             }
-            blobStats.incrementTotalDeleteBeforePutRecords();
+            indexStats.incrementTotalDeleteBeforePutRecords();
           } else {
-            blobStats.incrementTotalPutRecords();
+            indexStats.incrementTotalPutRecords();
           }
         }
       }
     }
     if (!excludeMiscLogging) {
-      logOutput("Total Put Records for index file " + indexFileToDump + " " + blobStats.getTotalPutRecords().get());
+      logOutput("Total Put Records for index file " + indexFileToDump + " " + indexStats.getTotalPutRecords().get());
       logOutput(
-          "Total Delete Records for index file " + indexFileToDump + " " + blobStats.getTotalDeleteRecords().get());
-      logOutput("Total Duplicate Put Records for index file " + indexFileToDump + " " + blobStats
+          "Total Delete Records for index file " + indexFileToDump + " " + indexStats.getTotalDeleteRecords().get());
+      logOutput("Total Duplicate Put Records for index file " + indexFileToDump + " " + indexStats
           .getTotalDuplicatePutRecords().get());
-      logOutput("Total Delete before Put Records for index file " + indexFileToDump + " " + blobStats
+      logOutput("Total Delete before Put Records for index file " + indexFileToDump + " " + indexStats
           .getTotalDeleteBeforePutRecords().get());
-      logOutput("Total Put after Delete Records for index file " + indexFileToDump + " " + blobStats
+      logOutput("Total Put after Delete Records for index file " + indexFileToDump + " " + indexStats
           .getTotalPutAfterDeleteRecords().get());
     }
     return blobsProcessed;
@@ -357,13 +357,13 @@ public class DumpData {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
     logOutput("Root directory for replica : " + replicaRootDirectory);
-    IndexStats blobStats = new IndexStats();
+    IndexStats indexStats = new IndexStats();
     ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
 
     for (File indexFile : replicaDirectory.listFiles()) {
       logOutput("Dumping index " + indexFile + " for replica " + replicaDirectory.getName());
       totalKeysProcessed +=
-          dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, blobIdToStatusMap, blobStats,
+          dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, blobIdToStatusMap, indexStats,
               excludeMiscLogging);
     }
     long totalActiveRecords = 0;
@@ -375,13 +375,13 @@ public class DumpData {
       }
     }
     logOutput("Total Keys processed for replica " + replicaDirectory.getName() + " : " + totalKeysProcessed);
-    logOutput("Total Put Records " + blobStats.getTotalPutRecords().get());
-    logOutput("Total Delete Records " + blobStats.getTotalDeleteRecords().get());
+    logOutput("Total Put Records " + indexStats.getTotalPutRecords().get());
+    logOutput("Total Delete Records " + indexStats.getTotalDeleteRecords().get());
     logOutput("Total Active Records " + totalActiveRecords);
-    logOutput("Total Duplicate Put Records " + blobStats.getTotalDuplicatePutRecords().get());
-    logOutput("Total Delete before Put Records " + blobStats.getTotalDeleteBeforePutRecords().get());
-    logOutput("Total Put after Delete Records " + blobStats.getTotalPutAfterDeleteRecords().get());
-    logOutput("Total Duplicate Delete Records " + blobStats.getTotalDuplicateDeleteRecords().get());
+    logOutput("Total Duplicate Put Records " + indexStats.getTotalDuplicatePutRecords().get());
+    logOutput("Total Delete before Put Records " + indexStats.getTotalDeleteBeforePutRecords().get());
+    logOutput("Total Put after Delete Records " + indexStats.getTotalPutAfterDeleteRecords().get());
+    logOutput("Total Duplicate Delete Records " + indexStats.getTotalDuplicateDeleteRecords().get());
   }
 
   public void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList, boolean excludeMiscLogging) {
