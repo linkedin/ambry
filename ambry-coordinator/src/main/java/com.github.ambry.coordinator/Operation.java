@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -280,15 +279,23 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
-      if(!sslEnabled) {
+      if (!sslEnabled) {
+        context.getCoordinatorMetrics().plainTextConnectionRequestRate.mark();
         connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                 context.getConnectionPoolCheckoutTimeout());
-      }
-      else{
+      } else {
+        // interim logging to track any SSL requests
+        logger.error("No SSL connections should be established for replica " + replicaId.getDataNodeId());
+        context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
+        // interim solution is to contact plain text port until Ambry server starts listening to ssl port
         connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
                 context.getConnectionPoolCheckoutTimeout());
+        // below line will be replaced with above line once ambry server listens to ssl port
+        /* connectedChannel = connectionPool
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
+                context.getConnectionPoolCheckoutTimeout()); */
       }
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);

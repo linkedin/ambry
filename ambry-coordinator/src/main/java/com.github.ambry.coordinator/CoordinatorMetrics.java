@@ -31,6 +31,9 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
+  public final Meter plainTextConnectionRequestRate;
+  public final Meter sslConnectionsRequestRate;
+
   public final Counter blobAlreadyExistsInLocalColoError;
   public final Counter blobAlreadyExistsInRemoteColoError;
 
@@ -116,12 +119,15 @@ public class CoordinatorMetrics {
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "successfulCrossColoProxyCallCount"));
     totalCrossColoProxyCallCount =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "totalCrossColoProxyCallCount"));
-    this.crossColoCallsEnabled = new Gauge<Integer>() {
+    crossColoCallsEnabled = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
         return (crossDCProxyCallsEnabled == true ? 1 : 0);
       }
     };
+    plainTextConnectionRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionRequestRate"));
+    sslConnectionsRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "sslConnectionsRequestRate"));
+
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.
