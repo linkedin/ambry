@@ -37,13 +37,12 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    if(!sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-          makeGetRequest(), clusterMap, this, false);
-    }
-    else {
+    if (sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
       return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
           makeGetRequest(), clusterMap, this, true);
+    } else {
+      return new GetBlobUserMetadataOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
+          makeGetRequest(), clusterMap, this, false);
     }
   }
 

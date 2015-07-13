@@ -49,11 +49,12 @@ final public class DeleteOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     DeleteRequest deleteRequest = new DeleteRequest(context.getCorrelationId(), context.getClientId(), blobId);
-    if(!sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest, false);
-    }
-    else {
+    if (sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
       return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest, true);
+    } else {
+
+      return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest,
+          false);
     }
   }
 

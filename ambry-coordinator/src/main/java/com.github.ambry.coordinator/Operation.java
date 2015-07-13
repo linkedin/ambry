@@ -279,12 +279,7 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
-      if (!sslEnabled) {
-        context.getCoordinatorMetrics().plainTextConnectionRequestRate.mark();
-        connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                context.getConnectionPoolCheckoutTimeout());
-      } else {
+      if (sslEnabled) {
         // interim logging to track any SSL requests
         logger.error("No SSL connections should be established for replica " + replicaId.getDataNodeId());
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
@@ -296,6 +291,13 @@ abstract class OperationRequest implements Runnable {
         /* connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
                 context.getConnectionPoolCheckoutTimeout()); */
+
+      } else {
+
+        context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
+        connectedChannel = connectionPool
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
+                context.getConnectionPoolCheckoutTimeout());
       }
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);

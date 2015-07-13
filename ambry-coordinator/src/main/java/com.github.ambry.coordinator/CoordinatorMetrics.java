@@ -31,7 +31,7 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
-  public final Meter plainTextConnectionRequestRate;
+  public final Meter plainTextConnectionsRequestRate;
   public final Meter sslConnectionsRequestRate;
 
   public final Counter blobAlreadyExistsInLocalColoError;
@@ -125,7 +125,7 @@ public class CoordinatorMetrics {
         return (crossDCProxyCallsEnabled == true ? 1 : 0);
       }
     };
-    plainTextConnectionRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionRequestRate"));
+    plainTextConnectionsRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionsRequestRate"));
     sslConnectionsRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "sslConnectionsRequestRate"));
 
 
