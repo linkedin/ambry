@@ -194,22 +194,22 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       throws IOException, InterruptedException {
     DumpData dumpData = new DumpData(outFile, fileWriter, map);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
-    IndexStats blobStats = new IndexStats();
+    IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
       Thread thread = new Thread(
           new ReplicaProcessorForBlobs(replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
-              countDownLatch, blobStats));
+              countDownLatch, indexStats));
       thread.start();
       thread.join();
     }
     countDownLatch.await();
     logOutput("Total Keys Processed " + totalKeysProcessed.get());
-    logOutput("Total Put Records " + blobStats.getTotalPutRecords().get());
-    logOutput("Total Delete Records " + blobStats.getTotalDeleteRecords().get());
-    logOutput("Total Duplicate Put Records " + blobStats.getTotalDuplicatePutRecords().get());
-    logOutput("Total Delete before Put Records " + blobStats.getTotalDeleteBeforePutRecords().get());
-    logOutput("Total Put after Delete Records " + blobStats.getTotalPutAfterDeleteRecords().get());
-    logOutput("Total Duplicate Delete Records " + blobStats.getTotalDuplicateDeleteRecords().get());
+    logOutput("Total Put Records " + indexStats.getTotalPutRecords().get());
+    logOutput("Total Delete Records " + indexStats.getTotalDeleteRecords().get());
+    logOutput("Total Duplicate Put Records " + indexStats.getTotalDuplicatePutRecords().get());
+    logOutput("Total Delete before Put Records " + indexStats.getTotalDeleteBeforePutRecords().get());
+    logOutput("Total Put after Delete Records " + indexStats.getTotalPutAfterDeleteRecords().get());
+    logOutput("Total Duplicate Delete Records " + indexStats.getTotalDuplicateDeleteRecords().get());
   }
 
   private boolean populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap,
@@ -263,18 +263,18 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
     AtomicLong totalKeysProcessed;
     DumpData dumpData;
     CountDownLatch countDownLatch;
-    IndexStats blobStats;
+    IndexStats indexStats;
 
     public ReplicaProcessorForBlobs(File rootDirectory, ArrayList<String> replicaList,
         ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
-        CountDownLatch countDownLatch, IndexStats blobStats) {
+        CountDownLatch countDownLatch, IndexStats indexStats) {
       this.rootDirectory = rootDirectory;
       this.replicaList = replicaList;
       this.blobIdToStatusMap = blobIdToStatusMap;
       this.totalKeysProcessed = totalKeysProcessed;
       this.dumpData = dumpData;
       this.countDownLatch = countDownLatch;
-      this.blobStats = blobStats;
+      this.indexStats = indexStats;
     }
 
     public void run() {
@@ -283,7 +283,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       for (File indexFile : indexFiles) {
         keysProcessedforReplica += dumpData
             .dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(), blobIdToStatusMap,
-                blobStats, true);
+                indexStats, true);
       }
       logOutput("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
       totalKeysProcessed.addAndGet(keysProcessedforReplica);
