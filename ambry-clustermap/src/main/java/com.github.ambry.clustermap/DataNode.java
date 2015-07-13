@@ -158,13 +158,13 @@ public class DataNode extends DataNodeId {
     if (port < MinPort) {
       throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
     } else if (port > MaxPort) {
-      throw new IllegalStateException("Invalid port: " + port + " is less than " + MaxPort);
+      throw new IllegalStateException("Invalid port: " + port + " is greater than " + MaxPort);
     }
 
     if (sslPort < MinPort) {
       throw new IllegalStateException("Invalid sslport: " + sslPort + " is less than " + MinPort);
     } else if (sslPort > MaxPort) {
-      throw new IllegalStateException("Invalid sslport: " + sslPort + " is less than " + MaxPort);
+      throw new IllegalStateException("Invalid sslport: " + sslPort + " is greater than " + MaxPort);
     }
   }
 

@@ -114,11 +114,21 @@ public class DataNodeTest {
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too small)
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, -1, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, 7666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // Bad ssl port (too small)
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, -1, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too big)
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, 10*1000, HardwareState.AVAILABLE, getDisks());
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, 7666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // Bad ssl port (too big)
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 100 * 1000, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 

@@ -71,6 +71,6 @@ public class CoordinatorConfig {
     this.connectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
-    this.sslEnabledColos = verifiableProperties.getString("coordinator.ssl.enbaled.colos", "");
+    this.sslEnabledColos = verifiableProperties.getString("coordinator.ssl.enabled.colos", "");
   }
 }

@@ -82,7 +82,7 @@ public class ReplicationConfig {
    * List of colos against which only SSL should be spoken
    */
   @Config("replication.ssl.enabled.colos")
-  public final String replicationsslEnabledColos;
+  public final String replicationSslEnabledColos;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -105,6 +105,6 @@ public class ReplicationConfig {
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
-    replicationsslEnabledColos = verifiableProperties.getString("replication.ssl.enabled.colos", "");
+    replicationSslEnabledColos = verifiableProperties.getString("replication.ssl.enabled.colos", "");
   }
 }
