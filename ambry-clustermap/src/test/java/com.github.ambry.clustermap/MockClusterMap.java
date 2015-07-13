@@ -25,17 +25,17 @@ public class MockClusterMap implements ClusterMap {
       throws IOException {
 
     // create 3 nodes with each having 3 mount paths
-    MockDataNodeId dataNodeId1 = createDataNode(64422, "DC1");
-    MockDataNodeId dataNodeId2 = createDataNode(64423, "DC1");
-    MockDataNodeId dataNodeId3 = createDataNode(64424, "DC1");
+    MockDataNodeId dataNodeId1 = createDataNode(64422, 65422, "DC1");
+    MockDataNodeId dataNodeId2 = createDataNode(64423, 65423, "DC1");
+    MockDataNodeId dataNodeId3 = createDataNode(64424, 65424, "DC1");
 
-    MockDataNodeId dataNodeId4 = createDataNode(64425, "DC2");
-    MockDataNodeId dataNodeId5 = createDataNode(64426, "DC2");
-    MockDataNodeId dataNodeId6 = createDataNode(64427, "DC2");
+    MockDataNodeId dataNodeId4 = createDataNode(64425, 65425, "DC2");
+    MockDataNodeId dataNodeId5 = createDataNode(64426, 65426, "DC2");
+    MockDataNodeId dataNodeId6 = createDataNode(64427, 65427, "DC2");
 
-    MockDataNodeId dataNodeId7 = createDataNode(64428, "DC3");
-    MockDataNodeId dataNodeId8 = createDataNode(64429, "DC3");
-    MockDataNodeId dataNodeId9 = createDataNode(64430, "DC3");
+    MockDataNodeId dataNodeId7 = createDataNode(64428, 65428, "DC3");
+    MockDataNodeId dataNodeId8 = createDataNode(64429, 65429, "DC3");
+    MockDataNodeId dataNodeId9 = createDataNode(64430, 65430, "DC3");
 
     dataNodes = new ArrayList<MockDataNodeId>(9);
     dataNodes.add(dataNodeId1);
@@ -60,7 +60,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private MockDataNodeId createDataNode(int port, String datacenter)
+  private MockDataNodeId createDataNode(int port, int sslPort, String datacenter)
       throws IOException {
     File f = null;
     try {
@@ -80,7 +80,7 @@ public class MockClusterMap implements ClusterMap {
       mountPaths.add(mountPath1);
       mountPaths.add(mountPath2);
       mountPaths.add(mountPath3);
-      MockDataNodeId dataNode = new MockDataNodeId(port, mountPaths, datacenter);
+      MockDataNodeId dataNode = new MockDataNodeId(port, sslPort, mountPaths, datacenter);
       return dataNode;
     } finally {
       if (f != null) {

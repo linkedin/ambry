@@ -16,6 +16,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +55,7 @@ public class AmbryCoordinator implements Coordinator {
   private ConnectionPool connectionPool;
   private final Random randomForPartitionSelection;
   private AtomicBoolean crossDCProxyCallsEnabled;
+  private ArrayList<String> sslEnabledColos;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -88,6 +91,10 @@ public class AmbryCoordinator implements Coordinator {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
             "Coordinator cannot start.");
       }
+      sslEnabledColos = new ArrayList<String>();
+      String sslEnabledColosString = coordinatorConfig.sslEnabledColos;
+      String[] sslEnabledColosArray = sslEnabledColosString.split(",");
+      sslEnabledColos.addAll(Arrays.asList(sslEnabledColosArray));
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
@@ -199,7 +206,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = new BlobId(partitionId);
       PutOperation putOperation =
           new PutOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, blobProperties, userMetadata, blobStream);
+              operationTimeoutMs, blobProperties, userMetadata, blobStream, sslEnabledColos);
       putOperation.execute();
 
       notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
@@ -223,7 +230,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       DeleteOperation deleteOperation =
           new DeleteOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs);
+              operationTimeoutMs, sslEnabledColos);
       deleteOperation.execute();
       notificationSystem.onBlobDeleted(blobIdString);
     } catch (CoordinatorException e) {
@@ -247,7 +254,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobPropertiesOperation gbpo =
           new GetBlobPropertiesOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, sslEnabledColos);
       gbpo.execute();
       return gbpo.getBlobProperties();
     } catch (CoordinatorException e) {
@@ -270,7 +277,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobUserMetadataOperation gumo =
           new GetBlobUserMetadataOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, sslEnabledColos);
       gumo.execute();
       return gumo.getUserMetadata();
     } catch (CoordinatorException e) {
@@ -294,7 +301,7 @@ public class AmbryCoordinator implements Coordinator {
       BlobId blobId = getBlobIdFromString(blobIdString);
       GetBlobOperation gbdo =
           new GetBlobOperation(datacenterName, connectionPool, requesterPool, getOperationContext(), blobId,
-              operationTimeoutMs, clusterMap);
+              operationTimeoutMs, clusterMap, sslEnabledColos);
       gbdo.execute();
 
       return gbdo.getBlobOutput();

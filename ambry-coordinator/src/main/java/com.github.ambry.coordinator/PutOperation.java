@@ -10,6 +10,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,10 +40,10 @@ final public class PutOperation extends Operation {
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream)
+      ByteBuffer userMetadata, InputStream blobStream, ArrayList<String> sslEnabledColos)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
+        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc), sslEnabledColos);
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
@@ -65,7 +66,12 @@ final public class PutOperation extends Operation {
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
         userMetadata.duplicate(), materializedBlobStream.duplicate());
-    return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
+    if(!sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
+      return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest, false);
+    }
+    else{
+      return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest, true);
+    }
   }
 
   @Override
@@ -128,8 +134,8 @@ final class PutOperationRequest extends OperationRequest {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected PutOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request);
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, boolean sslEnabled) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request, sslEnabled);
     logger.trace("Created PutOperationRequest for " + replicaId);
   }
 
