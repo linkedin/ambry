@@ -35,7 +35,7 @@ class EchoHandler {
       throws RestServiceException {
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.isFirstPart()) {
-      logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.debug("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.echoRate.mark();
       long startTime = System.currentTimeMillis();
       try {
@@ -43,12 +43,13 @@ class EchoHandler {
         responseHandler.setContentType("application/json");
         responseHandler.addToResponseBody(echoStr.getBytes(), true);
         responseHandler.flush();
+        logger.debug("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
       } finally {
         adminMetrics.echoTimeInMs.update(System.currentTimeMillis() - startTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
-      logger.trace("Finished handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.debug("Echo request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
 
@@ -62,18 +63,19 @@ class EchoHandler {
       throws RestServiceException {
     Map<String, List<String>> parameters = restRequestMetadata.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
+      // TODO: opportunity for batch get here.
+      String text = parameters.get(TEXT_KEY).get(0);
+      logger.debug("Text to echo {} for request {}", text, restRequestMetadata.getUri());
       try {
-        // TODO: opportunity for batch get here.
-        String text = parameters.get(TEXT_KEY).get(0);
         return packageResult(text);
       } catch (JSONException e) {
-        logger.error("Exception during response construction for echo GET - ", e);
+        logger.error("Exception during response construction for echo GET. Echo text {}", e, text);
         adminMetrics.echoGetResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result object - ", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.debug("Request for echo GET missing parameter - {}", TEXT_KEY);
+      logger.warn("Request for echo GET missing parameter - {}", TEXT_KEY);
       adminMetrics.echoGetMissingParameter.inc();
       throw new RestServiceException("Request missing parameter - " + TEXT_KEY, RestServiceErrorCode.MissingArgs);
     }

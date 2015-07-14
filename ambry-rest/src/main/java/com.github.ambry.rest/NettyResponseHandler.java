@@ -55,6 +55,7 @@ class NettyResponseHandler implements RestResponseHandler {
     this.responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
     channelWriteResultListener = new ChannelWriteResultListener(nettyMetrics);
     lastWriteFuture = ctx.newSucceededFuture();
+    logger.trace("Instantiated NettyResponseHandler");
   }
 
   @Override
@@ -63,10 +64,11 @@ class NettyResponseHandler implements RestResponseHandler {
     if (!responseMetadataWritten.get()) {
       maybeWriteResponseMetadata(responseMetadata);
     }
-
+    logger.trace("Adding {} bytes of data to response on channel {}", data.length, ctx.channel());
     ByteBuf buf = Unpooled.wrappedBuffer(data);
     HttpContent content;
     if (isLast) {
+      logger.debug("Last part of the response for request on channel {} sent", ctx.channel());
       content = new DefaultLastHttpContent(buf);
     } else {
       content = new DefaultHttpContent(buf);
@@ -79,6 +81,7 @@ class NettyResponseHandler implements RestResponseHandler {
     if (!responseMetadataWritten.get()) {
       maybeWriteResponseMetadata(responseMetadata);
     }
+    logger.trace("Flushing response data to channel {}", ctx.channel());
     // CAVEAT: It is possible that this flush might fail because the channel has been closed by an external thread with
     // a direct reference to the ChannelHandlerContext.
     ctx.flush();
@@ -88,12 +91,14 @@ class NettyResponseHandler implements RestResponseHandler {
   public void onRequestComplete(Throwable cause, boolean forceClose) {
     try {
       if (requestComplete.compareAndSet(false, true)) {
+        logger.debug("Finished responding to current request on channel {}", ctx.channel());
         nettyMetrics.requestCompletionRate.mark();
         if (cause != null) {
           nettyMetrics.requestFailure.inc();
+          logger.debug("Sending error response to client on channel {}", ctx.channel(), cause);
           ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
           if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
-            logger.error("Write exception encountered while trying to send error response to client on channel {}."
+            logger.error("Swallowing write exception encountered while sending error response to client on channel {}. "
                 + "Both write and original exceptions follow", ctx.channel(), errorResponseWrite.cause(), cause);
             nettyMetrics.errorSendingFailure.inc();
             // close the connection anyway so that the client knows something went wrong.
@@ -103,7 +108,8 @@ class NettyResponseHandler implements RestResponseHandler {
         close();
       }
     } catch (Exception e) {
-      logger.error("Exception during onRequestComplete tasks. Original error if any, follows", e, cause);
+      logger.error("Swallowing exception encountered during onRequestComplete tasks. Original error if any, follows", e,
+          cause);
       nettyMetrics.responseHandlerRequestCompleteTasksFailure.inc();
     }
   }
@@ -117,6 +123,7 @@ class NettyResponseHandler implements RestResponseHandler {
   public void setContentType(String type)
       throws RestServiceException {
     changeResponseHeader(HttpHeaders.Names.CONTENT_TYPE, type);
+    logger.debug("Set content type to {}", responseMetadata.headers().get(HttpHeaders.Names.CONTENT_TYPE));
   }
 
   /**
@@ -135,6 +142,7 @@ class NettyResponseHandler implements RestResponseHandler {
     try {
       responseMetadataChangeLock.lockInterruptibly();
       verifyResponseAlive();
+      logger.debug("Sending response metadata {} over channel {}", responseMetadata, ctx.channel());
       responseMetadataWritten.set(true);
       return writeToChannel(responseMetadata);
     } catch (Exception e) {
@@ -167,10 +175,13 @@ class NettyResponseHandler implements RestResponseHandler {
       // thread that has a direct reference to the ChannelHandlerContext can close the channel at any time and we
       // might not have got in our write when the channel was requested to be closed.
       // CAVEAT: This write is thread-safe but there are no ordering guarantees (there cannot be).
+      logger.trace("Writing to channel {}", ctx.channel());
       lastWriteFuture = channelWriteResultListener.trackWrite(ctx.write(httpObject));
       return lastWriteFuture;
     } catch (InterruptedException e) {
-      logger.error("Internal channel write lock acquiring interrupted", e);
+      logger
+          .error("Internal channel write lock acquiring interrupted. Throwing exception.. (channel {})", ctx.channel(),
+              e);
       nettyMetrics.channelWriteLockInterrupted.inc();
       throw new RestServiceException("Channel write synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -200,9 +211,11 @@ class NettyResponseHandler implements RestResponseHandler {
     try {
       responseMetadataChangeLock.lockInterruptibly();
       verifyResponseAlive();
+      logger.trace("Changing response metadata for channel {}", ctx.channel());
       return responseMetadata.headers().set(headerName, headerValue);
     } catch (InterruptedException e) {
-      logger.error("Internal metadata change lock acquiring interrupted", e);
+      logger.error("Internal metadata change lock acquiring interrupted. Throwing exception.. (channel {})",
+          ctx.channel(), e);
       nettyMetrics.responseMetadataWriteLockInterrupted.inc();
       throw new RestServiceException("Response metadata change synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -226,9 +239,11 @@ class NettyResponseHandler implements RestResponseHandler {
         // Waits for the last write operation performed by this class to succeed before closing.
         // This is NOT blocking.
         lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
+        logger.debug("Requested channel close on {}", ctx.channel());
       } catch (InterruptedException e) {
-        logger.error("Internal channel close lock acquiring interrupted. Aborting channel close of {} .. ",
-            ctx.channel(), e);
+        logger
+            .error("Internal channel close lock acquiring interrupted. Aborting channel close of {} .. ", ctx.channel(),
+                e);
         nettyMetrics.channelCloseLockInterrupted.inc();
       } finally {
         if (channelWriteLock.isHeldByCurrentThread()) {
@@ -248,7 +263,7 @@ class NettyResponseHandler implements RestResponseHandler {
   private void verifyResponseAlive()
       throws RestServiceException {
     if (responseMetadataWritten.get()) {
-      logger.trace("Response data already written to channel. No more metadata changes possible");
+      logger.trace("Response metadata already written to channel. No more metadata changes possible");
       nettyMetrics.deadResponseAccess.inc();
       throw new RestServiceException("Response metadata has already been written to channel",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
@@ -285,10 +300,12 @@ class NettyResponseHandler implements RestResponseHandler {
       }
     } else {
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-      logger.error("Cannot build an informative error response because cause received is unknown", cause);
+      logger.error("Received a non-RestServiceException. This is unexpected and should be investigated", ctx.channel(),
+          cause);
       nettyMetrics.unknownException.inc();
     }
     String fullMsg = "Failure: " + status + errReason;
+    logger.debug("Constructed error response for the client - {}", fullMsg);
     FullHttpResponse response =
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(fullMsg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
@@ -346,6 +363,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
 
   public ChannelWriteResultListener(NettyMetrics nettyMetrics) {
     this.nettyMetrics = nettyMetrics;
+    logger.trace("ChannelWriteResultListener instantiated");
   }
 
   /**
@@ -355,10 +373,13 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
    * @return - the write {@link ChannelFuture} that was submitted to be tracked.
    */
   public ChannelFuture trackWrite(ChannelFuture writeFuture) {
-    if (writeFutures.putIfAbsent(writeFuture, System.currentTimeMillis()) == null) {
+    Long writeStartTime = System.currentTimeMillis();
+    Long prevStartTime = writeFutures.putIfAbsent(writeFuture, writeStartTime);
+    if (prevStartTime == null) {
       writeFuture.addListener(this);
     } else {
-      logger.error("Received a tracking request for a ChannelFuture already being tracked");
+      logger.error("Discarding duplicate write tracking request for ChannelFuture. Prev write time {}. Current time {}",
+          prevStartTime, writeStartTime);
       nettyMetrics.channelWriteFutureAlreadyExists.inc();
     }
     return writeFuture;
@@ -382,7 +403,8 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
         nettyMetrics.channelWriteLatency.update(System.currentTimeMillis() - writeStartTime);
       }
     } else {
-      logger.error("Received operationComplete callback for ChannelFuture not found in tracking map");
+      logger.error("Received operationComplete callback for ChannelFuture not found in tracking map for channel {}",
+          future.channel());
       nettyMetrics.channelWriteFutureNotFound.inc();
     }
   }

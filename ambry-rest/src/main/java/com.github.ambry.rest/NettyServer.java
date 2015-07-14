@@ -46,6 +46,7 @@ class NettyServer implements NioServer {
     this.nettyMetrics = nettyMetrics;
     nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandlerController);
     nettyServerDeployerThread = new Thread(nettyServerDeployer);
+    logger.trace("Instantiated NettyServer");
   }
 
   @Override
@@ -107,11 +108,13 @@ class NettyServerDeployer implements Runnable {
     this.requestHandlerController = requestHandlerController;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
+    logger.trace("Instantiated NettyServerDeployer");
   }
 
   @Override
   public void run() {
     try {
+      logger.trace("Starting NettyServer deployment..");
       ServerBootstrap b = new ServerBootstrap();
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.

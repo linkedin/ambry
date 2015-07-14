@@ -105,7 +105,7 @@ class InvocationOptions {
       logger.trace("Server properties file path: {}", this.serverPropsFilePath);
     } else {
       parser.printHelpOn(System.err);
-      logger.error("Did not receive all required arguments for starting RestServer");
+      logger.error("Did not receive all required arguments for starting RestServer. Throwing exception..");
       throw new InstantiationException("Did not receive all required arguments");
     }
   }

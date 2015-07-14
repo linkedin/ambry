@@ -87,12 +87,12 @@ public class RestRequestInfo {
   public RestRequestInfo addListener(RestRequestInfoEventListener restRequestInfoEventListener) {
     if (restRequestInfoEventListener != null) {
       if (operationComplete.get()) {
-        logger.trace("Firing onHandlingComplete() for late listener");
+        logger.debug("Firing onHandlingComplete() for late listener");
         restRequestInfoEventListener.onHandlingComplete(this, handlingException);
       } else {
         synchronized (listeners) {
           if (operationComplete.get()) {
-            logger.trace("Firing onHandlingComplete() for late listener");
+            logger.debug("Firing onHandlingComplete() for late listener");
             restRequestInfoEventListener.onHandlingComplete(this, handlingException);
           } else {
             listeners.add(restRequestInfoEventListener);
@@ -109,13 +109,21 @@ public class RestRequestInfo {
    * @param e - the {@link Exception} that caused the handling to fail.
    */
   public void onHandlingComplete(Exception e) {
-    logger.trace("Firing onHandlingComplete() for listeners");
+    logger.debug("Firing onHandlingComplete() for listeners");
     synchronized (listeners) {
       handlingException = e;
       if (operationComplete.compareAndSet(false, true)) {
         for (RestRequestInfoEventListener listener : listeners) {
-          listener.onHandlingComplete(this, e);
+          try {
+            listener.onHandlingComplete(this, e);
+          } catch (Exception ee) {
+            logger
+                .error("Swallowing onHandlingComplete listener exception. Original exception, if any, also follows", ee,
+                    e);
+          }
         }
+      } else {
+        logger.error("Ignoring re-firing of onHandlingComplete for RestRequestInfo");
       }
     }
   }

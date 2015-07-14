@@ -26,6 +26,7 @@ class RequestHandlerController implements RestRequestHandlerController {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
+      logger.trace("Instantiated RequestHandlerController");
     } else {
       logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
           handlerCount);
@@ -50,6 +51,8 @@ class RequestHandlerController implements RestRequestHandlerController {
     try {
       int index = currIndex.getAndIncrement();
       RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
+      logger.debug("Monotonically increasing index value {} was used to pick request handler at index {}", index,
+          index % requestHandlers.size());
       return requestHandler;
     } catch (Exception e) {
       logger.error("Exception during selection of a RestRequestHandler to return", e);
@@ -79,6 +82,7 @@ class RequestHandlerController implements RestRequestHandlerController {
    * @param blobStorageService - The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
+    logger.trace("Creating {} instances of AsyncRequestHandler", handlerCount);
     for (int i = 0; i < handlerCount; i++) {
       // This can change if there is ever a RequestHandlerFactory.
       requestHandlers.add(new AsyncRequestHandler(blobStorageService, restServerMetrics));

@@ -49,6 +49,7 @@ class AsyncRequestHandler implements RestRequestHandler {
             restServerMetrics);
     dequeuedRequestHandlerThread = new Thread(dequeuedRequestHandler);
     restServerMetrics.registerAsyncRequestHandler(this);
+    logger.trace("Instantiated AsyncRequestHandler");
   }
 
   @Override
@@ -109,25 +110,26 @@ class AsyncRequestHandler implements RestRequestHandler {
   @Override
   public void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
+    logger.debug("Handling RestRequestInfo - {}", restRequestInfo);
     if (dequeuedRequestHandlerThread.isAlive()) {
       if (restRequestInfo == null) {
-        logger.error("RestRequestInfo received at AsyncRequestHandler is null");
+        logger.error("RestRequestInfo received is null. Throwing exception..");
         restServerMetrics.asyncRequestHandlerRestRequestInfoNull.inc();
         throw new RestServiceException("RestRequestInfo is null", RestServiceErrorCode.RestRequestInfoNull);
       } else if (restRequestInfo.getRestRequestMetadata() == null) {
-        logger.error("RestRequestMetadata is null in the RestRequestInfo received at AsyncRequestHandler");
+        logger.error("RestRequestMetadata is null in received RestRequestInfo. Throwing exception..");
         restServerMetrics.asyncRequestHandlerRestRequestMetadataNull.inc();
         throw new RestServiceException("RestRequestInfo missing RestRequestMetadata",
             RestServiceErrorCode.RequestMetadataNull);
       } else if (restRequestInfo.getRestResponseHandler() == null) {
-        logger.error("RestResponseHandler is null in the RestRequestInfo received at AsyncRequestHandler");
+        logger.error("RestResponseHandler is null in received RestRequestInfo. Throwing exception..");
         restServerMetrics.asyncRequestHandlerRestResponseHandlerNull.inc();
         throw new RestServiceException("RestRequestInfo missing RestResponseHandler",
             RestServiceErrorCode.ReponseHandlerNull);
       }
       queue(restRequestInfo);
     } else {
-      logger.error("DequeuedRequestHandler thread is not alive for handling requests");
+      logger.error("DequeuedRequestHandler thread is not alive for handling requests. Throwing exception..");
       restServerMetrics.asyncRequestHandlerUnavailable.inc();
       throw new RestServiceException("Requests cannot be handled because the AsyncRequestHandler is not available",
           RestServiceErrorCode.RequestHandlerUnavailable);
@@ -154,6 +156,7 @@ class AsyncRequestHandler implements RestRequestHandler {
    */
   private void queue(RestRequestInfo restRequestInfo)
       throws RestServiceException {
+    logger.debug("Queueing RestRequestInfo - {}", restRequestInfo);
     boolean offerFailed = false;
     if (restRequestInfo.isFirstPart()) {
       restServerMetrics.asyncRequestHandlerRequestArrivalRate.mark();
@@ -166,6 +169,8 @@ class AsyncRequestHandler implements RestRequestHandler {
       if (requestsInFlight.putIfAbsent(restRequestInfo.getRestRequestMetadata(), true) != null) {
         logger.error("A request seems to be marked as in-flight before the first RestRequestInfo was seen");
         restServerMetrics.asyncRequestHandlerRequestAlreadyInFlight.inc();
+      } else {
+        logger.debug("Added request {} to requests in flight", restRequestInfo.getRestRequestMetadata());
       }
     }
     if (restRequestInfo.getRestRequestContent() != null) {
@@ -178,12 +183,12 @@ class AsyncRequestHandler implements RestRequestHandler {
       queuingTimeTracker.startTracking(restRequestInfo);
       if (!restRequestInfoQueue.offer(restRequestInfo, OFFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
         offerFailed = true;
-        logger.error("Could not enqueue RestRequestInfo within {} seconds", OFFER_TIMEOUT_SECONDS);
+        logger.error("Could not enqueue RestRequestInfo within {} seconds. Aborting..", OFFER_TIMEOUT_SECONDS);
         restServerMetrics.asyncRequestHandlerQueueOfferTooLong.inc();
         throw new RestServiceException("Attempt to queue RestRequestInfo timed out",
             RestServiceErrorCode.RestRequestInfoQueueingFailure);
       } else {
-        logger.trace("Queued RestRequestInfo - {}", restRequestInfo);
+        logger.debug("Queued RestRequestInfo - {}", restRequestInfo);
         restServerMetrics.asyncRequestHandlerQueueingRate.mark();
       }
     } catch (InterruptedException e) {
@@ -240,6 +245,7 @@ class DequeuedRequestHandler implements Runnable {
     this.requestsInFlight = requestsInFlight;
     this.queuingTimeTracker = queuingTimeTracker;
     this.restServerMetrics = restServerMetrics;
+    logger.trace("Instantiated DequeuedRequestHandler");
   }
 
   /**
@@ -253,7 +259,7 @@ class DequeuedRequestHandler implements Runnable {
         try {
           restRequestInfo = restRequestInfoQueue.take();
           queuingTimeTracker.stopTracking(restRequestInfo, true);
-          logger.trace("Dequeued RestRequestInfo - {}", restRequestInfo);
+          logger.debug("Dequeued RestRequestInfo - {}", restRequestInfo);
           restServerMetrics.dequeuedRequestHandlerDequeuingRate.mark();
           if (restRequestInfo instanceof PoisonInfo) {
             logger.debug("Encountered PoisonInfo, shutting down..");
@@ -262,23 +268,24 @@ class DequeuedRequestHandler implements Runnable {
             break;
           }
           handleRequest(restRequestInfo);
+          logger.debug("RestRequestInfo {} was handled successfully", restRequestInfo);
           onHandlingComplete(restRequestInfo, null);
         } catch (InterruptedException e) {
-          logger.error("Interrupted exception during dequeueing of RestRequestInfo", e);
+          logger.error("Swallowing InterruptedException during dequeueing of RestRequestInfo", e);
           restServerMetrics.dequeuedRequestHandlerQueueTakeInterrupted.inc();
         } catch (Exception e) {
           if (!(e instanceof RestServiceException)) {
-            logger.error("Exception during handling of a dequeued RestRequestInfo", e);
+            logger.error("Reporting exception encountered during handling of a dequeued RestRequestInfo", e);
           }
           restServerMetrics.dequeuedRequestHandlerRestRequestInfoHandlingFailure.inc();
           onHandlingComplete(restRequestInfo, e);
         }
       } catch (Exception e) {
-        logger.error("Unexpected exception during dequeuing and handling of RestRequestInfo", e);
+        logger.error("Swallowing unexpected exception during dequeuing and handling of RestRequestInfo", e);
         restServerMetrics.dequeuedRequestHandlerUnexpectedException.inc();
       }
     }
-    logger.trace("DequeuedRequestHandler stopped");
+    logger.debug("DequeuedRequestHandler stopped");
     shutdownLatch.countDown();
   }
 
@@ -288,7 +295,7 @@ class DequeuedRequestHandler implements Runnable {
         restServerMetrics.dequeuedRequestHandlerRequestCompletionRate.mark();
         // NOTE: some of this code might be relevant to emptyQueue() also.
         restRequestMetadata.release();
-        logger.trace("Request completed - {}", restRequestMetadata);
+        logger.debug("Request completed - {}", restRequestMetadata);
       }
     }
   }
@@ -303,7 +310,7 @@ class DequeuedRequestHandler implements Runnable {
       throws RestServiceException {
     try {
       RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      logger.trace("RestMethod {} for RestRequestInfo {}", restMethod, restRequestInfo);
+      logger.debug("RestMethod {} for RestRequestInfo {}", restMethod, restRequestInfo);
       switch (restMethod) {
         case GET:
           blobStorageService.handleGet(restRequestInfo);
@@ -318,7 +325,7 @@ class DequeuedRequestHandler implements Runnable {
           blobStorageService.handleHead(restRequestInfo);
           break;
         default:
-          logger.error("RestRequestInfo specifies unknown REST method - {}", restMethod);
+          logger.error("RestRequestInfo specifies unknown REST method - {}. Throwing exception..", restMethod);
           restServerMetrics.dequeuedRequestHandlerUnknownRestMethod.inc();
           throw new RestServiceException("Unsupported rest method - " + restMethod,
               RestServiceErrorCode.UnsupportedRestMethod);
@@ -360,10 +367,12 @@ class DequeuedRequestHandler implements Runnable {
    */
   private void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     if (restRequestInfo != null) {
+      logger.debug("Performing onHandlingComplete tasks for RestRequestInfo {}. Handling exception, if any, attached",
+          restRequestInfo, e);
       try {
         restRequestInfo.onHandlingComplete(e);
       } catch (Exception ee) {
-        logger.error("Exception during onHandlingComplete tasks. Original exception also attached", ee, e);
+        logger.error("Swallowing exception during onHandlingComplete tasks. Original exception also attached", ee, e);
         restServerMetrics.dequeuedRequestHandlerHandlingCompleteTasksFailure.inc();
       } finally {
         RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
@@ -371,9 +380,10 @@ class DequeuedRequestHandler implements Runnable {
           responseHandler.onRequestComplete(e, false);
         }
         if (responseHandler.isRequestComplete()) {
+          logger.debug("Marking request as complete based on information from the RestResponseHandler");
           onRequestComplete(restRequestInfo.getRestRequestMetadata());
         }
-        logger.trace("Handling of RestRequestInfo {} completed (Exception, if any, attached)", restRequestInfo, e);
+        logger.debug("Handling of RestRequestInfo {} completed (Exception, if any, attached)", restRequestInfo, e);
       }
     }
   }
@@ -387,7 +397,7 @@ class DequeuedRequestHandler implements Runnable {
    */
   private void emptyQueue() {
     if (restRequestInfoQueue.size() > 0) {
-      logger.error("There are {} residual RestRequestInfos in queue during shutdown", restRequestInfoQueue.size());
+      logger.warn("There were {} residual RestRequestInfos in queue during shutdown", restRequestInfoQueue.size());
       restServerMetrics.asyncRequestHandlerResidualQueueSize.inc(restRequestInfoQueue.size());
       RestRequestInfo dequeuedPart = restRequestInfoQueue.poll();
       while (dequeuedPart != null) {
@@ -431,6 +441,7 @@ class QueuingTimeTracker {
 
   public QueuingTimeTracker(RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
+    logger.trace("Instantiated QueuingTimeTracker");
   }
 
   /**
@@ -438,7 +449,12 @@ class QueuingTimeTracker {
    * @param restRequestInfo - the {@link RestRequestInfo} whose queueing time needs to be tracked.
    */
   public void startTracking(RestRequestInfo restRequestInfo) {
-    queueTimes.putIfAbsent(restRequestInfo, System.currentTimeMillis());
+    Long queueStartTime = System.currentTimeMillis();
+    Long prevStartTime = queueTimes.putIfAbsent(restRequestInfo, queueStartTime);
+    if (prevStartTime != null) {
+      logger.error("Duplicate request to track RestRequestInfo {}. Prev track start time - {}, current time - {}",
+          restRequestInfo, prevStartTime, queueStartTime);
+    }
   }
 
   /**
@@ -453,7 +469,10 @@ class QueuingTimeTracker {
     if (queueStartTime != null && record) {
       long queueingTime = System.currentTimeMillis() - queueStartTime;
       restServerMetrics.asyncRequestHandlerQueueTimeInMs.update(queueingTime);
-      logger.trace("RestRequestInfo {} spent {} ms in the queue", restRequestInfo, queueingTime);
+      logger.debug("RestRequestInfo {} spent {} ms in the queue", restRequestInfo, queueingTime);
+    } else if (queueStartTime == null) {
+      logger.error("Request to stop tracking of RestRequestInfo {} that was not originally asked to be tracked",
+          restRequestInfo);
     }
   }
 }

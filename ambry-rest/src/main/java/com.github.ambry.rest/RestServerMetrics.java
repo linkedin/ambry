@@ -118,8 +118,8 @@ class RestServerMetrics {
         .counter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerUnexpectedException"));
     dequeuedRequestHandlerHandlingCompleteTasksFailure = metricRegistry.counter(
         MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerHandlingCompleteTasksFailure"));
-    restServerInstantiationFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class,
-        "RestServerInstantiationFailure"));
+    restServerInstantiationFailure =
+        metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerInstantiationFailure"));
     restServerStartFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerStartFailure"));
 
     asyncRequestHandlerForcedShutdown =

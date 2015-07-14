@@ -28,8 +28,9 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
+      logger.trace("Instantiated AdminBlobStorageServiceFactory");
     } else {
-      logger.error("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory");
+      logger.error("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory. Throwing exception..");
       throw new InstantiationException("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory");
     }
   }

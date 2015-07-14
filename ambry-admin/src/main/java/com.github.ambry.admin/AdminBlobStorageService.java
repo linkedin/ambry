@@ -25,6 +25,7 @@ class AdminBlobStorageService implements BlobStorageService {
     this.adminConfig = adminConfig;
     this.clusterMap = clusterMap;
     this.adminMetrics = adminMetrics;
+    logger.trace("Instantiated AdminBlobStorageService");
   }
 
   @Override
@@ -42,7 +43,7 @@ class AdminBlobStorageService implements BlobStorageService {
   public void handleGet(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     RestRequestMetadata restRequestMetadata = restRequestInfo.getRestRequestMetadata();
-    logger.trace("Handling GET request - {}", restRequestMetadata.getUri());
+    logger.debug("Handling GET request - {}", restRequestMetadata.getUri());
     try {
       String operationInUri = getOperationFromRequestUri(restRequestMetadata);
       logger.trace("GET operation requested - {}", operationInUri);
@@ -55,7 +56,7 @@ class AdminBlobStorageService implements BlobStorageService {
           GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap, adminMetrics);
           break;
         default:
-          logger.debug("Unsupported operation type during GET - {}", operationType);
+          logger.warn("Unsupported operation type during GET - {}", operationInUri);
           adminMetrics.unsupportedGetOperation.inc();
           throw new RestServiceException("Unsupported operation (" + operationInUri + ") for Admin service",
               RestServiceErrorCode.UnsupportedOperation);
@@ -73,7 +74,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.postOperationRate.mark();
     }
-    logger.debug("Unsupported operation during POST");
+    logger.warn("Unsupported operation during POST");
     adminMetrics.unsupportedPostOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - POST",
         RestServiceErrorCode.UnsupportedOperation);
@@ -85,7 +86,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.deleteOperationRate.mark();
     }
-    logger.debug("Unsupported operation during DELETE");
+    logger.warn("Unsupported operation during DELETE");
     adminMetrics.unsupportedDeleteOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - DELETE",
         RestServiceErrorCode.UnsupportedOperation);
@@ -97,7 +98,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.headOperationRate.mark();
     }
-    logger.debug("Unsupported operation during HEAD");
+    logger.warn("Unsupported operation during HEAD");
     adminMetrics.unsupportedHeadOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - HEAD",
         RestServiceErrorCode.UnsupportedOperation);
