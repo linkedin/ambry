@@ -149,6 +149,7 @@ public class RestServerTest {
   private void badNioServerClassTest()
       throws IOException {
     Properties properties = new Properties();
+    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
     properties.setProperty("rest.nio.server.factory", "non.existent.nio.server.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
@@ -158,7 +159,6 @@ public class RestServerTest {
       // nothing to do. expected.
     }
 
-    properties = new Properties();
     // invalid NioServerFactory.
     properties.setProperty("rest.nio.server.factory", RestServer.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
@@ -186,7 +186,6 @@ public class RestServerTest {
       // nothing to do. expected.
     }
 
-    properties = new Properties();
     // invalid BlobStorageServiceFactory.
     properties.setProperty("rest.blob.storage.service.factory", RestServer.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);

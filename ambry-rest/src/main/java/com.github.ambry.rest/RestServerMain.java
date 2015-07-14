@@ -47,7 +47,7 @@ public class RestServerMain {
       restServer.start();
       restServer.awaitShutdown();
     } catch (Exception e) {
-      logger.error("While trying to bootstrap RestServer: Exception", e);
+      logger.error("Exception during bootstrap of RestServer", e);
     } finally {
       logger.info("Exiting..");
       System.exit(0);
@@ -105,7 +105,7 @@ class InvocationOptions {
       logger.trace("Server properties file path: {}", this.serverPropsFilePath);
     } else {
       parser.printHelpOn(System.err);
-      logger.error("While trying to collect program arguments: Did not receive all required arguments");
+      logger.error("Did not receive all required arguments for starting RestServer");
       throw new InstantiationException("Did not receive all required arguments");
     }
   }

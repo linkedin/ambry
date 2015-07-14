@@ -20,9 +20,12 @@ import org.slf4j.LoggerFactory;
 class RestServerMetrics {
   private final MetricRegistry metricRegistry;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final Object asyncRequestHandlerRegisterLock = new Object();
+
+  // Gauges
+  // AsyncRequestHandler
   private final List<Gauge<Integer>> asyncRequestHandlerQueueOccupancy;
   private final List<Gauge<Integer>> asyncRequestHandlerRequestsInFlight;
-  private final Object asyncRequestHandlerRegisterLock = new Object();
 
   // Rates
   // AsyncRequestHandler
@@ -37,6 +40,7 @@ class RestServerMetrics {
   // Errors
   private final Counter metricAdditionFailure;
   // RequestHandlerController
+  public final Counter requestHandlerControllerInstantiationFailure;
   public final Counter requestHandlerControllerHandlerSelectionError;
   // AsyncRequestHandler
   public final Counter asyncRequestHandlerQueueOfferTooLong;
@@ -54,12 +58,16 @@ class RestServerMetrics {
   public final Counter dequeuedRequestHandlerQueueTakeInterrupted;
   public final Counter dequeuedRequestHandlerUnexpectedException;
   public final Counter dequeuedRequestHandlerHandlingCompleteTasksFailure;
+  // RestServer
+  public final Counter restServerInstantiationFailure;
   public final Counter restServerStartFailure;
 
   // Others
+  // AsyncRequestHandler
   public final Counter asyncRequestHandlerForcedShutdown;
   public final Histogram asyncRequestHandlerQueueTimeInMs;
   public final Histogram asyncRequestHandlerShutdownTimeInMs;
+  // RestServer
   public final Histogram restServerStartTimeInMs;
   public final Histogram restServerShutdownTimeInMs;
 
@@ -78,6 +86,8 @@ class RestServerMetrics {
         .meter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerRequestCompletionRate"));
 
     metricAdditionFailure = metricRegistry.counter(MetricRegistry.name(getClass(), "MetricAdditionFailure"));
+    requestHandlerControllerInstantiationFailure = metricRegistry
+        .counter(MetricRegistry.name(RequestHandlerController.class, "RequestHandlerControllerInstantiationFailure"));
     requestHandlerControllerHandlerSelectionError = metricRegistry
         .counter(MetricRegistry.name(RequestHandlerController.class, "RequestHandlerControllerHandlerSelectionError"));
     asyncRequestHandlerQueueOfferTooLong =
@@ -108,6 +118,8 @@ class RestServerMetrics {
         .counter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerUnexpectedException"));
     dequeuedRequestHandlerHandlingCompleteTasksFailure = metricRegistry.counter(
         MetricRegistry.name(DequeuedRequestHandler.class, "DequeuedRequestHandlerHandlingCompleteTasksFailure"));
+    restServerInstantiationFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class,
+        "RestServerInstantiationFailure"));
     restServerStartFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerStartFailure"));
 
     asyncRequestHandlerForcedShutdown =
@@ -137,7 +149,7 @@ class RestServerMetrics {
             .register(MetricRegistry.name(AsyncRequestHandler.class, pos + "-AsyncRequestHandlerQueueOccupancy"),
                 gauge);
       } else {
-        logger.error("While trying to register a request handler for queue occupancy metric: Failed to add to tracker");
+        logger.error("Failed to register AsyncRequestHandler to the queue occupancy tracker");
         metricAdditionFailure.inc();
       }
 
@@ -152,8 +164,7 @@ class RestServerMetrics {
             .register(MetricRegistry.name(AsyncRequestHandler.class, pos + "-AsyncRequestHandlerRequestsInFlight"),
                 gauge);
       } else {
-        logger.error(
-            "While trying to register a request handler for requests in flight metric: Failed to add to tracker");
+        logger.error("Failed to register AsyncRequestHandler to the requests in flight tracker");
         metricAdditionFailure.inc();
       }
     }

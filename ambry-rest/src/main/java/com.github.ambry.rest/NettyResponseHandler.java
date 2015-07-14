@@ -93,7 +93,7 @@ class NettyResponseHandler implements RestResponseHandler {
           nettyMetrics.requestFailure.inc();
           ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
           if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
-            logger.error("While trying to send error response to client on channel {}: Write exception encountered."
+            logger.error("Write exception encountered while trying to send error response to client on channel {}."
                 + "Both write and original exceptions follow", ctx.channel(), errorResponseWrite.cause(), cause);
             nettyMetrics.errorSendingFailure.inc();
             // close the connection anyway so that the client knows something went wrong.
@@ -103,7 +103,7 @@ class NettyResponseHandler implements RestResponseHandler {
         close();
       }
     } catch (Exception e) {
-      logger.error("While trying to do onRequestComplete task: Exception. Original error if any, follows", e, cause);
+      logger.error("Exception during onRequestComplete tasks. Original error if any, follows", e, cause);
       nettyMetrics.responseHandlerRequestCompleteTasksFailure.inc();
     }
   }
@@ -170,7 +170,7 @@ class NettyResponseHandler implements RestResponseHandler {
       lastWriteFuture = channelWriteResultListener.trackWrite(ctx.write(httpObject));
       return lastWriteFuture;
     } catch (InterruptedException e) {
-      logger.error("While trying to write to channel: Internal channel write lock acquiring interrupted", e);
+      logger.error("Internal channel write lock acquiring interrupted", e);
       nettyMetrics.channelWriteLockInterrupted.inc();
       throw new RestServiceException("Channel write synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -202,7 +202,7 @@ class NettyResponseHandler implements RestResponseHandler {
       verifyResponseAlive();
       return responseMetadata.headers().set(headerName, headerValue);
     } catch (InterruptedException e) {
-      logger.error("While trying to modify response metadata: Internal metadata change lock acquiring interrupted", e);
+      logger.error("Internal metadata change lock acquiring interrupted", e);
       nettyMetrics.responseMetadataWriteLockInterrupted.inc();
       throw new RestServiceException("Response metadata change synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -227,7 +227,7 @@ class NettyResponseHandler implements RestResponseHandler {
         // This is NOT blocking.
         lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
       } catch (InterruptedException e) {
-        logger.error("While trying to close channel {}: Internal channel close lock acquiring interrupted. Aborting.. ",
+        logger.error("Internal channel close lock acquiring interrupted. Aborting channel close of {} .. ",
             ctx.channel(), e);
         nettyMetrics.channelCloseLockInterrupted.inc();
       } finally {
@@ -248,8 +248,7 @@ class NettyResponseHandler implements RestResponseHandler {
   private void verifyResponseAlive()
       throws RestServiceException {
     if (responseMetadataWritten.get()) {
-      logger.trace("While trying to verify if response metadata can be modified : Response data already written to "
-          + "channel");
+      logger.trace("Response data already written to channel. No more metadata changes possible");
       nettyMetrics.deadResponseAccess.inc();
       throw new RestServiceException("Response metadata has already been written to channel",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
@@ -265,7 +264,7 @@ class NettyResponseHandler implements RestResponseHandler {
   private void verifyChannelActive()
       throws RestServiceException {
     if (channelClosed.get() || !(ctx.channel().isActive())) {
-      logger.trace("While trying to verify if channel {} is open: Channel closed", ctx.channel());
+      logger.trace("Channel {} is closed. No more interaction possible", ctx.channel());
       nettyMetrics.channelWriteAfterClose.inc();
       throw new RestServiceException("Channel " + ctx.channel() + " has already been closed before write",
           RestServiceErrorCode.ChannelAlreadyClosed);
@@ -286,7 +285,7 @@ class NettyResponseHandler implements RestResponseHandler {
       }
     } else {
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-      logger.error("While building error response: Unknown cause received", cause);
+      logger.error("Cannot build an informative error response because cause received is unknown", cause);
       nettyMetrics.unknownException.inc();
     }
     String fullMsg = "Failure: " + status + errReason;
@@ -359,7 +358,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
     if (writeFutures.putIfAbsent(writeFuture, System.currentTimeMillis()) == null) {
       writeFuture.addListener(this);
     } else {
-      logger.error("While trying to add a new ChannelFuture to track: Future already in map");
+      logger.error("Received a tracking request for a ChannelFuture already being tracked");
       nettyMetrics.channelWriteFutureAlreadyExists.inc();
     }
     return writeFuture;
@@ -376,15 +375,14 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
     if (writeStartTime != null) {
       if (!future.isSuccess()) {
         future.channel().close();
-        logger.error("While trying to write to channel {}: Write failed due to exception. Channel closed",
-            future.channel(), future.cause());
+        logger.error("Write on channel {} failed due to exception. Closed channel", future.channel(), future.cause());
         nettyMetrics.channelWriteFailure.inc();
       } else {
         // TODO: track small, medium, large and huge writes.
         nettyMetrics.channelWriteLatency.update(System.currentTimeMillis() - writeStartTime);
       }
     } else {
-      logger.error("While trying to handle completion of channel write: ChannelFuture not found in tracking map");
+      logger.error("Received operationComplete callback for ChannelFuture not found in tracking map");
       nettyMetrics.channelWriteFutureNotFound.inc();
     }
   }

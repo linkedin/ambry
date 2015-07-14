@@ -38,11 +38,14 @@ class EchoHandler {
       logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.echoRate.mark();
       long startTime = System.currentTimeMillis();
-      String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
-      responseHandler.setContentType("application/json");
-      responseHandler.addToResponseBody(echoStr.getBytes(), true);
-      responseHandler.flush();
-      adminMetrics.echoTimeInMs.update(System.currentTimeMillis() - startTime);
+      try {
+        String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
+        responseHandler.setContentType("application/json");
+        responseHandler.addToResponseBody(echoStr.getBytes(), true);
+        responseHandler.flush();
+      } finally {
+        adminMetrics.echoTimeInMs.update(System.currentTimeMillis() - startTime);
+      }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
       logger.trace("Finished handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
@@ -64,13 +67,13 @@ class EchoHandler {
         String text = parameters.get(TEXT_KEY).get(0);
         return packageResult(text);
       } catch (JSONException e) {
-        logger.error("While trying to construct response for echo GET: Exception - ", e);
+        logger.error("Exception during response construction for echo GET - ", e);
         adminMetrics.echoGetResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result object - ", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.debug("While trying to handle echo GET: Request missing parameter - {}", TEXT_KEY);
+      logger.debug("Request for echo GET missing parameter - {}", TEXT_KEY);
       adminMetrics.echoGetMissingParameter.inc();
       throw new RestServiceException("Request missing parameter - " + TEXT_KEY, RestServiceErrorCode.MissingArgs);
     }

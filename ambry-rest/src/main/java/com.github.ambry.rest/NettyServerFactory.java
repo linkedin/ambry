@@ -27,8 +27,8 @@ public class NettyServerFactory implements NioServerFactory {
       this.nettyMetrics = new NettyMetrics(metricRegistry);
       this.restRequestHandlerController = restRequestHandlerController;
     } else {
-      logger.error("While trying to instantiate NettyServerFactory: Some of the arguments received are null");
-      throw new InstantiationException("One of the received arguments is null");
+      logger.error("Null arg(s) received during instantiation of NettyServerFactory");
+      throw new InstantiationException("Null arg(s) received during instantiation of NettyServerFactory");
     }
   }
 

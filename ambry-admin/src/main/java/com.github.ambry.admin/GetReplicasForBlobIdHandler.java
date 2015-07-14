@@ -44,12 +44,15 @@ class GetReplicasForBlobIdHandler {
       logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.getReplicasForBlobIdRate.mark();
       long startTime = System.currentTimeMillis();
-      String replicaStr =
-          getReplicasForBlobId(restRequestInfo.getRestRequestMetadata(), clusterMap, adminMetrics).toString();
-      responseHandler.setContentType("application/json");
-      responseHandler.addToResponseBody(replicaStr.getBytes(), true);
-      responseHandler.flush();
-      adminMetrics.getReplicasForBlobIdTimeInMs.update(System.currentTimeMillis() - startTime);
+      try {
+        String replicaStr =
+            getReplicasForBlobId(restRequestInfo.getRestRequestMetadata(), clusterMap, adminMetrics).toString();
+        responseHandler.setContentType("application/json");
+        responseHandler.addToResponseBody(replicaStr.getBytes(), true);
+        responseHandler.flush();
+      } finally {
+        adminMetrics.getReplicasForBlobIdTimeInMs.update(System.currentTimeMillis() - startTime);
+      }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
       logger.trace("Finished handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
@@ -74,21 +77,21 @@ class GetReplicasForBlobIdHandler {
         BlobId blobId = new BlobId(parameters.get(BLOB_ID_KEY).get(0), clusterMap);
         return packageResult(blobId.getPartition().getReplicaIds());
       } catch (IllegalArgumentException e) {
-        logger.debug("While trying to handle getReplicasForBlobId: Invalid blob id", e);
+        logger.debug("Invalid blob id received for getReplicasForBlobId request", e);
         adminMetrics.getReplicasForBlobIdInvalidBlobId.inc();
         throw new RestServiceException("Invalid blob id", e, RestServiceErrorCode.InvalidArgs);
       } catch (IOException e) {
-        logger.error("While trying to handle getReplicasForBlobId: Unable to create BlobId object", e);
+        logger.error("Unable to create BlobId object during handling of getReplicasForBlobId", e);
         adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
         throw new RestServiceException("Unable to create blob id object ", e, RestServiceErrorCode.BlobIdCreationError);
       } catch (JSONException e) {
-        logger.error("While trying to construct response for getReplicasForBlobId: Exception - ", e);
+        logger.error("Exception during response construction for getReplicasForBlobId - ", e);
         adminMetrics.getReplicasForBlobIdResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result object", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.debug("While trying to handle getReplicasForBlobId: Request missing parameter - {}", BLOB_ID_KEY);
+      logger.debug("Request for getReplicasForBlobId missing parameter - {}", BLOB_ID_KEY);
       adminMetrics.getReplicasForBlobIdMissingParameter.inc();
       throw new RestServiceException("Request missing parameter - " + BLOB_ID_KEY, RestServiceErrorCode.MissingArgs);
     }

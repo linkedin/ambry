@@ -47,12 +47,12 @@ public class RestServer {
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
     if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
-      logger.error("While trying to instantiate RestServer: Some of the received arguments are null");
-      throw new InstantiationException("Received some null arguments while instantiating RestServer");
+      logger.error("Null arg(s) received during instantiation of RestServer");
+      throw new InstantiationException("Null arg(s) received during instantiation of RestServer");
     }
+    restServerConfig = new RestServerConfig(verifiableProperties);
+    restServerMetrics = new RestServerMetrics(metricRegistry);
     try {
-      restServerConfig = new RestServerConfig(verifiableProperties);
-      restServerMetrics = new RestServerMetrics(metricRegistry);
       BlobStorageServiceFactory blobStorageServiceFactory = Utils
           .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, metricRegistry, clusterMap);
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
@@ -63,11 +63,13 @@ public class RestServer {
               requestHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
-      logger.error("While trying to instantiate RestServer: Exception", e);
+      logger.error("Exception during instantiation of RestServer", e);
+      restServerMetrics.restServerInstantiationFailure.inc();
       throw new InstantiationException("Exception while creating RestServer components - " + e);
     }
     if (blobStorageService == null || requestHandlerController == null || nioServer == null) {
-      logger.error("While trying to instantiate RestServer: Failed to instantiate one of the components");
+      logger.error("Failed to instantiate one of the components of RestServer");
+      restServerMetrics.restServerInstantiationFailure.inc();
       throw new InstantiationException("Failed to instantiate one of the components of RestServer");
     }
   }
@@ -78,20 +80,17 @@ public class RestServer {
    */
   public void start()
       throws InstantiationException {
+    logger.info("Starting RestServer..");
+    long startupBeginTime = System.currentTimeMillis();
     try {
-      logger.info("Starting RestServer..");
-      long startupBeginTime = System.currentTimeMillis();
       // ordering is important.
       blobStorageService.start();
       requestHandlerController.start();
       nioServer.start();
+    } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
-      logger.info("RestServer has started in {} ms", startupTime);
+      logger.info("RestServer start took {} ms", startupTime);
       restServerMetrics.restServerStartTimeInMs.update(startupTime);
-    } catch (Exception e) {
-      logger.error("While trying to start RestServer: Exception", e);
-      restServerMetrics.restServerStartFailure.inc();
-      throw new InstantiationException("Exception during RestServer start " + e);
     }
   }
 
@@ -101,14 +100,17 @@ public class RestServer {
   public void shutdown() {
     logger.info("Shutting down RestServer..");
     long shutdownBeginTime = System.currentTimeMillis();
-    //ordering is important.
-    nioServer.shutdown();
-    requestHandlerController.shutdown();
-    blobStorageService.shutdown();
-    long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
-    logger.info("RestServer shutdown complete in {} ms", shutdownTime);
-    restServerMetrics.restServerShutdownTimeInMs.update(shutdownTime);
-    shutdownLatch.countDown();
+    try {
+      //ordering is important.
+      nioServer.shutdown();
+      requestHandlerController.shutdown();
+      blobStorageService.shutdown();
+    } finally {
+      long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
+      logger.info("RestServer shutdown took {} ms", shutdownTime);
+      restServerMetrics.restServerShutdownTimeInMs.update(shutdownTime);
+      shutdownLatch.countDown();
+    }
   }
 
   /**

@@ -29,6 +29,7 @@ class RequestHandlerController implements RestRequestHandlerController {
     } else {
       logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
           handlerCount);
+      restServerMetrics.requestHandlerControllerInstantiationFailure.inc();
       throw new InstantiationException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
     }
   }
@@ -51,9 +52,9 @@ class RequestHandlerController implements RestRequestHandlerController {
       RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
       return requestHandler;
     } catch (Exception e) {
-      logger.error("While trying to select a RestRequestHandler: Exception", e);
+      logger.error("Exception during selection of a RestRequestHandler to return", e);
       restServerMetrics.requestHandlerControllerHandlerSelectionError.inc();
-      throw new RestServiceException("Error while trying to pick a handler to return", e,
+      throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
           RestServiceErrorCode.RequestHandlerSelectionError);
     }
   }

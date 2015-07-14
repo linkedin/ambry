@@ -55,7 +55,7 @@ class AdminBlobStorageService implements BlobStorageService {
           GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap, adminMetrics);
           break;
         default:
-          logger.debug("While trying to perform GET: Unsupported operation type - {}", operationType);
+          logger.debug("Unsupported operation type during GET - {}", operationType);
           adminMetrics.unsupportedGetOperation.inc();
           throw new RestServiceException("Unsupported operation (" + operationInUri + ") for Admin service",
               RestServiceErrorCode.UnsupportedOperation);
@@ -73,7 +73,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.postOperationRate.mark();
     }
-    logger.debug("While trying to perform POST: Unsupported operation - POST");
+    logger.debug("Unsupported operation during POST");
     adminMetrics.unsupportedPostOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - POST",
         RestServiceErrorCode.UnsupportedOperation);
@@ -85,7 +85,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.deleteOperationRate.mark();
     }
-    logger.debug("While trying to perform DELETE: Unsupported operation - DELETE");
+    logger.debug("Unsupported operation during DELETE");
     adminMetrics.unsupportedDeleteOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - DELETE",
         RestServiceErrorCode.UnsupportedOperation);
@@ -97,7 +97,7 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.headOperationRate.mark();
     }
-    logger.debug("While trying to perform HEAD: Unsupported operation - HEAD");
+    logger.debug("Unsupported operation during HEAD");
     adminMetrics.unsupportedHeadOperation.inc();
     throw new RestServiceException("Unsupported operation for Admin service - HEAD",
         RestServiceErrorCode.UnsupportedOperation);

@@ -24,7 +24,6 @@ class NettyRequestMetadata implements RestRequestMetadata {
     }
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
-    // convert HttpMethod to RestMethod
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;

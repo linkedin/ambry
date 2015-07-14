@@ -53,26 +53,28 @@ class NettyServer implements NioServer {
       throws InstantiationException {
     if (!nettyServerDeployerThread.isAlive()) {
       logger.info("Starting NettyServer..");
+      long startupBeginTime = System.currentTimeMillis();
       try {
-        long startupBeginTime = System.currentTimeMillis();
         nettyServerDeployerThread.start();
         if (!(nettyServerDeployer.awaitStartup(nettyConfig.nettyServerStartupWaitSeconds, TimeUnit.SECONDS))) {
-          String errMsg = "NettyServer failed to start in " + nettyConfig.nettyServerStartupWaitSeconds + " seconds";
+          String errMsg =
+              new StringBuilder("NettyServer failed to start in ").append(nettyConfig.nettyServerStartupWaitSeconds)
+                  .append(" seconds").toString();
           logger.error(errMsg);
           nettyMetrics.nettyServerStartupFailure.inc();
           throw new InstantiationException(errMsg);
         } else if (nettyServerDeployer.getException() != null) {
           nettyMetrics.nettyServerStartupFailure.inc();
           throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
-        } else {
-          long startupTime = System.currentTimeMillis() - startupBeginTime;
-          logger.info("NettyServer has started on port {} in {} ms", nettyConfig.nettyServerPort, startupTime);
-          nettyMetrics.nettyServerStartupTime.update(startupTime);
         }
       } catch (InterruptedException e) {
         logger.error("NettyServer start await was interrupted. It might not have started", e);
         nettyMetrics.nettyServerStartupFailure.inc();
         throw new InstantiationException("Netty server start might have failed - " + e);
+      } finally {
+        long startupTime = System.currentTimeMillis() - startupBeginTime;
+        logger.info("NettyServer start took {} ms", startupTime);
+        nettyMetrics.nettyServerStartupTime.update(startupTime);
       }
     }
   }
@@ -131,12 +133,13 @@ class NettyServerDeployer implements Runnable {
             }
           });
       ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
+      logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
       // let the parent know that startup is complete and so that it can proceed.
       startupDone.countDown();
       // this is blocking
       f.channel().closeFuture().sync();
     } catch (Exception e) {
-      logger.error("While stating NettyServerDeployer: Exception", e);
+      logger.error("Exception during deployment of NettyServer", e);
       exception = e;
       startupDone.countDown();
     }
@@ -173,17 +176,17 @@ class NettyServerDeployer implements Runnable {
       bossGroup.shutdownGracefully();
       try {
         // magic number
-        if (workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
-          long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
-          logger.info("NettyServer shutdown complete in {} ms", shutdownTime);
-          nettyMetrics.nettyServerShutdownTime.update(shutdownTime);
-        } else {
+        if (!workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
           logger.error("NettyServer shutdown failed after waiting for 30 seconds");
           nettyMetrics.nettyServerShutdownFailure.inc();
         }
       } catch (InterruptedException e) {
         logger.error("NettyServer termination await was interrupted. Shutdown may have been unsuccessful", e);
         nettyMetrics.nettyServerShutdownFailure.inc();
+      } finally {
+        long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
+        logger.info("NettyServer shutdown took {} ms", shutdownTime);
+        nettyMetrics.nettyServerShutdownTime.update(shutdownTime);
       }
     }
   }
