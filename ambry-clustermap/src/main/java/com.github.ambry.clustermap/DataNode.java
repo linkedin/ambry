@@ -25,7 +25,7 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
-  private final int sslPort;
+  private final ArrayList<Port> ports;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -41,7 +41,7 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.sslPort = jsonObject.getInt("sslport");
+    this.ports = new ArrayList<Port>();
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
           .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
@@ -58,7 +58,10 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-
+    JSONArray portsJSONArray = jsonObject.getJSONArray("ports");
+    for (int i = 0; i < portsJSONArray.length(); ++i) {
+      this.ports.add(new Port(portsJSONArray.getJSONObject(i)));
+    }
     validate();
   }
 
@@ -95,7 +98,12 @@ public class DataNode extends DataNodeId {
 
   @Override
   public int getSSLPort() {
-    return sslPort;
+    for(Port individualPort: ports){
+      if(individualPort.getType() == PortType.SSL){
+        return individualPort.getPortNo();
+      }
+    }
+    throw new IllegalStateException("No SSL Port availbale in HardwareLayout ");
   }
 
   @Override
@@ -161,10 +169,15 @@ public class DataNode extends DataNodeId {
       throw new IllegalStateException("Invalid port: " + port + " is greater than " + MaxPort);
     }
 
-    if (sslPort < MinPort) {
-      throw new IllegalStateException("Invalid sslport: " + sslPort + " is less than " + MinPort);
-    } else if (sslPort > MaxPort) {
-      throw new IllegalStateException("Invalid sslport: " + sslPort + " is greater than " + MaxPort);
+    for (Port individualPort : ports) {
+      if (individualPort.getPortNo() < MinPort) {
+        throw new IllegalStateException(
+            "Invalid " + individualPort.getPortNo() + ": " + individualPort.getPortNo() + " is less than " + MinPort);
+      } else if (individualPort.getPortNo() > MaxPort) {
+        throw new IllegalStateException(
+            "Invalid " + individualPort.getPortNo() + ": " + individualPort.getPortNo() + " is greater than "
+                + MaxPort);
+      }
     }
   }
 
@@ -181,11 +194,15 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port).put("sslport", sslPort)
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port)
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
+    }
+    jsonObject.put("ports", new JSONArray());
+    for (Port individualPort : ports) {
+      jsonObject.accumulate("ports", individualPort.toJSONObject());
     }
     return jsonObject;
   }
@@ -193,7 +210,6 @@ public class DataNode extends DataNodeId {
   @Override
   public String toString() {
     return "DataNode[" + getHostname() + ":" + getPort() + "]";
-    // should sslport be added to toString() will all the metrics be affected?
   }
 
   @Override

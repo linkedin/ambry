@@ -124,7 +124,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6667},\n" +
+        "              {\"ssl\": 7667} \n" +
+        "              ] \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"Datacenter\"\n" +
@@ -176,7 +179,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6667},\n" +
+        "              {\"ssl\": 7667} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -189,7 +195,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6668},\n" +
+        "              {\"ssl\": 7668} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -202,7 +211,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6669},\n" +
+        "              {\"ssl\": 7669} \n" +
+        "              ] \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"Datacenter\"\n" +
@@ -264,7 +276,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6667},\n" +
+        "              {\"ssl\": 7667} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -277,7 +292,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6668},\n" +
+        "              {\"ssl\": 7668} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -290,7 +308,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6669},\n" +
+        "              {\"ssl\": 7669} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -303,7 +324,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6670,\n" +
-        "              \"sslport\": 7670\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6670},\n" +
+        "              {\"ssl\": 7670} \n" +
+        "              ] \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"Datacenter\"\n" +
@@ -387,7 +411,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6667},\n" +
+        "              {\"ssl\": 7667} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -400,7 +427,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6668},\n" +
+        "              {\"ssl\": 7668} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -413,7 +443,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6669},\n" +
+        "              {\"ssl\": 7669} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -426,7 +459,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6670,\n" +
-        "              \"sslport\": 7670\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6670},\n" +
+        "              {\"ssl\": 7670} \n" +
+        "              ] \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"Datacenter\"\n" +
@@ -444,7 +480,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6680,\n" +
-        "              \"sslport\": 7680\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6680},\n" +
+        "              {\"ssl\": 7680} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -457,7 +496,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6681,\n" +
-        "              \"sslport\": 7681\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6681},\n" +
+        "              {\"ssl\": 7681} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -470,7 +512,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6682,\n" +
-        "              \"sslport\": 7682\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6682},\n" +
+        "              {\"ssl\": 7682} \n" +
+        "              ] \n" +
         "      },\n" +
         "      {\n" +
         "        \"disks\": [\n" +
@@ -483,7 +528,10 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6683,\n" +
-        "              \"sslport\": 7683\n" +
+        "              \"ports\": [\n" +
+        "              {\"plaintext\": 6683},\n" +
+        "              {\"ssl\": 7683} \n" +
+        "              ] \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"DatacenterTwo\"\n" +
