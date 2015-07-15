@@ -48,6 +48,30 @@ public class TestUtils {
     return jsonArray;
   }
 
+  public static JSONArray getPorts(int port)
+      throws JSONException {
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(port, PortType.PLAINTEXT));
+    return TestUtils.getJsonArrayPorts(ports);
+  }
+
+  public static JSONArray getPorts(int port, int sslPort)
+      throws JSONException {
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(port, PortType.PLAINTEXT));
+    ports.add(new Port(sslPort, PortType.SSL));
+    return TestUtils.getJsonArrayPorts(ports);
+  }
+
+  public static JSONArray getJsonArrayPorts(ArrayList<Port> ports)
+      throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < ports.size(); ++i) {
+      jsonArray.put(new JSONObject().put(ports.get(i).getType().toString().toLowerCase(),ports.get(i).getPortNo()));
+    }
+    return jsonArray;
+  }
+
   // Does append anything to mountPath and so generates same disk repeatedly.
   public static JSONArray getJsonArrayDuplicateDisks(int diskCount, String mountPath, HardwareState hardwareState,
       long capacityInBytes)
@@ -59,15 +83,21 @@ public class TestUtils {
     return jsonArray;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, HardwareState hardwareState, JSONArray disks)
+  public static JSONObject getJsonDataNode(String hostname, int port, JSONArray ports, HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
-    jsonObject.put("sslport", sslPort);
+    jsonObject.put("ports", ports);
     jsonObject.put("hardwareState", hardwareState);
     jsonObject.put("disks", disks);
     return jsonObject;
+  }
+
+  // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
+  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort,
+      HardwareState hardwareState, JSONArray disks) throws JSONException{
+    return getJsonArrayDataNodes(dataNodeCount, hostname, basePort, -1, hardwareState, disks) ;
   }
 
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
@@ -76,9 +106,23 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i , hardwareState, disks));
+      JSONArray ports;
+      if(sslPort != -1) {
+        ports = getPorts(basePort + i, sslPort + i);
+      }
+      else{
+        ports = getPorts(basePort + i);
+      }
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, ports , hardwareState, disks));
     }
     return jsonArray;
+  }
+
+  // Does not increment basePort for each data node...
+  public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort,
+      HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    return getJsonArrayDuplicateDataNodes(dataNodeCount, hostname, basePort, -1, hardwareState, disks);
   }
 
   // Does not increment basePort for each data node...
@@ -87,7 +131,14 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, hardwareState, disks));
+      JSONArray ports;
+      if(sslPort != -1) {
+        ports = getPorts(basePort, sslPort);
+      }
+      else{
+        ports = getPorts(basePort);
+      }
+      jsonArray.put(getJsonDataNode(hostname, basePort, ports, hardwareState, disks));
     }
     return jsonArray;
   }
