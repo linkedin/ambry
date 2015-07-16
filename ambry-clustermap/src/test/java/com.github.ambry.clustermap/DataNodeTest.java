@@ -67,9 +67,8 @@ public class DataNodeTest {
   public void basics()
       throws JSONException {
 
-    JSONArray ports = TestUtils.getPorts(6666, 7666);
     JSONObject jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, ports, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
     DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
@@ -102,9 +101,8 @@ public class DataNodeTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
     try {
-      JSONArray ports = TestUtils.getPorts(6666, 7666);
       // Null DataNode
-      jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, ports, HardwareState.AVAILABLE, getDisks());
+      jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
       new DataNode(null, jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
@@ -112,43 +110,37 @@ public class DataNodeTest {
     }
 
     // Bad hostname
-    JSONArray ports = TestUtils.getPorts(6666, 7666);
-    jsonObject = TestUtils.getJsonDataNode("", 6666, ports, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode("", 6666, 7666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad hostname (http://tools.ietf.org/html/rfc6761 defines 'invalid' top level domain)
-    jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, ports, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, 7666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too small)
-    ports = TestUtils.getPorts(-1, 7666);
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, ports, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, 7666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad ssl port (too small)
-    ports = TestUtils.getPorts(6666, -1);
-    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, ports, HardwareState.AVAILABLE, getDisks());
+    jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, -1, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too big)
-    ports = TestUtils.getPorts(100 * 1000, 7666);
     jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, ports, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 100 * 1000, 7666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad ssl port (too big)
-    ports = TestUtils.getPorts(6666, 100 * 1000);
     jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, ports, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 100 * 1000, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 
   @Test
   public void testSoftState()
       throws JSONException, InterruptedException {
-    JSONArray ports = TestUtils.getPorts(6666, 7666);
     JSONObject jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, ports, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.datanode.retry.backoff.ms", Integer.toString(2000));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));

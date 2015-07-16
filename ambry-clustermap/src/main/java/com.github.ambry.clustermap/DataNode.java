@@ -58,11 +58,19 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-    JSONArray portsJSONArray = jsonObject.getJSONArray("ports");
-    for (int i = 0; i < portsJSONArray.length(); ++i) {
-      this.ports.add(new Port(portsJSONArray.getJSONObject(i)));
-    }
+    this.ports.add(new Port(this.port, PortType.PLAINTEXT));
+    parsePorts(jsonObject);
     validate();
+  }
+
+  private void parsePorts(JSONObject jsonObject){
+    try{
+      int sslPort = jsonObject.getInt("sslport");
+      this.ports.add(new Port(sslPort, PortType.SSL));
+    }
+    catch(JSONException e){
+      logger.trace("Swallowing JSONException while parsing sslport ");
+    }
   }
 
   /**
@@ -200,9 +208,11 @@ public class DataNode extends DataNodeId {
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
     }
-    jsonObject.put("ports", new JSONArray());
-    for (Port individualPort : ports) {
-      jsonObject.accumulate("ports", individualPort.toJSONObject());
+    for(Port individualPort : ports) {
+      if(individualPort.getType() == PortType.SSL){
+        jsonObject.put("sslport",individualPort.getPortNo());
+        break;
+      }
     }
     return jsonObject;
   }
