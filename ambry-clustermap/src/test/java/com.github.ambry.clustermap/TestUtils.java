@@ -70,7 +70,7 @@ public class TestUtils {
   }
 
   public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, HardwareState hardwareState, JSONArray disks)
-      throws JSONException {
+  throws JSONException{
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
@@ -81,8 +81,7 @@ public class TestUtils {
   }
 
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
-  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort,
-      HardwareState hardwareState, JSONArray disks)
+  public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
@@ -108,7 +107,7 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i , hardwareState, disks));
     }
     return jsonArray;
   }

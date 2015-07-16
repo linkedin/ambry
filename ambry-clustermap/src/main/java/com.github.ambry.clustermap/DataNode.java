@@ -203,51 +203,46 @@ public class DataNode extends DataNodeId {
       if (!portType.equalsIgnoreCase("plaintext")) {
         jsonObject.put(portType, ports.get(portType));
       }
+      } return jsonObject;
     }
-    return jsonObject;
+
+    @Override public String toString () {
+      return "DataNode[" + getHostname() + ":" + getPort() + "]";
+    }
+
+    @Override public boolean equals (Object o){
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+
+      DataNode dataNode = (DataNode) o;
+
+      if (port != dataNode.port) {
+        return false;
+      }
+
+      return hostname.equals(dataNode.hostname);
+    }
+
+    @Override public int hashCode () {
+      int result = hostname.hashCode();
+      result = 31 * result + port;
+      return result;
+    }
+
+    @Override public int compareTo (DataNodeId o){
+      if (o == null) {
+        throw new NullPointerException("input argument null");
+      }
+
+      DataNode other = (DataNode) o;
+      int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
+      if (compare == 0) {
+        compare = hostname.compareTo(other.hostname);
+      }
+      return compare;
+    }
   }
-
-  @Override
-  public String toString() {
-    return "DataNode[" + getHostname() + ":" + getPort() + "]";
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
-    DataNode dataNode = (DataNode) o;
-
-    if (port != dataNode.port) {
-      return false;
-    }
-
-    return hostname.equals(dataNode.hostname);
-  }
-
-  @Override
-  public int hashCode() {
-    int result = hostname.hashCode();
-    result = 31 * result + port;
-    return result;
-  }
-
-  @Override
-  public int compareTo(DataNodeId o) {
-    if (o == null) {
-      throw new NullPointerException("input argument null");
-    }
-
-    DataNode other = (DataNode) o;
-    int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
-    if (compare == 0) {
-      compare = hostname.compareTo(other.hostname);
-    }
-    return compare;
-  }
-}

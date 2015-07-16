@@ -132,7 +132,7 @@ public class DataNodeTest {
 
     // Bad ssl port (too big)
     jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 100 * 1000, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 100* 1000, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 
