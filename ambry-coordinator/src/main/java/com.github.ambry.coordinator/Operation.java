@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.SystemTime;
@@ -286,18 +287,17 @@ abstract class OperationRequest implements Runnable {
         // interim solution is to contact plain text port until Ambry server starts listening to ssl port
         connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                context.getConnectionPoolCheckoutTimeout());
+                PortType.PLAINTEXT, context.getConnectionPoolCheckoutTimeout());
         // below line will be replaced with above line once ambry server listens to ssl port
         /* connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
-                context.getConnectionPoolCheckoutTimeout()); */
+                PortType.SSL, context.getConnectionPoolCheckoutTimeout()); */
 
       } else {
-
         context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
         connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                context.getConnectionPoolCheckoutTimeout());
+                PortType.PLAINTEXT, context.getConnectionPoolCheckoutTimeout());
       }
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);

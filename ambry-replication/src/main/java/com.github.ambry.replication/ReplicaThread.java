@@ -18,6 +18,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -146,15 +147,17 @@ class ReplicaThread implements Runnable {
               replicationMetrics.sslConnectionsRequestRate.mark();
               logger.error("No SSL Connections should be established for replica " + remoteNode);
               // interim solution is to connect to plain text port until ambry server listens to ssl port
-              connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(),
-                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              connectedChannel = connectionPool
+                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.PLAINTEXT,
+                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               // below line will be replaced with above line once ambry server listens to ssl port
               /*connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getSSLPort(),
-                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs); */
+                 PortType.SSL, replicationConfig.replicationConnectionPoolCheckoutTimeoutMs); */
             } else {
               replicationMetrics.plainTextConnectionsRequestRate.mark();
-              connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(),
-                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              connectedChannel = connectionPool
+                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.PLAINTEXT,
+                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
             }
             checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
 

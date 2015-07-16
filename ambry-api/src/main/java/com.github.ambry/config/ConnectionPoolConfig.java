@@ -40,6 +40,20 @@ public class ConnectionPoolConfig {
   @Default("5")
   public final int connectionPoolMaxConnectionsPerHost;
 
+  /**
+   * The max connections allowed per host per port for plain text
+   */
+  @Config("connectionpool.max.connections.per.port.plain.text")
+  @Default("5")
+  public final int connectionPoolMaxConnectionsPerPortPlainText;
+
+  /**
+   * The max connections allowed per host per port for ssl
+   */
+  @Config("connectionpool.max.connections.per.port.ssl")
+  @Default("2")
+  public final int connectionPoolMaxConnectionsPerPortSSL;
+
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
     connectionPoolReadBufferSizeBytes =
         verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 1048576, 1, 1024 * 1024 * 1024);
@@ -50,5 +64,9 @@ public class ConnectionPoolConfig {
         verifiableProperties.getIntInRange("connectionpool.connect.timeout.ms", 800, 1, 100000);
     connectionPoolMaxConnectionsPerHost =
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.host", 5, 1, 20);
+    connectionPoolMaxConnectionsPerPortPlainText =
+        verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.plain.text", 5, 1, 20);
+    connectionPoolMaxConnectionsPerPortSSL =
+        verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.ssl", 2, 1, 20);
   }
 }

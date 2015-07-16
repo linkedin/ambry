@@ -25,12 +25,13 @@ public interface ConnectionPool {
    * method blocks for the timeout specified
    * @param host The remote host to which a connection is required
    * @param port The remote port to which a connection is required
+   * @param portType Specifies the {@link PortType} to which connection needs to be established
    * @param timeout The time up to which to wait to get a connection
    * @return The connected channel that represents the given host and port.
    * @throws IOException
    * @throws InterruptedException
    */
-  public ConnectedChannel checkOutConnection(String host, int port, long timeout)
+  public ConnectedChannel checkOutConnection(String host, int port, PortType portType, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException;
 
   /**

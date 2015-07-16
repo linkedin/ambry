@@ -1,26 +1,17 @@
-package com.github.ambry.clustermap;
+package com.github.ambry.network;
 
-import java.util.Iterator;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 
-public class Port {
+
+public class Port{
   int portNo;
   PortType type;
 
   public Port(int port, PortType type) {
     this.portNo = port;
     this.type = type;
-  }
-
-  public Port(JSONObject jsonObject) throws JSONException{
-    Iterator<String> itr = jsonObject.keys();
-    while(itr.hasNext()){
-      String portType = itr.next();
-      portNo = Integer.parseInt(jsonObject.get(portType).toString());
-      type = getType(portType);
-    }
   }
 
   private PortType getType(String portType){
@@ -39,18 +30,18 @@ public class Port {
     return this.portNo;
   }
 
-  public PortType getType(){
+  public PortType getPortType(){
     return this.type;
   }
 
   @Override
   public String toString() {
-    return "Ports[" + getPortNo() + ":" + getType() + "]";
+    return "Ports[" + getPortNo() + ":" + getPortType() + "]";
   }
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put(getType().toString().toLowerCase(), getPortNo());
+    JSONObject jsonObject = new JSONObject().put(getPortType().toString().toLowerCase(), getPortNo());
     return jsonObject;
   }
 }

@@ -26,7 +26,7 @@ public class SocketServerTest {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
-    server = new SocketServer(config, new MetricRegistry());
+    server = new SocketServer(config, new MetricRegistry(), new ArrayList<Port>());
     server.start();
   }
 

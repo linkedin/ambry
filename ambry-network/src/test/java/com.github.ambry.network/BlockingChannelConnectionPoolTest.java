@@ -5,6 +5,7 @@ import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -36,17 +37,23 @@ public class BlockingChannelConnectionPoolTest {
     props.setProperty("port", "6667");
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
-    server1 = new SocketServer(config, new MetricRegistry());
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(6667, PortType.PLAINTEXT));
+    server1 = new SocketServer(config, new MetricRegistry(), ports);
     server1.start();
     props.setProperty("port", "6668");
     propverify = new VerifiableProperties(props);
     config = new NetworkConfig(propverify);
-    server2 = new SocketServer(config, new MetricRegistry());
+    ports = new ArrayList<Port>();
+    ports.add(new Port(6668, PortType.PLAINTEXT));
+    server2 = new SocketServer(config, new MetricRegistry(), ports);
     server2.start();
     props.setProperty("port", "6669");
     propverify = new VerifiableProperties(props);
     config = new NetworkConfig(propverify);
-    server3 = new SocketServer(config, new MetricRegistry());
+    ports = new ArrayList<Port>();
+    ports.add(new Port(6669, PortType.PLAINTEXT));
+    server3 = new SocketServer(config, new MetricRegistry(), ports);
     server3.start();
   }
 
@@ -97,7 +104,7 @@ public class BlockingChannelConnectionPoolTest {
     props.put("connectionpool.max.connections.per.host", "5");
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), "127.0.0.1", 6667,
-            new MetricRegistry());
+            new MetricRegistry(), PortType.PLAINTEXT);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = null;
     try {
@@ -183,11 +190,11 @@ public class BlockingChannelConnectionPoolTest {
     @Override
     public void run() {
       try {
-        ConnectedChannel channel1 = connectionPool.checkOutConnection("localhost", 6667, 1000);
+        ConnectedChannel channel1 = connectionPool.checkOutConnection("localhost", 6667, PortType.PLAINTEXT, 1000);
         channelCount.get("localhost" + 6667).incrementAndGet();
-        ConnectedChannel channel2 = connectionPool.checkOutConnection("localhost", 6668, 1000);
+        ConnectedChannel channel2 = connectionPool.checkOutConnection("localhost", 6668, PortType.PLAINTEXT, 1000);
         channelCount.get("localhost" + 6668).incrementAndGet();
-        ConnectedChannel channel3 = connectionPool.checkOutConnection("localhost", 6669, 1000);
+        ConnectedChannel channel3 = connectionPool.checkOutConnection("localhost", 6669, PortType.PLAINTEXT, 1000);
         channelCount.get("localhost" + 6669).incrementAndGet();
         releaseConnection.await();
         if (destroyConnection) {

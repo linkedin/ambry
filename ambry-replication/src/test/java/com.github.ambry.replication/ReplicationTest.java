@@ -18,6 +18,7 @@ import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -310,7 +311,8 @@ public class ReplicationTest {
     Map<PartitionId, MockStore> stores;
 
     public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-        StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Map<PartitionId, MockStore> stores) {
+        StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+        Map<PartitionId, MockStore> stores) {
       super(config, scheduler, registry, replicas, factory, recovery, hardDelete);
       this.stores = stores;
     }
@@ -487,8 +489,9 @@ public class ReplicationTest {
     }
 
     @Override
-    public ConnectedChannel checkOutConnection(String host, int port, long timeout)
+    public ConnectedChannel checkOutConnection(String host, int port, PortType portType, long timeout)
         throws IOException, InterruptedException, ConnectionPoolTimeoutException {
+      // will create SSLMockConnection incase porttype is SSL. Ignoring for now
       return new MockConnection(host, port, messageInfoList.get(host + port), byteBufferList.get(host + port),
           maxEntriesToReturn);
     }
@@ -604,8 +607,8 @@ public class ReplicationTest {
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
-              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
-              true, clusterMap.getMetricRegistry(), new ArrayList<String>());
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), new ArrayList<String>());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
               replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
@@ -696,7 +699,6 @@ public class ReplicationTest {
       Assert.assertTrue(false);
     }
   }
-
 
   @Test
   public void replicaThreadTestForExpiredBlobs()
@@ -801,8 +803,8 @@ public class ReplicationTest {
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
-              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
-              true, clusterMap.getMetricRegistry(), new ArrayList<String>());
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), new ArrayList<String>());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
               replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
@@ -908,7 +910,6 @@ public class ReplicationTest {
       Assert.assertTrue(false);
     }
   }
-
 
   @Test
   public void replicaThreadTestWithCorruptMessages()
@@ -1026,8 +1027,8 @@ public class ReplicationTest {
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", 64422),
-              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null, storeKeyFactory,
-              true, clusterMap.getMetricRegistry(), new ArrayList<String>());
+              new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), new ArrayList<String>());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", 64423, replicaStores.get("localhost" + 64423),
               replicaBuffers.get("localhost" + 64423), 5), replicasToReplicate.get(dataNodeId), false);
@@ -1115,7 +1116,8 @@ public class ReplicationTest {
             }
           }
           if (!found) {
-            if(!messageInfo.isExpired() && !(messageInfo.getStoreKey().equals(partitionIdToCorruptIdMap.get(partitionId)))) {
+            if (!messageInfo.isExpired() && !(messageInfo.getStoreKey()
+                .equals(partitionIdToCorruptIdMap.get(partitionId)))) {
               Assert.assertFalse("Message is neither expired nor corrupt " + messageInfo, false);
             }
           }
@@ -1141,7 +1143,7 @@ public class ReplicationTest {
 
   private ByteBuffer constructTestBlobInMessageFormat(BlobId id, long blobSize, Random random)
       throws MessageFormatException, IOException {
-      return constructEntireMessageForTestBlob(id, blobSize, random, "test");
+    return constructEntireMessageForTestBlob(id, blobSize, random, "test");
   }
 
   /**

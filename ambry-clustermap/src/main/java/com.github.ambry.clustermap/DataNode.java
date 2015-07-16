@@ -2,6 +2,8 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
+import java.util.HashMap;
+import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,7 +27,7 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
-  private final ArrayList<Port> ports;
+  private final Map<String, Integer> ports;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -41,7 +43,6 @@ public class DataNode extends DataNodeId {
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
-    this.ports = new ArrayList<Port>();
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
           .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
@@ -58,18 +59,17 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-    this.ports.add(new Port(this.port, PortType.PLAINTEXT));
+    this.ports = new HashMap<String, Integer>();
+    this.ports.put("plaintext", port);
     parsePorts(jsonObject);
     validate();
   }
 
-  private void parsePorts(JSONObject jsonObject){
-    try{
+  private void parsePorts(JSONObject jsonObject)
+      throws JSONException {
+    if (jsonObject.has("sslport")) {
       int sslPort = jsonObject.getInt("sslport");
-      this.ports.add(new Port(sslPort, PortType.SSL));
-    }
-    catch(JSONException e){
-      logger.trace("Swallowing JSONException while parsing sslport ");
+      this.ports.put("sslport", sslPort);
     }
   }
 
@@ -106,12 +106,11 @@ public class DataNode extends DataNodeId {
 
   @Override
   public int getSSLPort() {
-    for(Port individualPort: ports){
-      if(individualPort.getType() == PortType.SSL){
-        return individualPort.getPortNo();
-      }
+    if (ports.containsKey("sslport")) {
+      return ports.get("sslport");
+    } else {
+      return -1;
     }
-    throw new IllegalStateException("No SSL Port availbale in HardwareLayout ");
   }
 
   @Override
@@ -171,20 +170,12 @@ public class DataNode extends DataNodeId {
   }
 
   protected void validatePorts() {
-    if (port < MinPort) {
-      throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
-    } else if (port > MaxPort) {
-      throw new IllegalStateException("Invalid port: " + port + " is greater than " + MaxPort);
-    }
-
-    for (Port individualPort : ports) {
-      if (individualPort.getPortNo() < MinPort) {
-        throw new IllegalStateException(
-            "Invalid " + individualPort.getPortNo() + ": " + individualPort.getPortNo() + " is less than " + MinPort);
-      } else if (individualPort.getPortNo() > MaxPort) {
-        throw new IllegalStateException(
-            "Invalid " + individualPort.getPortNo() + ": " + individualPort.getPortNo() + " is greater than "
-                + MaxPort);
+    for (String portType : ports.keySet()) {
+      int portNo = ports.get(portType);
+      if (portNo < MinPort) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MinPort);
+      } else if (portNo > MaxPort) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MaxPort);
       }
     }
   }
@@ -208,10 +199,9 @@ public class DataNode extends DataNodeId {
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
     }
-    for(Port individualPort : ports) {
-      if(individualPort.getType() == PortType.SSL){
-        jsonObject.put("sslport",individualPort.getPortNo());
-        break;
+    for (String portType : ports.keySet()) {
+      if (!portType.equalsIgnoreCase("plaintext")) {
+        jsonObject.put(portType, ports.get(portType));
       }
     }
     return jsonObject;

@@ -6,6 +6,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.HashSet;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,12 +41,13 @@ public class SocketServer implements NetworkServer {
   private final int recvBufferSize;
   private final int maxRequestSize;
   private final ArrayList<Processor> processors;
-  private volatile Acceptor acceptor;
+  private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final NetworkMetrics metrics;
+  private final ArrayList<Port> ports;
 
-  public SocketServer(NetworkConfig config, MetricRegistry registry) {
+  public SocketServer(NetworkConfig config, MetricRegistry registry, ArrayList<Port> ports) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -56,6 +58,9 @@ public class SocketServer implements NetworkServer {
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new NetworkMetrics(requestResponseChannel, registry);
+    this.ports = ports;
+    this.acceptors = new ArrayList<Acceptor>();
+    this.validatePorts();
   }
 
   public String getHost() {
@@ -91,6 +96,17 @@ public class SocketServer implements NetworkServer {
     return requestResponseChannel;
   }
 
+  private void validatePorts() {
+    HashSet<PortType> portTypeSet = new HashSet<PortType>();
+    for (Port extraPort : ports) {
+      if (portTypeSet.contains(extraPort.getPortType())) {
+        throw new IllegalArgumentException("Not more than one port of same type is allowed : " + extraPort.getPortType());
+      } else {
+        portTypeSet.add(extraPort.getPortType());
+      }
+    }
+  }
+
   public void start()
       throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
@@ -107,18 +123,35 @@ public class SocketServer implements NetworkServer {
     });
 
     // start accepting connections
-    logger.info("Starting acceptor thread");
-    this.acceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
-    Utils.newThread("ambry-acceptor", acceptor, false).start();
-    acceptor.awaitStartup();
+    logger.info("Starting acceptor threads");
+    Acceptor plainTextAcceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
+    this.acceptors.add(plainTextAcceptor);
+    Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
+
+    Iterator<Port> portIterator = ports.iterator();
+    while (portIterator.hasNext()) {
+      Port extraPort = portIterator.next();
+      if (extraPort.getPortType() == PortType.SSL) {
+        SSLAcceptor sslAcceptor =
+            new SSLAcceptor(host, extraPort.getPortNo(), processors, sendBufferSize, recvBufferSize);
+        acceptors.add(sslAcceptor);
+        Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
+      }
+    }
+    for (Acceptor acceptor : acceptors) {
+      acceptor.awaitStartup();
+    }
+
     logger.info("Started server");
   }
 
   public void shutdown() {
     try {
       logger.info("Shutting down server");
-      if (acceptor != null) {
-        acceptor.shutdown();
+      for (Acceptor acceptor : acceptors) {
+        if (acceptor != null) {
+          acceptor.shutdown();
+        }
       }
       for (Processor processor : processors) {
         processor.shutdown();
@@ -183,6 +216,14 @@ abstract class AbstractServerThread implements Runnable {
    */
   protected boolean isRunning() {
     return alive.get();
+  }
+}
+
+class SSLAcceptor extends Acceptor {
+
+  public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize)
+      throws IOException {
+    super(host, port, processors, sendBufferSize, recvBufferSize);
   }
 }
 
@@ -282,7 +323,7 @@ class Acceptor extends AbstractServerThread {
     socketChannel.socket().setTcpNoDelay(true);
     socketChannel.socket().setSendBufferSize(sendBufferSize);
     logger.trace("Accepted connection from {} on {}. sendBufferSize "
-            + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
+        + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
         socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(),
         recvBufferSize);
