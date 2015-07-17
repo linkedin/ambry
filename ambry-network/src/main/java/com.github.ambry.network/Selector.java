@@ -395,7 +395,7 @@ public class Selector implements Selectable {
    */
   private void close(SelectionKey key) {
     if (key == null) {
-      return;
+      throw new IllegalStateException("Attempt to close a null key");
     }
     SocketChannel socketChannel = channel(key);
     Transmissions transmissions = transmissions(key);
