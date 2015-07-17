@@ -338,7 +338,7 @@ class Processor extends AbstractServerThread {
         }
       }
     } catch (Exception e) {
-      logger.error("Error in processor thread {}", e);
+      logger.error("Error in processor thread", e);
     } finally {
       logger.debug("Closing server socket and selector.");
       closeAll();
@@ -365,8 +365,7 @@ class Processor extends AbstractServerThread {
           selector.send(networkSend);
         }
       } catch (IllegalStateException e) {
-        logger
-            .error("Attempt to write to socket for which there is no open connection. Connection id {}", connectionId);
+        logger.error("Error in processing new responses {}", e.getMessage());
       } finally {
         curr = (SocketServerResponse) channel.receiveResponse(id);
       }

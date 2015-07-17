@@ -424,8 +424,7 @@ public class Selector implements Selectable {
   private SelectionKey keyForId(String id) {
     SelectionKey key = this.keyMap.get(id);
     if (key == null) {
-      throw new IllegalStateException(
-          "Attempt to write to socket for which there is no open connection. Connection id " + id);
+      throw new IllegalStateException("Key not found for connection id " + id);
     }
     return key;
   }
