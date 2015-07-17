@@ -61,8 +61,6 @@ public class DataNodeTest {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
-
-
   @Test
   public void basics()
       throws JSONException {
