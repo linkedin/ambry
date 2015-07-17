@@ -40,10 +40,19 @@ public class MockConnectionPool implements ConnectionPool {
   @Override
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-    // will create SSLBlockingChannel incase portType is SSL
-    BlockingChannel blockingChannel =
+
+    BlockingChannel blockingChannel = null;
+    if(port.getPortType() == PortType.PLAINTEXT) {
+     blockingChannel =
         new MockBlockingChannel(mockCluster.getMockDataNode(host, port.getPortNo()), host, port.getPortNo(),
             readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
+    }
+    else{
+      // add MockSSLBlockingChannel
+      blockingChannel =
+          new MockBlockingChannel(mockCluster.getMockDataNode(host, port.getPortNo()), host, port.getPortNo(),
+              readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
+    }
     blockingChannel.connect();
     return blockingChannel;
   }
