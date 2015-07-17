@@ -13,6 +13,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
@@ -217,7 +218,7 @@ public class ServerWritePerformance {
                 new ByteBufferInputStream(ByteBuffer.wrap(blob)));
             channel = connectionPool
                 .checkOutConnection(partitionId.getReplicaIds().get(0).getDataNodeId().getHostname(),
-                    partitionId.getReplicaIds().get(0).getDataNodeId().getPort(), PortType.PLAINTEXT, 10000);
+                    new Port(partitionId.getReplicaIds().get(0).getDataNodeId().getPort(), PortType.PLAINTEXT), 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
             PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));

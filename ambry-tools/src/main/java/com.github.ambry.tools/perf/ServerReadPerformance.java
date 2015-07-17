@@ -16,6 +16,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
@@ -142,8 +143,8 @@ public class ServerReadPerformance {
             GetRequest getRequest =
                 new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
             channel = connectionPool
-                .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                    PortType.PLAINTEXT, 10000);
+                .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
+                    PortType.PLAINTEXT), 10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();

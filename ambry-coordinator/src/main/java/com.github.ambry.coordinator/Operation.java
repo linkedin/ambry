@@ -9,6 +9,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
@@ -16,7 +17,6 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -289,13 +289,13 @@ abstract class OperationRequest implements Runnable {
         logger.error("No SSL connections should be established for replica " + replicaId.getDataNodeId());
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
         connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                PortType.SSL, context.getConnectionPoolCheckoutTimeout());
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
+                PortType.SSL), context.getConnectionPoolCheckoutTimeout());
       } else {
         context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
         connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                PortType.PLAINTEXT, context.getConnectionPoolCheckoutTimeout());
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
+                PortType.PLAINTEXT), context.getConnectionPoolCheckoutTimeout());
       }
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);

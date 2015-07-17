@@ -310,19 +310,19 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   }
 
   @Override
-  public ConnectedChannel checkOutConnection(String host, int port, PortType portType, long timeoutInMs)
+  public ConnectedChannel checkOutConnection(String host, Port port, long timeoutInMs)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     final Timer.Context context = connectionCheckOutTime.time();
     try {
       requestsWaitingToCheckoutConnectionCount.incrementAndGet();
-      BlockingChannelInfo blockingChannelInfo = connections.get(host + port);
+      BlockingChannelInfo blockingChannelInfo = connections.get(host + port.getPortNo());
       if (blockingChannelInfo == null) {
         synchronized (this) {
-          blockingChannelInfo = connections.get(host + port);
+          blockingChannelInfo = connections.get(host + port.getPortNo());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, portType);
-            connections.put(host + port, blockingChannelInfo);
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port.getPortNo(), registry, port.getPortType());
+            connections.put(host + port.getPortNo(), blockingChannelInfo);
           } else {
             logger.trace(
                 "Using already existing BlockingChannelInfo for " + host + ":" + port + " in synchronized block");

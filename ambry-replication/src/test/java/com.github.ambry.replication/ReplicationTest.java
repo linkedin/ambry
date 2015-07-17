@@ -18,6 +18,7 @@ import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.GetRequest;
@@ -489,11 +490,11 @@ public class ReplicationTest {
     }
 
     @Override
-    public ConnectedChannel checkOutConnection(String host, int port, PortType portType, long timeout)
+    public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
         throws IOException, InterruptedException, ConnectionPoolTimeoutException {
       // will create SSLMockConnection incase porttype is SSL. Ignoring for now
-      return new MockConnection(host, port, messageInfoList.get(host + port), byteBufferList.get(host + port),
-          maxEntriesToReturn);
+      return new MockConnection(host, port.getPortNo(), messageInfoList.get(host + port.getPortNo()),
+          byteBufferList.get(host + port.getPortNo()), maxEntriesToReturn);
     }
 
     @Override

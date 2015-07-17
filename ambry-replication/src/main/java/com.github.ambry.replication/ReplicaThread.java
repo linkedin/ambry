@@ -11,6 +11,7 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
+import com.github.ambry.network.Port;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.commons.BlobId;
@@ -147,12 +148,12 @@ class ReplicaThread implements Runnable {
               replicationMetrics.sslConnectionsRequestRate.mark();
               logger.error("No SSL Connections should be established for replica " + remoteNode);
               connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.SSL,
+                  .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getPort(), PortType.SSL),
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
             } else {
               replicationMetrics.plainTextConnectionsRequestRate.mark();
               connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.PLAINTEXT,
+                  .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getPort(), PortType.PLAINTEXT),
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
             }
             checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
