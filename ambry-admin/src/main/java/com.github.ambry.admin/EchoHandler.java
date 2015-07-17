@@ -69,7 +69,7 @@ class EchoHandler {
       try {
         return packageResult(text);
       } catch (JSONException e) {
-        logger.error("Exception during response construction for echo GET. Echo text {}", e, text);
+        logger.error("Exception during response construction for echo GET. Echo text {}", text, e);
         adminMetrics.echoGetResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result object - ", e,
             RestServiceErrorCode.ResponseBuildingFailure);

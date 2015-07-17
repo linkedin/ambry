@@ -90,7 +90,7 @@ class GetReplicasForBlobIdHandler {
         adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
         throw new RestServiceException("Unable to create blob id object ", e, RestServiceErrorCode.BlobIdCreationError);
       } catch (JSONException e) {
-        logger.error("Exception during response construction for getReplicasForBlobId. Blob id - {} ", e, blobIdStr);
+        logger.error("Exception during response construction for getReplicasForBlobId. Blob id - {} ", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result object", e,
             RestServiceErrorCode.ResponseBuildingFailure);
