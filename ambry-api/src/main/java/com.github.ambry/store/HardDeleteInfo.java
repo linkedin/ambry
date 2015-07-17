@@ -9,10 +9,14 @@ import java.nio.channels.ReadableByteChannel;
 public class HardDeleteInfo {
   ReadableByteChannel channel;
   long streamSize;
+  long relativeOffset;
+  byte[] recoveryInfo;
 
-  public HardDeleteInfo(ReadableByteChannel channel, long streamSize) {
+  public HardDeleteInfo(ReadableByteChannel channel, long streamSize, long relativeOffset, byte[] recoveryInfo) {
     this.channel = channel;
     this.streamSize = streamSize;
+    this.relativeOffset = relativeOffset;
+    this.recoveryInfo = recoveryInfo;
   }
 
   public ReadableByteChannel getChannel() {
@@ -21,5 +25,13 @@ public class HardDeleteInfo {
 
   public long getSize() {
     return streamSize;
+  }
+
+  public long getRelativeOffset() {
+    return relativeOffset;
+  }
+
+  byte[] getRecoveryMetadata() {
+    return recoveryInfo;
   }
 }

@@ -26,16 +26,6 @@ public class InMemoryIndexTest {
   private StoreKeyFactory factory;
   private MockClusterMap map;
 
-  /**
-   * Create a temporary file
-   */
-  File tempFile()
-      throws IOException {
-    File f = File.createTempFile("ambry", ".tmp");
-    f.deleteOnExit();
-    return f;
-  }
-
   public InMemoryIndexTest()
       throws InstantiationException, IOException {
     map = new MockClusterMap();
@@ -46,34 +36,14 @@ public class InMemoryIndexTest {
     }
   }
 
-  class MockIndex extends InMemoryIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory)
-        throws StoreException {
-      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory,
-          new DummyMessageStoreRecovery(), new MetricRegistry());
-    }
-
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory, StoreConfig config,
-        MessageStoreRecovery messageRecovery)
-        throws StoreException {
-      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
-    }
-
-    IndexValue getValue(StoreKey key) {
-      return index.get(key);
-    }
-
-    public void deleteAll() {
-      index.clear();
-    }
-
-    public void stopScheduler() {
-      scheduler.shutdown();
-    }
-
-    public boolean isEmpty() {
-      return index.size() == 0;
-    }
+  /**
+   * Create a temporary file
+   */
+  File tempFile()
+      throws IOException {
+    File f = File.createTempFile("ambry", ".tmp");
+    f.deleteOnExit();
+    return f;
   }
 
   @Test
@@ -186,7 +156,8 @@ public class InMemoryIndexTest {
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
             @Override
-            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
+                Set<Long> noCrcList)
                 throws IOException {
               List<MessageInfo> infos = new ArrayList<MessageInfo>();
               infos.add(new MessageInfo(blobId4, 1000));
@@ -206,7 +177,8 @@ public class InMemoryIndexTest {
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
             @Override
-            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
+                Set<Long> noCrcList)
                 throws IOException {
               List<MessageInfo> infos = new ArrayList<MessageInfo>();
               infos.add(new MessageInfo(blobId4, 1000, true));
@@ -485,6 +457,36 @@ public class InMemoryIndexTest {
       Assert.assertEquals(info1.getMessageEntries().size(), 12);
     } catch (Exception e) {
       Assert.assertTrue(false);
+    }
+  }
+
+  class MockIndex extends InMemoryIndex {
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory)
+        throws StoreException {
+      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory,
+          new DummyMessageStoreRecovery(), new MetricRegistry());
+    }
+
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory, StoreConfig config,
+        MessageStoreRecovery messageRecovery)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
+    }
+
+    IndexValue getValue(StoreKey key) {
+      return index.get(key);
+    }
+
+    public void deleteAll() {
+      index.clear();
+    }
+
+    public void stopScheduler() {
+      scheduler.shutdown();
+    }
+
+    public boolean isEmpty() {
+      return index.size() == 0;
     }
   }
 }

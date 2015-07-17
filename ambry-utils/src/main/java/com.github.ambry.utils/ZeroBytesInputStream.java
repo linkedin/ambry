@@ -10,7 +10,7 @@ import java.util.Arrays;
  */
 
 public class ZeroBytesInputStream extends InputStream {
-  private int streamSize;
+  private long streamSize;
   private int position;
 
   /**
@@ -18,7 +18,7 @@ public class ZeroBytesInputStream extends InputStream {
    * @param size The number of zero bytes to be returned.
    * @throws IOException
    */
-  public ZeroBytesInputStream(int size)
+  public ZeroBytesInputStream(long size)
       throws IOException {
     this.streamSize = size;
     this.position = 0;
@@ -38,7 +38,7 @@ public class ZeroBytesInputStream extends InputStream {
   @Override
   public int read(byte[] bytes, int offset, int length)
       throws IOException {
-    int count = Math.min(length, streamSize - position);
+    int count = (int) Math.min(length, streamSize - position);
     Arrays.fill(bytes, offset, offset + count, (byte) 0);
     position += count;
     return count;
@@ -47,7 +47,7 @@ public class ZeroBytesInputStream extends InputStream {
   @Override
   public int available()
       throws IOException {
-    return streamSize - position;
+    return streamSize - position < Integer.MAX_VALUE ? (int) (streamSize - position) : Integer.MAX_VALUE;
   }
 }
 

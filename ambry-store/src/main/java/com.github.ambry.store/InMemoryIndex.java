@@ -101,7 +101,7 @@ public class InMemoryIndex {
       }
       // do recovery
       final Timer.Context context = recoveryTime.time();
-      List<MessageInfo> messagesRecovered = recovery.recover(log, logEndOffset.get(), log.sizeInBytes(), factory);
+      List<MessageInfo> messagesRecovered = recovery.recover(log, logEndOffset.get(), log.sizeInBytes(), factory, null);
       if (messagesRecovered.size() > 0) {
         nonzeroMessageRecovery.inc(1);
       }

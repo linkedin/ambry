@@ -6,6 +6,7 @@ import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +26,8 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+  public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
+      Set<Long> offsetsToIgnoreCrcCheck)
       throws IOException {
     ArrayList<MessageInfo> messageRecovered = new ArrayList<MessageInfo>();
     try {
@@ -35,6 +37,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         if (startOffset + MessageFormatRecord.Version_Field_Size_In_Bytes > endOffset) {
           throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
         }
+        long currentBlobStartOffset = startOffset;
         read.readInto(headerVersion, startOffset);
         startOffset += headerVersion.capacity();
         headerVersion.flip();
@@ -62,9 +65,16 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
               BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
               // we do not use the user metadata or blob during recovery but we still deserialize them to check
-              // for validity
-              MessageFormatRecord.deserializeUserMetadata(stream);
-              MessageFormatRecord.deserializeBlob(stream);
+              // for validity. However, we ignore the check if the blob's offset is part of offsets to ignore
+              // crc checks.
+              if (offsetsToIgnoreCrcCheck != null && offsetsToIgnoreCrcCheck.contains(currentBlobStartOffset)) {
+                stream.skip(
+                    headerFormat.getMessageSize() - (headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
+                        .getBlobPropertiesRecordRelativeOffset()));
+              } else {
+                MessageFormatRecord.deserializeUserMetadata(stream);
+                MessageFormatRecord.deserializeBlob(stream);
+              }
               MessageInfo info =
                   new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), Utils
                       .addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));

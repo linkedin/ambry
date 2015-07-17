@@ -23,7 +23,6 @@ public class MessageFormatRecord {
   // Common info for all formats
   public static final int Version_Field_Size_In_Bytes = 2;
   public static final int Crc_Size = 8;
-
   public static final short Message_Header_Version_V1 = 1;
   public static final short BlobProperties_Version_V1 = 1;
   public static final short Delete_Version_V1 = 1;
@@ -62,12 +61,18 @@ public class MessageFormatRecord {
 
   public static ByteBuffer deserializeUserMetadata(InputStream stream)
       throws IOException, MessageFormatException {
+    return getUserMetadataInfo(stream).getUserMetadata();
+  }
+
+  public static UserMetadataInfo getUserMetadataInfo(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case UserMetadata_Version_V1:
-        return UserMetadata_Format_V1.deserializeUserMetadataRecord(crcStream);
+        return new UserMetadataInfo(UserMetadata_Version_V1,
+            UserMetadata_Format_V1.deserializeUserMetadataRecord(crcStream));
       default:
         throw new MessageFormatException("metadata version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
@@ -76,12 +81,17 @@ public class MessageFormatRecord {
 
   public static BlobOutput deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
+    return getBlobRecordInfo(stream).getBlobOutput();
+  }
+
+  public static BlobRecordInfo getBlobRecordInfo(InputStream stream)
+      throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case Blob_Version_V1:
-        return Blob_Format_V1.deserializeBlobRecord(crcStream);
+        return new BlobRecordInfo(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
       default:
         throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
@@ -115,14 +125,9 @@ public class MessageFormatRecord {
    *
    */
   public static class MessageHeader_Format_V1 {
-    private ByteBuffer buffer;
-
     // total size field start offset and size
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
-
-    // relative offset fields start offset and size
-    private static final int Number_Of_Relative_Offset_Fields = 4;
     public static final int Relative_Offset_Field_Sizes_In_Bytes = 4;
     public static final int BlobProperties_Relative_Offset_Field_Offset_In_Bytes =
         Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
@@ -132,10 +137,16 @@ public class MessageFormatRecord {
         Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Blob_Relative_Offset_Field_Offset_In_Bytes =
         UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
-
     // crc field start offset
     public static final int Crc_Field_Offset_In_Bytes =
         Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+    // relative offset fields start offset and size
+    private static final int Number_Of_Relative_Offset_Fields = 4;
+    private ByteBuffer buffer;
+
+    public MessageHeader_Format_V1(ByteBuffer input) {
+      this.buffer = input;
+    }
 
     public static int getHeaderSize() {
       return Version_Field_Size_In_Bytes +
@@ -206,10 +217,6 @@ public class MessageFormatRecord {
             " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
             " blobRecordRelativeOffset " + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
-    }
-
-    public MessageHeader_Format_V1(ByteBuffer input) {
-      this.buffer = input;
     }
 
     public short getVersion() {
@@ -463,5 +470,41 @@ public class MessageFormatRecord {
       }
       return new BlobOutput(dataSize, output);
     }
+  }
+}
+
+class UserMetadataInfo {
+  short version;
+  ByteBuffer userMetadata;
+
+  UserMetadataInfo(short version, ByteBuffer userMetadata) {
+    this.version = version;
+    this.userMetadata = userMetadata;
+  }
+
+  short getVersion() {
+    return version;
+  }
+
+  ByteBuffer getUserMetadata() {
+    return userMetadata;
+  }
+}
+
+class BlobRecordInfo {
+  short version;
+  BlobOutput blobOutput;
+
+  BlobRecordInfo(short version, BlobOutput blobOutput) {
+    this.version = version;
+    this.blobOutput = blobOutput;
+  }
+
+  short getVersion() {
+    return version;
+  }
+
+  BlobOutput getBlobOutput() {
+    return blobOutput;
   }
 }

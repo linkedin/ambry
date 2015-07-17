@@ -186,7 +186,7 @@ public class BlobStoreRecoveryTest {
     ReadImp readrecovery = new ReadImp();
     readrecovery.initialize();
     List<MessageInfo> recoveredMessages =
-        recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
+        recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory(), null);
     Assert.assertEquals(recoveredMessages.size(), 4);
     Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
     Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);

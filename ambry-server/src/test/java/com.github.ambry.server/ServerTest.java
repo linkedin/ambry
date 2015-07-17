@@ -29,6 +29,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
@@ -292,6 +293,27 @@ public class ServerTest {
           int size = bytebufferToken.getInt();
           bytebufferToken.position(bytebufferToken.position() + size);
           parsedTokenValue = bytebufferToken.getLong();
+
+          int num = stream.readInt();
+          while(num-- > 0) {
+            // Read BlobReadOptions
+            short blobReadOptionsVersion = stream.readShort();
+            switch(blobReadOptionsVersion) {
+              case 0:
+                long offset = stream.readLong();
+                long sz = stream.readLong();
+                long ttl = stream.readLong();
+                StoreKey key = storeKeyFactory.getStoreKey(stream);
+                break;
+              default:
+                Assert.assertFalse(true);
+            }
+            short headerVersion = stream.readShort();
+            short userMetadataVersion = stream.readShort();
+            int userMetadataSize = stream.readInt();
+            short blobRecordVersion = stream.readShort();
+            long blobStreamSize = stream.readLong();
+          }
           long crc = crcStream.getValue();
           Assert.assertEquals(crc, stream.readLong());
           Thread.sleep(1000);

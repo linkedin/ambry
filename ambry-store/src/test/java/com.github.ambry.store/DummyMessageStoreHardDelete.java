@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import java.io.DataInputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 
@@ -33,6 +34,11 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   @Override
   public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
     return dummyMap.get(offset);
+  }
+
+  @Override
+  public byte[] processAndReturnRecoveryMetadata(DataInputStream stream, StoreKey key) {
+    return null;
   }
 }
 

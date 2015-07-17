@@ -2,6 +2,7 @@ package com.github.ambry.store;
 
 import java.util.List;
 import java.io.IOException;
+import java.util.Set;
 
 
 /**
@@ -17,9 +18,11 @@ public interface MessageStoreRecovery {
    * @param endOffset The end offset where the recovery needs to complete. The recovery can end before this offset if
    *                  there were malformed messages
    * @param factory The store key factory used to create the store key
+   * @param offsetsToIgnoreCrcCheck offsets to ignore crc checks.
    * @return A list of messages that were successfully recovered
    * @throws IOException
    */
-  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
+      Set<Long> offsetsToIgnoreCrcCheck)
       throws IOException;
 }

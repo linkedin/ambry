@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
@@ -24,5 +25,15 @@ public interface MessageStoreHardDelete {
    * @return a MessageInfo object for the message at the offset.
    */
   public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory)
+      throws IOException;
+
+  /**
+   * Processes the metadata for a message in the stream that will be used during recovery. Processing involves
+   * reading from the stream and maintaining the state of the blobs that need recovery.
+   * @param stream the input stream representing the persisted information
+   * @param key the StoreKey of the given message.
+   */
+
+  public byte[] processAndReturnRecoveryMetadata(DataInputStream stream, StoreKey key)
       throws IOException;
 }
