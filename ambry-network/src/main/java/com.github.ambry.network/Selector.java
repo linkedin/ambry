@@ -382,14 +382,21 @@ public class Selector implements Selectable {
    */
   @Override
   public void close(String connectionId) {
-    SelectionKey key = keyForId(connectionId);
-    close(key);
+    try {
+      SelectionKey key = keyForId(connectionId);
+      close(key);
+    } catch (IllegalStateException e) {
+      logger.error("Attempt to close socket for which there is no open connection. Connection id {}", connectionId);
+    }
   }
 
   /**
    * Begin closing this connection by given key
    */
   private void close(SelectionKey key) {
+    if (key == null) {
+      return;
+    }
     SocketChannel socketChannel = channel(key);
     Transmissions transmissions = transmissions(key);
     if (transmissions != null) {
@@ -418,8 +425,7 @@ public class Selector implements Selectable {
     SelectionKey key = this.keyMap.get(id);
     if (key == null) {
       throw new IllegalStateException(
-          "Attempt to write to socket for which there is no open connection. Connection id " + id
-              + " existing connections " + keyMap.keySet().toString());
+          "Attempt to write to socket for which there is no open connection. Connection id " + id);
     }
     return key;
   }

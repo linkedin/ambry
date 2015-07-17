@@ -364,6 +364,9 @@ class Processor extends AbstractServerThread {
           NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), curr.getMetrics(), time);
           selector.send(networkSend);
         }
+      } catch (IllegalStateException e) {
+        logger
+            .error("Attempt to write to socket for which there is no open connection. Connection id {}", connectionId);
       } finally {
         curr = (SocketServerResponse) channel.receiveResponse(id);
       }
