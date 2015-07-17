@@ -53,11 +53,10 @@ public class CoordinatorConfig {
   public final boolean crossDCProxyCallEnable;
 
   /**
-   * List of colos against which only SSL should be spoken
+   * List of Datacenters against which only SSL should be spoken
    */
-  @Config("coordinator.ssl.enabled.colos")
-  public final String sslEnabledColos;
-
+  @Config("coordinator.ssl.enabled.Datacenters")
+  public final String sslEnabledDatacenters;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
     this.hostname = verifiableProperties.getString("coordinator.hostname");
@@ -71,6 +70,6 @@ public class CoordinatorConfig {
     this.connectionPoolCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
-    this.sslEnabledColos = verifiableProperties.getString("coordinator.ssl.enabled.colos", "");
+    this.sslEnabledDatacenters = verifiableProperties.getString("coordinator.ssl.enabled.Datacenters", "");
   }
 }

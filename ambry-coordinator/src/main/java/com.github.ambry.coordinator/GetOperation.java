@@ -54,11 +54,10 @@ public abstract class GetOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public GetOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags,
-      ArrayList<String> sslEnabledColos)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap, MessageFormatFlags flags)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        getOperationPolicy(datacenterName, blobId.getPartition(), oc), sslEnabledColos);
+        getOperationPolicy(datacenterName, blobId.getPartition(), oc));
     this.clusterMap = clusterMap;
     this.flags = flags;
 
@@ -187,9 +186,8 @@ abstract class GetOperationRequest extends OperationRequest {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected GetOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap,
-      boolean sslEnabled) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request, sslEnabled);
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, ClusterMap clusterMap) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request);
     this.clusterMap = clusterMap;
   }
 

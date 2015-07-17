@@ -31,6 +31,7 @@ public class OperationPolicyTest {
   final String datacenterGamma = "gamma";
   final String[] dataCenters = new String[]{datacenterAlpha, datacenterBeta, datacenterGamma};
   final int REPLICAS_PER_DATACENTER = 3;
+  final ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
 
   /**
    * SerialOperationPolicy is used as the Policy for GetOperation
@@ -39,11 +40,10 @@ public class OperationPolicyTest {
   @Test
   public void testSerialOperationPolicy()
       throws Exception {
-    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
+    OperationContext oc = new OperationContext("client1", 1000, true, null, null, sslEnabledDataCenters);
     // Simple success test
     {
-      OperationPolicy op =
-          new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -60,8 +60,7 @@ public class OperationPolicyTest {
 
     // Failures but still succeed test
     {
-      OperationPolicy op =
-          new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -85,8 +84,7 @@ public class OperationPolicyTest {
 
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct
     {
-      OperationPolicy op =
-          new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -124,12 +122,11 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    oc = new OperationContext("client1", 1000, false, null, null);
+    oc = new OperationContext("client1", 1000, false, null, null, sslEnabledDataCenters);
 
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op =
-          new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -159,11 +156,10 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    oc = new OperationContext("client1", 1000, true, null, null);
+    oc = new OperationContext("client1", 1000, true, null, null, sslEnabledDataCenters);
     // Corruption test
     {
-      OperationPolicy op =
-          new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new SerialOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -194,7 +190,8 @@ public class OperationPolicyTest {
       throws CoordinatorException {
     // Simple success test
     {
-      OperationPolicy op = new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -211,7 +208,8 @@ public class OperationPolicyTest {
 
     // One failure but still succeeds
     {
-      OperationPolicy op = new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       Set<ReplicaId> replicasInFlight = new HashSet<ReplicaId>();
 
@@ -245,7 +243,8 @@ public class OperationPolicyTest {
 
     // Many failures but still succeeds
     {
-      OperationPolicy op = new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -270,7 +269,8 @@ public class OperationPolicyTest {
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
     // plus 1 for good luck in flight)
     {
-      OperationPolicy op = new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -402,7 +402,8 @@ public class OperationPolicyTest {
 
     // Corruption test
     {
-      OperationPolicy op = new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
+      OperationPolicy op =
+          new GetTwoInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), true);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -432,8 +433,9 @@ public class OperationPolicyTest {
   public void testGetCrossColoParallelOperationPolicy()
       throws Exception {
 
-    OperationContext oc = new OperationContext("client1", 1000, true,
-        new CoordinatorMetrics(new MockClusterMap(), true), null);
+    OperationContext oc =
+        new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(), true), null,
+            sslEnabledDataCenters);
     // Simple success test
     {
       OperationPolicy op =
@@ -1146,11 +1148,10 @@ public class OperationPolicyTest {
   @Test
   public void testPutPolicy()
       throws CoordinatorException {
-    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
+    OperationContext oc = new OperationContext("client1", 1000, true, null, null, sslEnabledDataCenters);
     // Simple success test. Requires 2 successes to complete
     {
-      OperationPolicy op =
-          new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1175,8 +1176,7 @@ public class OperationPolicyTest {
 
     // Failures but still succeed test
     {
-      OperationPolicy op =
-          new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1208,8 +1208,7 @@ public class OperationPolicyTest {
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct (2
     // plus 1 for good luck in flight)
     {
-      OperationPolicy op =
-          new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1284,11 +1283,10 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    oc = new OperationContext("client1", 1000, false, null, null);
+    oc = new OperationContext("client1", 1000, false, null, null, sslEnabledDataCenters);
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op =
-          new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new PutParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1332,11 +1330,10 @@ public class OperationPolicyTest {
   @Test
   public void testDeletePolicy()
       throws CoordinatorException {
-    OperationContext oc = new OperationContext("client1", 1000, true, null, null);
+    OperationContext oc = new OperationContext("client1", 1000, true, null, null, sslEnabledDataCenters);
     // Simple success test
     {
-      OperationPolicy op =
-          new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1361,8 +1358,7 @@ public class OperationPolicyTest {
 
     // Failures but still succeed test
     {
-      OperationPolicy op =
-          new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1393,8 +1389,7 @@ public class OperationPolicyTest {
 
     // Failure test;  ensure local probe policy is enforced (local replicas then remote); ensure sendMore is correct
     {
-      OperationPolicy op =
-          new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());
@@ -1469,11 +1464,10 @@ public class OperationPolicyTest {
       assertFalse(op.isCorrupt());
     }
 
-    oc = new OperationContext("client1", 1000, false, null, null);
+    oc = new OperationContext("client1", 1000, false, null, null, sslEnabledDataCenters);
     // Failure test;  ensure local probe policy is enforced and remote calls do not happen
     {
-      OperationPolicy op =
-          new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
+      OperationPolicy op = new AllInParallelOperationPolicy(datacenterAlpha, new OperationPolicyPartitionId(6), oc);
 
       assertFalse(op.isCorrupt());
       assertFalse(op.isComplete());

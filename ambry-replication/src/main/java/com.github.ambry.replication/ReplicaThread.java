@@ -146,13 +146,9 @@ class ReplicaThread implements Runnable {
             if (sslEnabledColos.contains(remoteNode.getDatacenterName())) {
               replicationMetrics.sslConnectionsRequestRate.mark();
               logger.error("No SSL Connections should be established for replica " + remoteNode);
-              // interim solution is to connect to plain text port until ambry server listens to ssl port
               connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.PLAINTEXT,
+                  .checkOutConnection(remoteNode.getHostname(), remoteNode.getPort(), PortType.SSL,
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
-              // below line will be replaced with above line once ambry server listens to ssl port
-              /*connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(), remoteNode.getSSLPort(),
-                 PortType.SSL, replicationConfig.replicationConnectionPoolCheckoutTimeoutMs); */
             } else {
               replicationMetrics.plainTextConnectionsRequestRate.mark();
               connectedChannel = connectionPool

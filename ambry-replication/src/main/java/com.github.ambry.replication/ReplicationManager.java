@@ -266,10 +266,7 @@ public final class ReplicationManager {
       this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      this.sslEnabledColos = new ArrayList<String>();
-      String sslEnabledColosString = replicationConfig.replicationSslEnabledColos;
-      String[] sslEnabledColosArray = sslEnabledColosString.split(",");
-      this.sslEnabledColos.addAll(Arrays.asList(sslEnabledColosArray));
+      this.sslEnabledColos = Utils.splitString(replicationConfig.replicationSslEnabledDatacenters, ",");
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {

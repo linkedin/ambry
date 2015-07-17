@@ -27,23 +27,17 @@ final public class GetBlobPropertiesOperation extends GetOperation {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public GetBlobPropertiesOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap,
-      ArrayList<String> sslEnabledColos)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, ClusterMap clusterMap)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
-        MessageFormatFlags.BlobProperties, sslEnabledColos);
+        MessageFormatFlags.BlobProperties);
     this.blobProperties = null;
   }
 
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
-    if (sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new GetBlobPropertiesOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-          makeGetRequest(), clusterMap, this, true);
-    } else {
-      return new GetBlobPropertiesOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
-          makeGetRequest(), clusterMap, this, false);
-    }
+    return new GetBlobPropertiesOperationRequest(connectionPool, responseQueue, context, blobId, replicaId,
+        makeGetRequest(), clusterMap, this);
   }
 
   public BlobProperties getBlobProperties()
@@ -70,9 +64,8 @@ final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
 
   protected GetBlobPropertiesOperationRequest(ConnectionPool connectionPool,
       BlockingQueue<OperationResponse> responseQueue, OperationContext context, BlobId blobId, ReplicaId replicaId,
-      RequestOrResponse request, ClusterMap clusterMap, GetBlobPropertiesOperation getBlobPropertiesOperation,
-      boolean sslEnabled) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap, sslEnabled);
+      RequestOrResponse request, ClusterMap clusterMap, GetBlobPropertiesOperation getBlobPropertiesOperation) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request, clusterMap);
     this.getBlobPropertiesOperation = getBlobPropertiesOperation;
     logger.trace("Created GetBlobPropertiesOperationRequest for " + replicaId);
   }

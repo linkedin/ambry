@@ -100,7 +100,8 @@ public class SocketServer implements NetworkServer {
     HashSet<PortType> portTypeSet = new HashSet<PortType>();
     for (Port extraPort : ports) {
       if (portTypeSet.contains(extraPort.getPortType())) {
-        throw new IllegalArgumentException("Not more than one port of same type is allowed : " + extraPort.getPortType());
+        throw new IllegalArgumentException(
+            "Not more than one port of same type is allowed : " + extraPort.getPortType());
       } else {
         portTypeSet.add(extraPort.getPortType());
       }

@@ -79,10 +79,10 @@ public class ReplicationConfig {
   public final boolean replicationValidateMessageStream;
 
   /**
-   * List of colos against which only SSL should be spoken
+   * List of Datacenters against which only SSL should be spoken during replication
    */
-  @Config("replication.ssl.enabled.colos")
-  public final String replicationSslEnabledColos;
+  @Config("replication.ssl.enabled.Datacenters")
+  public final String replicationSslEnabledDatacenters;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -105,6 +105,6 @@ public class ReplicationConfig {
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
-    replicationSslEnabledColos = verifiableProperties.getString("replication.ssl.enabled.colos", "");
+    replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.Datacenters", "");
   }
 }

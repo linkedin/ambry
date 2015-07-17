@@ -1,6 +1,7 @@
 package com.github.ambry.coordinator;
 
 import com.github.ambry.commons.ResponseHandler;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -17,15 +18,17 @@ public class OperationContext {
   private boolean crossDCProxyCallEnable;
   private CoordinatorMetrics coordinatorMetrics;
   private ResponseHandler responseHandler;
+  private ArrayList<String> sslEnabledDatacenters;
 
   public OperationContext(String clientId, int connectionPoolCheckoutTimeout, boolean crossDCProxyCallEnable,
-      CoordinatorMetrics coordinatorMetrics, ResponseHandler responseHandler) {
+      CoordinatorMetrics coordinatorMetrics, ResponseHandler responseHandler, ArrayList<String> sslEnabledDatacenters) {
     this.clientId = clientId;
     this.correlationId = currentCount.incrementAndGet();
     this.connectionPoolCheckoutTimeout = connectionPoolCheckoutTimeout;
     this.coordinatorMetrics = coordinatorMetrics;
     this.crossDCProxyCallEnable = crossDCProxyCallEnable;
     this.responseHandler = responseHandler;
+    this.sslEnabledDatacenters = sslEnabledDatacenters;
   }
 
   public String getClientId() {
@@ -52,9 +55,13 @@ public class OperationContext {
     return responseHandler;
   }
 
+  public ArrayList<String> getSslEnabledDatacenters() {
+    return this.sslEnabledDatacenters;
+  }
+
   @Override
   public String toString() {
     return "OpContext{" + clientId + ':' + correlationId + ':' + connectionPoolCheckoutTimeout + ':'
-        + crossDCProxyCallEnable + '}';
+        + crossDCProxyCallEnable + ':' + sslEnabledDatacenters + '}';
   }
 }

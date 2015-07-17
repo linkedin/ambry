@@ -49,11 +49,9 @@ public abstract class Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
   protected CoordinatorError currentError;
   protected CoordinatorError resolvedError;
-  protected ArrayList<String> sslEnabledColos;
 
   public Operation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy,
-      ArrayList<String> sslEnabledColos) {
+      OperationContext context, BlobId blobId, long operationTimeoutMs, OperationPolicy operationPolicy) {
     this.datacenterName = datacenterName;
     this.connectionPool = connectionPool;
     this.requesterPool = requesterPool;
@@ -66,7 +64,6 @@ public abstract class Operation {
 
     this.responseQueue = new ArrayBlockingQueue<OperationResponse>(operationPolicy.getReplicaIdCount());
     this.requestsInFlight = new HashSet<ReplicaId>();
-    this.sslEnabledColos = sslEnabledColos;
   }
 
   protected abstract OperationRequest makeOperationRequest(ReplicaId replicaId);
@@ -250,14 +247,14 @@ abstract class OperationRequest implements Runnable {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   protected OperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, boolean sslEnabled) {
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
     this.connectionPool = connectionPool;
     this.responseQueue = responseQueue;
     this.context = context;
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
-    this.sslEnabled = sslEnabled;
+    this.sslEnabled = isSslEnabled();
     this.responseHandler = context.getResponseHandler();
   }
 
@@ -273,6 +270,14 @@ abstract class OperationRequest implements Runnable {
     // Only Get responses have a payload to be deserialized.
   }
 
+  private boolean isSslEnabled() {
+    if (context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName())) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
@@ -281,18 +286,11 @@ abstract class OperationRequest implements Runnable {
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
       if (sslEnabled) {
-        // interim logging to track any SSL requests
         logger.error("No SSL connections should be established for replica " + replicaId.getDataNodeId());
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
-        // interim solution is to contact plain text port until Ambry server starts listening to ssl port
         connectedChannel = connectionPool
             .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                PortType.PLAINTEXT, context.getConnectionPoolCheckoutTimeout());
-        // below line will be replaced with above line once ambry server listens to ssl port
-        /* connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getSSLPort(),
-                PortType.SSL, context.getConnectionPoolCheckoutTimeout()); */
-
+                PortType.SSL, context.getConnectionPoolCheckoutTimeout());
       } else {
         context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
         connectedChannel = connectionPool

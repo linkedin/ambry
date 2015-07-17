@@ -61,13 +61,13 @@ public class CoordinatorMetrics {
   public final Counter successfulCrossColoProxyCallCount;
   public final Counter totalCrossColoProxyCallCount;
 
-  public final Gauge<Integer> crossColoCallsEnabled;
+  public final Gauge<Integer> crossDCCallsEnabled;
 
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -119,15 +119,16 @@ public class CoordinatorMetrics {
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "successfulCrossColoProxyCallCount"));
     totalCrossColoProxyCallCount =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "totalCrossColoProxyCallCount"));
-    crossColoCallsEnabled = new Gauge<Integer>() {
+    this.crossDCCallsEnabled = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return (crossDCProxyCallsEnabled == true ? 1 : 0);
+        return (crossDCCallsEnabled == true ? 1 : 0);
       }
     };
-    plainTextConnectionsRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionsRequestRate"));
-    sslConnectionsRequestRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "sslConnectionsRequestRate"));
-
+    plainTextConnectionsRequestRate =
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionsRequestRate"));
+    sslConnectionsRequestRate =
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "sslConnectionsRequestRate"));
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.

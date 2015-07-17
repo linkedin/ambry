@@ -30,10 +30,10 @@ final public class DeleteOperation extends Operation {
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
   public DeleteOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
-      OperationContext oc, BlobId blobId, long operationTimeoutMs, ArrayList<String> sslEnabledColos)
+      OperationContext oc, BlobId blobId, long operationTimeoutMs)
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc), sslEnabledColos);
+        new AllInParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
 
     this.replicaIdCount = blobId.getPartition().getReplicaIds().size();
     this.blobNotFoundCount = 0;
@@ -49,13 +49,7 @@ final public class DeleteOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     DeleteRequest deleteRequest = new DeleteRequest(context.getCorrelationId(), context.getClientId(), blobId);
-    if (sslEnabledColos.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest, true);
-    } else {
-
-      return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest,
-          false);
-    }
+    return new DeleteOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, deleteRequest);
   }
 
   @Override
@@ -118,8 +112,8 @@ final public class DeleteOperation extends Operation {
 
 final class DeleteOperationRequest extends OperationRequest {
   protected DeleteOperationRequest(ConnectionPool connectionPool, BlockingQueue<OperationResponse> responseQueue,
-      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request, boolean sslEnabled) {
-    super(connectionPool, responseQueue, context, blobId, replicaId, request, sslEnabled);
+      OperationContext context, BlobId blobId, ReplicaId replicaId, RequestOrResponse request) {
+    super(connectionPool, responseQueue, context, blobId, replicaId, request);
   }
 
   @Override

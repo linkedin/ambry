@@ -32,22 +32,20 @@ class BlockingChannelInfo {
   private Gauge<Integer> availableConnections;
   private Gauge<Integer> activeConnections;
   private Gauge<Integer> totalNumberOfConnections;
+  private int maxConnectionsPerHost;
 
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry,
       PortType portType) {
     this.config = config;
 
     this.portType = portType;
-    int blockingQueueSize;
-    if (portType == PortType.PLAINTEXT) {
-      blockingQueueSize = config.connectionPoolMaxConnectionsPerPortPlainText;
-    } else if (portType == PortType.SSL) {
-      blockingQueueSize = config.connectionPoolMaxConnectionsPerPortSSL;
+    if (portType == PortType.SSL) {
+      maxConnectionsPerHost = config.connectionPoolMaxConnectionsPerPortSSL;
     } else {
-      blockingQueueSize = config.connectionPoolMaxConnectionsPerHost;
+      maxConnectionsPerHost = config.connectionPoolMaxConnectionsPerPortPlainText;
     }
-    this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(blockingQueueSize);
-    this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(blockingQueueSize);
+    this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHost);
+    this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHost);
     this.numberOfConnections = new AtomicInteger(0);
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
@@ -106,8 +104,7 @@ class BlockingChannelInfo {
       // in the available queue. The check in available queue is approximate and it could not have any
       // connections when polled. In this case we just depend on an existing connection being placed back in
       // the available pool
-      if (numberOfConnections.get() == config.connectionPoolMaxConnectionsPerHost
-          || blockingChannelAvailableConnections.size() > 0) {
+      if (numberOfConnections.get() == maxConnectionsPerHost || blockingChannelAvailableConnections.size() > 0) {
         BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
         if (channel == null) {
           logger.error("Timed out trying to get a connection for host {} and port {}", host, port);
@@ -120,12 +117,18 @@ class BlockingChannelInfo {
       synchronized (lock) {
         // if the number of connections created for this host and port is less than the max allowed
         // connections, we create a new one and add it to the available queue
-        if (numberOfConnections.get() < config.connectionPoolMaxConnectionsPerHost) {
+        if (numberOfConnections.get() < maxConnectionsPerHost) {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
-          // will create SSLBlockingChannel incase portType is SSL
-          BlockingChannel channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
-              config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-              config.connectionPoolConnectTimeoutMs);
+          BlockingChannel channel = null;
+          if (portType == PortType.PLAINTEXT) {
+            channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
+                config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
+                config.connectionPoolConnectTimeoutMs);
+          } else if (portType == PortType.SSL) {
+            channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
+                config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
+                config.connectionPoolConnectTimeoutMs);
+          }
           channel.connect();
           blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
@@ -166,10 +169,17 @@ class BlockingChannelInfo {
       blockingChannel.disconnect();
       // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
       // to create the connection
-      // will create SSLBlockingChannel incase the portType is SSL
-      BlockingChannel channel = new BlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
-          config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
-          config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
+
+      BlockingChannel channel = null;
+      if (portType == PortType.PLAINTEXT) {
+        channel = new BlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
+            config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
+            config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
+      } else if (portType == PortType.SSL) {
+        channel = new SSLBlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
+            config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
+            config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
+      }
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
       blockingChannelAvailableConnections.add(channel);

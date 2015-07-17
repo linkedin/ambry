@@ -112,6 +112,7 @@ public class AmbryServer {
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
+      ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       int sslPort = nodeId.getSSLPort();
       if (sslPort != -1) {
         ports.add(new Port(sslPort, PortType.SSL));
