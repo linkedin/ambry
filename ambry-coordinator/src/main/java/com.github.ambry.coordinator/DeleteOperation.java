@@ -10,7 +10,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;

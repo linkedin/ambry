@@ -10,7 +10,6 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.ByteBufferInputStream;
-import java.util.ArrayList;
 import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
