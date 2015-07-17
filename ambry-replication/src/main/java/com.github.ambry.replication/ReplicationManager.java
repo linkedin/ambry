@@ -3,7 +3,6 @@ package com.github.ambry.replication;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
-import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

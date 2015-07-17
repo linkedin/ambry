@@ -220,6 +220,9 @@ abstract class AbstractServerThread implements Runnable {
   }
 }
 
+/**
+ * Thread that accepts and configures new connections for an SSL Port. There is only need for one of these
+ */
 class SSLAcceptor extends Acceptor {
 
   public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize)

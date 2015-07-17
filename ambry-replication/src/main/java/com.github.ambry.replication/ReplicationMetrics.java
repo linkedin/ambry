@@ -134,7 +134,7 @@ public class ReplicationMetrics {
     plainTextConnectionsRequestRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "PlainTextConnectionsRequestRate"));
     sslConnectionsRequestRate =
-        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslConnectionsReqeustRate"));
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslConnectionsRequestRate"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {

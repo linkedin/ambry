@@ -92,7 +92,7 @@ public class TestUtils {
     return jsonArray;
   }
 
-  // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
+  // Increments basePort and sslPort for each DataNode to ensure unique DataNode given same hostname.
   public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {
@@ -114,7 +114,7 @@ public class TestUtils {
     return jsonArray;
   }
 
-  // Does not increment basePort for each data node...
+  // Does not increment basePort and sslPort for each data node...
   public static JSONArray getJsonArrayDuplicateDataNodes(int dataNodeCount, String hostname, int basePort, int sslPort,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {

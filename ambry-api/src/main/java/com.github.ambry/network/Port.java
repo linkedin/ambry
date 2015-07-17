@@ -4,8 +4,8 @@ package com.github.ambry.network;
  * Used to represent a port containing port number and {@PortType}
  */
 public class Port {
-  int portNo;
-  PortType type;
+  private final int portNo;
+  private final PortType type;
 
   public Port(int port, PortType type) {
     this.portNo = port;

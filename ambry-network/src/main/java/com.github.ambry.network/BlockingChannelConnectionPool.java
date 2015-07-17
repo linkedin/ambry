@@ -32,7 +32,7 @@ class BlockingChannelInfo {
   private Gauge<Integer> availableConnections;
   private Gauge<Integer> activeConnections;
   private Gauge<Integer> totalNumberOfConnections;
-  private int maxConnectionsPerHost;
+  private int maxConnectionsPerChannel;
 
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry,
       PortType portType) {
@@ -40,12 +40,12 @@ class BlockingChannelInfo {
 
     this.portType = portType;
     if (portType == PortType.SSL) {
-      maxConnectionsPerHost = config.connectionPoolMaxConnectionsPerPortSSL;
+      maxConnectionsPerChannel = config.connectionPoolMaxConnectionsPerPortSSL;
     } else {
-      maxConnectionsPerHost = config.connectionPoolMaxConnectionsPerPortPlainText;
+      maxConnectionsPerChannel = config.connectionPoolMaxConnectionsPerPortPlainText;
     }
-    this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHost);
-    this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHost);
+    this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerChannel);
+    this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerChannel);
     this.numberOfConnections = new AtomicInteger(0);
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
@@ -104,7 +104,7 @@ class BlockingChannelInfo {
       // in the available queue. The check in available queue is approximate and it could not have any
       // connections when polled. In this case we just depend on an existing connection being placed back in
       // the available pool
-      if (numberOfConnections.get() == maxConnectionsPerHost || blockingChannelAvailableConnections.size() > 0) {
+      if (numberOfConnections.get() == maxConnectionsPerChannel || blockingChannelAvailableConnections.size() > 0) {
         BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
         if (channel == null) {
           logger.error("Timed out trying to get a connection for host {} and port {}", host, port);
@@ -117,7 +117,7 @@ class BlockingChannelInfo {
       synchronized (lock) {
         // if the number of connections created for this host and port is less than the max allowed
         // connections, we create a new one and add it to the available queue
-        if (numberOfConnections.get() < maxConnectionsPerHost) {
+        if (numberOfConnections.get() < maxConnectionsPerChannel) {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
           BlockingChannel channel = null;
           if (portType == PortType.PLAINTEXT) {

@@ -323,6 +323,13 @@ public class ReplicationTest {
     }
   }
 
+  class MockSSLConnection extends MockConnection {
+    public MockSSLConnection(String host, int port, Map<PartitionId, List<MessageInfo>> messageInfoList,
+        Map<PartitionId, List<ByteBuffer>> bufferList, int maxSizeToReturn) {
+      super(host, port, messageInfoList, bufferList, maxSizeToReturn);
+    }
+  }
+
   class MockConnection implements ConnectedChannel {
 
     class MockSend implements Send {
@@ -492,9 +499,13 @@ public class ReplicationTest {
     @Override
     public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
         throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-      // will create SSLMockConnection incase porttype is SSL. Ignoring for now
-      return new MockConnection(host, port.getPortNo(), messageInfoList.get(host + port.getPortNo()),
-          byteBufferList.get(host + port.getPortNo()), maxEntriesToReturn);
+      if (port.getPortType() == PortType.PLAINTEXT) {
+        return new MockConnection(host, port.getPortNo(), messageInfoList.get(host + port.getPortNo()),
+            byteBufferList.get(host + port.getPortNo()), maxEntriesToReturn);
+      } else {
+        return new MockSSLConnection(host, port.getPortNo(), messageInfoList.get(host + port.getPortNo()),
+            byteBufferList.get(host + port.getPortNo()), maxEntriesToReturn);
+      }
     }
 
     @Override

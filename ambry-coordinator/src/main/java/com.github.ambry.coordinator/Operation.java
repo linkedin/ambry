@@ -286,6 +286,7 @@ abstract class OperationRequest implements Runnable {
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
       if (sslEnabled) {
+        // remove this logging once all metrics are available for ssl(when sslEnabledDCs will be set to some value)
         logger.error("No SSL connections should be established for replica " + replicaId.getDataNodeId());
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
         connectedChannel = connectionPool

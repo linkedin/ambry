@@ -303,10 +303,7 @@ public class CoordinatorTest {
         "        \"hardwareState\": \"AVAILABLE\",\n" +
         "              \"hostname\": \"localhost\",\n" +
         "              \"port\": 6670,\n" +
-        "              \"ports\": [\n" +
-        "              {\"plaintext\": 6670},\n" +
-        "              {\"ssl\": 7670} \n" +
-        "              ] \n" +
+        "              \"sslport\": 7670 \n" +
         "      }\n" +
         "      ],\n" +
         "      \"name\": \"Datacenter\"\n" +
