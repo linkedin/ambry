@@ -238,7 +238,7 @@ class Acceptor extends AbstractServerThread {
               // round robin to the next processor thread
               currentProcessor = (currentProcessor + 1) % processors.size();
             } catch (Exception e) {
-              // throw
+              logger.debug("Error in accepting new connection", e);
             }
           }
         }
@@ -307,6 +307,7 @@ class Processor extends AbstractServerThread {
   private final Time time;
   private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
   private final Selector selector;
+  private final NetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics)
@@ -316,6 +317,7 @@ class Processor extends AbstractServerThread {
     this.id = id;
     this.time = SystemTime.getInstance();
     selector = new Selector(metrics, time);
+    this.metrics = metrics;
   }
 
   public void run() {
@@ -339,6 +341,7 @@ class Processor extends AbstractServerThread {
       }
     } catch (Exception e) {
       logger.error("Error in processor thread", e);
+      metrics.processorFailCount.inc();
     } finally {
       logger.debug("Closing server socket and selector.");
       closeAll();
@@ -365,7 +368,7 @@ class Processor extends AbstractServerThread {
           selector.send(networkSend);
         }
       } catch (IllegalStateException e) {
-        logger.error("Error in processing new responses {}", e.getMessage());
+        logger.debug("Error in processing new responses", e);
       } finally {
         curr = (SocketServerResponse) channel.receiveResponse(id);
       }

@@ -29,6 +29,7 @@ public class NetworkMetrics {
   public final Counter selectorBytesSentCount;
   public final Counter selectorBytesReceivedCount;
   public final Counter selectorSelectRate;
+  public final Counter processorFailCount;
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
   public final Histogram selectorIOTime;
@@ -66,6 +67,7 @@ public class NetworkMetrics {
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
     selectorBytesReceived = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesReceived"));
     selectorBytesSent = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesSent"));
+    processorFailCount = registry.counter(MetricRegistry.name(SocketServer.class, "ProcessorFailCount"));
     selectorBytesSentCount = registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesSentCount"));
     selectorBytesReceivedCount =
         registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesReceivedCount"));
