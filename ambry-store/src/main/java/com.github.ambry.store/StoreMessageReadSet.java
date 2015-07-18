@@ -24,9 +24,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 
   private static final short version = 0;
   private static final short Version_Length = 2;
-  private static final int Offset_Length = 8;
-  private static final int Size_Length = 8;
-  private static final int TTL_Length = 8;
+  private static final short Offset_Length = 8;
+  private static final short Size_Length = 8;
+  private static final short TTL_Length = 8;
 
   BlobReadOptions(long offset, long size, long ttl, StoreKey storeKey) {
     this.offset = offset;
@@ -91,8 +91,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
         throw new IOException("Unknown version encountered for BlobReadOptions");
     }
   }
-
-
 }
 
 /**

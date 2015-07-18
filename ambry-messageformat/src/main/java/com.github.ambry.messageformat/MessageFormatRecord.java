@@ -4,13 +4,12 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.DataInputStream;
-import java.nio.ByteBuffer;
-import java.io.InputStream;
-import java.io.IOException;
 
 
 /**
@@ -64,7 +63,7 @@ public class MessageFormatRecord {
     return getUserMetadataInfo(stream).getUserMetadata();
   }
 
-  public static UserMetadataInfo getUserMetadataInfo(InputStream stream)
+  static UserMetadataInfo getUserMetadataInfo(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -84,7 +83,7 @@ public class MessageFormatRecord {
     return getBlobRecordInfo(stream).getBlobOutput();
   }
 
-  public static BlobRecordInfo getBlobRecordInfo(InputStream stream)
+  static BlobRecordInfo getBlobRecordInfo(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -125,9 +124,14 @@ public class MessageFormatRecord {
    *
    */
   public static class MessageHeader_Format_V1 {
+    private ByteBuffer buffer;
+
     // total size field start offset and size
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
+
+    // relative offset fields start offset and size
+    private static final int Number_Of_Relative_Offset_Fields = 4;
     public static final int Relative_Offset_Field_Sizes_In_Bytes = 4;
     public static final int BlobProperties_Relative_Offset_Field_Offset_In_Bytes =
         Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
@@ -137,16 +141,10 @@ public class MessageFormatRecord {
         Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Blob_Relative_Offset_Field_Offset_In_Bytes =
         UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+
     // crc field start offset
     public static final int Crc_Field_Offset_In_Bytes =
         Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
-    // relative offset fields start offset and size
-    private static final int Number_Of_Relative_Offset_Fields = 4;
-    private ByteBuffer buffer;
-
-    public MessageHeader_Format_V1(ByteBuffer input) {
-      this.buffer = input;
-    }
 
     public static int getHeaderSize() {
       return Version_Field_Size_In_Bytes +
@@ -217,6 +215,10 @@ public class MessageFormatRecord {
             " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
             " blobRecordRelativeOffset " + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
+    }
+
+    public MessageHeader_Format_V1(ByteBuffer input) {
+      this.buffer = input;
     }
 
     public short getVersion() {
@@ -473,6 +475,9 @@ public class MessageFormatRecord {
   }
 }
 
+/**
+ * A class to hold the deserialized usermetadata of a blob and the version of the user metadata.
+ */
 class UserMetadataInfo {
   short version;
   ByteBuffer userMetadata;
@@ -491,6 +496,9 @@ class UserMetadataInfo {
   }
 }
 
+/**
+ * A class to hold the deserialized blob output of a blob and the version of the blob record in the blob output.
+ */
 class BlobRecordInfo {
   short version;
   BlobOutput blobOutput;

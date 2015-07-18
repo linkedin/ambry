@@ -8,9 +8,6 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,12 +16,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class InMemoryIndexTest {
 
   private StoreKeyFactory factory;
   private MockClusterMap map;
+
+  /**
+   * Create a temporary file
+   */
+  File tempFile()
+      throws IOException {
+    File f = File.createTempFile("ambry", ".tmp");
+    f.deleteOnExit();
+    return f;
+  }
 
   public InMemoryIndexTest()
       throws InstantiationException, IOException {
@@ -36,14 +45,34 @@ public class InMemoryIndexTest {
     }
   }
 
-  /**
-   * Create a temporary file
-   */
-  File tempFile()
-      throws IOException {
-    File f = File.createTempFile("ambry", ".tmp");
-    f.deleteOnExit();
-    return f;
+  class MockIndex extends InMemoryIndex {
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory)
+        throws StoreException {
+      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory,
+          new DummyMessageStoreRecovery(), new MetricRegistry());
+    }
+
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory, StoreConfig config,
+        MessageStoreRecovery messageRecovery)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
+    }
+
+    IndexValue getValue(StoreKey key) {
+      return index.get(key);
+    }
+
+    public void deleteAll() {
+      index.clear();
+    }
+
+    public void stopScheduler() {
+      scheduler.shutdown();
+    }
+
+    public boolean isEmpty() {
+      return index.size() == 0;
+    }
   }
 
   @Test
@@ -457,36 +486,6 @@ public class InMemoryIndexTest {
       Assert.assertEquals(info1.getMessageEntries().size(), 12);
     } catch (Exception e) {
       Assert.assertTrue(false);
-    }
-  }
-
-  class MockIndex extends InMemoryIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory)
-        throws StoreException {
-      super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory,
-          new DummyMessageStoreRecovery(), new MetricRegistry());
-    }
-
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory, StoreConfig config,
-        MessageStoreRecovery messageRecovery)
-        throws StoreException {
-      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
-    }
-
-    IndexValue getValue(StoreKey key) {
-      return index.get(key);
-    }
-
-    public void deleteAll() {
-      index.clear();
-    }
-
-    public void stopScheduler() {
-      scheduler.shutdown();
-    }
-
-    public boolean isEmpty() {
-      return index.size() == 0;
     }
   }
 }

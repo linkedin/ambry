@@ -33,10 +33,13 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
   /**
    * Creates a hard delete stream using the given parameters to replace the usermetadata and blob record fields. The
    * method takes the blobProperties field as a parameter, but that is just used to generate the stream.
-   * @param key the store key of the given blob
+   * @param key the store key of the given blob.
+   * @param headerVersion the version of the header.
    * @param blobProperties the blobProperties fo the given blob. This is used to find the relative offsets of other fields.
-   * @param userMetadataSize the size of the userMetadata field
-   * @param blobStreamSize the size of the blob stream
+   * @param userMetadataVersion the version of the userMetadata.
+   * @param userMetadataSize the size of the userMetadata field.
+   * @param blobRecordVersion the version of the blob record.
+   * @param blobStreamSize the size of the blob stream.
    * @throws MessageFormatException
    * @throws IOException
    */
@@ -77,9 +80,7 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
   }
 
   /**
-   * Returns the relative offset of userMetadata from the start offset of the original message. This essentially
-   * provides the offset of the hard delete stream in the message.
-   * @return the relative offset of userMetadata
+   * @return The relative offset of the original message that corresponds to this hard delete stream.
    */
   public int getHardDeleteStreamRelativeOffset() {
     return hardDeleteStreamRelativeOffset;

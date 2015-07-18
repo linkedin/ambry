@@ -1,0 +1,137 @@
+package com.github.ambry.messageformat;
+
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageStoreRecovery;
+import com.github.ambry.store.Read;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Utils;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
+
+
+public class BlobStoreHardDeleteTest {
+
+  public class ReadImp implements Read {
+
+    ByteBuffer buffer;
+    public StoreKey[] keys = {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4")};
+    long expectedExpirationTimeMs = 0;
+    HashSet<Long> offsetsToIgnoreCrcChecks = new HashSet<Long>();
+
+    public void initialize()
+        throws MessageFormatException, IOException {
+      // write 3 new blob messages, and delete update messages. write the last
+      // message that is partial
+      byte[] usermetadata = new byte[2000];
+      byte[] blob = new byte[4000];
+      new Random().nextBytes(usermetadata);
+      new Random().nextBytes(blob);
+
+      // 1st message
+      BlobProperties blobProperties = new BlobProperties(4000, "test", "mem1", "img", false, 9999);
+      expectedExpirationTimeMs =
+          Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
+      PutMessageFormatInputStream msg1 =
+          new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+
+      // 2nd message
+      PutMessageFormatInputStream msg2 =
+          new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+
+      // 3rd message
+      PutMessageFormatInputStream msg3 =
+          new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+
+      // 4th message
+      DeleteMessageFormatInputStream msg4 = new DeleteMessageFormatInputStream(keys[1]);
+
+      // 5th message
+      PutMessageFormatInputStream msg5 =
+          new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+
+      buffer = ByteBuffer.allocate((int) (msg1.getSize() +
+          msg2.getSize() +
+          msg3.getSize() +
+          msg4.getSize() +
+          msg5.getSize() / 2));
+
+      writeToBuffer(msg1, (int) msg1.getSize());
+      writeToBuffer(msg2, (int) msg2.getSize());
+
+      offsetsToIgnoreCrcChecks.add((long) buffer.position());
+      writeToBufferAndCorruptBlobRecord(msg3, (int) msg3.getSize());
+
+      writeToBuffer(msg4, (int) msg4.getSize());
+      writeToBuffer(msg5, (int) msg5.getSize() / 2);
+      buffer.position(0);
+    }
+
+    private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite)
+        throws IOException {
+      long sizeWritten = 0;
+      while (sizeWritten < sizeToWrite) {
+        int read = stream.read(buffer.array(), buffer.position(), (int) sizeToWrite);
+        sizeWritten += read;
+        buffer.position(buffer.position() + (int) sizeWritten);
+      }
+    }
+
+    private void writeToBufferAndCorruptBlobRecord(MessageFormatInputStream stream, int sizeToWrite)
+        throws IOException {
+      long sizeWritten = 0;
+      while (sizeWritten < sizeToWrite) {
+        int read = stream.read(buffer.array(), buffer.position(), (int) sizeToWrite);
+        sizeWritten += read;
+        buffer.position(buffer.position() + (int) sizeWritten);
+
+        //corrupt the last byte of the blob record, just before the crc, so the crc fails.
+        int indexToCorrupt = buffer.position() - MessageFormatRecord.Crc_Size - 1;
+        byte b = buffer.get(indexToCorrupt);
+        b = (byte) (int) ~b;
+        buffer.put(indexToCorrupt, b);
+      }
+    }
+
+    HashSet<Long> getOffsetsToIgnoreCrcChecks() {
+      return offsetsToIgnoreCrcChecks;
+    }
+
+    @Override
+    public void readInto(ByteBuffer bufferToWrite, long position)
+        throws IOException {
+      bufferToWrite.put(buffer.array(), (int) position, bufferToWrite.remaining());
+    }
+
+    public int getSize() {
+      return buffer.capacity();
+    }
+  }
+
+  @Test
+  public void recoveryTestWithHardDeletes()
+      throws MessageFormatException, IOException {
+    MessageStoreRecovery recovery = new BlobStoreRecovery();
+    // create log and write to it
+    ReadImp readrecovery = new ReadImp();
+    readrecovery.initialize();
+    List<MessageInfo> recoveredMessages = recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory(),
+        readrecovery.getOffsetsToIgnoreCrcChecks());
+    Assert.assertEquals(recoveredMessages.size(), 4);
+    Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
+    Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);
+    Assert.assertEquals(recoveredMessages.get(1).getStoreKey(), readrecovery.keys[1]);
+    Assert.assertEquals(recoveredMessages.get(2).getStoreKey(), readrecovery.keys[2]);
+    Assert.assertEquals(recoveredMessages.get(3).getStoreKey(), readrecovery.keys[1]);
+    Assert.assertEquals(recoveredMessages.get(3).isDeleted(), true);
+  }
+}

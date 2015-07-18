@@ -1,13 +1,13 @@
 package com.github.ambry.server;
 
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
@@ -42,7 +42,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.file.StandardWatchEventKinds;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -277,6 +276,23 @@ public class ServerTest {
     long endTime = SystemTime.getInstance().milliseconds() + TIMEOUT;
     do {
       if (cleanupTokenFile.exists()) {
+        /* The cleanup token format is as follows:
+           --
+           token_version
+           startTokenForRecovery
+           endTokenForRecovery
+           numBlobsInRange
+           blob1_blobReadOptions {version, offset, sz, ttl, key}
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           blob2_blobReadOptions
+           blob2_messageStoreRecoveryInfo
+           ....
+           blobN_blobReadOptions
+           blobN_messageStoreRecoveryInfo
+           crc
+           ---
+         */
+
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
         DataInputStream stream = new DataInputStream(crcStream);
         try {
@@ -295,10 +311,10 @@ public class ServerTest {
           parsedTokenValue = bytebufferToken.getLong();
 
           int num = stream.readInt();
-          while(num-- > 0) {
+          while (num-- > 0) {
             // Read BlobReadOptions
             short blobReadOptionsVersion = stream.readShort();
-            switch(blobReadOptionsVersion) {
+            switch (blobReadOptionsVersion) {
               case 0:
                 long offset = stream.readLong();
                 long sz = stream.readLong();

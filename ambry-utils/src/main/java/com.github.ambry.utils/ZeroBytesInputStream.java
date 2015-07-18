@@ -11,7 +11,7 @@ import java.util.Arrays;
 
 public class ZeroBytesInputStream extends InputStream {
   private long streamSize;
-  private int position;
+  private long position;
 
   /**
    * Returns 'size' number of zero bytes when read from.
@@ -47,6 +47,8 @@ public class ZeroBytesInputStream extends InputStream {
   @Override
   public int available()
       throws IOException {
+    /* available just has to be an estimate of the bytes remaining. So if the available bytes are greater than
+       what an int can hold, return Integer.MAX_VALUE. */
     return streamSize - position < Integer.MAX_VALUE ? (int) (streamSize - position) : Integer.MAX_VALUE;
   }
 }

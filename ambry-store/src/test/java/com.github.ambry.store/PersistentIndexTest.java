@@ -9,22 +9,21 @@ import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.util.EnumSet;
-import java.util.UUID;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import org.junit.Assert;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 
 public class PersistentIndexTest {
@@ -40,6 +39,46 @@ public class PersistentIndexTest {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
+  }
+
+  class MockIndex extends PersistentIndex {
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()));
+    }
+
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, recovery, cleanup,
+          new StoreMetrics(datadir, new MetricRegistry()));
+    }
+
+    IndexValue getValue(StoreKey key)
+        throws StoreException {
+      return findKey(key);
+    }
+
+    public void deleteAll() {
+      indexes.clear();
+    }
+
+    public void stopScheduler() {
+      scheduler.shutdown();
+    }
+
+    public boolean isEmpty() {
+      return indexes.size() == 0;
+    }
+
+    public Journal getJournal() {
+      return super.journal;
+    }
+
+    public IndexSegment getLastSegment() {
+      return super.indexes.lastEntry().getValue();
+    }
   }
 
   @Test
@@ -1660,46 +1699,6 @@ public class PersistentIndexTest {
       if (map != null) {
         map.cleanup();
       }
-    }
-  }
-
-  class MockIndex extends PersistentIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
-        throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()));
-    }
-
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-        MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
-        throws StoreException {
-      super(datadir, scheduler, log, config, factory, recovery, cleanup,
-          new StoreMetrics(datadir, new MetricRegistry()));
-    }
-
-    IndexValue getValue(StoreKey key)
-        throws StoreException {
-      return findKey(key);
-    }
-
-    public void deleteAll() {
-      indexes.clear();
-    }
-
-    public void stopScheduler() {
-      scheduler.shutdown();
-    }
-
-    public boolean isEmpty() {
-      return indexes.size() == 0;
-    }
-
-    public Journal getJournal() {
-      return super.journal;
-    }
-
-    public IndexSegment getLastSegment() {
-      return super.indexes.lastEntry().getValue();
     }
   }
 }

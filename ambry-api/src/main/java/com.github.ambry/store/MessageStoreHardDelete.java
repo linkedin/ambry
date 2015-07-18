@@ -33,7 +33,6 @@ public interface MessageStoreHardDelete {
    * @param stream the input stream representing the persisted information
    * @param key the StoreKey of the given message.
    */
-
-  public byte[] processAndReturnRecoveryMetadata(DataInputStream stream, StoreKey key)
+  public byte[] processAndReturnRecoveryInfo(DataInputStream stream, StoreKey key)
       throws IOException;
 }
