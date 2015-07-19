@@ -26,7 +26,10 @@ public class SocketServerTest {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
-    server = new SocketServer(config, new MetricRegistry(), new ArrayList<Port>());
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(config.port, PortType.PLAINTEXT));
+    ports.add(new Port(config.port + 1000, PortType.SSL));
+    server = new SocketServer(config, new MetricRegistry(), ports);
     server.start();
   }
 
@@ -38,12 +41,28 @@ public class SocketServerTest {
   @Test
   public void simpleRequest()
       throws IOException, InterruptedException {
+    simpleRequest(new Port(server.getPort(), PortType.PLAINTEXT));
+  }
+
+  @Test
+  public void simpleSSLRequest()
+      throws IOException, InterruptedException {
+    simpleRequest(new Port(server.getSSLPort(), PortType.SSL));
+  }
+
+  private void simpleRequest(Port targetPort)
+      throws IOException, InterruptedException {
     byte[] bytesToSend = new byte[1028];
     new Random().nextBytes(bytesToSend);
     ByteBuffer byteBufferToSend = ByteBuffer.wrap(bytesToSend);
     byteBufferToSend.putLong(0, 1028);
     BoundedByteBufferSend bufferToSend = new BoundedByteBufferSend(byteBufferToSend);
-    BlockingChannel channel = new BlockingChannel("localhost", server.getPort(), 10000, 10000, 1000, 2000);
+    BlockingChannel channel = null;
+    if (targetPort.getPortType() == PortType.SSL) {
+      channel = new SSLBlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 1000, 2000);
+    } else {
+      channel = new BlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 1000, 2000);
+    }
     channel.connect();
     channel.send(bufferToSend);
     RequestResponseChannel requestResponseChannel = server.getRequestResponseChannel();

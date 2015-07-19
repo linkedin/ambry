@@ -38,7 +38,7 @@ public class InMemoryIndexTest {
 
   public InMemoryIndexTest()
       throws InstantiationException, IOException {
-    map = new MockClusterMap();
+    map = new MockClusterMap(false);
     try {
       factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     } catch (Exception e) {

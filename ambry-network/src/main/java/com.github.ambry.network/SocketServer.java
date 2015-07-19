@@ -71,6 +71,15 @@ public class SocketServer implements NetworkServer {
     return port;
   }
 
+  public int getSSLPort() {
+    for (Port extraPort : ports) {
+      if (extraPort.getPortType() == PortType.SSL) {
+        return extraPort.getPortNo();
+      }
+    }
+    return -1;
+  }
+
   public int getNumProcessorThreads() {
     return numProcessorThreads;
   }

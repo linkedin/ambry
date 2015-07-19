@@ -20,6 +20,13 @@ public class MockDataNodeId extends DataNodeId {
     this.datacenter = dataCenter;
   }
 
+  public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
+    this.port = port;
+    this.sslPort = -1;
+    this.mountPaths = mountPaths;
+    this.datacenter = dataCenter;
+  }
+
   @Override
   public String getHostname() {
     return hostname;

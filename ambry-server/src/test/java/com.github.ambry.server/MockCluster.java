@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -29,14 +30,21 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
+      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap();
+    clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (MockDataNodeId dataNodeId : dataNodes) {
-      startServer(dataNodeId);
+      if (dataNodeId.getDatacenterName() == "DC1") {
+        startServer(dataNodeId, sslEnabledDatacentersForDC1);
+      } else if (dataNodeId.getDatacenterName() == "DC2") {
+        startServer(dataNodeId, sslEnabledDatacentersForDC2);
+      } else if (dataNodeId.getDatacenterName() == "DC3") {
+        startServer(dataNodeId, sslEnabledDatacentersForDC3);
+      }
     }
   }
 
@@ -48,7 +56,7 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId)
+  private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters)
       throws IOException, InstantiationException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
@@ -59,6 +67,8 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
+    props.setProperty("replication.ssl.enabled.Datacenters", sslEnabledDatacenters);
+    props.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     server.startup();

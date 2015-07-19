@@ -656,21 +656,27 @@ public class CoordinatorTest {
     return new ClusterMapManager(pl);
   }
 
-  VerifiableProperties getVProps() {
+  VerifiableProperties getVProps(String sslEnabledDatacenters) {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "Datacenter");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
+    if (sslEnabledDatacenters != null) {
+      properties.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
+    }
     return new VerifiableProperties(properties);
   }
 
-  VerifiableProperties getVPropsTwo() {
+  VerifiableProperties getVPropsTwo(String sslEnabledDatacenters) {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DatacenterTwo");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
+    if (sslEnabledDatacenters != null) {
+      properties.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
+    }
     return new VerifiableProperties(properties);
   }
 
@@ -864,10 +870,10 @@ public class CoordinatorTest {
     }
   }
 
-  void simple(ClusterMap clusterMap)
+  void simple(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(ac);
     }
@@ -879,16 +885,17 @@ public class CoordinatorTest {
    * to perform something like the put, get and delete. Purpose of this method is to test the sanity of these
    * smaller methods which are going to be used for execption cases after this test case.
    * @param clusterMap
+   * @param sslEnabledDatacenters comma separated list of datacenters where ssl should be enabled
    * @throws JSONException
    * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    * @throws CoordinatorException
    */
-  void simpleDecoupled(ClusterMap clusterMap)
+  void simpleDecoupled(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
     for (int i = 0; i < 20; ++i) {
       BlobProperties putBlobProperties =
           new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -901,7 +908,7 @@ public class CoordinatorTest {
     ac.close();
   }
 
-  void simpleDeleteException(ClusterMap clusterMap)
+  void simpleDeleteException(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode deleteErrorCode : deleteErrorMappings.keySet()) {
@@ -911,7 +918,7 @@ public class CoordinatorTest {
         // Ignoring three ServerErrorCodes as PUTs are expected to fail in such cases
         MockConnectionPool.mockCluster = new MockCluster(clusterMap);
         induceDeleteFailure(TOTAL_HOST_COUNT, deleteErrorCode);
-        AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+        AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
         for (int i = 0; i < 20; ++i) {
           BlobProperties putBlobProperties =
               new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -931,13 +938,13 @@ public class CoordinatorTest {
     }
   }
 
-  void simpleGetException(ClusterMap clusterMap)
+  void simpleGetException(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode getErrorCode : getErrorMappings.keySet()) {
       MockConnectionPool.mockCluster = new MockCluster(clusterMap);
       induceGetFailure(TOTAL_HOST_COUNT, getErrorCode);
-      AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+      AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
       for (int i = 0; i < 20; ++i) {
         BlobProperties putBlobProperties =
             new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -956,18 +963,17 @@ public class CoordinatorTest {
     }
   }
 
-  void simplePutException(ClusterMap clusterMap)
+  void simplePutException(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode putErrorCode : putErrorMappings.keySet()) {
-      System.out.println("puError code " + putErrorCode);
       if (!putErrorCode.equals(ServerErrorCode.Disk_Unavailable) &&
           !putErrorCode.equals(ServerErrorCode.Partition_ReadOnly) &&
           !putErrorCode.equals(ServerErrorCode.IO_Error)) {
         // Ignoring three ServerErrorCodes as PUTs are expected to fail in such cases
         MockConnectionPool.mockCluster = new MockCluster(clusterMap);
         inducePutFailure(TOTAL_HOST_COUNT, putErrorCode);
-        AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+        AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
         for (int i = 0; i < 20; ++i) {
           BlobProperties putBlobProperties =
               new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -986,10 +992,10 @@ public class CoordinatorTest {
     }
   }
 
-  void simpleGetNonExistantBlob(ClusterMap clusterMap)
+  void simpleGetNonExistantBlob(ClusterMap clusterMap, String sslEnabledDatacenters)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
     GetNonExistantBlob(ac);
     ac.close();
   }
@@ -997,58 +1003,90 @@ public class CoordinatorTest {
   @Test
   public void simpleOneDCOneNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simple(getClusterMapOneDCOneNodeOneDiskOnePartition());
-    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simple(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simple(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simple(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simple(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simple(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForDeleteException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForGetException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForPutException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleDecoupleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition());
+    String sslEnabledDatacenters = null;
+    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleOneDCFourNodeOneDiskTwoPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simple(getClusterMapOneDCFourNodeOneDiskTwoPartition());
+    String sslEnabledDatacenters = null;
+    simple(getClusterMapOneDCFourNodeOneDiskTwoPartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simple(getClusterMapOneDCFourNodeOneDiskTwoPartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void simpleTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    simple(getClusterMapTwoDCFourNodeOneDiskFourPartition());
+    String sslEnabledDatacenters = null;
+    simple(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacenters);
+    sslEnabledDatacenters = "Datacenter";
+    simple(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacenters);
   }
 
   @Test
   public void multiACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
+    String sslEnabledDatacenters = null;
     ClusterMap clusterMap = getClusterMapTwoDCFourNodeOneDiskFourPartition();
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
+    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+    for (int i = 0; i < 20; ++i) {
+      PutGetDelete(acOne);
+    }
+    acOne.close();
+    sslEnabledDatacenters = "Datacenter";
+    acOne = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(acOne);
     }
@@ -1080,11 +1118,11 @@ public class CoordinatorTest {
     acTwo.deleteBlob(blobId);
   }
 
-  void remoteAC(ClusterMap clusterMap)
+  void remoteAC(ClusterMap clusterMap, String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
-    AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
+    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(sslEnabledDatacentersForDC1), clusterMap);
+    AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(sslEnabledDatacentersForDC2), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutRemoteGetDelete(acOne, acTwo);
     }
@@ -1096,7 +1134,12 @@ public class CoordinatorTest {
   @Test
   public void remoteACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition());
+    String sslEnabledDatacentersForDC1 = null;
+    String sslEnabledDatacentersForDC2 = null;
+    remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2);
+    sslEnabledDatacentersForDC1 = "DatacenterTwo";
+    sslEnabledDatacentersForDC2 = "Datacenter";
+    remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2);
   }
 
   private ByteBuffer getByteBuffer(int count, boolean toFlip) {

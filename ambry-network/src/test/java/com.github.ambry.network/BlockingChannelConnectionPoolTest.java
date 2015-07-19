@@ -39,6 +39,7 @@ public class BlockingChannelConnectionPoolTest {
     NetworkConfig config = new NetworkConfig(propverify);
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(6667, PortType.PLAINTEXT));
+    ports.add(new Port(7667, PortType.SSL));
     server1 = new SocketServer(config, new MetricRegistry(), ports);
     server1.start();
     props.setProperty("port", "6668");
@@ -46,6 +47,7 @@ public class BlockingChannelConnectionPoolTest {
     config = new NetworkConfig(propverify);
     ports = new ArrayList<Port>();
     ports.add(new Port(6668, PortType.PLAINTEXT));
+    ports.add(new Port(7668, PortType.SSL));
     server2 = new SocketServer(config, new MetricRegistry(), ports);
     server2.start();
     props.setProperty("port", "6669");
@@ -53,6 +55,7 @@ public class BlockingChannelConnectionPoolTest {
     config = new NetworkConfig(propverify);
     ports = new ArrayList<Port>();
     ports.add(new Port(6669, PortType.PLAINTEXT));
+    ports.add(new Port(7669, PortType.SSL));
     server3 = new SocketServer(config, new MetricRegistry(), ports);
     server3.start();
   }
@@ -98,13 +101,28 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   @Test
-  public void testBlockingChannelInfo()
+  public void testBlockingChannelInfoForPlainText()
+      throws Exception {
+    testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 2);
+  }
+
+  @Test
+  public void testBlockingChannelInfoForSSL()
+      throws Exception {
+    testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 2, 5);
+  }
+
+  private void testBlockingChannelInfo(String host, Port port, int maxConnectionsPerPortPlainText,
+      int maxConnectionsPerPortSSL)
       throws Exception {
     Properties props = new Properties();
-    props.put("connectionpool.max.connections.per.host", "5");
+    props.put("connectionpool.max.connections.per.port.plain.text", "" + maxConnectionsPerPortPlainText);
+    props.put("connectionpool.max.connections.per.port.ssl", "" + maxConnectionsPerPortSSL);
+    int maxConnectionsPerChannel =
+        (port.getPortType() == PortType.PLAINTEXT) ? maxConnectionsPerPortPlainText : maxConnectionsPerPortSSL;
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), "127.0.0.1", 6667,
-            new MetricRegistry(), PortType.PLAINTEXT);
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPortNo(),
+            new MetricRegistry(), port.getPortType());
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = null;
     try {
@@ -115,46 +133,46 @@ public class BlockingChannelConnectionPoolTest {
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
     channelInfo.addBlockingChannel(blockingChannel);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
-    AtomicInteger channelCount = new AtomicInteger(10);
+    AtomicInteger channelCount = new AtomicInteger(2 * maxConnectionsPerChannel);
     CountDownLatch releaseLatch = new CountDownLatch(1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 2 * maxConnectionsPerChannel; i++) {
       BlockingChannelInfoThread infoThread =
           new BlockingChannelInfoThread(channelCount, channelInfo, releaseLatch, false);
       Thread t = new Thread(infoThread);
       t.start();
     }
-    while (channelCount.get() != 5) {
+    while (channelCount.get() != maxConnectionsPerChannel) {
       Thread.sleep(2);
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
     releaseLatch.countDown();
     while (channelCount.get() != 0) {
       Thread.sleep(2);
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
     channelInfo.cleanup();
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
-    channelCount = new AtomicInteger(10);
+    channelCount = new AtomicInteger(2 * maxConnectionsPerChannel);
     releaseLatch = new CountDownLatch(1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 2 * maxConnectionsPerChannel; i++) {
       BlockingChannelInfoThread infoThread =
           new BlockingChannelInfoThread(channelCount, channelInfo, releaseLatch, true);
       Thread t = new Thread(infoThread);
       t.start();
     }
-    while (channelCount.get() != 5) {
+    while (channelCount.get() != maxConnectionsPerChannel) {
       Thread.sleep(2);
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
     releaseLatch.countDown();
     while (channelCount.get() != 0) {
       Thread.sleep(2);
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
     channelInfo.cleanup();
-    channelCount = new AtomicInteger(2);
+    channelCount = new AtomicInteger(maxConnectionsPerChannel / 2);
     releaseLatch = new CountDownLatch(1);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < (maxConnectionsPerChannel / 2); i++) {
       BlockingChannelInfoThread infoThread =
           new BlockingChannelInfoThread(channelCount, channelInfo, releaseLatch, true);
       Thread t = new Thread(infoThread);
@@ -164,9 +182,9 @@ public class BlockingChannelConnectionPoolTest {
     while (channelCount.get() != 0) {
       Thread.sleep(2);
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), (maxConnectionsPerChannel / 2));
     channelInfo.getBlockingChannel(1000);
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), (maxConnectionsPerChannel / 2));
     channelInfo.cleanup();
   }
 
@@ -177,10 +195,13 @@ public class BlockingChannelConnectionPoolTest {
     private ConnectionPool connectionPool;
     private boolean destroyConnection;
     private CountDownLatch releaseConnection;
+    private Map<String, Port> channelToPortMap;
 
-    public ConnectionPoolThread(Map<String, AtomicInteger> channelCount, ConnectionPool connectionPool,
-        boolean destroyConnection, CountDownLatch releaseConnection, AtomicReference<Exception> e) {
+    public ConnectionPoolThread(Map<String, AtomicInteger> channelCount, Map<String, Port> channelToPortMap,
+        ConnectionPool connectionPool, boolean destroyConnection, CountDownLatch releaseConnection,
+        AtomicReference<Exception> e) {
       this.channelCount = channelCount;
+      this.channelToPortMap = channelToPortMap;
       this.connectionPool = connectionPool;
       this.destroyConnection = destroyConnection;
       this.releaseConnection = releaseConnection;
@@ -190,27 +211,21 @@ public class BlockingChannelConnectionPoolTest {
     @Override
     public void run() {
       try {
-        ConnectedChannel channel1 = connectionPool.checkOutConnection("localhost", new Port(6667, PortType.PLAINTEXT), 1000);
-        channelCount.get("localhost" + 6667).incrementAndGet();
-        ConnectedChannel channel2 = connectionPool.checkOutConnection("localhost", new Port(6668, PortType.PLAINTEXT), 1000);
-        channelCount.get("localhost" + 6668).incrementAndGet();
-        ConnectedChannel channel3 = connectionPool.checkOutConnection("localhost", new Port(6669, PortType.PLAINTEXT), 1000);
-        channelCount.get("localhost" + 6669).incrementAndGet();
+        List<ConnectedChannel> connectedChannels = new ArrayList<ConnectedChannel>();
+        for (String channelStr : channelCount.keySet()) {
+          Port port = channelToPortMap.get(channelStr);
+          ConnectedChannel channel =
+              connectionPool.checkOutConnection("localhost", new Port(port.getPortNo(), port.getPortType()), 1000);
+          connectedChannels.add(channel);
+          channelCount.get(channelStr).incrementAndGet();
+        }
         releaseConnection.await();
-        if (destroyConnection) {
-          connectionPool.destroyConnection(channel1);
-        } else {
-          connectionPool.checkInConnection(channel1);
-        }
-        if (destroyConnection) {
-          connectionPool.destroyConnection(channel2);
-        } else {
-          connectionPool.checkInConnection(channel2);
-        }
-        if (destroyConnection) {
-          connectionPool.destroyConnection(channel3);
-        } else {
-          connectionPool.checkInConnection(channel3);
+        for (ConnectedChannel channel : connectedChannels) {
+          if (destroyConnection) {
+            connectionPool.destroyConnection(channel);
+          } else {
+            connectionPool.checkInConnection(channel);
+          }
         }
       } catch (Exception e) {
         exception.set(e);
@@ -223,7 +238,8 @@ public class BlockingChannelConnectionPoolTest {
   public void testBlockingChannelConnectionPool()
       throws Exception {
     Properties props = new Properties();
-    props.put("connectionpool.max.connections.per.host", "5");
+    props.put("connectionpool.max.connections.per.port.plain.text", "5");
+    props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)),
             new MetricRegistry());
@@ -235,27 +251,107 @@ public class BlockingChannelConnectionPoolTest {
     channelCount.put("localhost" + 6667, new AtomicInteger(0));
     channelCount.put("localhost" + 6668, new AtomicInteger(0));
     channelCount.put("localhost" + 6669, new AtomicInteger(0));
+    Map<String, Port> channelToPortMap = new HashMap<String, Port>();
+    channelToPortMap.put("localhost" + 6667, new Port(6667, PortType.PLAINTEXT));
+    channelToPortMap.put("localhost" + 6668, new Port(6668, PortType.PLAINTEXT));
+    channelToPortMap.put("localhost" + 6669, new Port(6669, PortType.PLAINTEXT));
     for (int i = 0; i < 10; i++) {
       ConnectionPoolThread connectionPoolThread =
-          new ConnectionPoolThread(channelCount, connectionPool, false, releaseConnection, exception);
+          new ConnectionPoolThread(channelCount, channelToPortMap, connectionPool, false, releaseConnection, exception);
       Thread t = new Thread(connectionPoolThread);
       t.start();
     }
-    waitForConditionAndCheckForException(channelCount, exception, 6667, 5);
-    waitForConditionAndCheckForException(channelCount, exception, 6668, 5);
-    waitForConditionAndCheckForException(channelCount, exception, 6669, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6668, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 5);
 
     releaseConnection.countDown();
-    waitForConditionAndCheckForException(channelCount, exception, 6667, 10);
-    waitForConditionAndCheckForException(channelCount, exception, 6668, 10);
-    waitForConditionAndCheckForException(channelCount, exception, 6669, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6668, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 10);
+    connectionPool.shutdown();
+  }
+
+  @Test
+  public void testBlockingChannelConnectionPoolForSSL()
+      throws Exception {
+    Properties props = new Properties();
+    props.put("connectionpool.max.connections.per.port.plain.text", "5");
+    props.put("connectionpool.max.connections.per.port.ssl", "5");
+    ConnectionPool connectionPool =
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)),
+            new MetricRegistry());
+    connectionPool.start();
+
+    CountDownLatch releaseConnection = new CountDownLatch(1);
+    AtomicReference<Exception> exception = new AtomicReference<Exception>();
+    Map<String, AtomicInteger> channelCount = new HashMap<String, AtomicInteger>();
+    channelCount.put("localhost" + 6667, new AtomicInteger(0));
+    channelCount.put("localhost" + 6668, new AtomicInteger(0));
+    channelCount.put("localhost" + 6669, new AtomicInteger(0));
+    Map<String, Port> channelToPortMap = new HashMap<String, Port>();
+    channelToPortMap.put("localhost" + 6667, new Port(6667, PortType.SSL));
+    channelToPortMap.put("localhost" + 6668, new Port(6668, PortType.SSL));
+    channelToPortMap.put("localhost" + 6669, new Port(6669, PortType.SSL));
+    for (int i = 0; i < 10; i++) {
+      ConnectionPoolThread connectionPoolThread =
+          new ConnectionPoolThread(channelCount, channelToPortMap, connectionPool, false, releaseConnection, exception);
+      Thread t = new Thread(connectionPoolThread);
+      t.start();
+    }
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6668, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 5);
+
+    releaseConnection.countDown();
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6668, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 10);
+    connectionPool.shutdown();
+  }
+
+  @Test
+  public void testBlockingChannelConnectionPoolMixOfPlainTextAndSSL()
+      throws Exception {
+    Properties props = new Properties();
+    props.put("connectionpool.max.connections.per.port.plain.text", "5");
+    props.put("connectionpool.max.connections.per.port.ssl", "5");
+    ConnectionPool connectionPool =
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)),
+            new MetricRegistry());
+    connectionPool.start();
+
+    CountDownLatch releaseConnection = new CountDownLatch(1);
+    AtomicReference<Exception> exception = new AtomicReference<Exception>();
+    Map<String, AtomicInteger> channelCount = new HashMap<String, AtomicInteger>();
+    channelCount.put("localhost" + 6667, new AtomicInteger(0));
+    channelCount.put("localhost" + 7668, new AtomicInteger(0));
+    channelCount.put("localhost" + 6669, new AtomicInteger(0));
+    Map<String, Port> channelToPortMap = new HashMap<String, Port>();
+    channelToPortMap.put("localhost" + 6667, new Port(6667, PortType.PLAINTEXT));
+    channelToPortMap.put("localhost" + 7668, new Port(7668, PortType.SSL));
+    channelToPortMap.put("localhost" + 6669, new Port(6669, PortType.PLAINTEXT));
+    for (int i = 0; i < 10; i++) {
+      ConnectionPoolThread connectionPoolThread =
+          new ConnectionPoolThread(channelCount, channelToPortMap, connectionPool, false, releaseConnection, exception);
+      Thread t = new Thread(connectionPoolThread);
+      t.start();
+    }
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 7668, 5);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 5);
+
+    releaseConnection.countDown();
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6667, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 7668, 10);
+    waitForConditionAndCheckForException(channelCount, exception, "localhost", 6669, 10);
     connectionPool.shutdown();
   }
 
   private void waitForConditionAndCheckForException(Map<String, AtomicInteger> channelCount,
-      AtomicReference<Exception> exception, int port, int expectedChannelCount)
+      AtomicReference<Exception> exception, String host, int port, int expectedChannelCount)
       throws Exception {
-    while (channelCount.get("localhost" + port).get() != expectedChannelCount && exception.get() == null) {
+    while (channelCount.get(host + port).get() != expectedChannelCount && exception.get() == null) {
       Thread.sleep(2);
     }
     if (exception.get() != null) {

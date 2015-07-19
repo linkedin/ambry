@@ -46,7 +46,7 @@ public class AdminBlobStorageServiceTest {
   @BeforeClass
   public static void startAdminBlobStorageService()
       throws InstantiationException, IOException {
-    clusterMap = new MockClusterMap();
+    clusterMap = new MockClusterMap(false);
     adminBlobStorageService = getAdminBlobStorageService(clusterMap);
     adminBlobStorageService.start();
   }

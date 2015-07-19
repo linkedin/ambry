@@ -90,7 +90,7 @@ public class NettyServerTest {
   private RestRequestHandlerController getRestRequestHandlerController(Properties properties)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
+    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap(false));
     return new RequestHandlerController(1, restServerMetrics, blobStorageService);
   }
 

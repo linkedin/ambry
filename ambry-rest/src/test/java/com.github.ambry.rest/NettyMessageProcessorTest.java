@@ -45,7 +45,7 @@ public class NettyMessageProcessorTest {
   @BeforeClass
   public static void startRequestHandlerController()
       throws InstantiationException, IOException {
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
+    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap(false));
     requestHandlerController = new MockRestRequestHandlerController(1, blobStorageService);
     requestHandlerController.start();
   }

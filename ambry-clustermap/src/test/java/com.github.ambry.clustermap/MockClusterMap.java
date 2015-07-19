@@ -21,32 +21,56 @@ public class MockClusterMap implements ClusterMap {
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
 
-  public MockClusterMap()
+  public MockClusterMap(boolean enableSSLPorts)
       throws IOException {
 
-    // create 3 nodes with each having 3 mount paths
-    MockDataNodeId dataNodeId1 = createDataNode(64422, 65422, "DC1");
-    MockDataNodeId dataNodeId2 = createDataNode(64423, 65423, "DC1");
-    MockDataNodeId dataNodeId3 = createDataNode(64424, 65424, "DC1");
-
-    MockDataNodeId dataNodeId4 = createDataNode(64425, 65425, "DC2");
-    MockDataNodeId dataNodeId5 = createDataNode(64426, 65426, "DC2");
-    MockDataNodeId dataNodeId6 = createDataNode(64427, 65427, "DC2");
-
-    MockDataNodeId dataNodeId7 = createDataNode(64428, 65428, "DC3");
-    MockDataNodeId dataNodeId8 = createDataNode(64429, 65429, "DC3");
-    MockDataNodeId dataNodeId9 = createDataNode(64430, 65430, "DC3");
-
     dataNodes = new ArrayList<MockDataNodeId>(9);
-    dataNodes.add(dataNodeId1);
-    dataNodes.add(dataNodeId2);
-    dataNodes.add(dataNodeId3);
-    dataNodes.add(dataNodeId4);
-    dataNodes.add(dataNodeId5);
-    dataNodes.add(dataNodeId6);
-    dataNodes.add(dataNodeId7);
-    dataNodes.add(dataNodeId8);
-    dataNodes.add(dataNodeId9);
+    // create 3 nodes with each having 3 mount paths
+    if (enableSSLPorts) {
+      MockDataNodeId dataNodeId1 = createDataNode(64422, 54422, "DC1");
+      MockDataNodeId dataNodeId2 = createDataNode(64423, 54423, "DC1");
+      MockDataNodeId dataNodeId3 = createDataNode(64424, 54424, "DC1");
+
+      MockDataNodeId dataNodeId4 = createDataNode(64425, 54425, "DC2");
+      MockDataNodeId dataNodeId5 = createDataNode(64426, 54426, "DC2");
+      MockDataNodeId dataNodeId6 = createDataNode(64427, 54427, "DC2");
+
+      MockDataNodeId dataNodeId7 = createDataNode(64428, 54428, "DC3");
+      MockDataNodeId dataNodeId8 = createDataNode(64429, 54429, "DC3");
+      MockDataNodeId dataNodeId9 = createDataNode(64430, 54430, "DC3");
+
+      dataNodes.add(dataNodeId1);
+      dataNodes.add(dataNodeId2);
+      dataNodes.add(dataNodeId3);
+      dataNodes.add(dataNodeId4);
+      dataNodes.add(dataNodeId5);
+      dataNodes.add(dataNodeId6);
+      dataNodes.add(dataNodeId7);
+      dataNodes.add(dataNodeId8);
+      dataNodes.add(dataNodeId9);
+    } else {
+      MockDataNodeId dataNodeId1 = createDataNode(64422, -1, "DC1");
+      MockDataNodeId dataNodeId2 = createDataNode(64423, -1, "DC1");
+      MockDataNodeId dataNodeId3 = createDataNode(64424, -1, "DC1");
+
+      MockDataNodeId dataNodeId4 = createDataNode(64425, -1, "DC2");
+      MockDataNodeId dataNodeId5 = createDataNode(64426, -1, "DC2");
+      MockDataNodeId dataNodeId6 = createDataNode(64427, -1, "DC2");
+
+      MockDataNodeId dataNodeId7 = createDataNode(64428, -1, "DC3");
+      MockDataNodeId dataNodeId8 = createDataNode(64429, -1, "DC3");
+      MockDataNodeId dataNodeId9 = createDataNode(64430, -1, "DC3");
+
+      dataNodes.add(dataNodeId1);
+      dataNodes.add(dataNodeId2);
+      dataNodes.add(dataNodeId3);
+      dataNodes.add(dataNodeId4);
+      dataNodes.add(dataNodeId5);
+      dataNodes.add(dataNodeId6);
+      dataNodes.add(dataNodeId7);
+      dataNodes.add(dataNodeId8);
+      dataNodes.add(dataNodeId9);
+    }
     partitions = new HashMap<Long, PartitionId>();
 
     // create three partitions on each mount path

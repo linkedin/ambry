@@ -81,7 +81,7 @@ public class RequestResponseTest {
   public void putRequestResponseTest()
       throws IOException {
     Random rnd = new Random();
-    MockClusterMap clusterMap = new MockClusterMap();
+    MockClusterMap clusterMap = new MockClusterMap(false);
 
     int correlationId = 5;
     String clientId = "client";
@@ -128,7 +128,7 @@ public class RequestResponseTest {
   @Test
   public void getRequestResponseTest()
       throws IOException {
-    MockClusterMap clusterMap = new MockClusterMap();
+    MockClusterMap clusterMap = new MockClusterMap(false);
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     blobIdList.add(id1);
@@ -185,7 +185,7 @@ public class RequestResponseTest {
   @Test
   public void deleteRequestResponseTest()
       throws IOException {
-    MockClusterMap clusterMap = new MockClusterMap();
+    MockClusterMap clusterMap = new MockClusterMap(false);
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -214,7 +214,7 @@ public class RequestResponseTest {
   @Test
   public void replicaMetadataRequestTest()
       throws IOException {
-    MockClusterMap clusterMap = new MockClusterMap();
+    MockClusterMap clusterMap = new MockClusterMap(false);
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -230,7 +230,7 @@ public class RequestResponseTest {
     buffer.getLong();
     buffer.getShort();
     ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest
-        .readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
+        .readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(false),
             new MockFindTokenFactory());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
