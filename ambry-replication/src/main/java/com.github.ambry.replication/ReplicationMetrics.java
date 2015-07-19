@@ -21,6 +21,10 @@ public class ReplicationMetrics {
 
   public final Meter interColoReplicationBytesRate;
   public final Meter intraColoReplicationBytesRate;
+  public final Meter plainTextInterColoReplicationBytesRate;
+  public final Meter plainTextIntraColoReplicationBytesRate;
+  public final Meter sslInterColoReplicationBytesRate;
+  public final Meter sslIntraColoReplicationBytesRate;
   public final Meter plainTextConnectionsRequestRate;
   public final Meter sslConnectionsRequestRate;
   public final Counter interColoMetadataExchangeCount;
@@ -28,19 +32,45 @@ public class ReplicationMetrics {
   public final Counter interColoBlobsReplicatedCount;
   public final Counter intraColoBlobsReplicatedCount;
   public final Counter unknownRemoteReplicaRequestCount;
+  public final Counter plainTextInterColoMetadataExchangeCount;
+  public final Counter plainTextIntraColoMetadataExchangeCount;
+  public final Counter plainTextInterColoBlobsReplicatedCount;
+  public final Counter plainTextIntraColoBlobsReplicatedCount;
+  public final Counter sslInterColoMetadataExchangeCount;
+  public final Counter sslIntraColoMetadataExchangeCount;
+  public final Counter sslInterColoBlobsReplicatedCount;
+  public final Counter sslIntraColoBlobsReplicatedCount;
   public final Counter replicationErrors;
+  public final Counter plainTextReplicationErrors;
+  public final Counter sslReplicationErrors;
   public final Counter replicationTokenResetCount;
   public final Counter replicationInvalidMessageStreamErrorCount;
   public final Timer interColoReplicationLatency;
   public final Timer intraColoReplicationLatency;
+  public final Timer plainTextInterColoReplicationLatency;
+  public final Timer plainTextIntraColoReplicationLatency;
+  public final Timer sslInterColoReplicationLatency;
+  public final Timer sslIntraColoReplicationLatency;
   public final Histogram remoteReplicaTokensPersistTime;
   public final Histogram remoteReplicaTokensRestoreTime;
   public final Histogram interColoExchangeMetadataTime;
   public final Histogram intraColoExchangeMetadataTime;
+  public final Histogram plainTextInterColoExchangeMetadataTime;
+  public final Histogram plainTextIntraColoExchangeMetadataTime;
+  public final Histogram sslInterColoExchangeMetadataTime;
+  public final Histogram sslIntraColoExchangeMetadataTime;
   public final Histogram interColoFixMissingKeysTime;
   public final Histogram intraColoFixMissingKeysTime;
+  public final Histogram plainTextInterColoFixMissingKeysTime;
+  public final Histogram plainTextIntraColoFixMissingKeysTime;
+  public final Histogram sslInterColoFixMissingKeysTime;
+  public final Histogram sslIntraColoFixMissingKeysTime;
   public final Histogram interColoReplicationMetadataRequestTime;
   public final Histogram intraColoReplicationMetadataRequestTime;
+  public final Histogram plainTextInterColoReplicationMetadataRequestTime;
+  public final Histogram plainTextIntraColoReplicationMetadataRequestTime;
+  public final Histogram sslInterColoReplicationMetadataRequestTime;
+  public final Histogram sslIntraColoReplicationMetadataRequestTime;
   public final Histogram interColoReplicationWaitTime;
   public final Histogram intraColoReplicationWaitTime;
   public final Histogram interColoCheckMissingKeysTime;
@@ -49,10 +79,22 @@ public class ReplicationMetrics {
   public final Histogram intraColoProcessMetadataResponseTime;
   public final Histogram interColoGetRequestTime;
   public final Histogram intraColoGetRequestTime;
+  public final Histogram plainTextInterColoGetRequestTime;
+  public final Histogram plainTextIntraColoGetRequestTime;
+  public final Histogram sslInterColoGetRequestTime;
+  public final Histogram sslIntraColoGetRequestTime;
   public final Histogram interColoBatchStoreWriteTime;
   public final Histogram intraColoBatchStoreWriteTime;
+  public final Histogram plainTextInterColoBatchStoreWriteTime;
+  public final Histogram plainTextIntraColoBatchStoreWriteTime;
+  public final Histogram sslInterColoBatchStoreWriteTime;
+  public final Histogram sslIntraColoBatchStoreWriteTime;
   public final Histogram interColoTotalReplicationTime;
   public final Histogram intraColoTotalReplicationTime;
+  public final Histogram plainTextInterColoTotalReplicationTime;
+  public final Histogram plainTextIntraColoTotalReplicationTime;
+  public final Histogram sslInterColoTotalReplicationTime;
+  public final Histogram sslIntraColoTotalReplicationTime;
 
   public Gauge<Integer> numberOfIntraDCReplicaThreads;
   public Gauge<Integer> numberOfInterDCReplicaThreads;
@@ -73,6 +115,14 @@ public class ReplicationMetrics {
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
+    plainTextInterColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoReplicationBytesRate"));
+    plainTextIntraColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoReplicationBytesRate"));
+    sslInterColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslInterColoReplicationBytesRate"));
+    sslIntraColoReplicationBytesRate =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslIntraColoReplicationBytesRate"));
     interColoMetadataExchangeCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoMetadataExchangeCount"));
     intraColoMetadataExchangeCount =
@@ -83,8 +133,26 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoBlobsReplicatedCount"));
     unknownRemoteReplicaRequestCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "UnknownRemoteReplicaRequestCount"));
-    registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBlobsCount"));
+    plainTextInterColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoMetadataExchangeCount"));
+    plainTextIntraColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoMetadataExchangeCount"));
+    plainTextInterColoBlobsReplicatedCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoBlobsReplicatedCount"));
+    plainTextIntraColoBlobsReplicatedCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoBlobsReplicatedCount"));
+    sslInterColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslInterColoMetadataExchangeCount"));
+    sslIntraColoMetadataExchangeCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslIntraColoMetadataExchangeCount"));
+    sslInterColoBlobsReplicatedCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslInterColoBlobsReplicatedCount"));
+    sslIntraColoBlobsReplicatedCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslIntraColoBlobsReplicatedCount"));
     replicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationErrors"));
+    plainTextReplicationErrors =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "PlainTextReplicationErrors"));
+    sslReplicationErrors = registry.counter(MetricRegistry.name(ReplicaThread.class, "SslReplicationErrors"));
     replicationTokenResetCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
     replicationInvalidMessageStreamErrorCount =
@@ -93,6 +161,14 @@ public class ReplicationMetrics {
         registry.timer(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationLatency"));
     intraColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationLatency"));
+    plainTextInterColoReplicationLatency =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoReplicationLatency"));
+    plainTextIntraColoReplicationLatency =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoReplicationLatency"));
+    sslInterColoReplicationLatency =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "SslInterColoReplicationLatency"));
+    sslIntraColoReplicationLatency =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "SslIntraColoReplicationLatency"));
     remoteReplicaTokensPersistTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaTokensPersistTime"));
     remoteReplicaTokensRestoreTime =
@@ -101,14 +177,38 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoExchangeMetadataTime"));
     intraColoExchangeMetadataTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoExchangeMetadataTime"));
+    plainTextInterColoExchangeMetadataTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoExchangeMetadataTime"));
+    plainTextIntraColoExchangeMetadataTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoExchangeMetadataTime"));
+    sslInterColoExchangeMetadataTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoExchangeMetadataTime"));
+    sslIntraColoExchangeMetadataTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoExchangeMetadataTime"));
     interColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoFixMissingKeysTime"));
     intraColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoFixMissingKeysTime"));
+    plainTextInterColoFixMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoFixMissingKeysTime"));
+    plainTextIntraColoFixMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoFixMissingKeysTime"));
+    sslInterColoFixMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoFixMissingKeysTime"));
+    sslIntraColoFixMissingKeysTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoFixMissingKeysTime"));
     interColoReplicationMetadataRequestTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationMetadataRequestTime"));
     intraColoReplicationMetadataRequestTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationMetadataRequestTime"));
+    plainTextInterColoReplicationMetadataRequestTime = registry
+        .histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoReplicationMetadataRequestTime"));
+    plainTextIntraColoReplicationMetadataRequestTime = registry
+        .histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoReplicationMetadataRequestTime"));
+    sslInterColoReplicationMetadataRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoReplicationMetadataRequestTime"));
+    sslIntraColoReplicationMetadataRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoReplicationMetadataRequestTime"));
     interColoReplicationWaitTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationWaitTime"));
     intraColoReplicationWaitTime =
@@ -123,18 +223,41 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoProcessMetadataResponseTime"));
     interColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoGetRequestTime"));
     intraColoGetRequestTime = registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoGetRequestTime"));
+    plainTextInterColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoGetRequestTime"));
+    plainTextIntraColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoGetRequestTime"));
+    sslInterColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoGetRequestTime"));
+    sslIntraColoGetRequestTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoGetRequestTime"));
     interColoBatchStoreWriteTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoBatchStoreWriteTime"));
     intraColoBatchStoreWriteTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoBatchStoreWriteTime"));
+    plainTextInterColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoBatchStoreWriteTime"));
+    plainTextIntraColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoBatchStoreWriteTime"));
+    sslInterColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoBatchStoreWriteTime"));
+    sslIntraColoBatchStoreWriteTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoBatchStoreWriteTime"));
     interColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "InterColoTotalReplicationTime"));
     intraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
+    plainTextInterColoTotalReplicationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInterColoTotalReplicationTime"));
+    plainTextIntraColoTotalReplicationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
+    sslInterColoTotalReplicationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoTotalReplicationTime"));
+    sslIntraColoTotalReplicationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoTotalReplicationTime"));
     plainTextConnectionsRequestRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "PlainTextConnectionsRequestRate"));
-    sslConnectionsRequestRate =
-        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslConnectionsRequestRate"));
+    sslConnectionsRequestRate = registry.meter(MetricRegistry.name(ReplicaThread.class, "SslConnectionsRequestRate"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {
@@ -238,5 +361,141 @@ public class ReplicationMetrics {
         remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
         remoteReplicaInfo.getReplicaId().getReplicaPath() + "-localStoreError";
     localStoreErrorMap.get(localStoreErrorMetricName).inc();
+  }
+
+  public void incrementReplicationErrors(boolean sslEnabled) {
+    replicationErrors.inc();
+    if (sslEnabled) {
+      sslReplicationErrors.inc();
+    } else {
+      plainTextReplicationErrors.inc();
+    }
+  }
+
+  public void updateTotalReplicationTime(long totalReplicationTime, boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoTotalReplicationTime.update(totalReplicationTime);
+      if (sslEnabled) {
+        sslInterColoTotalReplicationTime.update(totalReplicationTime);
+      } else {
+        plainTextInterColoTotalReplicationTime.update(totalReplicationTime);
+      }
+    } else {
+      intraColoTotalReplicationTime.update(totalReplicationTime);
+      if (sslEnabled) {
+        sslIntraColoTotalReplicationTime.update(totalReplicationTime);
+      } else {
+        plainTextIntraColoTotalReplicationTime.update(totalReplicationTime);
+      }
+    }
+  }
+
+  public void updateExchangeMetadataTime(long exchangeMetadataTime, boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoMetadataExchangeCount.inc();
+      interColoExchangeMetadataTime.update(exchangeMetadataTime);
+      if (sslEnabled) {
+        sslInterColoMetadataExchangeCount.inc();
+        sslInterColoExchangeMetadataTime.update(exchangeMetadataTime);
+      } else {
+        plainTextInterColoMetadataExchangeCount.inc();
+        plainTextInterColoExchangeMetadataTime.update(exchangeMetadataTime);
+      }
+    } else {
+      intraColoMetadataExchangeCount.inc();
+      intraColoExchangeMetadataTime.update(exchangeMetadataTime);
+      if (sslEnabled) {
+        sslIntraColoMetadataExchangeCount.inc();
+        sslIntraColoExchangeMetadataTime.update(exchangeMetadataTime);
+      } else {
+        plainTextIntraColoMetadataExchangeCount.inc();
+        plainTextIntraColoExchangeMetadataTime.update(exchangeMetadataTime);
+      }
+    }
+  }
+
+  public void updateFixMissingStoreKeysTime(long fixMissingStoreKeysTime, boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      if (sslEnabled) {
+        sslInterColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      } else {
+        plainTextInterColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      }
+    } else {
+      intraColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      if (sslEnabled) {
+        sslIntraColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      } else {
+        plainTextIntraColoFixMissingKeysTime.update(fixMissingStoreKeysTime);
+      }
+    }
+  }
+
+  public void updateMetadataRequestTime(long metadataRequestTime, boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      if (sslEnabled) {
+        sslInterColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      } else {
+        plainTextInterColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      }
+    } else {
+      intraColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      if (sslEnabled) {
+        sslIntraColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      } else {
+        plainTextIntraColoReplicationMetadataRequestTime.update(metadataRequestTime);
+      }
+    }
+  }
+
+  public void updateGetRequestTime(long getRequestTime, boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoGetRequestTime.update(getRequestTime);
+      if (sslEnabled) {
+        sslInterColoGetRequestTime.update(getRequestTime);
+      } else {
+        plainTextInterColoGetRequestTime.update(getRequestTime);
+      }
+    } else {
+      intraColoGetRequestTime.update(getRequestTime);
+      if (sslEnabled) {
+        sslIntraColoGetRequestTime.update(getRequestTime);
+      } else {
+        plainTextIntraColoGetRequestTime.update(getRequestTime);
+      }
+    }
+  }
+
+  public void updateBatchStoreWriteTime(long batchStoreWriteTime, long totalBytesFixed, long totalBlobsFixed,
+      boolean remoteColo, boolean sslEnabled) {
+    if (remoteColo) {
+      interColoReplicationBytesRate.mark(totalBytesFixed);
+      interColoBlobsReplicatedCount.inc(totalBlobsFixed);
+      interColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      if (sslEnabled) {
+        sslInterColoReplicationBytesRate.mark(totalBytesFixed);
+        sslInterColoBlobsReplicatedCount.inc(totalBlobsFixed);
+        sslInterColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      } else {
+        plainTextInterColoReplicationBytesRate.mark(totalBytesFixed);
+        plainTextInterColoBlobsReplicatedCount.inc(totalBlobsFixed);
+        plainTextInterColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      }
+    } else {
+      intraColoReplicationBytesRate.mark(totalBytesFixed);
+      intraColoBlobsReplicatedCount.inc(totalBlobsFixed);
+      intraColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      if (sslEnabled) {
+        sslIntraColoReplicationBytesRate.mark(totalBytesFixed);
+        sslIntraColoBlobsReplicatedCount.inc(totalBlobsFixed);
+        sslIntraColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      } else {
+        plainTextIntraColoReplicationBytesRate.mark(totalBytesFixed);
+        plainTextIntraColoBlobsReplicatedCount.inc(totalBlobsFixed);
+        plainTextIntraColoBatchStoreWriteTime.update(batchStoreWriteTime);
+      }
+    }
   }
 }

@@ -74,7 +74,7 @@ final class GetBlobOperationRequest extends GetOperationRequest {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.getBlobRequestRate.mark();
+      metric.incrementGetBlobRequestRate(sslEnabled);
     }
   }
 
@@ -83,7 +83,7 @@ final class GetBlobOperationRequest extends GetOperationRequest {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.getBlobRequestLatencyInMs.update(durationInMs);
+      metric.updateGetBlobRequestLatency(durationInMs, sslEnabled);
     }
   }
 

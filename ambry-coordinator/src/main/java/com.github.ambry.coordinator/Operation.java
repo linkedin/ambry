@@ -242,7 +242,7 @@ abstract class OperationRequest implements Runnable {
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
   private ResponseHandler responseHandler;
-  private boolean sslEnabled;
+  protected boolean sslEnabled;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -354,7 +354,7 @@ abstract class OperationRequest implements Runnable {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.countError(error);
+      metric.countError(error, sslEnabled);
     }
   }
 
@@ -362,7 +362,7 @@ abstract class OperationRequest implements Runnable {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.countError(error);
+      metric.countError(error, sslEnabled);
     }
   }
 
