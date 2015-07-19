@@ -81,7 +81,7 @@ public class ReplicationConfig {
   /**
    * List of Datacenters against which only SSL should be spoken during replication
    */
-  @Config("replication.ssl.enabled.Datacenters")
+  @Config("replication.ssl.enabled.datacenters")
   public final String replicationSslEnabledDatacenters;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
@@ -105,6 +105,6 @@ public class ReplicationConfig {
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
-    replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.Datacenters", "");
+    replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.datacenters", "");
   }
 }

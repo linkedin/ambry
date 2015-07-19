@@ -1850,7 +1850,7 @@ public class ServerTest {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DC1");
-    properties.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
+    properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     return new VerifiableProperties(properties);
   }
 

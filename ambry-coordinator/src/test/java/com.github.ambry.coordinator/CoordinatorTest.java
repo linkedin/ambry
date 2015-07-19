@@ -663,7 +663,7 @@ public class CoordinatorTest {
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
     if (sslEnabledDatacenters != null) {
-      properties.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
+      properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     }
     return new VerifiableProperties(properties);
   }
@@ -675,7 +675,7 @@ public class CoordinatorTest {
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
     if (sslEnabledDatacenters != null) {
-      properties.setProperty("coordinator.ssl.enabled.Datacenters", sslEnabledDatacenters);
+      properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     }
     return new VerifiableProperties(properties);
   }
