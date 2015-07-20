@@ -16,27 +16,40 @@ import java.util.concurrent.atomic.AtomicLong;
  * Metrics for the network layer
  */
 public class NetworkMetrics {
-
   private final MetricRegistry registry;
+
+  // SocketRequestResponseChannel metrics
   private final List<Gauge<Integer>> responseQueueSize;
   private final Gauge<Integer> requestQueueSize;
-  public final Counter sendInFlight;
 
+  // SocketServer metrics
+  public final Counter sendInFlight;
+  public final Counter selectorBytesSentCount;
+  public final Counter selectorBytesReceivedCount;
+  public final Counter acceptConnectionErrorCount;
+  public final Counter acceptorShutDownErrorCount;
+  public final Counter processNewResponseErrorCount;
+  public Gauge<Integer> numberOfProcessorThreads;
+
+  // Selector metrics
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
   public final Histogram selectorBytesSent;
   public final Histogram selectorBytesReceived;
-  public final Counter selectorBytesSentCount;
-  public final Counter selectorBytesReceivedCount;
   public final Counter selectorSelectRate;
-  public final Counter processorFailCount;
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
   public final Histogram selectorIOTime;
+  public final Counter nioSelecorCloseErrorCount;
+  public final Counter disconnectedErrorCount;
+  public final Counter ioErrorCount;
+  public final Counter keyOperationErrorCount;
+  public final Counter closeKeyErrorCount;
+  public final Counter closeSocketErrorCount;
   public Gauge<Long> selectorActiveConnections;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
-  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry) {
+  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry, final List<Processor> processorThreads) {
     this.registry = registry;
     requestQueueSize = new Gauge<Integer>() {
       @Override
@@ -67,11 +80,41 @@ public class NetworkMetrics {
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
     selectorBytesReceived = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesReceived"));
     selectorBytesSent = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesSent"));
-    processorFailCount = registry.counter(MetricRegistry.name(SocketServer.class, "ProcessorFailCount"));
+    nioSelecorCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "NioSelecorCloseErrorCount"));
+    disconnectedErrorCount = registry.counter(MetricRegistry.name(Selector.class, "DisconnectedErrorCount"));
+    ioErrorCount = registry.counter(MetricRegistry.name(Selector.class, "IoErrorCount"));
+    keyOperationErrorCount = registry.counter(MetricRegistry.name(Selector.class, "KeyOperationErrorCount"));
+    closeKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "CloseKeyErrorCount"));
+    closeSocketErrorCount = registry.counter(MetricRegistry.name(Selector.class, "CloseSocketErrorCount"));
+
+    numberOfProcessorThreads = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return getLiveThreads(processorThreads);
+      }
+    };
+    registry.register(MetricRegistry.name(SocketServer.class, "NumberOfProcessorThreads"), numberOfProcessorThreads);
+
+    acceptConnectionErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptConnectionErrorCount"));
+    acceptorShutDownErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptorShutDownErrorCount"));
+    processNewResponseErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessNewResponseErrorCount"));
     selectorBytesSentCount = registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesSentCount"));
     selectorBytesReceivedCount =
         registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesReceivedCount"));
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
+  }
+
+  private int getLiveThreads(List<Processor> replicaThreads) {
+    int count = 0;
+    for (Processor thread : replicaThreads) {
+      if (thread.isRunning()) {
+        count++;
+      }
+    }
+    return count;
   }
 
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections) {

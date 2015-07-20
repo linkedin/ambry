@@ -38,8 +38,10 @@ public class SelectorTest {
     this.server = new EchoServer();
     this.server.start();
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
+    List<Processor> processorThreads = new ArrayList<Processor>();
     this.selector =
-        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()), SystemTime.getInstance());
+        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
+            SystemTime.getInstance());
   }
 
   @After
@@ -169,8 +171,7 @@ public class SelectorTest {
         assertEquals("Check that the receive has kindly been rewound", 0,
             receive.getReceivedBytes().getPayload().position());
         int index = Integer.parseInt(receive.getConnectionId().split("_")[1]);
-        assertEquals("Check the request counter", responses[index],
-            Integer.parseInt(pieces[1]));
+        assertEquals("Check the request counter", responses[index], Integer.parseInt(pieces[1]));
         responses[index]++; // increment the expected counter
         responseCount++;
       }

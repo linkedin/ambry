@@ -189,6 +189,7 @@ public class Selector implements Selectable {
     try {
       this.nioSelector.close();
     } catch (IOException e) {
+      metrics.nioSelecorCloseErrorCount.inc();
       logger.error("Exception closing nioSelector:", e);
     }
   }
@@ -295,12 +296,15 @@ public class Selector implements Selectable {
         } catch (IOException e) {
           String socketDescription = socketDescription(channel(key));
           if (e instanceof EOFException || e instanceof ConnectException) {
+            metrics.disconnectedErrorCount.inc();
             logger.error("Connection {} disconnected", socketDescription, e);
           } else {
+            metrics.ioErrorCount.inc();
             logger.warn("Error in I/O with connection to {}", socketDescription, e);
           }
           close(key);
         } catch (Exception e) {
+          metrics.keyOperationErrorCount.inc();
           logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
           close(key);
         }
@@ -386,6 +390,7 @@ public class Selector implements Selectable {
       SelectionKey key = keyForId(connectionId);
       close(key);
     } catch (IllegalStateException e) {
+      metrics.closeKeyErrorCount.inc();
       logger.error("Attempt to close socket for which there is no open connection. Connection id {}", connectionId);
     }
   }
@@ -413,6 +418,7 @@ public class Selector implements Selectable {
       socketChannel.socket().close();
       socketChannel.close();
     } catch (IOException e) {
+      metrics.closeSocketErrorCount.inc();
       logger.error("Exception closing connection to node {}:", transmissions.connectionId, e);
     }
     this.metrics.selectorConnectionClosed.inc();
