@@ -75,7 +75,7 @@ class NettyServer implements NioServer {
       } finally {
         long startupTime = System.currentTimeMillis() - startupBeginTime;
         logger.info("NettyServer start took {} ms", startupTime);
-        nettyMetrics.nettyServerStartupTime.update(startupTime);
+        nettyMetrics.nettyServerStartupTimeInMs.update(startupTime);
       }
     }
   }
@@ -189,7 +189,7 @@ class NettyServerDeployer implements Runnable {
       } finally {
         long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
         logger.info("NettyServer shutdown took {} ms", shutdownTime);
-        nettyMetrics.nettyServerShutdownTime.update(shutdownTime);
+        nettyMetrics.nettyServerShutdownTimeInMs.update(shutdownTime);
       }
     }
   }

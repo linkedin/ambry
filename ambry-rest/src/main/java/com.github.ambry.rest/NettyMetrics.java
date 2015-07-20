@@ -23,7 +23,7 @@ class NettyMetrics {
   public final Meter requestCompletionRate;
 
   // Latencies
-  public final Histogram channelWriteLatency;
+  public final Histogram channelWriteLatencyInMs;
 
   // Errors
   public final Counter channelActiveTasksFailure;
@@ -55,8 +55,8 @@ class NettyMetrics {
   public final Counter nettyServerShutdownFailure;
 
   // Other
-  public final Histogram nettyServerStartupTime;
-  public final Histogram nettyServerShutdownTime;
+  public final Histogram nettyServerStartupTimeInMs;
+  public final Histogram nettyServerShutdownTimeInMs;
 
   public NettyMetrics(MetricRegistry metricRegistry) {
 
@@ -71,8 +71,8 @@ class NettyMetrics {
     requestCompletionRate =
         metricRegistry.meter(MetricRegistry.name(NettyResponseHandler.class, "RequestCompletionRate"));
 
-    channelWriteLatency =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteLatency"));
+    channelWriteLatencyInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteLatencyInMs"));
 
     channelActiveTasksFailure =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelActiveTasksFailure"));
@@ -121,8 +121,9 @@ class NettyMetrics {
     nettyServerShutdownFailure =
         metricRegistry.counter(MetricRegistry.name(NettyServer.class, "NettyServerShutdownFailure"));
 
-    nettyServerStartupTime = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerStartupTime"));
-    nettyServerShutdownTime =
-        metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerShutdownTime"));
+    nettyServerStartupTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerStartupTimeInMs"));
+    nettyServerShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "NettyServerShutdownTimeInMs"));
   }
 }

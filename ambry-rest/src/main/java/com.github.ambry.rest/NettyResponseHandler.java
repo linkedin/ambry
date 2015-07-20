@@ -179,9 +179,8 @@ class NettyResponseHandler implements RestResponseHandler {
       lastWriteFuture = channelWriteResultListener.trackWrite(ctx.write(httpObject));
       return lastWriteFuture;
     } catch (InterruptedException e) {
-      logger
-          .error("Internal channel write lock acquiring interrupted. Throwing exception (channel {})", ctx.channel(),
-              e);
+      logger.error("Internal channel write lock acquiring interrupted. Throwing exception (channel {})", ctx.channel(),
+          e);
       nettyMetrics.channelWriteLockInterrupted.inc();
       throw new RestServiceException("Channel write synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -218,8 +217,9 @@ class NettyResponseHandler implements RestResponseHandler {
       logger.trace("Changing response metadata for channel {}", ctx.channel());
       return responseMetadata.headers().set(headerName, headerValue);
     } catch (InterruptedException e) {
-      logger.error("Internal metadata change lock acquiring interrupted. Throwing exception (channel {})",
-          ctx.channel(), e);
+      logger
+          .error("Internal metadata change lock acquiring interrupted. Throwing exception (channel {})", ctx.channel(),
+              e);
       nettyMetrics.responseMetadataWriteLockInterrupted.inc();
       throw new RestServiceException("Response metadata change synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
@@ -250,8 +250,7 @@ class NettyResponseHandler implements RestResponseHandler {
         logger.debug("Requested channel close on {}", ctx.channel());
       } catch (InterruptedException e) {
         logger
-            .error("Internal channel close lock acquiring interrupted. Aborting channel close of {}", ctx.channel(),
-                e);
+            .error("Internal channel close lock acquiring interrupted. Aborting channel close of {}", ctx.channel(), e);
         nettyMetrics.channelCloseLockInterrupted.inc();
       } finally {
         if (channelWriteLock.isHeldByCurrentThread()) {
@@ -406,7 +405,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
         nettyMetrics.channelWriteFailure.inc();
       } else {
         // TODO: track small, medium, large and huge writes.
-        nettyMetrics.channelWriteLatency.update(System.currentTimeMillis() - writeStartTime);
+        nettyMetrics.channelWriteLatencyInMs.update(System.currentTimeMillis() - writeStartTime);
       }
     } else {
       logger.error("Received operationComplete callback for ChannelFuture not found in tracking map for channel {}",
