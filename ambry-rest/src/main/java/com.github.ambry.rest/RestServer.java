@@ -47,7 +47,7 @@ public class RestServer {
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
     if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
-      logger.error("Null arg(s) received during instantiation of RestServer. Throwing exception..");
+      logger.error("Null arg(s) received during instantiation of RestServer. Throwing exception");
       throw new InstantiationException("Null arg(s) received during instantiation of RestServer");
     }
     restServerConfig = new RestServerConfig(verifiableProperties);
@@ -68,7 +68,7 @@ public class RestServer {
       throw new InstantiationException("Exception while creating RestServer components - " + e);
     }
     if (blobStorageService == null || requestHandlerController == null || nioServer == null) {
-      logger.error("Failed to instantiate one of the components of RestServer. Throwing exception..");
+      logger.error("Failed to instantiate one of the components of RestServer. Throwing exception");
       restServerMetrics.restServerInstantiationFailure.inc();
       throw new InstantiationException("Failed to instantiate one of the components of RestServer");
     }
@@ -81,7 +81,7 @@ public class RestServer {
    */
   public void start()
       throws InstantiationException {
-    logger.info("Starting RestServer..");
+    logger.info("Starting RestServer");
     long startupBeginTime = System.currentTimeMillis();
     try {
       // ordering is important.
@@ -99,7 +99,7 @@ public class RestServer {
    * Shuts down all the components. Returns when shutdown is FULLY complete.
    */
   public void shutdown() {
-    logger.info("Shutting down RestServer..");
+    logger.info("Shutting down RestServer");
     long shutdownBeginTime = System.currentTimeMillis();
     try {
       //ordering is important.

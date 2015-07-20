@@ -53,7 +53,7 @@ class NettyServer implements NioServer {
   public void start()
       throws InstantiationException {
     if (!nettyServerDeployerThread.isAlive()) {
-      logger.info("Starting NettyServer..");
+      logger.info("Starting NettyServer");
       long startupBeginTime = System.currentTimeMillis();
       try {
         nettyServerDeployerThread.start();
@@ -114,7 +114,7 @@ class NettyServerDeployer implements Runnable {
   @Override
   public void run() {
     try {
-      logger.trace("Starting NettyServer deployment..");
+      logger.trace("Starting NettyServer deployment");
       ServerBootstrap b = new ServerBootstrap();
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
@@ -173,7 +173,7 @@ class NettyServerDeployer implements Runnable {
    */
   public void shutdown() {
     if (!bossGroup.isTerminated() || !workerGroup.isTerminated()) {
-      logger.info("Shutting down NettyServer..");
+      logger.info("Shutting down NettyServer");
       long shutdownBeginTime = System.currentTimeMillis();
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();

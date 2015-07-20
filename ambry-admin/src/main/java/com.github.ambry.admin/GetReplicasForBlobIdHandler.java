@@ -81,7 +81,7 @@ class GetReplicasForBlobIdHandler {
         BlobId blobId = new BlobId(blobIdStr, clusterMap);
         return packageResult(blobId.getPartition().getReplicaIds());
       } catch (IllegalArgumentException e) {
-        logger.warn("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception..", blobIdStr, e);
+        logger.warn("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdInvalidBlobId.inc();
         throw new RestServiceException("Invalid blob id", e, RestServiceErrorCode.InvalidArgs);
       } catch (IOException e) {

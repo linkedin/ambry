@@ -35,12 +35,12 @@ public class RestServerMain {
       final ClusterMap clusterMap =
           new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
               new ClusterMapConfig(verifiableProperties));
-      logger.info("Bootstrapping RestServer..");
+      logger.info("Bootstrapping RestServer");
       restServer = new RestServer(verifiableProperties, metricRegistry, clusterMap);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
-          logger.info("Received shutdown signal. Requesting RestServer shutdown..");
+          logger.info("Received shutdown signal. Requesting RestServer shutdown");
           restServer.shutdown();
         }
       });
@@ -49,7 +49,7 @@ public class RestServerMain {
     } catch (Exception e) {
       logger.error("Exception during bootstrap of RestServer", e);
     } finally {
-      logger.info("Exiting..");
+      logger.info("Exiting");
       System.exit(0);
     }
   }
@@ -105,7 +105,7 @@ class InvocationOptions {
       logger.trace("Server properties file path: {}", this.serverPropsFilePath);
     } else {
       parser.printHelpOn(System.err);
-      logger.error("Did not receive all required arguments for starting RestServer. Throwing exception..");
+      logger.error("Did not receive all required arguments for starting RestServer. Throwing exception");
       throw new InstantiationException("Did not receive all required arguments");
     }
   }

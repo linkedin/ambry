@@ -38,7 +38,7 @@ class RequestHandlerController implements RestRequestHandlerController {
   @Override
   public void start()
       throws InstantiationException {
-    logger.info("Starting RequestHandlerController with {} request handler(s)..", requestHandlers.size());
+    logger.info("Starting RequestHandlerController with {} request handler(s)", requestHandlers.size());
     for (int i = 0; i < requestHandlers.size(); i++) {
       requestHandlers.get(i).start();
     }
@@ -65,7 +65,7 @@ class RequestHandlerController implements RestRequestHandlerController {
   @Override
   public void shutdown() {
     if (requestHandlers.size() > 0) {
-      logger.info("Shutting down RequestHandlerController..");
+      logger.info("Shutting down RequestHandlerController");
       Iterator<RestRequestHandler> asyncRequestHandlerIterator = requestHandlers.iterator();
       while (asyncRequestHandlerIterator.hasNext()) {
         RestRequestHandler requestHandler = asyncRequestHandlerIterator.next();

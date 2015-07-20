@@ -30,7 +30,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       this.clusterMap = clusterMap;
       logger.trace("Instantiated AdminBlobStorageServiceFactory");
     } else {
-      logger.error("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory. Throwing exception..");
+      logger.error("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory. Throwing exception");
       throw new InstantiationException("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory");
     }
   }

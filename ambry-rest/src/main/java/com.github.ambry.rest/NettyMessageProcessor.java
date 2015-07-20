@@ -193,14 +193,14 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       if (obj.getDecoderResult().isSuccess()) {
         handleRequest((HttpRequest) obj);
       } else {
-        logger.warn("Decoder failed because of malformed request on channel {}. Throwing exception..", ctx.channel());
+        logger.warn("Decoder failed because of malformed request on channel {}. Throwing exception", ctx.channel());
         nettyMetrics.malformedRequest.inc();
         throw new RestServiceException("Malformed request received", RestServiceErrorCode.MalformedRequest);
       }
     } else if (obj != null && obj instanceof HttpContent) {
       handleContent((HttpContent) obj);
     } else {
-      logger.warn("Received null/unrecognized HttpObject {} on channel {}. Throwing exception..", obj, ctx.channel());
+      logger.warn("Received null/unrecognized HttpObject {} on channel {}. Throwing exception", obj, ctx.channel());
       nettyMetrics.unknownHttpObject.inc();
       throw new RestServiceException("HttpObject received is null or not of a known type",
           RestServiceErrorCode.UnknownHttpObject);
@@ -248,7 +248,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       logger.trace("Received content for request - {}", request);
       requestHandler.handleRequest(new RestRequestInfo(request, new NettyRequestContent(httpContent), responseHandler));
     } else {
-      logger.error("Received content without a request on channel {}. Throwing exception..", ctx.channel());
+      logger.error("Received content without a request on channel {}. Throwing exception", ctx.channel());
       nettyMetrics.noRequest.inc();
       throw new RestServiceException("Received content without a request", RestServiceErrorCode.NoRequest);
     }

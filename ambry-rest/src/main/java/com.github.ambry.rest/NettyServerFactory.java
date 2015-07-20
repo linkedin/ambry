@@ -28,7 +28,7 @@ public class NettyServerFactory implements NioServerFactory {
       this.restRequestHandlerController = restRequestHandlerController;
       logger.trace("Instantiated NettyServerFactory");
     } else {
-      logger.error("Null arg(s) received during instantiation of NettyServerFactory. Throwing exception..");
+      logger.error("Null arg(s) received during instantiation of NettyServerFactory. Throwing exception");
       throw new InstantiationException("Null arg(s) received during instantiation of NettyServerFactory");
     }
   }

@@ -56,7 +56,7 @@ class AsyncRequestHandler implements RestRequestHandler {
   public void start()
       throws InstantiationException {
     if (!dequeuedRequestHandlerThread.isAlive()) {
-      logger.info("Starting AsyncRequestHandler..");
+      logger.info("Starting AsyncRequestHandler");
       dequeuedRequestHandlerThread.start();
       logger.info("AsyncRequestHandler has started");
     }
@@ -73,7 +73,7 @@ class AsyncRequestHandler implements RestRequestHandler {
   @Override
   public void shutdown() {
     if (dequeuedRequestHandlerThread.isAlive()) {
-      logger.info("Shutting down AsyncRequestHandler..");
+      logger.info("Shutting down AsyncRequestHandler");
       long shutdownBeginTime = System.currentTimeMillis();
       try {
         queue(new PoisonInfo());
@@ -113,23 +113,23 @@ class AsyncRequestHandler implements RestRequestHandler {
     logger.debug("Handling RestRequestInfo - {}", restRequestInfo);
     if (dequeuedRequestHandlerThread.isAlive()) {
       if (restRequestInfo == null) {
-        logger.error("RestRequestInfo received is null. Throwing exception..");
+        logger.error("RestRequestInfo received is null. Throwing exception");
         restServerMetrics.asyncRequestHandlerRestRequestInfoNull.inc();
         throw new RestServiceException("RestRequestInfo is null", RestServiceErrorCode.RestRequestInfoNull);
       } else if (restRequestInfo.getRestRequestMetadata() == null) {
-        logger.error("RestRequestMetadata is null in received RestRequestInfo. Throwing exception..");
+        logger.error("RestRequestMetadata is null in received RestRequestInfo. Throwing exception");
         restServerMetrics.asyncRequestHandlerRestRequestMetadataNull.inc();
         throw new RestServiceException("RestRequestInfo missing RestRequestMetadata",
             RestServiceErrorCode.RequestMetadataNull);
       } else if (restRequestInfo.getRestResponseHandler() == null) {
-        logger.error("RestResponseHandler is null in received RestRequestInfo. Throwing exception..");
+        logger.error("RestResponseHandler is null in received RestRequestInfo. Throwing exception");
         restServerMetrics.asyncRequestHandlerRestResponseHandlerNull.inc();
         throw new RestServiceException("RestRequestInfo missing RestResponseHandler",
             RestServiceErrorCode.ReponseHandlerNull);
       }
       queue(restRequestInfo);
     } else {
-      logger.error("DequeuedRequestHandler thread is not alive for handling requests. Throwing exception..");
+      logger.error("DequeuedRequestHandler thread is not alive for handling requests. Throwing exception");
       restServerMetrics.asyncRequestHandlerUnavailable.inc();
       throw new RestServiceException("Requests cannot be handled because the AsyncRequestHandler is not available",
           RestServiceErrorCode.RequestHandlerUnavailable);
@@ -183,7 +183,7 @@ class AsyncRequestHandler implements RestRequestHandler {
       queuingTimeTracker.startTracking(restRequestInfo);
       if (!restRequestInfoQueue.offer(restRequestInfo, OFFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
         offerFailed = true;
-        logger.error("Could not enqueue RestRequestInfo within {} seconds. Aborting..", OFFER_TIMEOUT_SECONDS);
+        logger.error("Could not enqueue RestRequestInfo within {} seconds. Aborting", OFFER_TIMEOUT_SECONDS);
         restServerMetrics.asyncRequestHandlerQueueOfferTooLong.inc();
         throw new RestServiceException("Attempt to queue RestRequestInfo timed out",
             RestServiceErrorCode.RestRequestInfoQueueingFailure);
@@ -262,7 +262,7 @@ class DequeuedRequestHandler implements Runnable {
           logger.debug("Dequeued RestRequestInfo - {}", restRequestInfo);
           restServerMetrics.dequeuedRequestHandlerDequeuingRate.mark();
           if (restRequestInfo instanceof PoisonInfo) {
-            logger.debug("Encountered PoisonInfo, shutting down..");
+            logger.debug("Encountered PoisonInfo, shutting down");
             restRequestInfo.onHandlingComplete(null);
             emptyQueue();
             break;
@@ -325,7 +325,7 @@ class DequeuedRequestHandler implements Runnable {
           blobStorageService.handleHead(restRequestInfo);
           break;
         default:
-          logger.error("RestRequestInfo specifies unknown REST method - {}. Throwing exception..", restMethod);
+          logger.error("RestRequestInfo specifies unknown REST method - {}. Throwing exception", restMethod);
           restServerMetrics.dequeuedRequestHandlerUnknownRestMethod.inc();
           throw new RestServiceException("Unsupported rest method - " + restMethod,
               RestServiceErrorCode.UnsupportedRestMethod);
