@@ -428,11 +428,7 @@ public class Selector implements Selectable {
    * Get the selection key associated with this numeric id
    */
   private SelectionKey keyForId(String id) {
-    SelectionKey key = this.keyMap.get(id);
-    if (key == null) {
-      throw new IllegalStateException("Key not found for connection id " + id);
-    }
-    return key;
+    return this.keyMap.get(id);
   }
 
   /**
@@ -520,6 +516,9 @@ public class Selector implements Selectable {
    * Get the transmissions for the given connection
    */
   private Transmissions transmissions(SelectionKey key) {
+    if (key == null) {
+      throw new IllegalStateException("Attempt to get attachment from a null key");
+    }
     return (Transmissions) key.attachment();
   }
 
