@@ -228,15 +228,14 @@ class Acceptor extends AbstractServerThread {
           Set<SelectionKey> keys = nioSelector.selectedKeys();
           Iterator<SelectionKey> iter = keys.iterator();
           while (iter.hasNext() && isRunning()) {
+            SelectionKey key = null;
             try {
-              if (processors.get(currentProcessor).isRunning()) {
-                SelectionKey key = iter.next();
-                iter.remove();
-                if (key.isAcceptable()) {
-                  accept(key, processors.get(currentProcessor));
-                } else {
-                  throw new IllegalStateException("Unrecognized key state for acceptor thread.");
-                }
+              key = iter.next();
+              iter.remove();
+              if (key.isAcceptable()) {
+                accept(key, processors.get(currentProcessor));
+              } else {
+                throw new IllegalStateException("Unrecognized key state for acceptor thread.");
               }
 
               // round robin to the next processor thread
