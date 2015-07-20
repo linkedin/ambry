@@ -60,7 +60,7 @@ class AdminMetrics {
 
     echoTimeInMs = metricRegistry.histogram(MetricRegistry.name(EchoHandler.class, "EchoTimeInMs"));
     getReplicasForBlobIdTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdTimeInMs"));
+        .histogram(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "GetReplicasForBlobIdTimeInMs"));
 
     unsupportedGetOperation =
         metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "AdminUnsupportedGetOperation"));

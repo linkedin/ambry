@@ -185,6 +185,10 @@ class NettyResponseHandler implements RestResponseHandler {
       nettyMetrics.channelWriteLockInterrupted.inc();
       throw new RestServiceException("Channel write synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
+    } catch (RestServiceException e) {
+      logger.error("Trying to write to channel {} after it has been closed", ctx.channel());
+      nettyMetrics.channelWriteAfterClose.inc();
+      throw e;
     } finally {
       if (channelWriteLock.isHeldByCurrentThread()) {
         channelWriteLock.unlock();
@@ -219,6 +223,10 @@ class NettyResponseHandler implements RestResponseHandler {
       nettyMetrics.responseMetadataWriteLockInterrupted.inc();
       throw new RestServiceException("Response metadata change synchronization was interrupted", e,
           RestServiceErrorCode.OperationInterrupted);
+    } catch (RestServiceException e) {
+      logger.error("Trying to set response header {} to {} after response has been sent", headerName, headerValue);
+      nettyMetrics.deadResponseAccess.inc();
+      throw e;
     } finally {
       if (channelWriteLock.isHeldByCurrentThread()) {
         channelWriteLock.unlock();
@@ -264,7 +272,6 @@ class NettyResponseHandler implements RestResponseHandler {
       throws RestServiceException {
     if (responseMetadataWritten.get()) {
       logger.trace("Response metadata already written to channel. No more metadata changes possible");
-      nettyMetrics.deadResponseAccess.inc();
       throw new RestServiceException("Response metadata has already been written to channel",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
     }
@@ -280,8 +287,7 @@ class NettyResponseHandler implements RestResponseHandler {
       throws RestServiceException {
     if (channelClosed.get() || !(ctx.channel().isActive())) {
       logger.trace("Channel {} is closed. No more interaction possible", ctx.channel());
-      nettyMetrics.channelWriteAfterClose.inc();
-      throw new RestServiceException("Channel " + ctx.channel() + " has already been closed before write",
+      throw new RestServiceException("Channel " + ctx.channel() + " is closed and cannot accept operations",
           RestServiceErrorCode.ChannelAlreadyClosed);
     }
   }
