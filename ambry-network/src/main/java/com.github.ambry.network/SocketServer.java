@@ -228,9 +228,8 @@ class Acceptor extends AbstractServerThread {
           Set<SelectionKey> keys = nioSelector.selectedKeys();
           Iterator<SelectionKey> iter = keys.iterator();
           while (iter.hasNext() && isRunning()) {
-            SelectionKey key = null;
             try {
-              key = iter.next();
+              SelectionKey key = iter.next();
               if (processors.get(currentProcessor).isRunning()) {
                 iter.remove();
                 if (key.isAcceptable()) {
