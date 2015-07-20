@@ -229,8 +229,8 @@ class Acceptor extends AbstractServerThread {
           Iterator<SelectionKey> iter = keys.iterator();
           while (iter.hasNext() && isRunning()) {
             try {
-              SelectionKey key = iter.next();
               if (processors.get(currentProcessor).isRunning()) {
+                SelectionKey key = iter.next();
                 iter.remove();
                 if (key.isAcceptable()) {
                   accept(key, processors.get(currentProcessor));
