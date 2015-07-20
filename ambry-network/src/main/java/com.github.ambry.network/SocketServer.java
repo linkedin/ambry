@@ -228,11 +228,13 @@ class Acceptor extends AbstractServerThread {
             SelectionKey key = null;
             try {
               key = iter.next();
-              iter.remove();
-              if (key.isAcceptable()) {
-                accept(key, processors.get(currentProcessor));
-              } else {
-                throw new IllegalStateException("Unrecognized key state for acceptor thread.");
+              if (processors.get(currentProcessor).isRunning()) {
+                iter.remove();
+                if (key.isAcceptable()) {
+                  accept(key, processors.get(currentProcessor));
+                } else {
+                  throw new IllegalStateException("Unrecognized key state for acceptor thread.");
+                }
               }
 
               // round robin to the next processor thread
