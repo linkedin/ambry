@@ -121,9 +121,9 @@ class RestServerMetrics {
     restServerInstantiationFailure =
         metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerInstantiationFailure"));
     restServerStartFailure = metricRegistry.counter(MetricRegistry.name(RestServer.class, "RestServerStartFailure"));
+
     asyncRequestHandlerForcedShutdown =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerForcedShutdown"));
-
     asyncRequestHandlerQueueTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestHandler.class, "AsyncRequestHandlerQueueTimeInMs"));
     asyncRequestHandlerShutdownTimeInMs =
