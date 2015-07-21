@@ -1,7 +1,7 @@
 package com.github.ambry.network;
 
 /**
- * Used to represent a port containing port number and {@PortType}
+ * Represents a port containing port number and {@PortType}
  */
 public class Port {
   private final int portNo;

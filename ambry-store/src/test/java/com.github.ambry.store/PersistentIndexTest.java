@@ -98,7 +98,7 @@ public class PersistentIndexTest {
       MockId blobId8 = new MockId("id8");
       MockId blobId9 = new MockId("id9");
 
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       IndexSegment info = new IndexSegment(tempFile().getParent(), 0, factory, blobId1.sizeInBytes(),
@@ -234,7 +234,7 @@ public class PersistentIndexTest {
       scheduler.startup();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       MockId blobId1 = new MockId("id1");
@@ -280,7 +280,7 @@ public class PersistentIndexTest {
       scheduler.startup();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       final MockId blobId1 = new MockId("id1");
@@ -490,7 +490,7 @@ public class PersistentIndexTest {
       scheduler.startup();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       MockId blobId1 = new MockId("id1");
@@ -546,7 +546,7 @@ public class PersistentIndexTest {
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       MockId blobId1 = new MockId("id1");
@@ -627,7 +627,7 @@ public class PersistentIndexTest {
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       MockId blobId1 = new MockId("id1");
@@ -677,7 +677,7 @@ public class PersistentIndexTest {
       props.setProperty("store.data.flush.interval.seconds", "1");
       props.setProperty("store.data.flush.delay.seconds", "1");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(6900);
@@ -812,7 +812,7 @@ public class PersistentIndexTest {
       props.setProperty("store.data.flush.delay.seconds", "1");
       props.setProperty("store.index.max.number.of.inmem.elements", "5");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(2700);
@@ -956,7 +956,7 @@ public class PersistentIndexTest {
       props.put("store.index.max.number.of.inmem.elements", "5");
       props.put("store.max.number.of.entries.to.return.for.find", "12");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       FindInfo infoempty = index.findEntriesSince(token, 1000);
@@ -1110,7 +1110,7 @@ public class PersistentIndexTest {
       props.put("store.max.number.of.entries.to.return.for.find", "12");
       props.put("store.journal.factory", "com.github.ambry.store.MockJournalFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       MockJournal journal = (MockJournal) index.getJournal();
@@ -1469,7 +1469,7 @@ public class PersistentIndexTest {
       props.put("store.index.max.number.of.inmem.elements", "5");
       props.put("store.max.number.of.entries.to.return.for.find", "12");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
       FindInfo infoempty = index.findDeletedEntriesSince(token, 1000, SystemTime.getInstance().milliseconds() / 1000);

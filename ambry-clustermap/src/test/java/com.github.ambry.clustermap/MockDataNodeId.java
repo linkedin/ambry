@@ -3,28 +3,41 @@ package com.github.ambry.clustermap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
 
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import java.util.ArrayList;
 import java.util.List;
 
 
 public class MockDataNodeId extends DataNodeId {
   int port;
-  int sslPort;
+  ArrayList<Port> ports;
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
 
-  public MockDataNodeId(int port, int sslPort, List<String> mountPaths, String dataCenter) {
+  public MockDataNodeId(int port, ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.port = port;
-    this.sslPort = sslPort;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
+    parsePorts(ports);
   }
 
   public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
     this.port = port;
-    this.sslPort = -1;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
+    parsePorts(new ArrayList<Port>());
+  }
+
+  private void parsePorts(ArrayList<Port> ports){
+    this.ports = new ArrayList<Port>();
+    this.ports.add(new Port(this.port, PortType.PLAINTEXT));
+    for(Port extraPort: ports){
+      if(extraPort.getPortType() != PortType.PLAINTEXT){
+        this.ports.add(new Port(extraPort.getPortNo(), extraPort.getPortType()));
+      }
+    }
   }
 
   @Override
@@ -39,7 +52,12 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public int getSSLPort() {
-    return sslPort;
+    for(Port extraPort: ports){
+      if(extraPort.getPortType() == PortType.SSL){
+        return extraPort.getPortNo();
+      }
+    }
+    return -1;
   }
 
   @Override

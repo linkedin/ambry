@@ -70,7 +70,7 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
@@ -144,7 +144,7 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
@@ -205,7 +205,7 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
@@ -286,7 +286,7 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       byte[] bufToWrite = new byte[5000];
@@ -426,7 +426,7 @@ public class BlobStoreTest {
       verifyProperty.verify();
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
-      map = new MockClusterMap(false);
+      map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),

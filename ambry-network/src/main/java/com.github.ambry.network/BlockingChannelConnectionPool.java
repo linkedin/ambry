@@ -119,16 +119,7 @@ class BlockingChannelInfo {
         // connections, we create a new one and add it to the available queue
         if (numberOfConnections.get() < maxConnectionsPerChannel) {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
-          BlockingChannel channel = null;
-          if (portType == PortType.PLAINTEXT) {
-            channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
-                config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-                config.connectionPoolConnectTimeoutMs);
-          } else if (portType == PortType.SSL) {
-            channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
-                config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-                config.connectionPoolConnectTimeoutMs);
-          }
+          BlockingChannel channel = getBlockingChannel(host, port);
           channel.connect();
           blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
@@ -156,6 +147,26 @@ class BlockingChannelInfo {
     }
   }
 
+  /**
+   * Returns BlockingChannel or SSLBlockingChannel depending on whether the port type is PlainText or SSL
+   * @param host upon which connection has to be established
+   * @param port upon which connection has to be established
+   * @return BlockingChannel
+   */
+  private BlockingChannel getBlockingChannel(String host, int port) {
+    BlockingChannel channel = null;
+    if (portType == PortType.PLAINTEXT) {
+      channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
+          config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
+          config.connectionPoolConnectTimeoutMs);
+    } else if (portType == PortType.SSL) {
+      channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
+          config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
+          config.connectionPoolConnectTimeoutMs);
+    }
+    return channel;
+  }
+
   public void destroyBlockingChannel(BlockingChannel blockingChannel) {
     rwlock.readLock().lock();
     try {
@@ -170,16 +181,7 @@ class BlockingChannelInfo {
       // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
       // to create the connection
 
-      BlockingChannel channel = null;
-      if (portType == PortType.PLAINTEXT) {
-        channel = new BlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
-            config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
-            config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
-      } else if (portType == PortType.SSL) {
-        channel = new SSLBlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
-            config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
-            config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs);
-      }
+      BlockingChannel channel = getBlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
       blockingChannelAvailableConnections.add(channel);

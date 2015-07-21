@@ -103,7 +103,7 @@ public class RequestHandlerControllerTest {
   private RestRequestHandlerController createRestRequestHandlerController(int handlerCount)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap(false));
+    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
     return new RequestHandlerController(handlerCount, restServerMetrics, blobStorageService);
   }
 }

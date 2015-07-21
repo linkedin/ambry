@@ -79,7 +79,7 @@ public class ReplicationConfig {
   public final boolean replicationValidateMessageStream;
 
   /**
-   * List of Datacenters against which only SSL should be spoken during replication
+   * List of Datacenters to which we need SSL encryption during replication
    */
   @Config("replication.ssl.enabled.datacenters")
   public final String replicationSslEnabledDatacenters;

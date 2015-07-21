@@ -53,7 +53,7 @@ public class CoordinatorConfig {
   public final boolean crossDCProxyCallEnable;
 
   /**
-   * List of Datacenters against which only SSL should be spoken
+   * List of Datacenters to which we need SSL encryption
    */
   @Config("coordinator.ssl.enabled.datacenters")
   public final String sslEnabledDatacenters;

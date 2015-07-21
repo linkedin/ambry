@@ -27,6 +27,7 @@ import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.rmi.UnexpectedException;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -72,6 +73,10 @@ public class ServerReadPerformance {
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
+      ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
+          parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
+              .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -99,6 +104,8 @@ public class ServerReadPerformance {
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -142,9 +149,13 @@ public class ServerReadPerformance {
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequest =
                 new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
-            channel = connectionPool
-                .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
-                    PortType.PLAINTEXT), 10000);
+            if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
+              channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+                  new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), 10000);
+            } else {
+              channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+                  new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT), 10000);
+            }
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();

@@ -193,18 +193,24 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port)
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port);
+    addSSLPortToJson(jsonObject);
+    jsonObject
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
     }
+    return jsonObject;
+  }
+
+  private void addSSLPortToJson(JSONObject jsonObject)
+      throws JSONException {
     for (String portType : ports.keySet()) {
       if (!portType.equalsIgnoreCase("plaintext")) {
         jsonObject.put(portType, ports.get(portType));
       }
     }
-    return jsonObject;
   }
 
   @Override

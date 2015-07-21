@@ -434,7 +434,7 @@ public class OperationPolicyTest {
       throws Exception {
 
     OperationContext oc =
-        new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(false), true), null,
+        new OperationContext("client1", 1000, true, new CoordinatorMetrics(new MockClusterMap(), true), null,
             sslEnabledDataCenters);
     // Simple success test
     {

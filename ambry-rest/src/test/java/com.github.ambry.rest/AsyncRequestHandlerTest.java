@@ -221,7 +221,7 @@ public class AsyncRequestHandlerTest {
   // BeforeClass helpers
   private static RestRequestHandler getAsyncRequestHandler()
       throws IOException {
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap(false));
+    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     return new AsyncRequestHandler(blobStorageService, serverMetrics);
   }
