@@ -34,7 +34,7 @@ class NettyMetrics {
   public final Counter duplicateRequest;
   public final Counter noRequest;
   public final Counter processorRequestCompleteTasksFailure;
-  public final Counter handleRequestFailure;
+  public final Counter nettyMessageProcessorExceptionCaught;
   public final Counter fallbackErrorSendingFailure;
   public final Counter requestFailure;
   public final Counter errorSendingFailure;
@@ -45,7 +45,7 @@ class NettyMetrics {
   public final Counter badRequest;
   public final Counter internalServerError;
   public final Counter unknownException;
-  public final Counter unknownRestException;
+  public final Counter unknownRestServiceException;
   public final Counter channelWriteAfterClose;
   public final Counter deadResponseAccess;
   public final Counter channelWriteFutureAlreadyExists;
@@ -84,8 +84,8 @@ class NettyMetrics {
     malformedRequest = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "MalformedRequest"));
     duplicateRequest = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "DuplicateRequest"));
     noRequest = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "NoRequest"));
-    handleRequestFailure =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "HandleRequestFailure"));
+    nettyMessageProcessorExceptionCaught = metricRegistry
+        .counter(MetricRegistry.name(NettyMessageProcessor.class, "NettyMessageProcessorExceptionCaught"));
     processorRequestCompleteTasksFailure = metricRegistry
         .counter(MetricRegistry.name(NettyMessageProcessor.class, "ProcessorRequestCompleteTasksFailure"));
     fallbackErrorSendingFailure =
@@ -101,15 +101,15 @@ class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ResponseMetadataWriteLockInterrupted"));
     channelCloseLockInterrupted =
         metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelCloseLockInterrupted"));
-    badRequest = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "badRequest"));
+    badRequest = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "BadRequest"));
     internalServerError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "internalServerError"));
-    unknownException = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "unknownException"));
-    unknownRestException =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "unknownRestException"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "InternalServerError"));
+    unknownException = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "UnknownException"));
+    unknownRestServiceException =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "UnknownRestServiceException"));
     channelWriteAfterClose =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "channelWriteAfterClose"));
-    deadResponseAccess = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "deadResponseAccess"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteAfterClose"));
+    deadResponseAccess = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "DeadResponseAccess"));
     channelWriteFutureAlreadyExists =
         metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "WriteFutureAlreadyExists"));
     channelWriteFutureNotFound =

@@ -139,7 +139,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
     logger.debug("Caught exception in channel {}", ctx.channel(), cause);
-    nettyMetrics.handleRequestFailure.inc();
+    nettyMetrics.nettyMessageProcessorExceptionCaught.inc();
     if (responseHandler == null) {
       logger.error("No RestResponseHandler available. Directly informing client of exception caught on channel {}",
           ctx.channel(), cause);

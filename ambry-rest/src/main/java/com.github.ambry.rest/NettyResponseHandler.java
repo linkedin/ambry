@@ -350,7 +350,7 @@ class NettyResponseHandler implements RestResponseHandler {
         nettyMetrics.internalServerError.inc();
         return HttpResponseStatus.INTERNAL_SERVER_ERROR;
       default:
-        nettyMetrics.unknownRestException.inc();
+        nettyMetrics.unknownRestServiceException.inc();
         return HttpResponseStatus.INTERNAL_SERVER_ERROR;
     }
   }
