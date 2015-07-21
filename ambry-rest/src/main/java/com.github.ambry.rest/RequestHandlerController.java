@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,7 @@ class RequestHandlerController implements RestRequestHandlerController {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
+      restServerMetrics.trackRequestHandlerHealth(requestHandlers);
       logger.trace("Instantiated RequestHandlerController");
     } else {
       logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
@@ -48,18 +50,25 @@ class RequestHandlerController implements RestRequestHandlerController {
   @Override
   public RestRequestHandler getRequestHandler()
       throws RestServiceException {
+    RestRequestHandler requestHandler;
+    int index = currIndex.getAndIncrement();
     try {
-      int index = currIndex.getAndIncrement();
-      RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
-      logger.debug("Monotonically increasing index value {} was used to pick request handler at index {}", index,
-          index % requestHandlers.size());
-      return requestHandler;
+      requestHandler = requestHandlers.get(index % requestHandlers.size());
     } catch (Exception e) {
       logger.error("Exception during selection of a RestRequestHandler to return", e);
       restServerMetrics.requestHandlerControllerHandlerSelectionError.inc();
       throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
           RestServiceErrorCode.RequestHandlerSelectionError);
     }
+    if (requestHandler.isRunning()) {
+      logger.debug("Monotonically increasing value {} was used to pick request handler at index {}", index,
+          index % requestHandlers.size());
+    } else {
+      logger.debug("Request handler at index {} is dead. Substitute request handler selection will be attempted",
+          index % requestHandlers.size());
+      requestHandler = pickSubstituteRequestHandler();
+    }
+    return requestHandler;
   }
 
   @Override
@@ -87,5 +96,26 @@ class RequestHandlerController implements RestRequestHandlerController {
       // This can change if there is ever a RequestHandlerFactory.
       requestHandlers.add(new AsyncRequestHandler(blobStorageService, restServerMetrics));
     }
+  }
+
+  /**
+   * Picks a {@link RestRequestHandler} in linear time by iterating through all {@link RestRequestHandler}s and
+   * returning the one that is running. The start index for the iteration is randomized to prevent the overloading of
+   * one {@link RestRequestHandler}.
+   * @return - A running {@link RestRequestHandler}.
+   * @throws RestServiceException - when there is no {@link RestRequestHandler}.
+   */
+  private RestRequestHandler pickSubstituteRequestHandler()
+      throws RestServiceException {
+    int start = new Random().nextInt(requestHandlers.size());
+    for (int i = start; i < start + requestHandlers.size(); i++) {
+      if (requestHandlers.get(i % requestHandlers.size()).isRunning()) {
+        return requestHandlers.get(i % requestHandlers.size());
+      }
+    }
+    logger.error("No running RestRequestHandler available for selection");
+    restServerMetrics.requestHandlerControllerNoRequestHandlerAvailable.inc();
+    throw new RestServiceException("No running RestRequestHandler available for selection",
+        RestServiceErrorCode.NoRequestHandlersAvailable);
   }
 }

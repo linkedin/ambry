@@ -67,4 +67,13 @@ public interface RestRequestHandler {
    * @throws Exception
    */
   public void onRequestComplete(RestRequestMetadata restRequestMetadata);
+
+  /**
+   * Used to query whether the RestRequestHandler is currently in a state to handle submitted requests.
+   * <p/>
+   * This function should be considered only as a sanity check since there is no guarantee that the RestRequestHandler
+   * is still running at the time of request submission.
+   * @return {@code true} if in a state to handle submitted requests. {@code false} otherwise.
+   */
+  public boolean isRunning();
 }

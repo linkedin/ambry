@@ -55,7 +55,7 @@ class AsyncRequestHandler implements RestRequestHandler {
   @Override
   public void start()
       throws InstantiationException {
-    if (!dequeuedRequestHandlerThread.isAlive()) {
+    if (!isRunning()) {
       logger.info("Starting AsyncRequestHandler");
       dequeuedRequestHandlerThread.start();
       logger.info("AsyncRequestHandler has started");
@@ -72,7 +72,7 @@ class AsyncRequestHandler implements RestRequestHandler {
    */
   @Override
   public void shutdown() {
-    if (dequeuedRequestHandlerThread.isAlive()) {
+    if (isRunning()) {
       logger.info("Shutting down AsyncRequestHandler");
       long shutdownBeginTime = System.currentTimeMillis();
       try {
@@ -111,7 +111,7 @@ class AsyncRequestHandler implements RestRequestHandler {
   public void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     logger.debug("Handling RestRequestInfo - {}", restRequestInfo);
-    if (dequeuedRequestHandlerThread.isAlive()) {
+    if (isRunning()) {
       if (restRequestInfo == null) {
         logger.error("RestRequestInfo received is null. Throwing exception");
         restServerMetrics.asyncRequestHandlerRestRequestInfoNull.inc();
@@ -139,6 +139,11 @@ class AsyncRequestHandler implements RestRequestHandler {
   @Override
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
     dequeuedRequestHandler.onRequestComplete(restRequestMetadata);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return dequeuedRequestHandlerThread.isAlive();
   }
 
   public int getQueueSize() {

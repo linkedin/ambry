@@ -58,9 +58,13 @@ public enum RestServiceErrorCode {
    */
   OperationInterrupted,
   /**
-   * Indicates failure of the {@link RestRequestHandlerController} to select and provide a handler.
+   * Indicates failure of the {@link RestRequestHandlerController} to select and provide a {@link RestRequestHandler}.
    */
   RequestHandlerSelectionError,
+  /**
+   * Indicates that {@link RestRequestHandlerController} did not find a running {@link RestRequestHandler} to return.
+   */
+  NoRequestHandlersAvailable,
   /**
    * Indicates failure of the {@link RestRequestHandler} to handle a submitted request.
    */
