@@ -241,6 +241,7 @@ class Acceptor extends AbstractServerThread {
               // round robin to the next processor thread
               currentProcessor = (currentProcessor + 1) % processors.size();
             } catch (Exception e) {
+              key.cancel();
               metrics.acceptConnectionErrorCount.inc();
               logger.debug("Error in accepting new connection", e);
             }

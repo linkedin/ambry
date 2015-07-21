@@ -40,16 +40,17 @@ public class NetworkMetrics {
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
   public final Histogram selectorIOTime;
-  public final Counter nioSelecorCloseErrorCount;
-  public final Counter disconnectedErrorCount;
-  public final Counter ioErrorCount;
-  public final Counter keyOperationErrorCount;
-  public final Counter closeKeyErrorCount;
-  public final Counter closeSocketErrorCount;
+  public final Counter selectorNioCloseErrorCount;
+  public final Counter selectorDisconnectedErrorCount;
+  public final Counter selectorIOErrorCount;
+  public final Counter selectorKeyOperationErrorCount;
+  public final Counter selectorCloseKeyErrorCount;
+  public final Counter selectorCloseSocketErrorCount;
   public Gauge<Long> selectorActiveConnections;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
-  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry, final List<Processor> processorThreads) {
+  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
+      final List<Processor> processorThreads) {
     this.registry = registry;
     requestQueueSize = new Gauge<Integer>() {
       @Override
@@ -80,12 +81,15 @@ public class NetworkMetrics {
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
     selectorBytesReceived = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesReceived"));
     selectorBytesSent = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesSent"));
-    nioSelecorCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "NioSelecorCloseErrorCount"));
-    disconnectedErrorCount = registry.counter(MetricRegistry.name(Selector.class, "DisconnectedErrorCount"));
-    ioErrorCount = registry.counter(MetricRegistry.name(Selector.class, "IoErrorCount"));
-    keyOperationErrorCount = registry.counter(MetricRegistry.name(Selector.class, "KeyOperationErrorCount"));
-    closeKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "CloseKeyErrorCount"));
-    closeSocketErrorCount = registry.counter(MetricRegistry.name(Selector.class, "CloseSocketErrorCount"));
+    selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
+    selectorDisconnectedErrorCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SelectorDisconnectedErrorCount"));
+    selectorIOErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorIoErrorCount"));
+    selectorKeyOperationErrorCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SelectorKeyOperationErrorCount"));
+    selectorCloseKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseKeyErrorCount"));
+    selectorCloseSocketErrorCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
 
     numberOfProcessorThreads = new Gauge<Integer>() {
       @Override
