@@ -261,6 +261,17 @@ public class AdminBlobStorageServiceTest {
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
+
+
+    try {
+      // bad input - invalid blob id for this cluster map.
+      String blobId = "AAEAAQAAAAAAAADFAAAAJDMyYWZiOTJmLTBkNDYtNDQyNS1iYzU0LWEwMWQ1Yzg3OTJkZQ.gif";
+      RestRequestInfo restRequestInfo = createGetReplicasForBlobIdRestRequestInfo(blobId);
+      adminBlobStorageService.handleGet(restRequestInfo);
+      fail("Exception should have been thrown because the blobid is invalid");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidPartition, e.getErrorCode());
+    }
   }
 
   /**

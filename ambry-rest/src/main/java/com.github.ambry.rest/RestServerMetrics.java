@@ -187,7 +187,7 @@ class RestServerMetrics {
         return count;
       }
     };
-    metricRegistry.register(MetricRegistry.name(RequestHandlerController.class, "RequestHandlersAlive"),
-        requestHandlersAlive);
+    metricRegistry
+        .register(MetricRegistry.name(RequestHandlerController.class, "RequestHandlersAlive"), requestHandlersAlive);
   }
 }

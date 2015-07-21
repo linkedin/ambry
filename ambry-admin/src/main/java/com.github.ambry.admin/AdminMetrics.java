@@ -42,6 +42,7 @@ class AdminMetrics {
   public final Counter getReplicasForBlobIdInvalidBlobId;
   public final Counter getReplicasForBlobIdObjectCreationError;
   public final Counter getReplicasForBlobIdMissingParameter;
+  public final Counter getReplicasForBlobIdPartitionNull;
   public final Counter getReplicasForBlobIdResponseBuildingError;
 
   public AdminMetrics(MetricRegistry metricRegistry) {
@@ -80,6 +81,8 @@ class AdminMetrics {
         MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdObjectCreationError"));
     getReplicasForBlobIdMissingParameter = metricRegistry
         .counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdMissingParameter"));
+    getReplicasForBlobIdPartitionNull = metricRegistry
+        .counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdPartitionNull"));
     getReplicasForBlobIdResponseBuildingError = metricRegistry.counter(
         MetricRegistry.name(GetReplicasForBlobIdHandler.class, "AdminGetReplicasForBlobIdResponseBuildingError"));
   }

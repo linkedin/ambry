@@ -323,30 +323,12 @@ class NettyResponseHandler implements RestResponseHandler {
    * @return
    */
   private HttpResponseStatus getHttpResponseStatus(RestServiceErrorCode restServiceErrorCode) {
-    switch (restServiceErrorCode) {
+    RestServiceErrorCode errorCodeGroup = RestServiceErrorCode.getErrorCodeGroup(restServiceErrorCode);
+    switch (errorCodeGroup) {
       case BadRequest:
-      case InvalidArgs:
-      case MalformedRequest:
-      case MissingArgs:
-      case NoRequest:
-      case UnknownHttpObject:
-      case UnsupportedOperation:
-      case UnsupportedHttpMethod:
         nettyMetrics.badRequest.inc();
         return HttpResponseStatus.BAD_REQUEST;
-      case BlobIdCreationError:
-      case ChannelActiveTasksFailure:
-      case OperationInterrupted:
-      case RequestHandlerSelectionError:
       case InternalServerError:
-      case RequestHandleFailure:
-      case RequestHandlerUnavailable:
-      case RestRequestInfoQueueingFailure:
-      case RestRequestInfoNull:
-      case ResponseBuildingFailure:
-      case ReponseHandlerNull:
-      case RequestMetadataNull:
-      case UnsupportedRestMethod:
         nettyMetrics.internalServerError.inc();
         return HttpResponseStatus.INTERNAL_SERVER_ERROR;
       default:

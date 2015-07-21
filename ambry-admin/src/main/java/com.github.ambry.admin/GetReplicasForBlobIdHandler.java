@@ -1,6 +1,7 @@
 package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestRequestInfo;
@@ -78,8 +79,14 @@ class GetReplicasForBlobIdHandler {
       String blobIdStr = parameters.get(BLOB_ID_KEY).get(0);
       logger.debug("BlobId for request {} is {}", restRequestMetadata.getUri(), blobIdStr);
       try {
-        BlobId blobId = new BlobId(blobIdStr, clusterMap);
-        return packageResult(blobId.getPartition().getReplicaIds());
+        PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();
+        if (partitionId == null) {
+          logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobIdStr);
+          adminMetrics.getReplicasForBlobIdPartitionNull.inc();
+          throw new RestServiceException("Partition for blob id " + blobIdStr + " is null. The id might be invalid",
+              RestServiceErrorCode.InvalidPartition);
+        }
+        return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
         logger.warn("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdInvalidBlobId.inc();
@@ -111,8 +118,10 @@ class GetReplicasForBlobIdHandler {
   private static JSONObject packageResult(List<ReplicaId> replicaIds)
       throws JSONException {
     JSONObject result = new JSONObject();
-    for (ReplicaId replicaId : replicaIds) {
-      result.append(REPLICAS_KEY, replicaId);
+    if (replicaIds != null) {
+      for (ReplicaId replicaId : replicaIds) {
+        result.append(REPLICAS_KEY, replicaId);
+      }
     }
     return result;
   }

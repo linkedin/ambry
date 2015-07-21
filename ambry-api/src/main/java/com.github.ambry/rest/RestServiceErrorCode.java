@@ -13,6 +13,10 @@ public enum RestServiceErrorCode {
    */
   InvalidArgs,
   /**
+   * Indicates that the {@link com.github.ambry.clustermap.PartitionId} of a blob is null or invalid.
+   */
+  InvalidPartition,
+  /**
    * Client has sent a request that is cannot be decoded using the REST protocol (usually HTTP).
    */
   MalformedRequest,
@@ -29,6 +33,11 @@ public enum RestServiceErrorCode {
    */
   UnsupportedHttpMethod,
   /**
+   * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
+   * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
+   */
+  UnknownHttpObject,
+  /**
    * Client has requested for an operation that is not supported by the {@link BlobStorageService}.
    */
   UnsupportedOperation,
@@ -42,6 +51,10 @@ public enum RestServiceErrorCode {
    */
   BlobIdCreationError,
   /**
+   * Indicates failure of tasks that needed to be done when a new channel with a client became active.
+   */
+  ChannelActiveTasksFailure,
+  /**
    * Indicates that an operation is being performed upon a channel that has been closed already.
    */
   ChannelAlreadyClosed,
@@ -50,9 +63,9 @@ public enum RestServiceErrorCode {
    */
   IllegalResponseMetadataStateTransition,
   /**
-   * Indicates failure of tasks that needed to be done when a new channel with a client became active.
+   * Indicates that {@link RestRequestHandlerController} did not find a running {@link RestRequestHandler} to return.
    */
-  ChannelActiveTasksFailure,
+  NoRequestHandlersAvailable,
   /**
    * Indicates that there was a {@link InterruptedException} while trying to perform the operation.
    */
@@ -61,10 +74,6 @@ public enum RestServiceErrorCode {
    * Indicates failure of the {@link RestRequestHandlerController} to select and provide a {@link RestRequestHandler}.
    */
   RequestHandlerSelectionError,
-  /**
-   * Indicates that {@link RestRequestHandlerController} did not find a running {@link RestRequestHandler} to return.
-   */
-  NoRequestHandlersAvailable,
   /**
    * Indicates failure of the {@link RestRequestHandler} to handle a submitted request.
    */
@@ -96,13 +105,52 @@ public enum RestServiceErrorCode {
    */
   RequestMetadataNull,
   /**
-   * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
-   * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
-   */
-  UnknownHttpObject,
-  /**
    * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
    */
-  UnsupportedRestMethod;
+  UnsupportedRestMethod,
+  /**
+   * Error code group that catches all RestServiceErrorCodes that are not defined as part of a group.
+   */
+  UnknownErrorCode;
+
+  /**
+   * Gets the error code group that a certain RestServiceErrorCode belongs to (mostly used for http error reporting
+   * purposes).
+   * @param code - the input RestServiceErrorCode.
+   * @return - the group that the RestServiceErrorCode belongs to.
+   */
+  public static RestServiceErrorCode getErrorCodeGroup(RestServiceErrorCode code) {
+    switch (code) {
+      case BadRequest:
+      case InvalidArgs:
+      case InvalidPartition:
+      case MalformedRequest:
+      case MissingArgs:
+      case NoRequest:
+      case UnknownHttpObject:
+      case UnsupportedOperation:
+      case UnsupportedHttpMethod:
+        return BadRequest;
+      case InternalServerError:
+      case BlobIdCreationError:
+      case ChannelActiveTasksFailure:
+      case ChannelAlreadyClosed:
+      case IllegalResponseMetadataStateTransition:
+      case NoRequestHandlersAvailable:
+      case OperationInterrupted:
+      case RequestHandlerSelectionError:
+      case RequestHandleFailure:
+      case RequestHandlerUnavailable:
+      case RestRequestInfoQueueingFailure:
+      case RestRequestInfoNull:
+      case ResponseBuildingFailure:
+      case ReponseHandlerNull:
+      case RequestMetadataNull:
+      case UnsupportedRestMethod:
+        return InternalServerError;
+      default:
+        return UnknownErrorCode;
+    }
+  }
 }
