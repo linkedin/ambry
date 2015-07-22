@@ -24,14 +24,14 @@ public class NetworkMetrics {
 
   // SocketServer metrics
   public final Counter sendInFlight;
-  public final Counter selectorBytesSentCount;
-  public final Counter selectorBytesReceivedCount;
   public final Counter acceptConnectionErrorCount;
   public final Counter acceptorShutDownErrorCount;
   public final Counter processNewResponseErrorCount;
   public Gauge<Integer> numberOfProcessorThreads;
 
   // Selector metrics
+  public final Counter selectorBytesSentCount;
+  public final Counter selectorBytesReceivedCount;
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
   public final Histogram selectorBytesSent;
@@ -90,6 +90,9 @@ public class NetworkMetrics {
     selectorCloseKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseKeyErrorCount"));
     selectorCloseSocketErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
+    selectorBytesSentCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesSentCount"));
+    selectorBytesReceivedCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesReceivedCount"));
 
     numberOfProcessorThreads = new Gauge<Integer>() {
       @Override
@@ -105,9 +108,6 @@ public class NetworkMetrics {
         registry.counter(MetricRegistry.name(SocketServer.class, "AcceptorShutDownErrorCount"));
     processNewResponseErrorCount =
         registry.counter(MetricRegistry.name(SocketServer.class, "ProcessNewResponseErrorCount"));
-    selectorBytesSentCount = registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesSentCount"));
-    selectorBytesReceivedCount =
-        registry.counter(MetricRegistry.name(SocketServer.class, "SelectorBytesReceivedCount"));
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
   }
 
