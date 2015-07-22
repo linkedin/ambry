@@ -55,7 +55,7 @@ public class SocketServer implements NetworkServer {
     this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
-    metrics = new NetworkMetrics(requestResponseChannel, registry);
+    metrics = new NetworkMetrics(requestResponseChannel, registry, processors);
   }
 
   public String getHost() {
@@ -108,7 +108,7 @@ public class SocketServer implements NetworkServer {
 
     // start accepting connections
     logger.info("Starting acceptor thread");
-    this.acceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
+    this.acceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize, metrics);
     Utils.newThread("ambry-acceptor", acceptor, false).start();
     acceptor.awaitStartup();
     logger.info("Started server");
@@ -198,9 +198,11 @@ class Acceptor extends AbstractServerThread {
   private final ServerSocketChannel serverChannel;
   private final java.nio.channels.Selector nioSelector;
   private static final long selectTimeOutMs = 500;
+  private final NetworkMetrics metrics;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize)
+  public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
+      NetworkMetrics metrics)
       throws IOException {
     this.host = host;
     this.port = port;
@@ -209,6 +211,7 @@ class Acceptor extends AbstractServerThread {
     this.recvBufferSize = recvBufferSize;
     this.serverChannel = openServerSocket(this.host, this.port);
     this.nioSelector = java.nio.channels.Selector.open();
+    this.metrics = metrics;
   }
 
   /**
@@ -238,7 +241,9 @@ class Acceptor extends AbstractServerThread {
               // round robin to the next processor thread
               currentProcessor = (currentProcessor + 1) % processors.size();
             } catch (Exception e) {
-              // throw
+              key.cancel();
+              metrics.acceptConnectionErrorCount.inc();
+              logger.debug("Error in accepting new connection", e);
             }
           }
         }
@@ -248,7 +253,8 @@ class Acceptor extends AbstractServerThread {
       nioSelector.close();
       shutdownComplete();
     } catch (Exception e) {
-      logger.error("Error during shutdown of acceptor thread {}", e);
+      metrics.acceptorShutDownErrorCount.inc();
+      logger.error("Error during shutdown of acceptor thread", e);
     }
   }
 
@@ -307,6 +313,7 @@ class Processor extends AbstractServerThread {
   private final Time time;
   private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
   private final Selector selector;
+  private final NetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics)
@@ -316,6 +323,7 @@ class Processor extends AbstractServerThread {
     this.id = id;
     this.time = SystemTime.getInstance();
     selector = new Selector(metrics, time);
+    this.metrics = metrics;
   }
 
   public void run() {
@@ -338,7 +346,7 @@ class Processor extends AbstractServerThread {
         }
       }
     } catch (Exception e) {
-      logger.error("Error in processor thread {}", e);
+      logger.error("Error in processor thread", e);
     } finally {
       logger.debug("Closing server socket and selector.");
       closeAll();
@@ -364,6 +372,9 @@ class Processor extends AbstractServerThread {
           NetworkSend networkSend = new NetworkSend(connectionId, curr.getPayload(), curr.getMetrics(), time);
           selector.send(networkSend);
         }
+      } catch (IllegalStateException e) {
+        metrics.processNewResponseErrorCount.inc();
+        logger.debug("Error in processing new responses", e);
       } finally {
         curr = (SocketServerResponse) channel.receiveResponse(id);
       }
