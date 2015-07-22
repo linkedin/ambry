@@ -80,7 +80,7 @@ public class BlockingChannelConnectionPoolTest {
           if (destroyConnection) {
             channelInfo.destroyBlockingChannel(channel);
           } else {
-            channelInfo.addBlockingChannel(channel);
+            channelInfo.releaseBlockingChannel(channel);
           }
         } else if (exception.get() == null) {
           exception.set(new Exception("Timed out waiting for signal to release connections"));
@@ -112,7 +112,7 @@ public class BlockingChannelConnectionPoolTest {
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
-    channelInfo.addBlockingChannel(blockingChannel);
+    channelInfo.releaseBlockingChannel(blockingChannel);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
   }
 

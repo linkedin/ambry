@@ -73,7 +73,7 @@ class BlockingChannelInfo {
     logger.info("Starting blocking channel info for host {} and port {}", host, port);
   }
 
-  public void addBlockingChannel(BlockingChannel blockingChannel) {
+  public void releaseBlockingChannel(BlockingChannel blockingChannel) {
     rwlock.readLock().lock();
     try {
       if (blockingChannelActiveConnections.remove(blockingChannel)) {
@@ -333,7 +333,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
             connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
         throw new IllegalArgumentException("Connection does not belong to the pool");
       }
-      blockingChannelInfo.addBlockingChannel((BlockingChannel) connectedChannel);
+      blockingChannelInfo.releaseBlockingChannel((BlockingChannel) connectedChannel);
     } finally {
       context.stop();
     }
