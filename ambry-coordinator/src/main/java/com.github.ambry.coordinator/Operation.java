@@ -137,6 +137,8 @@ public abstract class Operation {
             operationPolicy.onFailedResponse(replicaId);
             logger.trace("Failed response ");
           }
+          setCurrentError(CoordinatorError.UnexpectedInternalError);
+          resolveCoordinatorError(currentError);
         }
 
         if (operationPolicy.isComplete()) {
@@ -254,7 +256,7 @@ abstract class OperationRequest implements Runnable {
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
-    this.sslEnabled = isSslEnabled();
+    this.sslEnabled = context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName());
     this.responseHandler = context.getResponseHandler();
   }
 
@@ -270,14 +272,6 @@ abstract class OperationRequest implements Runnable {
     // Only Get responses have a payload to be deserialized.
   }
 
-  private boolean isSslEnabled() {
-    if (context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
@@ -288,7 +282,7 @@ abstract class OperationRequest implements Runnable {
       if (sslEnabled) {
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
         connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
+            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getSSLPort(),
                 PortType.SSL), context.getConnectionPoolCheckoutTimeout());
       } else {
         context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();

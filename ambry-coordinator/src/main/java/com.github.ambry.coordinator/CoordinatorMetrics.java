@@ -67,7 +67,7 @@ public class CoordinatorMetrics {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCCallsEnabled) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean isCrossDatacenterCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -122,7 +122,7 @@ public class CoordinatorMetrics {
     this.crossDCCallsEnabled = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return (crossDCCallsEnabled == true ? 1 : 0);
+        return (isCrossDatacenterCallsEnabled == true ? 1 : 0);
       }
     };
     plainTextConnectionsRequestRate =

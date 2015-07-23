@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,7 +28,7 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
-  private final Map<String, Integer> ports;
+  private final Map<PortType, Integer> ports;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -59,8 +60,8 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-    this.ports = new HashMap<String, Integer>();
-    this.ports.put("plaintext", port);
+    this.ports = new HashMap<PortType, Integer>();
+    this.ports.put(PortType.PLAINTEXT, port);
     parsePorts(jsonObject);
     validate();
   }
@@ -69,7 +70,7 @@ public class DataNode extends DataNodeId {
       throws JSONException {
     if (jsonObject.has("sslport")) {
       int sslPort = jsonObject.getInt("sslport");
-      this.ports.put("sslport", sslPort);
+      this.ports.put(PortType.SSL, sslPort);
     }
   }
 
@@ -170,7 +171,7 @@ public class DataNode extends DataNodeId {
   }
 
   protected void validatePorts() {
-    for (String portType : ports.keySet()) {
+    for (PortType portType : ports.keySet()) {
       int portNo = ports.get(portType);
       if (portNo < MinPort) {
         throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MinPort);
@@ -206,9 +207,9 @@ public class DataNode extends DataNodeId {
 
   private void addSSLPortToJson(JSONObject jsonObject)
       throws JSONException {
-    for (String portType : ports.keySet()) {
-      if (!portType.equalsIgnoreCase("plaintext")) {
-        jsonObject.put(portType, ports.get(portType));
+    for (PortType portType : ports.keySet()) {
+      if (portType != PortType.PLAINTEXT) {
+        jsonObject.put("sslport", ports.get(portType));
       }
     }
   }

@@ -158,10 +158,8 @@ class ReplicaThread implements Runnable {
           try {
             if (sslEnabled) {
               replicationMetrics.sslConnectionsRequestRate.mark();
-              logger.error("No SSL Connections should be established for replica " + remoteNode);
-              // remove this logging once all metrics are available for ssl(when sslEnabledDCs will be set to some value)
               connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getPort(), PortType.SSL),
+                  .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getSSLPort(), PortType.SSL),
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
             } else {
               replicationMetrics.plainTextConnectionsRequestRate.mark();

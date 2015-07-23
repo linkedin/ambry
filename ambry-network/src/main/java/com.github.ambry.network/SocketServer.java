@@ -6,6 +6,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import org.slf4j.Logger;
@@ -45,9 +46,9 @@ public class SocketServer implements NetworkServer {
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final NetworkMetrics metrics;
-  private final ArrayList<Port> ports;
+  private final HashMap<PortType, Port> ports;
 
-  public SocketServer(NetworkConfig config, MetricRegistry registry, ArrayList<Port> ports) {
+  public SocketServer(NetworkConfig config, MetricRegistry registry, ArrayList<Port> portList) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -58,9 +59,9 @@ public class SocketServer implements NetworkServer {
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new NetworkMetrics(requestResponseChannel, registry);
-    this.ports = ports;
     this.acceptors = new ArrayList<Acceptor>();
-    this.validatePorts();
+    this.ports = new HashMap<PortType, Port>();
+    this.validatePorts(portList);
   }
 
   public String getHost() {
@@ -72,10 +73,8 @@ public class SocketServer implements NetworkServer {
   }
 
   public int getSSLPort() {
-    for (Port extraPort : ports) {
-      if (extraPort.getPortType() == PortType.SSL) {
-        return extraPort.getPortNo();
-      }
+    if(ports.containsKey(PortType.SSL)) {
+      return ports.get(PortType.SSL).getPortNo();
     }
     return -1;
   }
@@ -105,14 +104,15 @@ public class SocketServer implements NetworkServer {
     return requestResponseChannel;
   }
 
-  private void validatePorts() {
+  private void validatePorts(ArrayList<Port> portList) {
     HashSet<PortType> portTypeSet = new HashSet<PortType>();
-    for (Port extraPort : ports) {
+    for (Port extraPort : portList) {
       if (portTypeSet.contains(extraPort.getPortType())) {
         throw new IllegalArgumentException(
             "Not more than one port of same type is allowed : " + extraPort.getPortType());
       } else {
         portTypeSet.add(extraPort.getPortType());
+        this.ports.put(extraPort.getPortType(), extraPort);
       }
     }
   }
@@ -134,16 +134,18 @@ public class SocketServer implements NetworkServer {
 
     // start accepting connections
     logger.info("Starting acceptor threads");
+    System.out.println("Starting acceptor threads " + port);
     Acceptor plainTextAcceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
 
-    Iterator<Port> portIterator = ports.iterator();
-    while (portIterator.hasNext()) {
-      Port extraPort = portIterator.next();
-      if (extraPort.getPortType() == PortType.SSL) {
+    Iterator<PortType> portTypeIterator = ports.keySet().iterator();
+    while (portTypeIterator.hasNext()) {
+      PortType portType = portTypeIterator.next();
+      if (portType == PortType.SSL) {
+        System.out.println("Starting SSLacceptor threads " + ports.get(portType).getPortNo());
         SSLAcceptor sslAcceptor =
-            new SSLAcceptor(host, extraPort.getPortNo(), processors, sendBufferSize, recvBufferSize);
+            new SSLAcceptor(host, ports.get(portType).getPortNo(), processors, sendBufferSize, recvBufferSize);
         acceptors.add(sslAcceptor);
         Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
       }
@@ -335,6 +337,11 @@ class Acceptor extends AbstractServerThread {
     socketChannel.configureBlocking(false);
     socketChannel.socket().setTcpNoDelay(true);
     socketChannel.socket().setSendBufferSize(sendBufferSize);
+    System.out.println("Accepted connection from "+socketChannel.socket().getInetAddress()+" on "
+        +socketChannel.socket().getLocalSocketAddress()+". sendBufferSize "
+        + "[actual|requested]: ["+socketChannel.socket().getSendBufferSize()+"|"
+        +sendBufferSize+"] recvBufferSize [actual|requested]: ["
+        +socketChannel.socket().getReceiveBufferSize()+"|"+recvBufferSize+"]");
     logger.trace("Accepted connection from {} on {}. sendBufferSize "
         + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),

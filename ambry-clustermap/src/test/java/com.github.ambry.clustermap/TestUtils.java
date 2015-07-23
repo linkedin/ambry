@@ -109,7 +109,7 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort, hardwareState, disks));
     }
     return jsonArray;
   }

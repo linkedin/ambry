@@ -68,7 +68,6 @@ public class MockCluster {
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
-    props.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     server.startup();

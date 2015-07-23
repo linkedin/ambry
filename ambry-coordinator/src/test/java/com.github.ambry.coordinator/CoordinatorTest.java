@@ -105,578 +105,21 @@ public class CoordinatorTest {
     putErrorMappings.put(ServerErrorCode.Data_Corrupt, CoordinatorError.UnexpectedInternalError);
   }
 
-  ClusterMap getClusterMapOneDCOneNodeOneDiskOnePartition()
-      throws JSONException {
-    String HL = "  {\n" +
-        "    \"clusterName\": \"OneDCOneNodeOneDiskOnePartition\",\n" +
-        "    \"version\": 2,\n" +
-        "          \"datacenters\": [\n" +
-        "    {\n" +
-        "      \"dataNodes\": [\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667 \n" +
-        "      }\n" +
-        "      ],\n" +
-        "      \"name\": \"Datacenter\"\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }\n";
-
-    String PL = "{\n" +
-        "    \"clusterName\": \"OneDCOneNodeOneDiskOnePartition\",\n" +
-        "    \"version\": 3,\n" +
-        "          \"partitions\": [\n" +
-        "    {\n" +
-        "      \"id\": 0,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }  \n";
-
-    HardwareLayout hl =
-        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
-    PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
-    return new ClusterMapManager(pl);
-  }
-
-  ClusterMap getClusterMapOneDCThreeNodeOneDiskOnePartition()
-      throws JSONException {
-    String HL = "  {\n" +
-        "    \"clusterName\": \"OneDCThreeNodeOneDiskOnePartition\",\n" +
-        "    \"version\": 4,\n" +
-        "          \"datacenters\": [\n" +
-        "    {\n" +
-        "      \"dataNodes\": [\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669 \n" +
-        "      }\n" +
-        "      ],\n" +
-        "      \"name\": \"Datacenter\"\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }\n";
-
-    String PL = "{\n" +
-        "    \"clusterName\": \"OneDCThreeNodeOneDiskOnePartition\",\n" +
-        "    \"version\": 5,\n" +
-        "          \"partitions\": [\n" +
-        "    {\n" +
-        "      \"id\": 0,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }  \n";
-
-    HardwareLayout hl =
-        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
-    PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
-    return new ClusterMapManager(pl);
-  }
-
-  ClusterMap getClusterMapOneDCFourNodeOneDiskTwoPartition()
-      throws JSONException {
-    String HL = "  {\n" +
-        "    \"clusterName\": \"OneDCFourNodeOneDiskTwoPartition\",\n" +
-        "    \"version\": 6,\n" +
-        "          \"datacenters\": [\n" +
-        "    {\n" +
-        "      \"dataNodes\": [\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6670,\n" +
-        "              \"sslport\": 7670 \n" +
-        "      }\n" +
-        "      ],\n" +
-        "      \"name\": \"Datacenter\"\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }\n";
-
-    String PL = "{\n" +
-        "    \"clusterName\": \"OneDCFourNodeOneDiskTwoPartition\",\n" +
-        "    \"version\": 7,\n" +
-        "          \"partitions\": [\n" +
-        "    {\n" +
-        "      \"id\": 0,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    },\n" +
-        "    {\n" +
-        "      \"id\": 1,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6670\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }  \n";
-
-    HardwareLayout hl =
-        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
-    PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
-    return new ClusterMapManager(pl);
-  }
-
-  ClusterMap getClusterMapTwoDCFourNodeOneDiskFourPartition()
-      throws JSONException {
-    String HL = "  {\n" +
-        "    \"clusterName\": \"TwoDCFourNodeOneDiskFourPartition\",\n" +
-        "    \"version\": 8,\n" +
-        "          \"datacenters\": [\n" +
-        "    {\n" +
-        "      \"dataNodes\": [\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6667,\n" +
-        "              \"sslport\": 7667 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6668,\n" +
-        "              \"sslport\": 7668 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6669,\n" +
-        "              \"sslport\": 7669 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6670,\n" +
-        "              \"sslport\": 7670 \n" +
-        "      }\n" +
-        "      ],\n" +
-        "      \"name\": \"Datacenter\"\n" +
-        "    },\n" +
-        "    {\n" +
-        "      \"dataNodes\": [\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6680,\n" +
-        "              \"sslport\": 7680 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6681,\n" +
-        "              \"sslport\": 7681 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6682,\n" +
-        "              \"sslport\": 7682 \n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"disks\": [\n" +
-        "        {\n" +
-        "          \"capacityInBytes\": 21474836480,\n" +
-        "                \"hardwareState\": \"AVAILABLE\",\n" +
-        "                \"mountPath\": \"/mnt0\"\n" +
-        "        }\n" +
-        "        ],\n" +
-        "        \"hardwareState\": \"AVAILABLE\",\n" +
-        "              \"hostname\": \"localhost\",\n" +
-        "              \"port\": 6683,\n" +
-        "              \"sslport\": 7683 \n" +
-        "      }\n" +
-        "      ],\n" +
-        "      \"name\": \"DatacenterTwo\"\n" +
-        "    }\n" +
-        "    ]\n" +
-        "  }\n";
-
-    String PL = "{\n" +
-        "    \"clusterName\": \"TwoDCFourNodeOneDiskFourPartition\",\n" +
-        "    \"version\": 9,\n" +
-        "          \"partitions\": [\n" +
-        "    {\n" +
-        "      \"id\": 0,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6680\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6682\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6683\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    },\n" +
-
-        "    {\n" +
-        "      \"id\": 1,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6670\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6681\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6682\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6683\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    },\n" +
-
-        "    {\n" +
-        "      \"id\": 2,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6668\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6670\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6680\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6681\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6683\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    },\n" +
-
-        "    {\n" +
-        "      \"id\": 3,\n" +
-        "            \"partitionState\": \"READ_WRITE\",\n" +
-        "            \"replicaCapacityInBytes\": 10737418240,\n" +
-        "            \"replicas\": [\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6667\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6669\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6670\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6680\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6681\n" +
-        "      },\n" +
-        "      {\n" +
-        "        \"hostname\": \"localhost\",\n" +
-        "              \"mountPath\": \"/mnt0\",\n" +
-        "              \"port\": 6682\n" +
-        "      }\n" +
-        "      ]\n" +
-        "    }\n" +
-
-        "    ]\n" +
-        "  }  \n";
-
-    HardwareLayout hl =
-        new HardwareLayout(new JSONObject(HL), new ClusterMapConfig(new VerifiableProperties(new Properties())));
-    PartitionLayout pl = new PartitionLayout(hl, new JSONObject(PL));
-    return new ClusterMapManager(pl);
-  }
-
-  VerifiableProperties getVProps(String sslEnabledDatacenters) {
+  VerifiableProperties getVProps() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "Datacenter");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
-    if (sslEnabledDatacenters != null) {
-      properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
-    }
     return new VerifiableProperties(properties);
   }
 
-  VerifiableProperties getVPropsTwo(String sslEnabledDatacenters) {
+  VerifiableProperties getVPropsTwo() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DatacenterTwo");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
-    if (sslEnabledDatacenters != null) {
-      properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
-    }
     return new VerifiableProperties(properties);
   }
 
@@ -870,10 +313,10 @@ public class CoordinatorTest {
     }
   }
 
-  void simple(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simple(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(ac);
     }
@@ -885,17 +328,16 @@ public class CoordinatorTest {
    * to perform something like the put, get and delete. Purpose of this method is to test the sanity of these
    * smaller methods which are going to be used for execption cases after this test case.
    * @param clusterMap
-   * @param sslEnabledDatacenters comma separated list of datacenters where ssl should be enabled
    * @throws JSONException
    * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    * @throws CoordinatorException
    */
-  void simpleDecoupled(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simpleDecoupled(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
     for (int i = 0; i < 20; ++i) {
       BlobProperties putBlobProperties =
           new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -908,7 +350,7 @@ public class CoordinatorTest {
     ac.close();
   }
 
-  void simpleDeleteException(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simpleDeleteException(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode deleteErrorCode : deleteErrorMappings.keySet()) {
@@ -918,7 +360,7 @@ public class CoordinatorTest {
         // Ignoring three ServerErrorCodes as PUTs are expected to fail in such cases
         MockConnectionPool.mockCluster = new MockCluster(clusterMap);
         induceDeleteFailure(TOTAL_HOST_COUNT, deleteErrorCode);
-        AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+        AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
         for (int i = 0; i < 20; ++i) {
           BlobProperties putBlobProperties =
               new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -938,13 +380,13 @@ public class CoordinatorTest {
     }
   }
 
-  void simpleGetException(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simpleGetException(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode getErrorCode : getErrorMappings.keySet()) {
       MockConnectionPool.mockCluster = new MockCluster(clusterMap);
       induceGetFailure(TOTAL_HOST_COUNT, getErrorCode);
-      AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+      AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
       for (int i = 0; i < 20; ++i) {
         BlobProperties putBlobProperties =
             new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -963,7 +405,7 @@ public class CoordinatorTest {
     }
   }
 
-  void simplePutException(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simplePutException(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
 
     for (ServerErrorCode putErrorCode : putErrorMappings.keySet()) {
@@ -973,7 +415,7 @@ public class CoordinatorTest {
         // Ignoring three ServerErrorCodes as PUTs are expected to fail in such cases
         MockConnectionPool.mockCluster = new MockCluster(clusterMap);
         inducePutFailure(TOTAL_HOST_COUNT, putErrorCode);
-        AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+        AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
         for (int i = 0; i < 20; ++i) {
           BlobProperties putBlobProperties =
               new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -992,10 +434,10 @@ public class CoordinatorTest {
     }
   }
 
-  void simpleGetNonExistantBlob(ClusterMap clusterMap, String sslEnabledDatacenters)
+  void simpleGetNonExistantBlob(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator ac = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+    AmbryCoordinator ac = new AmbryCoordinator(getVProps(), clusterMap);
     GetNonExistantBlob(ac);
     ac.close();
   }
@@ -1003,90 +445,58 @@ public class CoordinatorTest {
   @Test
   public void simpleOneDCOneNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simple(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simple(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simple(MockClusterMapFactory.getClusterMapOneDCOneNodeOneDiskOnePartition());
+    simpleGetNonExistantBlob(MockClusterMapFactory.getClusterMapOneDCOneNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simple(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simple(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simple(MockClusterMapFactory.getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForDeleteException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simpleDeleteException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simpleDeleteException(MockClusterMapFactory.getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForGetException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simpleGetException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simpleGetException(MockClusterMapFactory.getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleOneDCThreeNodeOneDiskOnePartitionForPutException()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simplePutException(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simplePutException(MockClusterMapFactory.getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleDecoupleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simpleDecoupled(getClusterMapOneDCThreeNodeOneDiskOnePartition(), sslEnabledDatacenters);
+    simpleDecoupled(MockClusterMapFactory.getClusterMapOneDCThreeNodeOneDiskOnePartition());
   }
 
   @Test
   public void simpleOneDCFourNodeOneDiskTwoPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simple(getClusterMapOneDCFourNodeOneDiskTwoPartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simple(getClusterMapOneDCFourNodeOneDiskTwoPartition(), sslEnabledDatacenters);
+    simple(MockClusterMapFactory.getClusterMapOneDCFourNodeOneDiskTwoPartition());
   }
 
   @Test
   public void simpleTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    simple(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacenters);
-    sslEnabledDatacenters = "Datacenter";
-    simple(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacenters);
+    simple(MockClusterMapFactory.getClusterMapTwoDCFourNodeOneDiskFourPartition());
   }
 
   @Test
   public void multiACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacenters = null;
-    ClusterMap clusterMap = getClusterMapTwoDCFourNodeOneDiskFourPartition();
+    ClusterMap clusterMap = MockClusterMapFactory.getClusterMapTwoDCFourNodeOneDiskFourPartition();
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
-    for (int i = 0; i < 20; ++i) {
-      PutGetDelete(acOne);
-    }
-    acOne.close();
-    sslEnabledDatacenters = "Datacenter";
-    acOne = new AmbryCoordinator(getVProps(sslEnabledDatacenters), clusterMap);
+    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutGetDelete(acOne);
     }
@@ -1118,11 +528,11 @@ public class CoordinatorTest {
     acTwo.deleteBlob(blobId);
   }
 
-  void remoteAC(ClusterMap clusterMap, String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2)
+  void remoteAC(ClusterMap clusterMap)
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(sslEnabledDatacentersForDC1), clusterMap);
-    AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(sslEnabledDatacentersForDC2), clusterMap);
+    AmbryCoordinator acOne = new AmbryCoordinator(getVProps(), clusterMap);
+    AmbryCoordinator acTwo = new AmbryCoordinator(getVPropsTwo(), clusterMap);
     for (int i = 0; i < 20; ++i) {
       PutRemoteGetDelete(acOne, acTwo);
     }
@@ -1134,12 +544,7 @@ public class CoordinatorTest {
   @Test
   public void remoteACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
-    String sslEnabledDatacentersForDC1 = null;
-    String sslEnabledDatacentersForDC2 = null;
-    remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2);
-    sslEnabledDatacentersForDC1 = "DatacenterTwo";
-    sslEnabledDatacentersForDC2 = "Datacenter";
-    remoteAC(getClusterMapTwoDCFourNodeOneDiskFourPartition(), sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2);
+    remoteAC(MockClusterMapFactory.getClusterMapTwoDCFourNodeOneDiskFourPartition());
   }
 
   private ByteBuffer getByteBuffer(int count, boolean toFlip) {
