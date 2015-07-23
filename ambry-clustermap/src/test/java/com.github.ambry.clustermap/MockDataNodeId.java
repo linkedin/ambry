@@ -6,12 +6,14 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class MockDataNodeId extends DataNodeId {
   int port;
-  ArrayList<Port> ports;
+  Map<PortType, Integer> ports;
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
@@ -30,12 +32,12 @@ public class MockDataNodeId extends DataNodeId {
     parsePorts(new ArrayList<Port>());
   }
 
-  private void parsePorts(ArrayList<Port> ports){
-    this.ports = new ArrayList<Port>();
-    this.ports.add(new Port(this.port, PortType.PLAINTEXT));
-    for(Port extraPort: ports){
-      if(extraPort.getPortType() != PortType.PLAINTEXT){
-        this.ports.add(new Port(extraPort.getPortNo(), extraPort.getPortType()));
+  private void parsePorts(ArrayList<Port> ports) {
+    this.ports = new HashMap<PortType, Integer>();
+    this.ports.put(PortType.PLAINTEXT, port);
+    for (Port extraPort : ports) {
+      if (extraPort.getPortType() != PortType.PLAINTEXT) {
+        this.ports.put(extraPort.getPortType(), extraPort.getPortNo());
       }
     }
   }
@@ -52,12 +54,22 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public int getSSLPort() {
-    for(Port extraPort: ports){
-      if(extraPort.getPortType() == PortType.SSL){
-        return extraPort.getPortNo();
+    for (PortType portType : ports.keySet()) {
+      if (portType == PortType.SSL) {
+        return ports.get(portType);
       }
     }
-    return -1;
+    throw new IllegalArgumentException("No SSL port exists for the datanode " + hostname + ":" + port);
+  }
+
+  @Override
+  public boolean isSSLPortExists() {
+    for (PortType portType : ports.keySet()) {
+      if (portType == PortType.SSL) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override

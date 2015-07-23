@@ -280,15 +280,19 @@ abstract class OperationRequest implements Runnable {
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
       if (sslEnabled) {
+        if (replicaId.getDataNodeId().isSSLPortExists()) {
         context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
-        connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getSSLPort(),
-                PortType.SSL), context.getConnectionPoolCheckoutTimeout());
+        connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+            new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), context.getConnectionPoolCheckoutTimeout());
+        } else {
+          throw new IllegalArgumentException("No SSL Port exists for the given DataNode " + replicaId.getDataNodeId());
+        }
       } else {
-        context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
-        connectedChannel = connectionPool
-            .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
-                PortType.PLAINTEXT), context.getConnectionPoolCheckoutTimeout());
+          context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
+          connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+              new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT),
+              context.getConnectionPoolCheckoutTimeout());
+
       }
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);

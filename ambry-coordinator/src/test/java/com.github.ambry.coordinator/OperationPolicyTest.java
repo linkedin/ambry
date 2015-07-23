@@ -1637,6 +1637,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public boolean isSSLPortExists(){
+      return false;
+    }
+
+    @Override
     public HardwareState getState() {
       throw new IllegalStateException("Should not be invoked.");
     }

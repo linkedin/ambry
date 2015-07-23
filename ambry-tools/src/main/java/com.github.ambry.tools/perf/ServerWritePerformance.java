@@ -230,8 +230,12 @@ public class ServerWritePerformance {
                 new ByteBufferInputStream(ByteBuffer.wrap(blob)));
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-              channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-                  new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), 10000);
+              if (replicaId.getDataNodeId().isSSLPortExists()) {
+                channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+                    new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), 10000);
+              } else {
+                throw new IllegalArgumentException("No SSL Port exists for the replica " + replicaId.getDataNodeId());
+              }
             } else {
               channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
                   new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT), 10000);

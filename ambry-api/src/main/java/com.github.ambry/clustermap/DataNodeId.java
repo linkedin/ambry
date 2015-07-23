@@ -28,6 +28,13 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract int getSSLPort();
 
   /**
+   * Returns true is SSL port exists for the DataNodeId.
+   *
+   * @return true if SSL port exists for the datanode, false otherwise
+   */
+  public abstract boolean isSSLPortExists();
+
+  /**
    * Gets the state of the DataNodeId.
    *
    * @return state of the DataNodeId.

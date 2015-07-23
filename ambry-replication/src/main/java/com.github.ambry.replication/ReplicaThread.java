@@ -157,10 +157,14 @@ class ReplicaThread implements Runnable {
           long startTimeInMs = replicationStartTimeInMs;
           try {
             if (sslEnabled) {
-              replicationMetrics.sslConnectionsRequestRate.mark();
-              connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getSSLPort(), PortType.SSL),
-                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              if (remoteNode.isSSLPortExists()) {
+                replicationMetrics.sslConnectionsRequestRate.mark();
+                connectedChannel = connectionPool
+                    .checkOutConnection(remoteNode.getHostname(), new Port(remoteNode.getSSLPort(), PortType.SSL),
+                        replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              } else {
+                throw new IllegalArgumentException("No SSL Port exists for the remote node " + remoteNode);
+              }
             } else {
               replicationMetrics.plainTextConnectionsRequestRate.mark();
               connectedChannel = connectionPool

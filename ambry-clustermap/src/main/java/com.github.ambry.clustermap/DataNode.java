@@ -106,11 +106,20 @@ public class DataNode extends DataNodeId {
   }
 
   @Override
+  public boolean isSSLPortExists(){
+    if (ports.containsKey("sslport")) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  @Override
   public int getSSLPort() {
     if (ports.containsKey("sslport")) {
       return ports.get("sslport");
     } else {
-      return -1;
+      throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + port);
     }
   }
 
