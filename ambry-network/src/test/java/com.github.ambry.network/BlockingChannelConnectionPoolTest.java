@@ -55,17 +55,17 @@ public class BlockingChannelConnectionPoolTest {
   class BlockingChannelInfoThread implements Runnable {
     private final BlockingChannelInfo channelInfo;
     private final CountDownLatch channelCount;
-    private final CountDownLatch releaseStart;
+    private final CountDownLatch shouldRelease;
     private final CountDownLatch releaseComplete;
     private final boolean destroyConnection;
     private final AtomicReference<Exception> exception;
 
     public BlockingChannelInfoThread(BlockingChannelInfo channelInfo, CountDownLatch channelCount,
-        CountDownLatch releaseStart, CountDownLatch releaseComplete, boolean destroyConnection,
+        CountDownLatch shouldRelease, CountDownLatch releaseComplete, boolean destroyConnection,
         AtomicReference<Exception> exception) {
       this.channelInfo = channelInfo;
       this.channelCount = channelCount;
-      this.releaseStart = releaseStart;
+      this.shouldRelease = shouldRelease;
       this.releaseComplete = releaseComplete;
       this.destroyConnection = destroyConnection;
       this.exception = exception;
@@ -76,7 +76,7 @@ public class BlockingChannelConnectionPoolTest {
       try {
         BlockingChannel channel = channelInfo.getBlockingChannel(1000);
         channelCount.countDown();
-        if (releaseStart.await(1000, TimeUnit.MILLISECONDS)) {
+        if (shouldRelease.await(1000, TimeUnit.MILLISECONDS)) {
           if (destroyConnection) {
             channelInfo.destroyBlockingChannel(channel);
           } else {
@@ -124,11 +124,11 @@ public class BlockingChannelConnectionPoolTest {
             new MetricRegistry());
 
     CountDownLatch channelCount = new CountDownLatch(5);
-    CountDownLatch releaseStart = new CountDownLatch(1);
+    CountDownLatch shouldRelease = new CountDownLatch(1);
     CountDownLatch releaseComplete = new CountDownLatch(10);
     for (int i = 0; i < 5; i++) {
       BlockingChannelInfoThread infoThread =
-          new BlockingChannelInfoThread(channelInfo, channelCount, releaseStart, releaseComplete, destroyConnection,
+          new BlockingChannelInfoThread(channelInfo, channelCount, shouldRelease, releaseComplete, destroyConnection,
               exception);
       Thread t = new Thread(infoThread);
       t.start();
@@ -140,13 +140,13 @@ public class BlockingChannelConnectionPoolTest {
     channelCount = new CountDownLatch(5);
     for (int i = 0; i < 5; i++) {
       BlockingChannelInfoThread infoThread =
-          new BlockingChannelInfoThread(channelInfo, channelCount, releaseStart, releaseComplete, destroyConnection,
+          new BlockingChannelInfoThread(channelInfo, channelCount, shouldRelease, releaseComplete, destroyConnection,
               exception);
       Thread t = new Thread(infoThread);
       t.start();
     }
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
-    releaseStart.countDown();
+    shouldRelease.countDown();
     awaitCountdown(channelCount, 1000, exception, "Timed out while waiting for channel count to reach 5");
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
     awaitCountdown(releaseComplete, 2000, exception, "Timed out while waiting for channels to be released");
@@ -161,15 +161,15 @@ public class BlockingChannelConnectionPoolTest {
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), "127.0.0.1", 6667,
             new MetricRegistry());
     CountDownLatch channelCount = new CountDownLatch(2);
-    CountDownLatch releaseStart = new CountDownLatch(1);
+    CountDownLatch shouldRelease = new CountDownLatch(1);
     CountDownLatch releaseComplete = new CountDownLatch(2);
     for (int i = 0; i < 2; i++) {
       BlockingChannelInfoThread infoThread =
-          new BlockingChannelInfoThread(channelInfo, channelCount, releaseStart, releaseComplete, true, exception);
+          new BlockingChannelInfoThread(channelInfo, channelCount, shouldRelease, releaseComplete, true, exception);
       Thread t = new Thread(infoThread);
       t.start();
     }
-    releaseStart.countDown();
+    shouldRelease.countDown();
     awaitCountdown(releaseComplete, 2000, exception, "Timed out while waiting for channels to be released");
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
     channelInfo.getBlockingChannel(1000);
@@ -184,16 +184,16 @@ public class BlockingChannelConnectionPoolTest {
     private final Map<String, CountDownLatch> channelCount;
     private final ConnectionPool connectionPool;
     private final boolean destroyConnection;
-    private final CountDownLatch releaseStart;
+    private final CountDownLatch shouldRelease;
     private final CountDownLatch releaseComplete;
 
     public ConnectionPoolThread(Map<String, CountDownLatch> channelCount, ConnectionPool connectionPool,
-        boolean destroyConnection, CountDownLatch releaseStart, CountDownLatch releaseComplete,
+        boolean destroyConnection, CountDownLatch shouldRelease, CountDownLatch releaseComplete,
         AtomicReference<Exception> e) {
       this.channelCount = channelCount;
       this.connectionPool = connectionPool;
       this.destroyConnection = destroyConnection;
-      this.releaseStart = releaseStart;
+      this.shouldRelease = shouldRelease;
       this.releaseComplete = releaseComplete;
       this.exception = e;
     }
@@ -207,7 +207,7 @@ public class BlockingChannelConnectionPoolTest {
         channelCount.get("localhost" + 6668).countDown();
         ConnectedChannel channel3 = connectionPool.checkOutConnection("localhost", 6669, 1000);
         channelCount.get("localhost" + 6669).countDown();
-        if (releaseStart.await(5000, TimeUnit.MILLISECONDS)) {
+        if (shouldRelease.await(5000, TimeUnit.MILLISECONDS)) {
           if (destroyConnection) {
             connectionPool.destroyConnection(channel1);
           } else {
@@ -244,7 +244,7 @@ public class BlockingChannelConnectionPoolTest {
             new MetricRegistry());
     connectionPool.start();
 
-    CountDownLatch releaseStart = new CountDownLatch(1);
+    CountDownLatch shouldRelease = new CountDownLatch(1);
     CountDownLatch releaseComplete = new CountDownLatch(10);
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     Map<String, CountDownLatch> channelCount = new HashMap<String, CountDownLatch>();
@@ -253,7 +253,7 @@ public class BlockingChannelConnectionPoolTest {
     channelCount.put("localhost" + 6669, new CountDownLatch(5));
     for (int i = 0; i < 10; i++) {
       ConnectionPoolThread connectionPoolThread =
-          new ConnectionPoolThread(channelCount, connectionPool, false, releaseStart, releaseComplete, exception);
+          new ConnectionPoolThread(channelCount, connectionPool, false, shouldRelease, releaseComplete, exception);
       Thread t = new Thread(connectionPoolThread);
       t.start();
     }
@@ -269,7 +269,7 @@ public class BlockingChannelConnectionPoolTest {
     channelCount.put("localhost" + 6668, new CountDownLatch(5));
     channelCount.put("localhost" + 6669, new CountDownLatch(5));
 
-    releaseStart.countDown();
+    shouldRelease.countDown();
     awaitCountdown(channelCount.get("localhost" + 6667), 1000, exception,
         "Timed out waiting for channel count to reach 5");
     awaitCountdown(channelCount.get("localhost" + 6668), 1000, exception,
