@@ -23,7 +23,7 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
    * Gets the DataNodeId's SSL connection port.
    *
    * @return port upon which to establish a SSL encrypted connection with the DataNodeId
-   * if no SSL port exists, returns -1
+   * if no SSL port exists, throws IllegalArgumentException
    */
   public abstract int getSSLPort();
 
