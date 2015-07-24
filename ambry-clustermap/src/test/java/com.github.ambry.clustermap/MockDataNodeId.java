@@ -1,8 +1,5 @@
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HardwareState;
-
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
