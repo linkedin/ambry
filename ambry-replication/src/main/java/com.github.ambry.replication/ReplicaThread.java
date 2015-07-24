@@ -74,13 +74,12 @@ class ReplicaThread implements Runnable {
   private final StoreKeyFactory storeKeyFactory;
   private final boolean validateMessageStream;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<String> sslEnabledColos;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean validateMessageStream, MetricRegistry metricRegistry, ArrayList<String> sslEnabledColos) {
+      boolean validateMessageStream, MetricRegistry metricRegistry) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -96,7 +95,6 @@ class ReplicaThread implements Runnable {
     this.storeKeyFactory = storeKeyFactory;
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
-    this.sslEnabledColos = sslEnabledColos;
   }
 
   public String getName() {

@@ -108,11 +108,7 @@ public class DataNode extends DataNodeId {
 
   @Override
   public boolean isSSLPortExists() {
-    if (ports.containsKey("sslport")) {
-      return true;
-    } else {
-      return false;
-    }
+    return ports.containsKey("sslport");
   }
 
   @Override
@@ -255,7 +251,6 @@ public class DataNode extends DataNodeId {
     if (port != dataNode.port) {
       return false;
     }
-
     return hostname.equals(dataNode.hostname);
   }
 

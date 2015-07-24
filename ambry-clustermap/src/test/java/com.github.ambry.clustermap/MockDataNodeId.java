@@ -22,6 +22,8 @@ public class MockDataNodeId extends DataNodeId {
     this.port = port;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
+    this.ports = new HashMap<PortType, Integer>();
+    this.ports.put(PortType.PLAINTEXT, port);
     parsePorts(ports);
   }
 
@@ -29,12 +31,11 @@ public class MockDataNodeId extends DataNodeId {
     this.port = port;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
-    parsePorts(new ArrayList<Port>());
+    this.ports = new HashMap<PortType, Integer>();
+    this.ports.put(PortType.PLAINTEXT, port);
   }
 
   private void parsePorts(ArrayList<Port> ports) {
-    this.ports = new HashMap<PortType, Integer>();
-    this.ports.put(PortType.PLAINTEXT, port);
     for (Port extraPort : ports) {
       if (extraPort.getPortType() != PortType.PLAINTEXT) {
         this.ports.put(extraPort.getPortType(), extraPort.getPortNo());

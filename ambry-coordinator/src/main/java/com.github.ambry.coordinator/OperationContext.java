@@ -55,13 +55,13 @@ public class OperationContext {
     return responseHandler;
   }
 
-  public ArrayList<String> getSslEnabledDatacenters() {
+  public ArrayList<String> getSslEnabledDatacenters(){
     return this.sslEnabledDatacenters;
   }
 
   @Override
   public String toString() {
     return "OpContext{" + clientId + ':' + correlationId + ':' + connectionPoolCheckoutTimeout + ':'
-        + crossDCProxyCallEnable + ':' + sslEnabledDatacenters + '}';
+        + crossDCProxyCallEnable + '}';
   }
 }

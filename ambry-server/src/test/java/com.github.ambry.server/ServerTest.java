@@ -101,7 +101,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "", "DC1", "DC1");
+    endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "DC2", "DC1", "DC1,DC2");
   }
 
   private void endToEndTest(Port targetPort, boolean enableSSLPorts, String targetNodeDatacenter,
