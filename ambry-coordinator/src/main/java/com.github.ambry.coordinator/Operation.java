@@ -245,6 +245,7 @@ abstract class OperationRequest implements Runnable {
   private final RequestOrResponse request;
   private ResponseHandler responseHandler;
   protected boolean sslEnabled;
+  private Port port;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -258,6 +259,7 @@ abstract class OperationRequest implements Runnable {
     this.request = request;
     this.sslEnabled = context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName());
     this.responseHandler = context.getResponseHandler();
+    this.setPort(context);
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)
@@ -272,6 +274,18 @@ abstract class OperationRequest implements Runnable {
     // Only Get responses have a payload to be deserialized.
   }
 
+  private void setPort(OperationContext context) {
+    if (context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName())) {
+      this.port = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+    } else {
+      this.port = new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
+    }
+  }
+
+  private Port getPort() {
+    return this.port;
+  }
+
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
@@ -279,21 +293,9 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
-      if (sslEnabled) {
-        if (replicaId.getDataNodeId().isSSLPortExists()) {
-        context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
-        connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-            new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), context.getConnectionPoolCheckoutTimeout());
-        } else {
-          throw new IllegalArgumentException("No SSL Port exists for the given DataNode " + replicaId.getDataNodeId());
-        }
-      } else {
-          context.getCoordinatorMetrics().plainTextConnectionsRequestRate.mark();
-          connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-              new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT),
-              context.getConnectionPoolCheckoutTimeout());
-
-      }
+      context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), getPort(),
+          context.getConnectionPoolCheckoutTimeout());
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
       logger.trace("{} {} receiving response", context, replicaId);

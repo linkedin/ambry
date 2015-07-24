@@ -25,8 +25,6 @@ public class ReplicationMetrics {
   public final Meter plainTextIntraColoReplicationBytesRate;
   public final Meter sslInterColoReplicationBytesRate;
   public final Meter sslIntraColoReplicationBytesRate;
-  public final Meter plainTextConnectionsRequestRate;
-  public final Meter sslConnectionsRequestRate;
   public final Counter interColoMetadataExchangeCount;
   public final Counter intraColoMetadataExchangeCount;
   public final Counter interColoBlobsReplicatedCount;
@@ -255,9 +253,6 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoTotalReplicationTime"));
-    plainTextConnectionsRequestRate =
-        registry.meter(MetricRegistry.name(ReplicaThread.class, "PlainTextConnectionsRequestRate"));
-    sslConnectionsRequestRate = registry.meter(MetricRegistry.name(ReplicaThread.class, "SslConnectionsRequestRate"));
 
     this.registry = registry;
     numberOfIntraDCReplicaThreads = new Gauge<Integer>() {

@@ -19,6 +19,7 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -568,7 +569,7 @@ public class ReplicationTest {
           RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
               new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
                   bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
-              SystemTime.getInstance());
+              SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));
           remoteReplicas.add(remoteReplicaInfo);
         }
       }
@@ -765,7 +766,7 @@ public class ReplicationTest {
           RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
               new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
                   bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
-              SystemTime.getInstance());
+              SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));
           remoteReplicas.add(remoteReplicaInfo);
         }
       }
@@ -990,7 +991,7 @@ public class ReplicationTest {
           RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(peerReplicaId, replicaId,
               new MockStore(messageInfoNode1.get(replicaId.getPartitionId()),
                   bufferListNode1.get(replicaId.getPartitionId())), new MockFindToken(0, 0), 1000000,
-              SystemTime.getInstance());
+              SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));
           remoteReplicas.add(remoteReplicaInfo);
         }
       }

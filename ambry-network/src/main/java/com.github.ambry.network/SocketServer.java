@@ -134,7 +134,6 @@ public class SocketServer implements NetworkServer {
 
     // start accepting connections
     logger.info("Starting acceptor threads");
-    System.out.println("Starting acceptor threads " + port);
     Acceptor plainTextAcceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
@@ -143,7 +142,6 @@ public class SocketServer implements NetworkServer {
     while (portTypeIterator.hasNext()) {
       PortType portType = portTypeIterator.next();
       if (portType == PortType.SSL) {
-        System.out.println("Starting SSLacceptor threads " + ports.get(portType).getPortNo());
         SSLAcceptor sslAcceptor =
             new SSLAcceptor(host, ports.get(portType).getPortNo(), processors, sendBufferSize, recvBufferSize);
         acceptors.add(sslAcceptor);
@@ -337,11 +335,6 @@ class Acceptor extends AbstractServerThread {
     socketChannel.configureBlocking(false);
     socketChannel.socket().setTcpNoDelay(true);
     socketChannel.socket().setSendBufferSize(sendBufferSize);
-    System.out.println("Accepted connection from "+socketChannel.socket().getInetAddress()+" on "
-        +socketChannel.socket().getLocalSocketAddress()+". sendBufferSize "
-        + "[actual|requested]: ["+socketChannel.socket().getSendBufferSize()+"|"
-        +sendBufferSize+"] recvBufferSize [actual|requested]: ["
-        +socketChannel.socket().getReceiveBufferSize()+"|"+recvBufferSize+"]");
     logger.trace("Accepted connection from {} on {}. sendBufferSize "
         + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),

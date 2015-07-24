@@ -1,6 +1,8 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
 import org.slf4j.Logger;
@@ -57,9 +59,10 @@ final class RemoteReplicaInfo {
   private final Store localStore;
   private long totalBytesReadFromLocalStore;
   private Time time;
+  private final Port port;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
-      long tokenPersistIntervalInMs, Time time) {
+      long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.currentToken = token;
@@ -70,6 +73,7 @@ final class RemoteReplicaInfo {
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
     this.time = time;
+    this.port = port;
   }
 
   public ReplicaId getReplicaId() {
@@ -82,6 +86,10 @@ final class RemoteReplicaInfo {
 
   public Store getLocalStore() {
     return localStore;
+  }
+
+  public Port getPort(){
+    return this.port;
   }
 
   public long getReplicaLagInBytes() {
@@ -279,7 +287,8 @@ public final class ReplicationManager {
             RemoteReplicaInfo remoteReplicaInfo =
                 new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
-                    SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance());
+                    SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance(),
+                    getPortForReplica(remoteReplica, sslEnabledColos));
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
@@ -348,6 +357,21 @@ public final class ReplicationManager {
           replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
     } catch (IOException e) {
       logger.error("IO error while starting replication");
+    }
+  }
+
+  /**
+   * Returns the port to be contacted for the remote replica according to the configs.
+   * @param replicaId Replica against which connection has to be establised
+   * @param sslEnabledDatacenters List of datacenters upon which SSL encryption should be enabled
+   * @return
+   */
+  public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters){
+    if(sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
+      return new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+    }
+    else {
+      return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
   }
 

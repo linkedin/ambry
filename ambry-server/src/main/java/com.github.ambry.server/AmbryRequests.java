@@ -100,12 +100,9 @@ public class AmbryRequests implements RequestAPI {
 
   public void handleRequests(Request request)
       throws InterruptedException {
-    System.out.println("One complete request has reached Ambry Server "+ currentNode);
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
-      System.out.println("read the stream "+ currentNode);
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-      System.out.println("type "+ type);
       switch (type) {
         case PutRequest:
           handlePutRequest(request);
@@ -130,9 +127,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handlePutRequest(Request request)
       throws IOException, InterruptedException {
-    System.out.println("Handling put request in Ambry Server "+ currentNode);
     PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    System.out.println("Completely read the put request "+ currentNode);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -143,27 +138,20 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error = validateRequest(putRequest.getBlobId().getPartition(), true);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating put request failed with error {} for request {}", error, putRequest);
-        System.out.println("Validating put request failed with error "+error+" for request " + putRequest);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
             new PutMessageFormatInputStream(putRequest.getBlobId(), putRequest.getBlobProperties(),
                 putRequest.getUsermetadata(), putRequest.getData(), putRequest.getBlobProperties().getBlobSize());
-        System.out.println("created put stream ");
         MessageInfo info = new MessageInfo(putRequest.getBlobId(), stream.getSize(), Utils
             .addSecondsToEpochTime(putRequest.getBlobProperties().getCreationTimeInMs(),
                 putRequest.getBlobProperties().getTimeToLiveInSeconds()));
-        System.out.println("created msg info ");
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        System.out.println("Create write set ");
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
-        System.out.println("about to write to store");
         storeToPut.put(writeset);
-        System.out.println("written to store");
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
-        System.out.println("Created put response");
         metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
@@ -181,12 +169,10 @@ public class AmbryRequests implements RequestAPI {
       } else {
         metrics.unExpectedStorePutError.inc();
       }
-      System.out.println("Sending put response with error code "+e.getErrorCode() +" , "+ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
       response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
       logger.error("Unknown exception on a put for request " + putRequest, e);
-      System.out.println("unknown exception for " + putRequest);
       response =
           new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
     } finally {
@@ -195,7 +181,6 @@ public class AmbryRequests implements RequestAPI {
       publicAccessLogger.info("{} {} processingTime {}", putRequest, response, processingTime);
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
-    System.out.println("Sending put response ");
     sendPutResponse(requestResponseChannel, response, request,
         new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
         new HistogramMeasurement(metrics.putBlobSendTimeInMs), new HistogramMeasurement(metrics.putBlobTotalTimeInMs),
