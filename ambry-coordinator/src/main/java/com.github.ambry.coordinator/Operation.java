@@ -257,9 +257,9 @@ abstract class OperationRequest implements Runnable {
     this.blobId = blobId;
     this.replicaId = replicaId;
     this.request = request;
-    this.sslEnabled = context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName());
     this.responseHandler = context.getResponseHandler();
-    this.setPort(context);
+    this.port = replicaId.getDataNodeId().getPortToConnect(context.getSslEnabledDatacenters());
+    this.sslEnabled = port.getPortType() == PortType.SSL ? true : false;
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)
@@ -272,14 +272,6 @@ abstract class OperationRequest implements Runnable {
   void deserializeResponsePayload(Response response)
       throws IOException, MessageFormatException {
     // Only Get responses have a payload to be deserialized.
-  }
-
-  private void setPort(OperationContext context) {
-    if (context.getSslEnabledDatacenters().contains(replicaId.getDataNodeId().getDatacenterName())) {
-      this.port = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
-    } else {
-      this.port = new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
-    }
   }
 
   private Port getPort() {

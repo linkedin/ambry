@@ -7,6 +7,8 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1639,6 +1641,11 @@ public class OperationPolicyTest {
     @Override
     public boolean isSSLPortExists(){
       return false;
+    }
+
+    @Override
+    public Port getPortToConnect(ArrayList<String> sslEnabledDataCenters){
+      return new Port(0, PortType.PLAINTEXT);
     }
 
     @Override

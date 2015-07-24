@@ -1,6 +1,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
@@ -106,7 +107,7 @@ public class DataNode extends DataNodeId {
   }
 
   @Override
-  public boolean isSSLPortExists(){
+  public boolean isSSLPortExists() {
     if (ports.containsKey("sslport")) {
       return true;
     } else {
@@ -121,6 +122,18 @@ public class DataNode extends DataNodeId {
     } else {
       throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + port);
     }
+  }
+
+  @Override
+  public Port getPortToConnect(ArrayList<String> sslEnabledDataCenters) {
+    if (sslEnabledDataCenters.contains(datacenter)) {
+      if (ports.containsKey(PortType.SSL)) {
+        return new Port(ports.get(PortType.SSL), PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+      }
+    }
+    return new Port(port, PortType.PLAINTEXT);
   }
 
   @Override

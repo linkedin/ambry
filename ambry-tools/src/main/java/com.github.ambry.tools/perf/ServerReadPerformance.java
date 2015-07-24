@@ -149,17 +149,8 @@ public class ServerReadPerformance {
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequest =
                 new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
-            if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-              if (replicaId.getDataNodeId().isSSLPortExists()) {
-                channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-                    new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL), 10000);
-              } else {
-                throw new IllegalArgumentException("No SSL Port exists for the replica " + replicaId);
-              }
-            } else {
-              channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
-                  new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT), 10000);
-            }
+            Port port = replicaId.getDataNodeId().getPortToConnect(sslEnabledDatacentersList);
+            channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();

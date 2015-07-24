@@ -131,7 +131,7 @@ class ReplicaThread implements Runnable {
           if (dataNodeId.getDatacenterName().equals(remoteNode.getDatacenterName())) {
             remoteColo = false;
           }
-          boolean sslEnabled = sslEnabledColos.contains(remoteNode.getDatacenterName()) ? true : false;
+          boolean sslEnabled = replicasToReplicatePerNode.get(0).getPort().getPortType() == PortType.SSL ? true : false;
           Timer.Context context = null;
           Timer.Context portTypeBasedContext = null;
           if (remoteColo) {
