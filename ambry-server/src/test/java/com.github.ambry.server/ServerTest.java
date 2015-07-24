@@ -104,7 +104,7 @@ public class ServerTest {
     endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "DC2", "DC1", "DC1,DC2");
   }
 
-  private void endToEndTest(Port targetPort, boolean enableSSLPorts, String targetNodeDatacenter,
+  private void endToEndTest(Port targetPort, boolean enableSSLPorts, String coordinatorDatacenter,
       String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws InterruptedException, IOException, InstantiationException {
     cluster =
@@ -261,7 +261,7 @@ public class ServerTest {
         // Use coordinator to get the blob
         Coordinator coordinator = null;
         if (targetPort.getPortType() == PortType.SSL) {
-          coordinator = new AmbryCoordinator(getCoordinatorProperties(targetNodeDatacenter), clusterMap);
+          coordinator = new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter), clusterMap);
         } else {
           coordinator = new AmbryCoordinator(getCoordinatorProperties(""), clusterMap);
         }
@@ -650,7 +650,7 @@ public class ServerTest {
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC2,DC3", new Port(64422, PortType.PLAINTEXT),
-        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC2,DC3", "DC2,DC3");
+        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC3", "DC2");
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(String sslEnabledDatacenters, Port sourcePort,
