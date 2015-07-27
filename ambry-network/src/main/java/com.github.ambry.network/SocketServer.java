@@ -73,10 +73,11 @@ public class SocketServer implements NetworkServer {
   }
 
   public int getSSLPort() {
-    if(ports.containsKey(PortType.SSL)) {
-      return ports.get(PortType.SSL).getPort();
+    Port sslPort = ports.get(PortType.SSL);
+    if(sslPort != null) {
+      return sslPort.getPort();
     }
-    return -1;
+    throw new IllegalStateException("No SSL Port Exists for Server " + host + ":" + port);
   }
 
   public int getNumProcessorThreads() {
