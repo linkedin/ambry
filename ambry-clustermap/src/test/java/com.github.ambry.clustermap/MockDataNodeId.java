@@ -21,7 +21,7 @@ public class MockDataNodeId extends DataNodeId {
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Integer>();
     this.ports.put(PortType.PLAINTEXT, port);
-    parsePorts(ports);
+    populatePorts(ports);
   }
 
   public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
@@ -32,10 +32,10 @@ public class MockDataNodeId extends DataNodeId {
     this.ports.put(PortType.PLAINTEXT, port);
   }
 
-  private void parsePorts(ArrayList<Port> ports) {
-    for (Port extraPort : ports) {
-      if (extraPort.getPortType() != PortType.PLAINTEXT) {
-        this.ports.put(extraPort.getPortType(), extraPort.getPortNo());
+  private void populatePorts(ArrayList<Port> ports) {
+    for (Port port : ports) {
+      if (port.getPortType() != PortType.PLAINTEXT) {
+        this.ports.put(port.getPortType(), port.getPort());
       }
     }
   }
@@ -52,26 +52,23 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public int getSSLPort() {
-    for (PortType portType : ports.keySet()) {
-      if (portType == PortType.SSL) {
-        return ports.get(portType);
-      }
+    if (hasSSLPort()) {
+      return ports.get(PortType.SSL);
     }
     throw new IllegalArgumentException("No SSL port exists for the datanode " + hostname + ":" + port);
   }
 
   @Override
-  public boolean isSSLPortExists() {
-    for (PortType portType : ports.keySet()) {
-      if (portType == PortType.SSL) {
-        return true;
-      }
+  public boolean hasSSLPort() {
+    if (ports.containsKey(PortType.SSL)) {
+      return true;
+    } else {
+      return false;
     }
-    return false;
   }
 
   @Override
-  public Port getPortToConnect(ArrayList<String> sslEnabledDataCenters) {
+  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
         return new Port(ports.get(PortType.SSL), PortType.SSL);

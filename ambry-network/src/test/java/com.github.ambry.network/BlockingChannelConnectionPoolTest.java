@@ -6,7 +6,6 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,8 +16,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 
 /**
@@ -121,7 +118,7 @@ public class BlockingChannelConnectionPoolTest {
     int maxConnectionsPerChannel =
         (port.getPortType() == PortType.PLAINTEXT) ? maxConnectionsPerPortPlainText : maxConnectionsPerPortSSL;
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPortNo(),
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPort(),
             new MetricRegistry(), port.getPortType());
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = null;
@@ -215,7 +212,7 @@ public class BlockingChannelConnectionPoolTest {
         for (String channelStr : channelCount.keySet()) {
           Port port = channelToPortMap.get(channelStr);
           ConnectedChannel channel =
-              connectionPool.checkOutConnection("localhost", new Port(port.getPortNo(), port.getPortType()), 1000);
+              connectionPool.checkOutConnection("localhost", new Port(port.getPort(), port.getPortType()), 1000);
           connectedChannels.add(channel);
           channelCount.get(channelStr).incrementAndGet();
         }

@@ -15,7 +15,6 @@ import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -229,7 +228,7 @@ public class ServerWritePerformance {
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
                 new ByteBufferInputStream(ByteBuffer.wrap(blob)));
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
-            Port port = replicaId.getDataNodeId().getPortToConnect(sslEnabledDatacenters);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);

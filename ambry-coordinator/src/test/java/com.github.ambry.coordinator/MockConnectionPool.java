@@ -44,11 +44,11 @@ public class MockConnectionPool implements ConnectionPool {
     BlockingChannel blockingChannel = null;
     if (port.getPortType() == PortType.PLAINTEXT) {
       blockingChannel =
-          new MockBlockingChannel(mockCluster.getMockDataNode(host, port.getPortNo()), host, port.getPortNo(),
+          new MockBlockingChannel(mockCluster.getMockDataNode(host, port.getPort()), host, port.getPort(),
               readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
     } else {
       blockingChannel =
-          new MockSSLBlockingChannel(mockCluster.getMockDataNode(host, port.getPortNo()), host, port.getPortNo(),
+          new MockSSLBlockingChannel(mockCluster.getMockDataNode(host, port.getPort()), host, port.getPort(),
               readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
     }
     blockingChannel.connect();

@@ -74,7 +74,7 @@ public class SocketServer implements NetworkServer {
 
   public int getSSLPort() {
     if(ports.containsKey(PortType.SSL)) {
-      return ports.get(PortType.SSL).getPortNo();
+      return ports.get(PortType.SSL).getPort();
     }
     return -1;
   }
@@ -106,13 +106,13 @@ public class SocketServer implements NetworkServer {
 
   private void validatePorts(ArrayList<Port> portList) {
     HashSet<PortType> portTypeSet = new HashSet<PortType>();
-    for (Port extraPort : portList) {
-      if (portTypeSet.contains(extraPort.getPortType())) {
+    for (Port port : portList) {
+      if (portTypeSet.contains(port.getPortType())) {
         throw new IllegalArgumentException(
-            "Not more than one port of same type is allowed : " + extraPort.getPortType());
+            "Not more than one port of same type is allowed : " + port.getPortType());
       } else {
-        portTypeSet.add(extraPort.getPortType());
-        this.ports.put(extraPort.getPortType(), extraPort);
+        portTypeSet.add(port.getPortType());
+        this.ports.put(port.getPortType(), port);
       }
     }
   }
@@ -143,7 +143,7 @@ public class SocketServer implements NetworkServer {
       PortType portType = portTypeIterator.next();
       if (portType == PortType.SSL) {
         SSLAcceptor sslAcceptor =
-            new SSLAcceptor(host, ports.get(portType).getPortNo(), processors, sendBufferSize, recvBufferSize);
+            new SSLAcceptor(host, ports.get(portType).getPort(), processors, sendBufferSize, recvBufferSize);
         acceptors.add(sslAcceptor);
         Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
       }

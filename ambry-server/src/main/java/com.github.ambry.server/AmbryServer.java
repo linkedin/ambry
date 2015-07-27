@@ -113,7 +113,7 @@ public class AmbryServer {
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
-      if(nodeId.isSSLPortExists()) {
+      if(nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, registry, ports);

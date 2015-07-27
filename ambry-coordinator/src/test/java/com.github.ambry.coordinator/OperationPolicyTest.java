@@ -1635,16 +1635,16 @@ public class OperationPolicyTest {
 
     @Override
     public int getSSLPort() {
-      return 0;
+      throw new IllegalStateException("No SSL port exists for localhost");
     }
 
     @Override
-    public boolean isSSLPortExists(){
+    public boolean hasSSLPort() {
       return false;
     }
 
     @Override
-    public Port getPortToConnect(ArrayList<String> sslEnabledDataCenters){
+    public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
       return new Port(0, PortType.PLAINTEXT);
     }
 

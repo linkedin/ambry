@@ -491,7 +491,7 @@ public class ReplicationTest {
     @Override
     public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
         throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-      return new MockConnection(host, port.getPortNo(), messageInfoList.get(host + port), byteBufferList.get(host + port),
+      return new MockConnection(host, port.getPort(), messageInfoList.get(host + port), byteBufferList.get(host + port),
           maxEntriesToReturn);
     }
 

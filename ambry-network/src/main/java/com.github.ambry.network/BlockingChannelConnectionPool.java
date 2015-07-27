@@ -317,14 +317,14 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     final Timer.Context context = connectionCheckOutTime.time();
     try {
       requestsWaitingToCheckoutConnectionCount.incrementAndGet();
-      BlockingChannelInfo blockingChannelInfo = connections.get(host + port.getPortNo());
+      BlockingChannelInfo blockingChannelInfo = connections.get(host + port.getPort());
       if (blockingChannelInfo == null) {
         synchronized (this) {
-          blockingChannelInfo = connections.get(host + port.getPortNo());
+          blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port.getPortNo(), registry, port.getPortType());
-            connections.put(host + port.getPortNo(), blockingChannelInfo);
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port.getPort(), registry, port.getPortType());
+            connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace(
                 "Using already existing BlockingChannelInfo for " + host + ":" + port + " in synchronized block");

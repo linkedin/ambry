@@ -59,9 +59,9 @@ public class SocketServerTest {
     BoundedByteBufferSend bufferToSend = new BoundedByteBufferSend(byteBufferToSend);
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 1000, 2000);
+      channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     } else {
-      channel = new BlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 1000, 2000);
+      channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }
     channel.connect();
     channel.send(bufferToSend);

@@ -258,8 +258,8 @@ abstract class OperationRequest implements Runnable {
     this.replicaId = replicaId;
     this.request = request;
     this.responseHandler = context.getResponseHandler();
-    this.port = replicaId.getDataNodeId().getPortToConnect(context.getSslEnabledDatacenters());
-    this.sslEnabled = port.getPortType() == PortType.SSL ? true : false;
+    this.port = replicaId.getDataNodeId().getPortToConnectTo(context.getSslEnabledDatacenters());
+    this.sslEnabled = port.getPortType() == PortType.SSL;
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)

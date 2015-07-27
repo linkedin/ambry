@@ -44,13 +44,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.file.StandardWatchEventKinds;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -128,9 +125,9 @@ public class ServerTest {
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       BlockingChannel channel = null;
       if (targetPort.getPortType() == PortType.SSL) {
-        channel = new SSLBlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel = new BlockingChannel("localhost", targetPort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
       }
       channel.connect();
       channel.send(putRequest);
@@ -689,21 +686,21 @@ public class ServerTest {
       BlockingChannel channel3 = null;
 
       if (sourcePort.getPortType() == PortType.SSL) {
-        channel1 = new BlockingChannel("localhost", sourcePort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
       }
 
       if (targetPort1.getPortType() == PortType.SSL) {
-        channel2 = new BlockingChannel("localhost", targetPort1.getPortNo(), 10000, 10000, 10000, 2000);
+        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPortNo(), 10000, 10000, 10000, 2000);
+        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       }
 
       if (targetPort2.getPortType() == PortType.SSL) {
-        channel3 = new BlockingChannel("localhost", targetPort2.getPortNo(), 10000, 10000, 10000, 2000);
+        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPortNo(), 10000, 10000, 10000, 2000);
+        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
       }
 
       channel1.connect();
@@ -877,7 +874,7 @@ public class ServerTest {
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourcePort.getPortNo());
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
@@ -1157,21 +1154,21 @@ public class ServerTest {
       BlockingChannel channel3 = null;
 
       if (sourcePort.getPortType() == PortType.SSL) {
-        channel1 = new BlockingChannel("localhost", sourcePort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPortNo(), 10000, 10000, 10000, 2000);
+        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
       }
 
       if (targetPort1.getPortType() == PortType.SSL) {
-        channel2 = new BlockingChannel("localhost", targetPort1.getPortNo(), 10000, 10000, 10000, 2000);
+        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPortNo(), 10000, 10000, 10000, 2000);
+        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       }
 
       if (targetPort2.getPortType() == PortType.SSL) {
-        channel3 = new BlockingChannel("localhost", targetPort2.getPortNo(), 10000, 10000, 10000, 2000);
+        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
       } else {
-        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPortNo(), 10000, 10000, 10000, 2000);
+        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
       }
 
       // put all the blobs to random servers
@@ -1342,7 +1339,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPortNo());
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -1456,7 +1453,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPortNo());
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
