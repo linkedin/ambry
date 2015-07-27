@@ -47,9 +47,20 @@ public class RestServer {
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
     if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
-      logger.error("Null arg(s) received during instantiation of RestServer. Throwing exception");
-      throw new InstantiationException("Null arg(s) received during instantiation of RestServer");
+      StringBuilder errorMessage =  new StringBuilder("Null arg(s) received during instantiation of RestServer -");
+      if(verifiableProperties == null) {
+        errorMessage.append(" [VerifiableProperties] ");
+      }
+      if(metricRegistry == null) {
+        errorMessage.append(" [MetricRegistry] ");
+      }
+      if(clusterMap == null) {
+        errorMessage.append(" [ClusterMap] ");
+      }
+      logger.error(errorMessage.toString());
+      throw new IllegalArgumentException(errorMessage.toString());
     }
+
     restServerConfig = new RestServerConfig(verifiableProperties);
     restServerMetrics = new RestServerMetrics(metricRegistry);
     try {
@@ -64,13 +75,21 @@ public class RestServer {
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
       logger.error("Exception during instantiation of RestServer", e);
-      restServerMetrics.restServerInstantiationFailure.inc();
-      throw new InstantiationException("Exception while creating RestServer components - " + e);
+      restServerMetrics.restServerInstantiationFailureError.inc();
+      throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
-    if (blobStorageService == null || requestHandlerController == null || nioServer == null) {
-      logger.error("Failed to instantiate one of the components of RestServer. Throwing exception");
-      restServerMetrics.restServerInstantiationFailure.inc();
-      throw new InstantiationException("Failed to instantiate one of the components of RestServer");
+
+    if (blobStorageService == null || nioServer == null) {
+      StringBuilder errorMessage = new StringBuilder("Failed to instantiate some components of RestServer -");
+      if(blobStorageService == null) {
+        errorMessage.append(" [BlobStorageService] ");
+      }
+      if(nioServer == null) {
+        errorMessage.append(" [NioServer] ");
+      }
+      logger.error(errorMessage.toString());
+      restServerMetrics.restServerInstantiationFailureError.inc();
+      throw new InstantiationException(errorMessage.toString());
     }
     logger.trace("Instantiated RestServer");
   }

@@ -56,8 +56,8 @@ class AdminBlobStorageService implements BlobStorageService {
           GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap, adminMetrics);
           break;
         default:
-          logger.warn("Unsupported operation type during GET - {}", operationInUri);
-          adminMetrics.unsupportedGetOperation.inc();
+          logger.debug("Unsupported operation type during GET - {}", operationInUri);
+          adminMetrics.unsupportedGetOperationError.inc();
           throw new RestServiceException("Unsupported operation (" + operationInUri + ") for Admin service",
               RestServiceErrorCode.UnsupportedOperation);
       }
@@ -74,8 +74,8 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.postOperationRate.mark();
     }
-    logger.warn("Unsupported operation during POST");
-    adminMetrics.unsupportedPostOperation.inc();
+    logger.debug("Unsupported operation during POST");
+    adminMetrics.unsupportedPostOperationError.inc();
     throw new RestServiceException("Unsupported operation for Admin service - POST",
         RestServiceErrorCode.UnsupportedOperation);
   }
@@ -86,8 +86,8 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.deleteOperationRate.mark();
     }
-    logger.warn("Unsupported operation during DELETE");
-    adminMetrics.unsupportedDeleteOperation.inc();
+    logger.debug("Unsupported operation during DELETE");
+    adminMetrics.unsupportedDeleteOperationError.inc();
     throw new RestServiceException("Unsupported operation for Admin service - DELETE",
         RestServiceErrorCode.UnsupportedOperation);
   }
@@ -98,8 +98,8 @@ class AdminBlobStorageService implements BlobStorageService {
     if (restRequestInfo.isFirstPart()) {
       adminMetrics.headOperationRate.mark();
     }
-    logger.warn("Unsupported operation during HEAD");
-    adminMetrics.unsupportedHeadOperation.inc();
+    logger.debug("Unsupported operation during HEAD");
+    adminMetrics.unsupportedHeadOperationError.inc();
     throw new RestServiceException("Unsupported operation for Admin service - HEAD",
         RestServiceErrorCode.UnsupportedOperation);
   }

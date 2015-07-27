@@ -22,8 +22,7 @@ class RequestHandlerController implements RestRequestHandlerController {
   private final AtomicInteger currIndex = new AtomicInteger(0);
 
   public RequestHandlerController(int handlerCount, RestServerMetrics restServerMetrics,
-      BlobStorageService blobStorageService)
-      throws InstantiationException {
+      BlobStorageService blobStorageService) {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
@@ -32,8 +31,8 @@ class RequestHandlerController implements RestRequestHandlerController {
     } else {
       logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
           handlerCount);
-      restServerMetrics.requestHandlerControllerInstantiationFailure.inc();
-      throw new InstantiationException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
+      restServerMetrics.requestHandlerControllerInstantiationFailureError.inc();
+      throw new IllegalArgumentException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
     }
   }
 
@@ -54,19 +53,13 @@ class RequestHandlerController implements RestRequestHandlerController {
     int index = currIndex.getAndIncrement();
     try {
       requestHandler = requestHandlers.get(index % requestHandlers.size());
-    } catch (Exception e) {
-      logger.error("Exception during selection of a RestRequestHandler to return", e);
-      restServerMetrics.requestHandlerControllerHandlerSelectionError.inc();
-      throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
-          RestServiceErrorCode.RequestHandlerSelectionError);
-    }
-    if (requestHandler.isRunning()) {
       logger.debug("Monotonically increasing value {} was used to pick request handler at index {}", index,
           index % requestHandlers.size());
-    } else {
-      logger.debug("Request handler at index {} is dead. Substitute request handler selection will be attempted",
-          index % requestHandlers.size());
-      requestHandler = pickSubstituteRequestHandler();
+    } catch (Exception e) {
+      logger.error("Exception during selection of a RestRequestHandler to return", e);
+      restServerMetrics.requestHandlerSelectionError.inc();
+      throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
+          RestServiceErrorCode.RequestHandlerSelectionError);
     }
     return requestHandler;
   }
@@ -96,26 +89,5 @@ class RequestHandlerController implements RestRequestHandlerController {
       // This can change if there is ever a RequestHandlerFactory.
       requestHandlers.add(new AsyncRequestHandler(blobStorageService, restServerMetrics));
     }
-  }
-
-  /**
-   * Picks a {@link RestRequestHandler} in linear time by iterating through all {@link RestRequestHandler}s and
-   * returning the one that is running. The start index for the iteration is randomized to prevent the overloading of
-   * one {@link RestRequestHandler}.
-   * @return - A running {@link RestRequestHandler}.
-   * @throws RestServiceException - when there is no {@link RestRequestHandler}.
-   */
-  private RestRequestHandler pickSubstituteRequestHandler()
-      throws RestServiceException {
-    int start = new Random().nextInt(requestHandlers.size());
-    for (int i = start; i < start + requestHandlers.size(); i++) {
-      if (requestHandlers.get(i % requestHandlers.size()).isRunning()) {
-        return requestHandlers.get(i % requestHandlers.size());
-      }
-    }
-    logger.error("No running RestRequestHandler available for selection");
-    restServerMetrics.requestHandlerControllerNoRequestHandlerAvailable.inc();
-    throw new RestServiceException("No running RestRequestHandler available for selection",
-        RestServiceErrorCode.NoRequestHandlersAvailable);
   }
 }

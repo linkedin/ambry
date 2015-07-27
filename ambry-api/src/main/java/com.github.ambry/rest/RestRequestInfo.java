@@ -29,7 +29,7 @@ public class RestRequestInfo {
   private final List<RestRequestInfoEventListener> listeners =
       Collections.synchronizedList(new ArrayList<RestRequestInfoEventListener>());
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private Exception handlingException = null;
+  private Exception exception = null;
 
   /**
    * Specifies whether this RestRequestInfo is the the first part of a request.
@@ -87,13 +87,13 @@ public class RestRequestInfo {
   public RestRequestInfo addListener(RestRequestInfoEventListener restRequestInfoEventListener) {
     if (restRequestInfoEventListener != null) {
       if (operationComplete.get()) {
-        logger.debug("Firing onHandlingComplete() for late listener");
-        restRequestInfoEventListener.onHandlingComplete(this, handlingException);
+        logger.debug("Firing onComplete() for late listener");
+        restRequestInfoEventListener.onHandlingComplete(this, exception);
       } else {
         synchronized (listeners) {
           if (operationComplete.get()) {
-            logger.debug("Firing onHandlingComplete() for late listener");
-            restRequestInfoEventListener.onHandlingComplete(this, handlingException);
+            logger.debug("Firing onComplete() for late listener");
+            restRequestInfoEventListener.onHandlingComplete(this, exception);
           } else {
             listeners.add(restRequestInfoEventListener);
           }
@@ -108,22 +108,21 @@ public class RestRequestInfo {
    * failure).
    * @param e - the {@link Exception} that caused the handling to fail.
    */
-  public void onHandlingComplete(Exception e) {
-    logger.debug("Firing onHandlingComplete() for listeners");
+  public void onComplete(Exception e) {
+    logger.debug("Firing onComplete() for listeners");
     synchronized (listeners) {
-      handlingException = e;
+      exception = e;
       if (operationComplete.compareAndSet(false, true)) {
         for (RestRequestInfoEventListener listener : listeners) {
           try {
             listener.onHandlingComplete(this, e);
           } catch (Exception ee) {
             logger
-                .error("Swallowing onHandlingComplete listener exception. Original exception, if any, also follows", ee,
-                    e);
+                .error("Swallowing onComplete listener exception", ee);
           }
         }
       } else {
-        logger.error("Ignoring re-firing of onHandlingComplete for RestRequestInfo");
+        logger.error("Ignoring re-firing of onComplete for RestRequestInfo");
       }
     }
   }

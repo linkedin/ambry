@@ -64,7 +64,7 @@ public class RestServerTest {
    */
   @Test
   public void serverCreationWithBadInputTest()
-      throws IOException {
+      throws InstantiationException, IOException {
     badArgumentsTest();
     badNioServerClassTest();
     badBlobStorageServiceClassTest();
@@ -110,7 +110,7 @@ public class RestServerTest {
    * @throws IOException
    */
   private void badArgumentsTest()
-      throws IOException {
+      throws InstantiationException, IOException {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -121,7 +121,7 @@ public class RestServerTest {
       // no props.
       new RestServer(null, metricRegistry, clusterMap);
       fail("Properties missing, yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // nothing to do. expected.
     }
 
@@ -129,7 +129,7 @@ public class RestServerTest {
       // no MetricRegistry.
       new RestServer(verifiableProperties, null, clusterMap);
       fail("MetricsRegistry missing, yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // nothing to do. expected.
     }
 
@@ -137,7 +137,7 @@ public class RestServerTest {
       // no ClusterMap.
       new RestServer(verifiableProperties, metricRegistry, null);
       fail("ClusterMap missing, yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // nothing to do. expected.
     }
   }

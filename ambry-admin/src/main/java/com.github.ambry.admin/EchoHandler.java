@@ -45,7 +45,7 @@ class EchoHandler {
         responseHandler.flush();
         logger.debug("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
       } finally {
-        adminMetrics.echoTimeInMs.update(System.currentTimeMillis() - startTime);
+        adminMetrics.echoProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
@@ -63,7 +63,6 @@ class EchoHandler {
       throws RestServiceException {
     Map<String, List<String>> parameters = restRequestMetadata.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
-      // TODO: opportunity for batch get here.
       String text = parameters.get(TEXT_KEY).get(0);
       logger.debug("Text to echo {} for request {}", text, restRequestMetadata.getUri());
       try {
@@ -75,8 +74,8 @@ class EchoHandler {
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.warn("Request for echo GET missing parameter - {}", TEXT_KEY);
-      adminMetrics.echoGetMissingParameter.inc();
+      logger.debug("Request for echo GET missing parameter - {}", TEXT_KEY);
+      adminMetrics.echoGetMissingParameterError.inc();
       throw new RestServiceException("Request missing parameter - " + TEXT_KEY, RestServiceErrorCode.MissingArgs);
     }
   }

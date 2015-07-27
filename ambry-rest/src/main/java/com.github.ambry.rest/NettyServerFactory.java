@@ -28,8 +28,19 @@ public class NettyServerFactory implements NioServerFactory {
       this.restRequestHandlerController = restRequestHandlerController;
       logger.trace("Instantiated NettyServerFactory");
     } else {
-      logger.error("Null arg(s) received during instantiation of NettyServerFactory. Throwing exception");
-      throw new InstantiationException("Null arg(s) received during instantiation of NettyServerFactory");
+      StringBuilder errorMessage =
+          new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
+      if(verifiableProperties == null) {
+        errorMessage.append(" [VerifiableProperties] ");
+      }
+      if(metricRegistry == null) {
+        errorMessage.append(" [MetricRegistry] ");
+      }
+      if(restRequestHandlerController == null) {
+        errorMessage.append(" [RestRequestHandlerController] ");
+      }
+      logger.error(errorMessage.toString());
+      throw new InstantiationException(errorMessage.toString());
     }
   }
 

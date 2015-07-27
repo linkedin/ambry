@@ -34,7 +34,7 @@ public class RequestHandlerControllerTest {
    * Tests that an exception is thrown when trying to instantiate a {@link RequestHandlerController} with 0 handlers.
    * @throws Exception
    */
-  @Test(expected = InstantiationException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void startWithHandlerCountZeroTest()
       throws Exception {
     createRestRequestHandlerController(0);
@@ -66,11 +66,8 @@ public class RequestHandlerControllerTest {
       throws InstantiationException, IOException, RestServiceException {
     RestRequestHandlerController requestHandlerController = createRestRequestHandlerController(1);
     try {
-      requestHandlerController.getRequestHandler();
-      fail("RequestHandlerController did not have any running RestRequestHandlers but did not throw exception");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.NoRequestHandlersAvailable,
-          e.getErrorCode());
+      // fine to use without start.
+      assertNotNull("Request handler is null", requestHandlerController.getRequestHandler());
     } finally {
       requestHandlerController.shutdown();
     }
@@ -88,41 +85,9 @@ public class RequestHandlerControllerTest {
     RestRequestHandlerController requestHandlerController = createRestRequestHandlerController(5);
     requestHandlerController.start();
     try {
-      doGetRestRequestHandler(requestHandlerController, 1000);
-    } finally {
-      requestHandlerController.shutdown();
-    }
-  }
-
-  /**
-   * Tests the functionality of {@link RequestHandlerController#getRequestHandler()} when some of the
-   * {@link RestRequestHandler}s that it contains are no longer running.
-   * @throws InstantiationException
-   * @throws IOException
-   * @throws RestServiceException
-   */
-  @Test
-  public void restRequestHandlerGetWithDeadRequestHandlersTest()
-      throws InstantiationException, IOException, RestServiceException {
-    RestRequestHandlerController requestHandlerController = createRestRequestHandlerController(3);
-    requestHandlerController.start();
-    try {
-      // shutdown one RestRequestHandler.
-      requestHandlerController.getRequestHandler().shutdown();
-      // getRequestHandler() should not suffer.
-      doGetRestRequestHandler(requestHandlerController, 1000);
-      // shutdown another RestRequestHandler.
-      requestHandlerController.getRequestHandler().shutdown();
-      // getRequestHandler() should not suffer.
-      doGetRestRequestHandler(requestHandlerController, 1000);
-      // shutdown last remaining RestRequestHandler.
-      requestHandlerController.getRequestHandler().shutdown();
-      // getRequestHandler() should fail fast and not go into an infinite loop.
-      doGetRestRequestHandler(requestHandlerController, 1);
-      fail("There was no running RestRequestHandler available. The test should have thrown an exception");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.NoRequestHandlersAvailable,
-          e.getErrorCode());
+      for (int i = 0; i < 1000; i++) {
+        assertNotNull("Obtained RestRequestHandler is null", requestHandlerController.getRequestHandler());
+      }
     } finally {
       requestHandlerController.shutdown();
     }
@@ -135,14 +100,5 @@ public class RequestHandlerControllerTest {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
     return new RequestHandlerController(handlerCount, restServerMetrics, blobStorageService);
-  }
-
-  private void doGetRestRequestHandler(RestRequestHandlerController requestHandlerController, int maxIterations)
-      throws RestServiceException {
-    for (int i = 0; i < maxIterations; i++) {
-      RestRequestHandler requestHandler = requestHandlerController.getRequestHandler();
-      assertNotNull("Obtained RestRequestHandler is null", requestHandler);
-      assertTrue("Obtained RestRequestHandler is not running", requestHandler.isRunning());
-    }
   }
 }

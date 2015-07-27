@@ -62,20 +62,20 @@ class NettyServer implements NioServer {
               new StringBuilder("NettyServer failed to start in ").append(nettyConfig.nettyServerStartupWaitSeconds)
                   .append(" seconds").toString();
           logger.error(errMsg);
-          nettyMetrics.nettyServerStartupFailure.inc();
+          nettyMetrics.nettyServerStartFailureError.inc();
           throw new InstantiationException(errMsg);
         } else if (nettyServerDeployer.getException() != null) {
-          nettyMetrics.nettyServerStartupFailure.inc();
+          nettyMetrics.nettyServerStartFailureError.inc();
           throw new InstantiationException("NettyServer start failed - " + nettyServerDeployer.getException());
         }
       } catch (InterruptedException e) {
         logger.error("NettyServer start await was interrupted. It might not have started", e);
-        nettyMetrics.nettyServerStartupFailure.inc();
+        nettyMetrics.nettyServerStartFailureError.inc();
         throw new InstantiationException("Netty server start might have failed - " + e);
       } finally {
         long startupTime = System.currentTimeMillis() - startupBeginTime;
         logger.info("NettyServer start took {} ms", startupTime);
-        nettyMetrics.nettyServerStartupTimeInMs.update(startupTime);
+        nettyMetrics.nettyServerStartTimeInMs.update(startupTime);
       }
     }
   }
@@ -178,14 +178,13 @@ class NettyServerDeployer implements Runnable {
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
       try {
-        // magic number
         if (!workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
           logger.error("NettyServer shutdown failed after waiting for 30 seconds");
-          nettyMetrics.nettyServerShutdownFailure.inc();
+          nettyMetrics.nettyServerShutdownFailureError.inc();
         }
       } catch (InterruptedException e) {
         logger.error("NettyServer termination await was interrupted. Shutdown may have been unsuccessful", e);
-        nettyMetrics.nettyServerShutdownFailure.inc();
+        nettyMetrics.nettyServerShutdownFailureError.inc();
       } finally {
         long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
         logger.info("NettyServer shutdown took {} ms", shutdownTime);

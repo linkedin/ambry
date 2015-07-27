@@ -36,7 +36,6 @@ import static org.junit.Assert.fail;
 public class NettyEndToEndTest {
   private static String NETTY_SERVER_PORT = "16503";
   private static String NETTY_SERVER_ALTERNATE_PORT = "16501";
-  // magic number.
   private static int RESPONSE_QUEUE_POLL_TIMEOUT_SECS = 30;
 
   private static RestRequestHandlerController requestHandlerController;

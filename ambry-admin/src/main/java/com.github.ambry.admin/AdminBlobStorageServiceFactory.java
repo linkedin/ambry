@@ -22,16 +22,26 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap)
-      throws InstantiationException {
+      ClusterMap clusterMap) {
     if (verifiableProperties != null && metricRegistry != null && clusterMap != null) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
       logger.trace("Instantiated AdminBlobStorageServiceFactory");
     } else {
-      logger.error("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory. Throwing exception");
-      throw new InstantiationException("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory");
+      StringBuilder errorMessage =
+          new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
+      if(verifiableProperties == null) {
+        errorMessage.append(" [VerifiableProperties] ");
+      }
+      if(metricRegistry == null) {
+        errorMessage.append(" [MetricRegistry] ");
+      }
+      if(clusterMap == null) {
+        errorMessage.append(" [ClusterMap] ");
+      }
+      logger.error(errorMessage.toString());
+      throw new IllegalArgumentException(errorMessage.toString());
     }
   }
 

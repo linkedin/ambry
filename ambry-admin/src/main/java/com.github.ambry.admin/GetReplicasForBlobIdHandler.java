@@ -54,7 +54,7 @@ class GetReplicasForBlobIdHandler {
         logger.debug("Sent getReplicasForBlobId response for request {}",
             restRequestInfo.getRestRequestMetadata().getUri());
       } finally {
-        adminMetrics.getReplicasForBlobIdTimeInMs.update(System.currentTimeMillis() - startTime);
+        adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
@@ -75,21 +75,20 @@ class GetReplicasForBlobIdHandler {
       throws RestServiceException {
     Map<String, List<String>> parameters = restRequestMetadata.getArgs();
     if (parameters != null && parameters.containsKey(BLOB_ID_KEY)) {
-      // TODO: opportunity for batch get here.
       String blobIdStr = parameters.get(BLOB_ID_KEY).get(0);
       logger.debug("BlobId for request {} is {}", restRequestMetadata.getUri(), blobIdStr);
       try {
         PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();
         if (partitionId == null) {
           logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobIdStr);
-          adminMetrics.getReplicasForBlobIdPartitionNull.inc();
+          adminMetrics.getReplicasForBlobIdPartitionNullError.inc();
           throw new RestServiceException("Partition for blob id " + blobIdStr + " is null. The id might be invalid",
               RestServiceErrorCode.InvalidPartition);
         }
         return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
-        logger.warn("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception", blobIdStr, e);
-        adminMetrics.getReplicasForBlobIdInvalidBlobId.inc();
+        logger.debug("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception", blobIdStr, e);
+        adminMetrics.getReplicasForBlobIdInvalidBlobIdError.inc();
         throw new RestServiceException("Invalid blob id", e, RestServiceErrorCode.InvalidArgs);
       } catch (IOException e) {
         logger.error("BlobId object creation for {} threw exception during handling of getReplicasForBlobId", blobIdStr,
@@ -103,8 +102,8 @@ class GetReplicasForBlobIdHandler {
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.warn("Request for getReplicasForBlobId missing parameter - {}", BLOB_ID_KEY);
-      adminMetrics.getReplicasForBlobIdMissingParameter.inc();
+      logger.debug("Request for getReplicasForBlobId missing parameter - {}", BLOB_ID_KEY);
+      adminMetrics.getReplicasForBlobIdMissingParameterError.inc();
       throw new RestServiceException("Request missing parameter - " + BLOB_ID_KEY, RestServiceErrorCode.MissingArgs);
     }
   }
