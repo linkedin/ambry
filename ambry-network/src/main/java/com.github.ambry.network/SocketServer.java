@@ -74,7 +74,7 @@ public class SocketServer implements NetworkServer {
 
   public int getSSLPort() {
     Port sslPort = ports.get(PortType.SSL);
-    if(sslPort != null) {
+    if (sslPort != null) {
       return sslPort.getPort();
     }
     throw new IllegalStateException("No SSL Port Exists for Server " + host + ":" + port);
@@ -109,8 +109,7 @@ public class SocketServer implements NetworkServer {
     HashSet<PortType> portTypeSet = new HashSet<PortType>();
     for (Port port : portList) {
       if (portTypeSet.contains(port.getPortType())) {
-        throw new IllegalArgumentException(
-            "Not more than one port of same type is allowed : " + port.getPortType());
+        throw new IllegalArgumentException("Not more than one port of same type is allowed : " + port.getPortType());
       } else {
         portTypeSet.add(port.getPortType());
         this.ports.put(port.getPortType(), port);
@@ -139,15 +138,11 @@ public class SocketServer implements NetworkServer {
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
 
-    Iterator<PortType> portTypeIterator = ports.keySet().iterator();
-    while (portTypeIterator.hasNext()) {
-      PortType portType = portTypeIterator.next();
-      if (portType == PortType.SSL) {
-        SSLAcceptor sslAcceptor =
-            new SSLAcceptor(host, ports.get(portType).getPort(), processors, sendBufferSize, recvBufferSize);
-        acceptors.add(sslAcceptor);
-        Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
-      }
+    Port sslPort = ports.get(PortType.SSL);
+    if (sslPort != null) {
+      SSLAcceptor sslAcceptor = new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize);
+      acceptors.add(sslAcceptor);
+      Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
     }
     for (Acceptor acceptor : acceptors) {
       acceptor.awaitStartup();
