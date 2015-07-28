@@ -47,21 +47,18 @@ class AdminMetrics {
 
   public AdminMetrics(MetricRegistry metricRegistry) {
 
-    getOperationRate =
-        metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "GetOperationRate"));
-    postOperationRate =
-        metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "PostOperationRate"));
+    getOperationRate = metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "GetOperationRate"));
+    postOperationRate = metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "PostOperationRate"));
     deleteOperationRate =
         metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "DeleteOperationRate"));
-    headOperationRate =
-        metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "HeadOperationRate"));
+    headOperationRate = metricRegistry.meter(MetricRegistry.name(AdminBlobStorageService.class, "HeadOperationRate"));
     echoRate = metricRegistry.meter(MetricRegistry.name(EchoHandler.class, "EchoRate"));
     getReplicasForBlobIdRate =
         metricRegistry.meter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "GetReplicasForBlobIdRate"));
 
     echoProcessingTimeInMs = metricRegistry.histogram(MetricRegistry.name(EchoHandler.class, "ProcessingTimeInMs"));
-    getReplicasForBlobIdProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ProcessingTimeInMs"));
+    getReplicasForBlobIdProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ProcessingTimeInMs"));
 
     unsupportedGetOperationError =
         metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "UnsupportedGetOperationError"));
@@ -75,15 +72,15 @@ class AdminMetrics {
         metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "MissingParameterError"));
     echoGetResponseBuildingError =
         metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "ResponseBuildingError"));
-    getReplicasForBlobIdInvalidBlobIdError = metricRegistry
-        .counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "InvalidBlobIdError"));
-    getReplicasForBlobIdObjectCreationError = metricRegistry.counter(
-        MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ObjectCreationError"));
-    getReplicasForBlobIdMissingParameterError = metricRegistry
-        .counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "MissingParameterError"));
-    getReplicasForBlobIdPartitionNullError = metricRegistry
-        .counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "PartitionNullError"));
-    getReplicasForBlobIdResponseBuildingError = metricRegistry.counter(
-        MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ResponseBuildingError"));
+    getReplicasForBlobIdInvalidBlobIdError =
+        metricRegistry.counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "InvalidBlobIdError"));
+    getReplicasForBlobIdObjectCreationError =
+        metricRegistry.counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ObjectCreationError"));
+    getReplicasForBlobIdMissingParameterError =
+        metricRegistry.counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "MissingParameterError"));
+    getReplicasForBlobIdPartitionNullError =
+        metricRegistry.counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "PartitionNullError"));
+    getReplicasForBlobIdResponseBuildingError =
+        metricRegistry.counter(MetricRegistry.name(GetReplicasForBlobIdHandler.class, "ResponseBuildingError"));
   }
 }

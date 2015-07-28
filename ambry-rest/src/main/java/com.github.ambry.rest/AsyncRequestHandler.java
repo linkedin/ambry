@@ -412,8 +412,7 @@ class DequeuedRequestHandler implements Runnable {
         residualRestRequestInfo = restRequestInfoQueue.poll();
       }
     }
-    logger.info("There were {} requests in flight when the AsyncRequestHandler was shut down",
-        requestsInFlight.size());
+    logger.info("There were {} requests in flight when the AsyncRequestHandler was shut down", requestsInFlight.size());
     Iterator<Map.Entry<RestRequestMetadata, Boolean>> requestMetadata = requestsInFlight.entrySet().iterator();
     while (requestMetadata.hasNext()) {
       requestMetadata.next().getKey().release();

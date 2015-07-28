@@ -30,13 +30,13 @@ public class NettyServerFactory implements NioServerFactory {
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
-      if(verifiableProperties == null) {
+      if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if(metricRegistry == null) {
+      if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
       }
-      if(restRequestHandlerController == null) {
+      if (restRequestHandlerController == null) {
         errorMessage.append(" [RestRequestHandlerController] ");
       }
       logger.error(errorMessage.toString());

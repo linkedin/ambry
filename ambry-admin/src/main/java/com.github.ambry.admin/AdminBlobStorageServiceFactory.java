@@ -31,13 +31,13 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
-      if(verifiableProperties == null) {
+      if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if(metricRegistry == null) {
+      if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
       }
-      if(clusterMap == null) {
+      if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
       logger.error(errorMessage.toString());

@@ -47,14 +47,14 @@ public class RestServer {
   public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws InstantiationException {
     if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
-      StringBuilder errorMessage =  new StringBuilder("Null arg(s) received during instantiation of RestServer -");
-      if(verifiableProperties == null) {
+      StringBuilder errorMessage = new StringBuilder("Null arg(s) received during instantiation of RestServer -");
+      if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if(metricRegistry == null) {
+      if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
       }
-      if(clusterMap == null) {
+      if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
       logger.error(errorMessage.toString());
@@ -81,10 +81,10 @@ public class RestServer {
 
     if (blobStorageService == null || nioServer == null) {
       StringBuilder errorMessage = new StringBuilder("Failed to instantiate some components of RestServer -");
-      if(blobStorageService == null) {
+      if (blobStorageService == null) {
         errorMessage.append(" [BlobStorageService] ");
       }
-      if(nioServer == null) {
+      if (nioServer == null) {
         errorMessage.append(" [NioServer] ");
       }
       logger.error(errorMessage.toString());

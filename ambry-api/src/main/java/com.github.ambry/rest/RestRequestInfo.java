@@ -117,8 +117,7 @@ public class RestRequestInfo {
           try {
             listener.onHandlingComplete(this, e);
           } catch (Exception ee) {
-            logger
-                .error("Swallowing onComplete listener exception", ee);
+            logger.error("Swallowing onComplete listener exception", ee);
           }
         }
       } else {

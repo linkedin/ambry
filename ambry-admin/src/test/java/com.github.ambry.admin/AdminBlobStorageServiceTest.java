@@ -262,7 +262,6 @@ public class AdminBlobStorageServiceTest {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
 
-
     try {
       // bad input - invalid blob id for this cluster map.
       String blobId = "AAEAAQAAAAAAAADFAAAAJDMyYWZiOTJmLTBkNDYtNDQyNS1iYzU0LWEwMWQ1Yzg3OTJkZQ.gif";
