@@ -83,7 +83,7 @@ class GetReplicasForBlobIdHandler {
           logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobIdStr);
           adminMetrics.getReplicasForBlobIdPartitionNullError.inc();
           throw new RestServiceException("Partition for blob id " + blobIdStr + " is null. The id might be invalid",
-              RestServiceErrorCode.InvalidPartition);
+              RestServiceErrorCode.InvalidArgs);
         }
         return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
@@ -94,7 +94,7 @@ class GetReplicasForBlobIdHandler {
         logger.error("BlobId object creation for {} threw exception during handling of getReplicasForBlobId", blobIdStr,
             e);
         adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
-        throw new RestServiceException("Unable to create blob id object ", e, RestServiceErrorCode.BlobIdCreationError);
+        throw new RestServiceException("Unable to create blob id object ", e, RestServiceErrorCode.SupportObjectCreationError);
       } catch (JSONException e) {
         logger.error("Exception during response construction for getReplicasForBlobId. Blob id - {} ", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdResponseBuildingError.inc();

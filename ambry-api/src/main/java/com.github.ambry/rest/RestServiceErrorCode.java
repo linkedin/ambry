@@ -13,10 +13,6 @@ public enum RestServiceErrorCode {
    */
   InvalidArgs,
   /**
-   * Indicates that the {@link com.github.ambry.clustermap.PartitionId} of a blob is null or invalid.
-   */
-  InvalidPartition,
-  /**
    * Client has sent a request that is cannot be decoded using the REST protocol (usually HTTP).
    */
   MalformedRequest,
@@ -46,10 +42,6 @@ public enum RestServiceErrorCode {
    * there is nothing that a client can do about it.
    */
   InternalServerError,
-  /**
-   * Indicates that a valid BlobId could not be created due to an internal server error.
-   */
-  BlobIdCreationError,
   /**
    * Indicates failure of tasks that needed to be done when a new channel with a client became active.
    */
@@ -99,11 +91,15 @@ public enum RestServiceErrorCode {
   /**
    * Indicates that there is no reference of a {@link RestResponseHandler} in the {@link RestRequestInfo}.
    */
-  ReponseHandlerNull,
+  ResponseHandlerNull,
   /**
    * Indicates that there is no reference of a {@link RestRequestMetadata} in the {@link RestRequestInfo}.
    */
   RequestMetadataNull,
+  /**
+   * Indicates that an object that is needed for the request could not be created due to an internal server error.
+   */
+  SupportObjectCreationError,
   /**
    * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
@@ -124,7 +120,6 @@ public enum RestServiceErrorCode {
     switch (code) {
       case BadRequest:
       case InvalidArgs:
-      case InvalidPartition:
       case MalformedRequest:
       case MissingArgs:
       case NoRequest:
@@ -133,7 +128,6 @@ public enum RestServiceErrorCode {
       case UnsupportedHttpMethod:
         return BadRequest;
       case InternalServerError:
-      case BlobIdCreationError:
       case ChannelActiveTasksFailure:
       case ChannelAlreadyClosed:
       case IllegalResponseMetadataStateTransition:
@@ -145,8 +139,9 @@ public enum RestServiceErrorCode {
       case RestRequestInfoQueueingFailure:
       case RestRequestInfoNull:
       case ResponseBuildingFailure:
-      case ReponseHandlerNull:
+      case ResponseHandlerNull:
       case RequestMetadataNull:
+      case SupportObjectCreationError:
       case UnsupportedRestMethod:
         return InternalServerError;
       default:

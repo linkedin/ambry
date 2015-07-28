@@ -122,7 +122,7 @@ class AsyncRequestHandler implements RestRequestHandler {
         logger.error("RestResponseHandler is null in received RestRequestInfo. Throwing exception");
         restServerMetrics.asyncRequestHandlerRestResponseHandlerNullError.inc();
         throw new RestServiceException("RestRequestInfo missing RestResponseHandler",
-            RestServiceErrorCode.ReponseHandlerNull);
+            RestServiceErrorCode.ResponseHandlerNull);
       }
       queue(restRequestInfo);
     } else {

@@ -265,7 +265,7 @@ public class AsyncRequestHandlerTest {
       throws Exception {
     RestRequestMetadata restRequestMetadata = createRestRequest(RestMethod.GET, "/", new JSONObject());
     RestRequestInfo restRequestInfo = new RestRequestInfo(restRequestMetadata, null, null, true);
-    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ReponseHandlerNull, requestHandler);
+    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ResponseHandlerNull, requestHandler);
   }
 
   /**

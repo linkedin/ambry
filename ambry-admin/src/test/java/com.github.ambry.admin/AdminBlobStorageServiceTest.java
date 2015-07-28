@@ -270,7 +270,7 @@ public class AdminBlobStorageServiceTest {
       adminBlobStorageService.handleGet(restRequestInfo);
       fail("Exception should have been thrown because the blobid is invalid");
     } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidPartition, e.getErrorCode());
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
   }
 
