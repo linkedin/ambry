@@ -34,7 +34,7 @@ class NettyMetrics {
   public final Counter duplicateRequestError;
   public final Counter noRequestError;
   public final Counter processorRequestCompleteTasksError;
-  public final Counter nettyMessageProcessorExceptionCaught;
+  public final Counter processorExceptionCaught;
   public final Counter fallbackErrorSendingError;
   public final Counter requestHandlingError;
   public final Counter responseSendingError;
@@ -87,8 +87,8 @@ class NettyMetrics {
     duplicateRequestError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "DuplicateRequestError"));
     noRequestError = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "NoRequestError"));
-    nettyMessageProcessorExceptionCaught = metricRegistry
-        .counter(MetricRegistry.name(NettyMessageProcessor.class, "NettyMessageProcessorExceptionCaught"));
+    processorExceptionCaught =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaught"));
     processorRequestCompleteTasksError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "OnRequestCompleteTasksError"));
     fallbackErrorSendingError =

@@ -61,7 +61,6 @@ class RestServerMetrics {
   public final Counter dequeuedRequestHandlerHandlingCompleteTasksError;
   // RestServer
   public final Counter restServerInstantiationError;
-  public final Counter restServerStartError;
 
   // Others
   // AsyncRequestHandler
@@ -120,7 +119,6 @@ class RestServerMetrics {
     dequeuedRequestHandlerHandlingCompleteTasksError =
         metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "OnHandlingCompleteTasksError"));
     restServerInstantiationError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
-    restServerStartError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "StartError"));
 
     asyncRequestHandlerForcedShutdown =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ForcedShutdown"));

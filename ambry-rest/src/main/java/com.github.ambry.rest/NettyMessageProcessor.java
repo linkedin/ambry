@@ -145,7 +145,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     } else {
       logger.error("Error on channel {}", ctx.channel(), cause);
     }
-    nettyMetrics.nettyMessageProcessorExceptionCaught.inc();
+    nettyMetrics.processorExceptionCaught.inc();
     if (responseHandler == null) {
       logger.warn("No RestResponseHandler available for channel {}. Sending error response to client directly",
           ctx.channel());
