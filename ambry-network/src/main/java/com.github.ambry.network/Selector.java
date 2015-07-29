@@ -189,6 +189,7 @@ public class Selector implements Selectable {
     try {
       this.nioSelector.close();
     } catch (IOException e) {
+      metrics.selectorNioCloseErrorCount.inc();
       logger.error("Exception closing nioSelector:", e);
     }
   }
@@ -199,6 +200,9 @@ public class Selector implements Selectable {
    */
   public void send(NetworkSend networkSend) {
     SelectionKey key = keyForId(networkSend.getConnectionId());
+    if (key == null) {
+      throw new IllegalStateException("Attempt to send data to a null key");
+    }
     Transmissions transmissions = transmissions(key);
     if (transmissions.hasSend()) {
       throw new IllegalStateException("Attempt to begin a send operation with prior send operation still in progress.");
@@ -295,12 +299,15 @@ public class Selector implements Selectable {
         } catch (IOException e) {
           String socketDescription = socketDescription(channel(key));
           if (e instanceof EOFException || e instanceof ConnectException) {
+            metrics.selectorDisconnectedErrorCount.inc();
             logger.error("Connection {} disconnected", socketDescription, e);
           } else {
+            metrics.selectorIOErrorCount.inc();
             logger.warn("Error in I/O with connection to {}", socketDescription, e);
           }
           close(key);
         } catch (Exception e) {
+          metrics.selectorKeyOperationErrorCount.inc();
           logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
           close(key);
         }
@@ -383,7 +390,12 @@ public class Selector implements Selectable {
   @Override
   public void close(String connectionId) {
     SelectionKey key = keyForId(connectionId);
-    close(key);
+    if (key == null) {
+      metrics.selectorCloseKeyErrorCount.inc();
+      logger.error("Attempt to close socket for which there is no open connection. Connection id {}", connectionId);
+    } else {
+      close(key);
+    }
   }
 
   /**
@@ -406,6 +418,7 @@ public class Selector implements Selectable {
       socketChannel.socket().close();
       socketChannel.close();
     } catch (IOException e) {
+      metrics.selectorCloseSocketErrorCount.inc();
       logger.error("Exception closing connection to node {}:", transmissions.connectionId, e);
     }
     this.metrics.selectorConnectionClosed.inc();
@@ -415,13 +428,7 @@ public class Selector implements Selectable {
    * Get the selection key associated with this numeric id
    */
   private SelectionKey keyForId(String id) {
-    SelectionKey key = this.keyMap.get(id);
-    if (key == null) {
-      throw new IllegalStateException(
-          "Attempt to write to socket for which there is no open connection. Connection id " + id
-              + " existing connections " + keyMap.keySet().toString());
-    }
-    return key;
+    return this.keyMap.get(id);
   }
 
   /**
