@@ -15,28 +15,24 @@ public class MockDataNodeId extends DataNodeId {
   String hostname = "localhost";
   String datacenter;
 
-  public MockDataNodeId(int port, ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
-    this.port = port;
+  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Integer>();
-    this.ports.put(PortType.PLAINTEXT, port);
     populatePorts(ports);
   }
 
-  public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
-    this.port = port;
-    this.mountPaths = mountPaths;
-    this.datacenter = dataCenter;
-    this.ports = new HashMap<PortType, Integer>();
-    this.ports.put(PortType.PLAINTEXT, port);
-  }
-
   private void populatePorts(ArrayList<Port> ports) {
+    boolean plainTextPortFound = false;
     for (Port port : ports) {
-      if (port.getPortType() != PortType.PLAINTEXT) {
-        this.ports.put(port.getPortType(), port.getPort());
+      if (port.getPortType() == PortType.PLAINTEXT) {
+        plainTextPortFound = true;
+        this.port = port.getPort();
       }
+      this.ports.put(port.getPortType(), port.getPort());
+    }
+    if (!plainTextPortFound) {
+      throw new IllegalArgumentException("No Plain Text port found");
     }
   }
 

@@ -39,14 +39,14 @@ public class HardwareLayoutTest {
   private JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks)
       throws JSONException {
     return TestUtils
-        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE, disks);
+        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE,
+            disks);
   }
 
   private JSONArray getDuplicateDataNodes(int basePort, int sslPort, JSONArray disks)
       throws JSONException {
-    return TestUtils
-        .getJsonArrayDuplicateDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE,
-            disks);
+    return TestUtils.getJsonArrayDuplicateDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort,
+        HardwareState.AVAILABLE, disks);
   }
 
   private JSONArray getDatacenters()
