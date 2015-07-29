@@ -42,7 +42,7 @@ class GetReplicasForBlobIdHandler {
       throws RestServiceException {
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.isFirstPart()) {
-      logger.debug("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.getReplicasForBlobIdRate.mark();
       long startTime = System.currentTimeMillis();
       try {
@@ -51,14 +51,17 @@ class GetReplicasForBlobIdHandler {
         responseHandler.setContentType("application/json");
         responseHandler.addToResponseBody(replicaStr.getBytes(), true);
         responseHandler.flush();
-        logger.debug("Sent getReplicasForBlobId response for request {}",
+        logger.trace("Sent getReplicasForBlobId response for request {}",
             restRequestInfo.getRestRequestMetadata().getUri());
       } finally {
-        adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
+        long processingTime = System.currentTimeMillis() - startTime;
+        logger.trace("Processing getReplicasForBlobId response for request {} took {} ms",
+            restRequestInfo.getRestRequestMetadata().getUri(), processingTime);
+        adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
-      logger.debug("GetReplicasForBlobId request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("GetReplicasForBlobId request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
 
@@ -76,7 +79,7 @@ class GetReplicasForBlobIdHandler {
     Map<String, List<String>> parameters = restRequestMetadata.getArgs();
     if (parameters != null && parameters.containsKey(BLOB_ID_KEY)) {
       String blobIdStr = parameters.get(BLOB_ID_KEY).get(0);
-      logger.debug("BlobId for request {} is {}", restRequestMetadata.getUri(), blobIdStr);
+      logger.trace("BlobId for request {} is {}", restRequestMetadata.getUri(), blobIdStr);
       try {
         PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();
         if (partitionId == null) {
@@ -87,25 +90,23 @@ class GetReplicasForBlobIdHandler {
         }
         return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
-        logger.debug("Invalid blob id {} received for getReplicasForBlobId request. Throwing exception", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdInvalidBlobIdError.inc();
-        throw new RestServiceException("Invalid blob id", e, RestServiceErrorCode.InvalidArgs);
+        throw new RestServiceException("Invalid blob id received for getReplicasForBlob request - " + blobIdStr, e,
+            RestServiceErrorCode.InvalidArgs);
       } catch (IOException e) {
-        logger.error("BlobId object creation for {} threw exception during handling of getReplicasForBlobId", blobIdStr,
-            e);
         adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
-        throw new RestServiceException("Unable to create blob id object ", e,
+        throw new RestServiceException(
+            "BlobId object creation failed for getReplicasForBlobId request for blob id " + blobIdStr, e,
             RestServiceErrorCode.SupportObjectCreationError);
       } catch (JSONException e) {
-        logger.error("Exception during response construction for getReplicasForBlobId. Blob id - {} ", blobIdStr, e);
         adminMetrics.getReplicasForBlobIdResponseBuildingError.inc();
-        throw new RestServiceException("Unable to construct result object", e,
+        throw new RestServiceException("Unable to construct result JSON object during getReplicasForBlobId", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.debug("Request for getReplicasForBlobId missing parameter - {}", BLOB_ID_KEY);
       adminMetrics.getReplicasForBlobIdMissingParameterError.inc();
-      throw new RestServiceException("Request missing parameter - " + BLOB_ID_KEY, RestServiceErrorCode.MissingArgs);
+      throw new RestServiceException("Request for getReplicasForBlobId missing parameter - " + BLOB_ID_KEY,
+          RestServiceErrorCode.MissingArgs);
     }
   }
 

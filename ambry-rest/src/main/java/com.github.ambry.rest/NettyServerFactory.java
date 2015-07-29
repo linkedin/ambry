@@ -26,7 +26,6 @@ public class NettyServerFactory implements NioServerFactory {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
       this.restRequestHandlerController = restRequestHandlerController;
-      logger.trace("Instantiated NettyServerFactory");
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
@@ -39,9 +38,9 @@ public class NettyServerFactory implements NioServerFactory {
       if (restRequestHandlerController == null) {
         errorMessage.append(" [RestRequestHandlerController] ");
       }
-      logger.error(errorMessage.toString());
       throw new InstantiationException(errorMessage.toString());
     }
+    logger.trace("Instantiated NettyServerFactory");
   }
 
   /**

@@ -26,13 +26,11 @@ class RequestHandlerController implements RestRequestHandlerController {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
       restServerMetrics.trackRequestHandlerHealth(requestHandlers);
-      logger.trace("Instantiated RequestHandlerController");
     } else {
-      logger.error("RequestHandlerController instantiation failed because required handler count <=0 (is {})",
-          handlerCount);
-      restServerMetrics.requestHandlerControllerInstantiationFailureError.inc();
-      throw new IllegalArgumentException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
+      restServerMetrics.requestHandlerControllerInstantiationError.inc();
+      throw new IllegalArgumentException("Handlers to be created has to be > 0. Is " + handlerCount);
     }
+    logger.trace("Instantiated RequestHandlerController");
   }
 
   @Override
@@ -52,10 +50,9 @@ class RequestHandlerController implements RestRequestHandlerController {
     int index = currIndex.getAndIncrement();
     try {
       requestHandler = requestHandlers.get(index % requestHandlers.size());
-      logger.debug("Monotonically increasing value {} was used to pick request handler at index {}", index,
+      logger.trace("Monotonically increasing value {} was used to pick request handler at index {}", index,
           index % requestHandlers.size());
     } catch (Exception e) {
-      logger.error("Exception during selection of a RestRequestHandler to return", e);
       restServerMetrics.requestHandlerSelectionError.inc();
       throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
           RestServiceErrorCode.RequestHandlerSelectionError);

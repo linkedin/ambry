@@ -1,7 +1,17 @@
 package com.github.ambry.rest;
 
 /**
- * All the error codes that accompany a RestServiceException.
+ * All the error codes that accompany a {@link RestServiceException}. Each of these error codes are expected to go
+ * into certain "groups" that map to HTTP error codes.
+ * <p/>
+ * The groups are:
+ * {@link #BadRequest}
+ * {@link #InternalServerError}
+ * {@link #UnknownErrorCode}
+ * <p/>
+ * About logging:
+ * Generally, error codes belonging to the group {@link #BadRequest} are logged at DEBUG level. Those that belong to
+ * {@link #InternalServerError} or {@link #UnknownErrorCode} are logged at ERROR level.
  */
 public enum RestServiceErrorCode {
   /**
@@ -54,10 +64,6 @@ public enum RestServiceErrorCode {
    * Indicates that a state transition while generating response metadata is invalid.
    */
   IllegalResponseMetadataStateTransition,
-  /**
-   * Indicates that {@link RestRequestHandlerController} did not find a running {@link RestRequestHandler} to return.
-   */
-  NoRequestHandlersAvailable,
   /**
    * Indicates that there was a {@link InterruptedException} while trying to perform the operation.
    */
@@ -131,7 +137,6 @@ public enum RestServiceErrorCode {
       case ChannelActiveTasksFailure:
       case ChannelAlreadyClosed:
       case IllegalResponseMetadataStateTransition:
-      case NoRequestHandlersAvailable:
       case OperationInterrupted:
       case RequestHandlerSelectionError:
       case RequestHandleFailure:

@@ -27,7 +27,6 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
-      logger.trace("Instantiated AdminBlobStorageServiceFactory");
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
@@ -40,9 +39,9 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
-      logger.error(errorMessage.toString());
       throw new IllegalArgumentException(errorMessage.toString());
     }
+    logger.trace("Instantiated AdminBlobStorageServiceFactory");
   }
 
   /**

@@ -86,7 +86,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void channelActive(ChannelHandlerContext ctx)
       throws RestServiceException {
-    logger.debug("Channel {} with remote address {} active", ctx.channel(), ctx.channel().remoteAddress());
+    logger.trace("Channel {} active", ctx.channel());
     this.ctx = ctx;
     // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
     // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
@@ -95,12 +95,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     requestHandler = requestHandlerController.getRequestHandler();
     responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
     if (requestHandler == null || responseHandler == null) {
-      String msg = new StringBuilder(
-          (requestHandler == null ? "RestRequestHandler received was null" : "RestResponseHandler received was null"))
-          .append(" during bootstrap of channel ").append(ctx.channel())
-          .append(". Channel will be destroyed since initialization has failed").toString();
-      logger.error(msg);
-      nettyMetrics.channelActiveTasksFailureError.inc();
+      nettyMetrics.channelActiveTasksError.inc();
+      String msg = (requestHandler == null) ? "RestRequestHandler received during channel bootstrap was null"
+          : "RestResponseHandler received during channel bootstrap was null";
       throw new RestServiceException(msg, RestServiceErrorCode.ChannelActiveTasksFailure);
     }
     nettyMetrics.channelCreationRate.mark();
@@ -119,7 +116,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
-    logger.debug("Channel {} with remote address {} inactive", ctx.channel(), ctx.channel().remoteAddress());
+    logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     onRequestComplete(null, true);
   }
@@ -138,11 +135,20 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
-    logger.debug("Caught exception in channel {}", ctx.channel(), cause);
+    if (cause instanceof RestServiceException) {
+      RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
+      if (RestServiceErrorCode.getErrorCodeGroup(errorCode) == RestServiceErrorCode.BadRequest) {
+        logger.debug("Error on channel {} with error code {}", ctx.channel(), errorCode, cause);
+      } else {
+        logger.error("Error on channel {} with error code {}", ctx.channel(), errorCode, cause);
+      }
+    } else {
+      logger.error("Error on channel {}", ctx.channel(), cause);
+    }
     nettyMetrics.nettyMessageProcessorExceptionCaught.inc();
     if (responseHandler == null) {
-      logger.error("No RestResponseHandler available. Directly informing client of exception caught on channel {}",
-          ctx.channel(), cause);
+      logger.warn("No RestResponseHandler available for channel {}. Sending error response to client directly",
+          ctx.channel());
       nettyMetrics.missingResponseHandlerError.inc();
       sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
     }
@@ -187,20 +193,21 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
       throws RestServiceException {
-    logger.trace("Reading on channel {} from {}", ctx.channel(), ctx.channel().remoteAddress());
+    logger.trace("Reading on channel {}", ctx.channel());
     nettyMetrics.httpObjectArrivalRate.mark();
     if (obj != null && obj instanceof HttpRequest) {
       if (obj.getDecoderResult().isSuccess()) {
         handleRequest((HttpRequest) obj);
       } else {
-        logger.warn("Decoder failed because of malformed request on channel {}. Throwing exception", ctx.channel());
+        logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel());
         nettyMetrics.malformedRequestError.inc();
-        throw new RestServiceException("Malformed request received", RestServiceErrorCode.MalformedRequest);
+        throw new RestServiceException("Decoder failed because of malformed request",
+            RestServiceErrorCode.MalformedRequest);
       }
     } else if (obj != null && obj instanceof HttpContent) {
       handleContent((HttpContent) obj);
     } else {
-      logger.warn("Received null/unrecognized HttpObject {} on channel {}. Throwing exception", obj, ctx.channel());
+      logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
       nettyMetrics.unknownHttpObjectError.inc();
       throw new RestServiceException("HttpObject received is null or not of a known type",
           RestServiceErrorCode.UnknownHttpObject);
@@ -222,13 +229,13 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     if (request == null) {
       nettyMetrics.requestArrivalRate.mark();
       request = new NettyRequestMetadata(httpRequest);
-      logger.debug("Channel {} now handling request {}", ctx.channel(), request);
+      logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
       requestHandler.handleRequest(new RestRequestInfo(request, null, responseHandler, true));
     } else {
       // We have received a duplicate request. This shouldn't happen and there is no good way to deal with it. So
       // just update a metric and log an error.
-      logger.error("Discarding duplicate request on channel {}. Current request - {}. Duplicate request - {}",
-          ctx.channel(), request, httpRequest);
+      logger.warn("Discarding duplicate request on channel {}. Current request - {}. Duplicate request - {}",
+          ctx.channel(), request.getUri(), httpRequest.getUri());
       nettyMetrics.duplicateRequestError.inc();
     }
   }
@@ -245,10 +252,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private void handleContent(HttpContent httpContent)
       throws RestServiceException {
     if (request != null) {
-      logger.trace("Received content for request - {}", request);
+      logger.trace("Received content for request - {}", request.getUri());
       requestHandler.handleRequest(new RestRequestInfo(request, new NettyRequestContent(httpContent), responseHandler));
     } else {
-      logger.error("Received content without a request on channel {}. Throwing exception", ctx.channel());
+      logger.warn("Received content without a request on channel {}", ctx.channel());
       nettyMetrics.noRequestError.inc();
       throw new RestServiceException("Received content without a request", RestServiceErrorCode.NoRequest);
     }
@@ -261,8 +268,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * @param forceClose - whether the connection needs to be forcibly closed.
    */
   private void onRequestComplete(Throwable cause, boolean forceClose) {
+    String uri = (request != null) ? request.getUri() : null;
     try {
-      logger.debug("Request {} is complete", request);
+      logger.trace("Request {} is complete", uri);
       if (responseHandler != null) {
         responseHandler.onRequestComplete(cause, forceClose);
       }
@@ -271,8 +279,8 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       }
     } catch (Exception e) {
       logger.error("Swallowing exception during onRequestComplete tasks on channel {} for request {} ", ctx.channel(),
-          request, e);
-      nettyMetrics.processorRequestCompleteTasksFailureError.inc();
+          uri, e);
+      nettyMetrics.processorRequestCompleteTasksError.inc();
     }
   }
 
@@ -286,11 +294,11 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.copiedBuffer(msg, CharsetUtil.UTF_8));
     response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     if (ctx.channel().isActive()) {
-      logger.debug("Sending error response {} because a RestResponseHandler is unavailable", msg);
+      logger.trace("Sending error response {} to the client", msg);
       ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     } else {
       logger.error("Could not send error to client on channel {} because channel is inactive", ctx.channel());
-      nettyMetrics.fallbackErrorSendingFailureError.inc();
+      nettyMetrics.fallbackErrorSendingError.inc();
     }
   }
 }

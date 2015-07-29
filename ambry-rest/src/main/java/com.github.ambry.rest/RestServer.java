@@ -57,7 +57,6 @@ public class RestServer {
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
-      logger.error(errorMessage.toString());
       throw new IllegalArgumentException(errorMessage.toString());
     }
 
@@ -75,7 +74,7 @@ public class RestServer {
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
       logger.error("Exception during instantiation of RestServer", e);
-      restServerMetrics.restServerInstantiationFailureError.inc();
+      restServerMetrics.restServerInstantiationError.inc();
       throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
 
@@ -87,8 +86,7 @@ public class RestServer {
       if (nioServer == null) {
         errorMessage.append(" [NioServer] ");
       }
-      logger.error(errorMessage.toString());
-      restServerMetrics.restServerInstantiationFailureError.inc();
+      restServerMetrics.restServerInstantiationError.inc();
       throw new InstantiationException(errorMessage.toString());
     }
     logger.trace("Instantiated RestServer");

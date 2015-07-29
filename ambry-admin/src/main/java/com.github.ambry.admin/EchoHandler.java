@@ -35,7 +35,7 @@ class EchoHandler {
       throws RestServiceException {
     RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
     if (restRequestInfo.isFirstPart()) {
-      logger.debug("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.echoRate.mark();
       long startTime = System.currentTimeMillis();
       try {
@@ -43,13 +43,16 @@ class EchoHandler {
         responseHandler.setContentType("application/json");
         responseHandler.addToResponseBody(echoStr.getBytes(), true);
         responseHandler.flush();
-        logger.debug("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
+        logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
       } finally {
-        adminMetrics.echoProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
+        long processingTime = System.currentTimeMillis() - startTime;
+        logger.trace("Processing echo response for request {} took {} ms",
+            restRequestInfo.getRestRequestMetadata().getUri(), processingTime);
+        adminMetrics.echoProcessingTimeInMs.update(processingTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseHandler.onRequestComplete(null, false);
-      logger.debug("Echo request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("Echo request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
 
@@ -64,19 +67,18 @@ class EchoHandler {
     Map<String, List<String>> parameters = restRequestMetadata.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
       String text = parameters.get(TEXT_KEY).get(0);
-      logger.debug("Text to echo {} for request {}", text, restRequestMetadata.getUri());
+      logger.trace("Text to echo for request {} is {}", restRequestMetadata.getUri(), text);
       try {
         return packageResult(text);
       } catch (JSONException e) {
-        logger.error("Exception during response construction for echo GET. Echo text {}", text, e);
         adminMetrics.echoGetResponseBuildingError.inc();
-        throw new RestServiceException("Unable to construct result object - ", e,
+        throw new RestServiceException("Unable to construct result JSON object during echo GET - ", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      logger.debug("Request for echo GET missing parameter - {}", TEXT_KEY);
       adminMetrics.echoGetMissingParameterError.inc();
-      throw new RestServiceException("Request missing parameter - " + TEXT_KEY, RestServiceErrorCode.MissingArgs);
+      throw new RestServiceException("Request for echo GET missing parameter - " + TEXT_KEY,
+          RestServiceErrorCode.MissingArgs);
     }
   }
 
