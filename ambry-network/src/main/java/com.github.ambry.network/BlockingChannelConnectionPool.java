@@ -33,10 +33,9 @@ class BlockingChannelInfo {
   private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerChannel;
 
-  public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry,
-      PortType portType) {
+  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry) {
     this.config = config;
-    this.portType = portType;
+    this.portType = port.getPortType();
     if (portType == PortType.SSL) {
       maxConnectionsPerChannel = config.connectionPoolMaxConnectionsPerPortSSL;
     } else {
@@ -48,7 +47,7 @@ class BlockingChannelInfo {
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
     this.host = host;
-    this.port = port;
+    this.port = port.getPort();
 
     availableConnections = new Gauge<Integer>() {
       @Override
@@ -185,8 +184,8 @@ class BlockingChannelInfo {
       blockingChannel.disconnect();
       // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
       // to create the connection
-      BlockingChannel channel = getBlockingChannelbasedOnPort(blockingChannel.getRemoteHost(),
-          blockingChannel.getRemotePort());
+      BlockingChannel channel =
+          getBlockingChannelbasedOnPort(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
       blockingChannelAvailableConnections.add(channel);
@@ -328,7 +327,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port.getPort(), registry, port.getPortType());
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace(

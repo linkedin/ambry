@@ -121,8 +121,8 @@ public class BlockingChannelConnectionPoolTest {
   private void createAndReleaseSingleChannelTest(Properties props, String host, Port port)
       throws InterruptedException, ConnectionPoolTimeoutException {
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPort(),
-            new MetricRegistry(), port.getPortType());
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
+            new MetricRegistry());
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
@@ -135,8 +135,8 @@ public class BlockingChannelConnectionPoolTest {
       throws Exception {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPort(),
-            new MetricRegistry(), port.getPortType());
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
+            new MetricRegistry());
 
     CountDownLatch channelCount = new CountDownLatch(maxConnectionsPerChannel);
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -173,8 +173,8 @@ public class BlockingChannelConnectionPoolTest {
       throws Exception {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port.getPort(),
-            new MetricRegistry(), port.getPortType());
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
+            new MetricRegistry());
     CountDownLatch channelCount = new CountDownLatch(underSubscriptionCount);
     CountDownLatch shouldRelease = new CountDownLatch(1);
     CountDownLatch releaseComplete = new CountDownLatch(underSubscriptionCount);
