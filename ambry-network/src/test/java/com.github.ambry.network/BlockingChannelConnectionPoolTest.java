@@ -104,18 +104,30 @@ public class BlockingChannelConnectionPoolTest {
     }
   }
 
+  @Test
+  public void testBlockingChannelInfoForPlainText()
+      throws Exception {
+    testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 5);
+  }
+
+  @Test
+  public void testBlockingChannelInfoForSSL()
+      throws Exception {
+    testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 5, 5);
+  }
+
   private void testBlockingChannelInfo(String host, Port port, int maxConnectionsPerPortPlainText,
       int maxConnectionsPerPortSSL)
       throws Exception {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "" + maxConnectionsPerPortPlainText);
     props.put("connectionpool.max.connections.per.port.ssl", "" + maxConnectionsPerPortSSL);
-    int maxConnectionsPerChannel =
+    int maxConnectionsPerHost =
         (port.getPortType() == PortType.PLAINTEXT) ? maxConnectionsPerPortPlainText : maxConnectionsPerPortSSL;
     createAndReleaseSingleChannelTest(props, host, port);
-    overSubscriptionTest(props, host, port, maxConnectionsPerChannel, true);
-    overSubscriptionTest(props, host, port, maxConnectionsPerChannel, false);
-    underSubscriptionTest(props, host, port, (maxConnectionsPerChannel / 2));
+    overSubscriptionTest(props, host, port, maxConnectionsPerHost, true);
+    overSubscriptionTest(props, host, port, maxConnectionsPerHost, false);
+    underSubscriptionTest(props, host, port, (maxConnectionsPerHost / 2));
   }
 
   private void createAndReleaseSingleChannelTest(Properties props, String host, Port port)
@@ -130,7 +142,7 @@ public class BlockingChannelConnectionPoolTest {
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
   }
 
-  private void overSubscriptionTest(Properties props, String host, Port port, int maxConnectionsPerChannel,
+  private void overSubscriptionTest(Properties props, String host, Port port, int maxConnectionsPerHost,
       boolean destroyConnection)
       throws Exception {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
@@ -138,32 +150,34 @@ public class BlockingChannelConnectionPoolTest {
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
             new MetricRegistry());
 
-    CountDownLatch channelCount = new CountDownLatch(maxConnectionsPerChannel);
+    CountDownLatch channelCount = new CountDownLatch(maxConnectionsPerHost);
     CountDownLatch shouldRelease = new CountDownLatch(1);
-    CountDownLatch releaseComplete = new CountDownLatch(2 * maxConnectionsPerChannel);
-    for (int i = 0; i < maxConnectionsPerChannel; i++) {
+    CountDownLatch releaseComplete = new CountDownLatch(2 * maxConnectionsPerHost);
+    for (int i = 0; i < maxConnectionsPerHost; i++) {
       BlockingChannelInfoThread infoThread =
           new BlockingChannelInfoThread(channelInfo, channelCount, shouldRelease, releaseComplete, destroyConnection,
               exception);
       Thread t = new Thread(infoThread);
       t.start();
     }
-    awaitCountdown(channelCount, 1000, exception, "Timed out while waiting for channel count to reach 5");
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
+    awaitCountdown(channelCount, 1000, exception,
+        "Timed out while waiting for channel count to reach " + maxConnectionsPerHost);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerHost);
 
-    // try "maxConnectionsPerChannel" more connections
-    channelCount = new CountDownLatch(maxConnectionsPerChannel);
-    for (int i = 0; i < maxConnectionsPerChannel; i++) {
+    // try "maxConnectionsPerHost" more connections
+    channelCount = new CountDownLatch(maxConnectionsPerHost);
+    for (int i = 0; i < maxConnectionsPerHost; i++) {
       BlockingChannelInfoThread infoThread =
           new BlockingChannelInfoThread(channelInfo, channelCount, shouldRelease, releaseComplete, destroyConnection,
               exception);
       Thread t = new Thread(infoThread);
       t.start();
     }
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerHost);
     shouldRelease.countDown();
-    awaitCountdown(channelCount, 1000, exception, "Timed out while waiting for channel count to reach 5");
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerChannel);
+    awaitCountdown(channelCount, 1000, exception,
+        "Timed out while waiting for channel count to reach " + maxConnectionsPerHost);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), maxConnectionsPerHost);
     awaitCountdown(releaseComplete, 2000, exception, "Timed out while waiting for channels to be released");
     channelInfo.cleanup();
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
@@ -191,18 +205,6 @@ public class BlockingChannelConnectionPoolTest {
     Assert.assertEquals(channelInfo.getNumberOfConnections(), underSubscriptionCount);
     channelInfo.cleanup();
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
-  }
-
-  @Test
-  public void testBlockingChannelInfoForPlainText()
-      throws Exception {
-    testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 2);
-  }
-
-  @Test
-  public void testBlockingChannelInfoForSSL()
-      throws Exception {
-    testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 2, 5);
   }
 
   class ConnectionPoolThread implements Runnable {
