@@ -33,10 +33,9 @@ class BlockingChannelInfo {
   private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerChannel;
 
-  public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry,
-      PortType portType) {
+  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry) {
     this.config = config;
-    this.portType = portType;
+    this.portType = port.getPortType();
     if (portType == PortType.SSL) {
       maxConnectionsPerChannel = config.connectionPoolMaxConnectionsPerPortSSL;
     } else {
@@ -48,7 +47,7 @@ class BlockingChannelInfo {
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
     this.host = host;
-    this.port = port;
+    this.port = port.getPort();
 
     availableConnections = new Gauge<Integer>() {
       @Override
@@ -123,7 +122,7 @@ class BlockingChannelInfo {
         // connections, we create a new one and add it to the available queue
         if (numberOfConnections.get() < maxConnectionsPerChannel) {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
-          BlockingChannel channel = getBlockingChannel(host, port);
+          BlockingChannel channel = getBlockingChannelBasedOnPortType(host, port);
           channel.connect();
           numberOfConnections.incrementAndGet();
           logger.trace("Created a new connection for host {} and port {}. Number of connections {}", host, port,
@@ -158,7 +157,7 @@ class BlockingChannelInfo {
    * @param port upon which connection has to be established
    * @return BlockingChannel
    */
-  private BlockingChannel getBlockingChannel(String host, int port) {
+  private BlockingChannel getBlockingChannelBasedOnPortType(String host, int port) {
     BlockingChannel channel = null;
     if (portType == PortType.PLAINTEXT) {
       channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
@@ -185,7 +184,8 @@ class BlockingChannelInfo {
       blockingChannel.disconnect();
       // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
       // to create the connection
-      BlockingChannel channel = getBlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
+      BlockingChannel channel =
+          getBlockingChannelBasedOnPortType(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
       blockingChannelAvailableConnections.add(channel);
@@ -327,7 +327,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port);
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port.getPort(), registry, port.getPortType());
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace(
