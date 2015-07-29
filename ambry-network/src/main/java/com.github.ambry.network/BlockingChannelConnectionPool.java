@@ -4,6 +4,9 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ConnectionPoolConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.Map;
@@ -13,8 +16,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 class BlockingChannelInfo {
@@ -36,6 +37,7 @@ class BlockingChannelInfo {
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, int port, MetricRegistry registry,
       PortType portType) {
     this.config = config;
+
     this.portType = portType;
     if (portType == PortType.SSL) {
       maxConnectionsPerChannel = config.connectionPoolMaxConnectionsPerPortSSL;
@@ -80,20 +82,15 @@ class BlockingChannelInfo {
     logger.info("Starting blocking channel info for host {} and port {}", host, port);
   }
 
-  public void releaseBlockingChannel(BlockingChannel blockingChannel) {
+  public void addBlockingChannel(BlockingChannel blockingChannel) {
     rwlock.readLock().lock();
     try {
-      if (blockingChannelActiveConnections.remove(blockingChannel)) {
-        blockingChannelAvailableConnections.add(blockingChannel);
-        logger.trace(
-            "Adding connection to {}:{} back to pool. Current available connections {} Current active connections {}",
-            blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
-            blockingChannelAvailableConnections.size(), blockingChannelActiveConnections.size());
-      } else {
-        logger.error("Tried to add invalid connection. Channel does not belong in the active queue. Host {} port {}"
-            + " channel host {} channel port {}", host, port, blockingChannel.getRemoteHost(),
-            blockingChannel.getRemotePort());
-      }
+      blockingChannelActiveConnections.remove(blockingChannel);
+      blockingChannelAvailableConnections.add(blockingChannel);
+      logger.trace(
+          "Adding connection to {}:{} back to pool. Current available connections {} Current active connections {}",
+          blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(), blockingChannelAvailableConnections.size(),
+          blockingChannelActiveConnections.size());
     } finally {
       rwlock.readLock().unlock();
     }
@@ -109,14 +106,13 @@ class BlockingChannelInfo {
       // the available pool
       if (numberOfConnections.get() == maxConnectionsPerChannel || blockingChannelAvailableConnections.size() > 0) {
         BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
-        if (channel != null) {
-          blockingChannelActiveConnections.add(channel);
-          logger.trace("Returning connection to " + channel.getRemoteHost() + ":" + channel.getRemotePort());
-          return channel;
-        } else if (numberOfConnections.get() == maxConnectionsPerChannel) {
+        if (channel == null) {
           logger.error("Timed out trying to get a connection for host {} and port {}", host, port);
           throw new ConnectionPoolTimeoutException("Could not get a connection to host " + host + " and port " + port);
         }
+        blockingChannelActiveConnections.add(channel);
+        logger.trace("Returning connection to " + channel.getRemoteHost() + ":" + channel.getRemotePort());
+        return channel;
       }
       synchronized (lock) {
         // if the number of connections created for this host and port is less than the max allowed
@@ -125,11 +121,10 @@ class BlockingChannelInfo {
           logger.trace("Planning to create a new connection for host {} and port {} ", host, port);
           BlockingChannel channel = getBlockingChannel(host, port);
           channel.connect();
+          blockingChannelAvailableConnections.add(channel);
           numberOfConnections.incrementAndGet();
           logger.trace("Created a new connection for host {} and port {}. Number of connections {}", host, port,
               numberOfConnections.get());
-          blockingChannelActiveConnections.add(channel);
-          return channel;
         }
       }
       BlockingChannel channel = blockingChannelAvailableConnections.poll(timeoutInMs, TimeUnit.MILLISECONDS);
@@ -185,6 +180,7 @@ class BlockingChannelInfo {
       blockingChannel.disconnect();
       // we ensure we maintain the current count of connections to the host to avoid synchronization across threads
       // to create the connection
+
       BlockingChannel channel = getBlockingChannel(blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port);
@@ -355,7 +351,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
             connectedChannel.getRemoteHost(), connectedChannel.getRemotePort());
         throw new IllegalArgumentException("Connection does not belong to the pool");
       }
-      blockingChannelInfo.releaseBlockingChannel((BlockingChannel) connectedChannel);
+      blockingChannelInfo.addBlockingChannel((BlockingChannel) connectedChannel);
     } finally {
       context.stop();
     }
