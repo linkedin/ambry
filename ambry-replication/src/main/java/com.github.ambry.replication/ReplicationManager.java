@@ -88,7 +88,7 @@ final class RemoteReplicaInfo {
     return localStore;
   }
 
-  public Port getPort(){
+  public Port getPort() {
     return this.port;
   }
 
@@ -238,7 +238,7 @@ public final class ReplicationManager {
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateInterDC;
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<String> sslEnabledColos;
+  private final ArrayList<String> sslEnabledDatacenters;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -273,7 +273,7 @@ public final class ReplicationManager {
       this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      this.sslEnabledColos = Utils.splitString(replicationConfig.replicationSslEnabledDatacenters, ",");
+      this.sslEnabledDatacenters = Utils.splitString(replicationConfig.replicationSslEnabledDatacenters, ",");
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -288,7 +288,7 @@ public final class ReplicationManager {
                 new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance(),
-                    getPortForReplica(remoteReplica, sslEnabledColos));
+                    getPortForReplica(remoteReplica, sslEnabledDatacenters));
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
@@ -366,11 +366,10 @@ public final class ReplicationManager {
    * @param sslEnabledDatacenters List of datacenters upon which SSL encryption should be enabled
    * @return
    */
-  public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters){
-    if(sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
+  public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters) {
+    if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
       return new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
-    }
-    else {
+    } else {
       return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
   }
