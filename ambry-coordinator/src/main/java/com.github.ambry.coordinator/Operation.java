@@ -9,6 +9,8 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.SystemTime;
@@ -135,6 +137,8 @@ public abstract class Operation {
             operationPolicy.onFailedResponse(replicaId);
             logger.trace("Failed response ");
           }
+          setCurrentError(CoordinatorError.UnexpectedInternalError);
+          resolveCoordinatorError(currentError);
         }
 
         if (operationPolicy.isComplete()) {
@@ -240,6 +244,8 @@ abstract class OperationRequest implements Runnable {
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
   private ResponseHandler responseHandler;
+  protected boolean sslEnabled;
+  private Port port;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -252,6 +258,8 @@ abstract class OperationRequest implements Runnable {
     this.replicaId = replicaId;
     this.request = request;
     this.responseHandler = context.getResponseHandler();
+    this.port = replicaId.getDataNodeId().getPortToConnectTo(context.getSslEnabledDatacenters());
+    this.sslEnabled = port.getPortType() == PortType.SSL;
   }
 
   protected abstract Response getResponse(DataInputStream dataInputStream)
@@ -266,6 +274,10 @@ abstract class OperationRequest implements Runnable {
     // Only Get responses have a payload to be deserialized.
   }
 
+  private Port getPort() {
+    return this.port;
+  }
+
   @Override
   public void run() {
     ConnectedChannel connectedChannel = null;
@@ -273,9 +285,9 @@ abstract class OperationRequest implements Runnable {
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
-      connectedChannel = connectionPool
-          .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-              context.getConnectionPoolCheckoutTimeout());
+      context.getCoordinatorMetrics().sslConnectionsRequestRate.mark();
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), getPort(),
+          context.getConnectionPoolCheckoutTimeout());
       logger.trace("{} {} sending request", context, replicaId);
       connectedChannel.send(request);
       logger.trace("{} {} receiving response", context, replicaId);
@@ -332,7 +344,7 @@ abstract class OperationRequest implements Runnable {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.countError(error);
+      metric.countError(error, sslEnabled);
     }
   }
 
@@ -340,7 +352,7 @@ abstract class OperationRequest implements Runnable {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.countError(error);
+      metric.countError(error, sslEnabled);
     }
   }
 

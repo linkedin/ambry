@@ -138,7 +138,7 @@ final class PutOperationRequest extends OperationRequest {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.putBlobRequestRate.mark();
+      metric.incrementPutBlobRequestRate(sslEnabled);
     }
   }
 
@@ -147,7 +147,7 @@ final class PutOperationRequest extends OperationRequest {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.putBlobRequestLatencyInMs.update(durationInMs);
+      metric.updatePutBlobRequestLatency(durationInMs, sslEnabled);
     }
   }
 
