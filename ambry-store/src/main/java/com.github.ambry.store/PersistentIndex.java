@@ -1078,7 +1078,7 @@ public class PersistentIndex {
     }
   }
 
-  class HardDeleteThread implements Runnable {
+  private class HardDeleteThread implements Runnable {
     /** A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
      * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing
      * hard deletes when we do a crash recovery.
@@ -1126,7 +1126,7 @@ public class PersistentIndex {
     /**
      * A class to hold the information required to write hard delete stream to the Log.
      */
-    class LogWriteInfo {
+    private class LogWriteInfo {
       ReadableByteChannel channel;
       long offset;
       long size;
@@ -1726,28 +1726,6 @@ class StoreFindToken implements FindToken {
    */
   public boolean isUninitialized() {
     return this.getOffset() == Uninitialized_Offset && this.getIndexStartOffset() == Uninitialized_Offset;
-  }
-
-  /** Test whether this token is greater than the passed in token
-   *
-   * @return true if this token is greater than the passed in token, false otherwise.
-   */
-
-  public boolean greaterThan(StoreFindToken token) {
-    if (this.isUninitialized() || token.isUninitialized()) {
-      throw new IllegalArgumentException("Cannot compare with uninitialized token");
-    }
-
-    if (this.offset != Uninitialized_Offset && token.offset != Uninitialized_Offset) { //both journal based
-      return this.offset > token.getOffset();
-    } else if (this.offset != Uninitialized_Offset) { // this is journal based
-      return this.offset > token.getIndexStartOffset();
-    } else if (this.offset == Uninitialized_Offset && token.offset != Uninitialized_Offset) { // token is journal based
-      return this.indexStartOffset > token.getOffset();
-    } else { // both index based.
-      return this.indexStartOffset == token.getIndexStartOffset() ? this.getStoreKey().compareTo(token.getStoreKey())
-          > 0 : this.indexStartOffset > token.getIndexStartOffset();
-    }
   }
 
   @Override

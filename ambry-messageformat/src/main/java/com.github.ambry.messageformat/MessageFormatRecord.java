@@ -479,8 +479,8 @@ public class MessageFormatRecord {
  * A class to hold the deserialized usermetadata of a blob and the version of the user metadata.
  */
 class UserMetadataInfo {
-  short version;
-  ByteBuffer userMetadata;
+  private final short version;
+  private final ByteBuffer userMetadata;
 
   UserMetadataInfo(short version, ByteBuffer userMetadata) {
     this.version = version;
@@ -500,8 +500,8 @@ class UserMetadataInfo {
  * A class to hold the deserialized blob output of a blob and the version of the blob record in the blob output.
  */
 class BlobRecordInfo {
-  short version;
-  BlobOutput blobOutput;
+  private final short version;
+  private final BlobOutput blobOutput;
 
   BlobRecordInfo(short version, BlobOutput blobOutput) {
     this.version = version;

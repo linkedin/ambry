@@ -7,10 +7,10 @@ import java.nio.channels.ReadableByteChannel;
  * A class that contains information about hard delete messages.
  */
 public class HardDeleteInfo {
-  ReadableByteChannel channel;
-  long streamSize;
-  long hardDeleteRelativeOffsetInMessage;
-  byte[] recoveryInfo;
+  private ReadableByteChannel channel;
+  private long streamSize;
+  private long hardDeleteRelativeOffsetInMessage;
+  private byte[] recoveryInfo;
 
   public HardDeleteInfo(ReadableByteChannel channel, long streamSize, long hardDeleteRelativeOffsetInMessage,
       byte[] recoveryInfo) {
@@ -32,7 +32,7 @@ public class HardDeleteInfo {
     return hardDeleteRelativeOffsetInMessage;
   }
 
-  byte[] getRecoveryInfo() {
+  public byte[] getRecoveryInfo() {
     return recoveryInfo;
   }
 }
