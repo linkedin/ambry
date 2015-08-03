@@ -18,6 +18,9 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.network.SSLBlockingChannel;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOptions;
@@ -68,7 +71,6 @@ public class ServerTest {
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
     notificationSystem = new MockNotificationSystem(9);
-    cluster = new MockCluster(notificationSystem);
   }
 
   @After
@@ -82,13 +84,30 @@ public class ServerTest {
   }
 
   @Test
-  public void startStopTest() {
+  public void startStopTest()
+      throws IOException, InstantiationException {
     // do nothing
+    cluster = new MockCluster(notificationSystem, false, "", "", "");
   }
 
   @Test
   public void endToEndTest()
-      throws InterruptedException, IOException {
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndTest(new Port(64422, PortType.PLAINTEXT), false, "DC1", "", "", "");
+  }
+
+  @Test
+  public void endToEndSSLTest()
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "DC2", "DC1", "DC1,DC2");
+  }
+
+  private void endToEndTest(Port targetPort, boolean enableSSLPorts, String coordinatorDatacenter,
+      String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+      throws InterruptedException, IOException, InstantiationException {
+    cluster =
+        new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
+            sslEnabledDatacentersForDC3);
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -105,7 +124,12 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
+      BlockingChannel channel = null;
+      if (targetPort.getPortType() == PortType.SSL) {
+        channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
+      }
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
@@ -233,7 +257,12 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
+        Coordinator coordinator = null;
+        if (targetPort.getPortType() == PortType.SSL) {
+          coordinator = new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter), clusterMap);
+        } else {
+          coordinator = new AmbryCoordinator(getCoordinatorProperties(""), clusterMap);
+        }
         BlobOutput output = coordinator.getBlob(blobId1.getID());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
@@ -344,6 +373,7 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
+    cluster = new MockCluster(notificationSystem, true, "", "", "");
     MockClusterMap clusterMap = cluster.getClusterMap();
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -647,7 +677,26 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException {
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeSinglePartitionTest("", new Port(64422, PortType.PLAINTEXT),
+        new Port(64423, PortType.PLAINTEXT), new Port(64424, PortType.PLAINTEXT), false, "", "", "");
+  }
+
+  @Test
+  public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeSinglePartitionTest("DC2,DC3", new Port(64422, PortType.PLAINTEXT),
+        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC3", "DC2");
+  }
+
+  private void endToEndReplicationWithMultiNodeSinglePartitionTest(String sslEnabledDatacenters, Port sourcePort,
+      Port targetPort1, Port targetPort2, boolean enableSSLPorts, String sslEnabledDatacentersForDC1,
+      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+      throws InterruptedException, IOException, InstantiationException {
+    // sourceNode is used to locate the datanode and hence has to be PlainText port
+    cluster =
+        new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
+            sslEnabledDatacentersForDC3);
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -671,9 +720,27 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000, 2000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000, 2000);
+      BlockingChannel channel1 = null;
+      BlockingChannel channel2 = null;
+      BlockingChannel channel3 = null;
+
+      if (sourcePort.getPortType() == PortType.SSL) {
+        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
+      }
+
+      if (targetPort1.getPortType() == PortType.SSL) {
+        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
+      }
+
+      if (targetPort2.getPortType() == PortType.SSL) {
+        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
+      }
 
       channel1.connect();
       channel2.connect();
@@ -791,7 +858,7 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(), clusterMap);
+        Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(sslEnabledDatacenters), clusterMap);
         checkBlobId(coordinator, blobId1, data);
         checkBlobId(coordinator, blobId2, data);
         checkBlobId(coordinator, blobId3, data);
@@ -846,7 +913,7 @@ public class ServerTest {
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", 64422);
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
@@ -1090,7 +1157,26 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException {
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeMultiPartitionTest(new Port(64422, PortType.PLAINTEXT),
+        new Port(64423, PortType.PLAINTEXT), new Port(64424, PortType.PLAINTEXT), false, "", "", "");
+  }
+
+  @Test
+  public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeMultiPartitionTest(new Port(64422, PortType.PLAINTEXT),
+        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC1,DC2", "DC1,DC2", "DC1,DC2");
+  }
+
+  private void endToEndReplicationWithMultiNodeMultiPartitionTest(Port sourcePort, Port targetPort1, Port targetPort2,
+      boolean enableSSLPorts, String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2,
+      String sslEnabledDatacentersForDC3)
+      throws InterruptedException, IOException, InstantiationException {
+    // sourceNode is used to locate the datanode and hence has to be PlainTextPort
+    cluster =
+        new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
+            sslEnabledDatacentersForDC3);
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -1102,9 +1188,27 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = new BlockingChannel("localhost", 64422, 10000, 10000, 10000, 2000);
-      BlockingChannel channel2 = new BlockingChannel("localhost", 64423, 10000, 10000, 10000, 2000);
-      BlockingChannel channel3 = new BlockingChannel("localhost", 64424, 10000, 10000, 10000, 2000);
+      BlockingChannel channel1 = null;
+      BlockingChannel channel2 = null;
+      BlockingChannel channel3 = null;
+
+      if (sourcePort.getPortType() == PortType.SSL) {
+        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
+      }
+
+      if (targetPort1.getPortType() == PortType.SSL) {
+        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
+      }
+
+      if (targetPort2.getPortType() == PortType.SSL) {
+        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
+      } else {
+        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
+      }
 
       // put all the blobs to random servers
 
@@ -1274,7 +1378,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 64422);
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -1388,7 +1492,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", 64422);
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
@@ -1692,10 +1796,24 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException {
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", false, "", "", "");
+  }
+
+  @Test
+  public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
+      throws InterruptedException, IOException, InstantiationException {
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", true, "DC2,DC3", "DC2,DC3", "DC2,DC3");
+  }
+
+  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
+      boolean enableSSLPorts, String sslEnabledDatacenter1, String sslEnabledDatacenter2, String sslEnabledDatacenter3)
+      throws InterruptedException, IOException, InstantiationException {
+    cluster = new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacenter1, sslEnabledDatacenter2,
+        sslEnabledDatacenter3);
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
-    props.setProperty("coordinator.datacenter.name", "DC1");
+    props.setProperty("coordinator.datacenter.name", sourceDatacenter);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
     Thread[] senderThreads = new Thread[3];
@@ -1764,10 +1882,11 @@ public class ServerTest {
     Assert.assertArrayEquals(blobout, dataToCheck);
   }
 
-  private VerifiableProperties getCoordinatorProperties() {
+  private VerifiableProperties getCoordinatorProperties(String sslEnabledDatacenters) {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DC1");
+    properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     return new VerifiableProperties(properties);
   }
 

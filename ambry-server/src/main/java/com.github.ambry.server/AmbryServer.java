@@ -14,11 +14,13 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
+import com.github.ambry.network.Port;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.PortType;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
@@ -26,6 +28,7 @@ import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,7 +111,12 @@ public class AmbryServer {
               nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
-      networkServer = new SocketServer(networkConfig, registry);
+      ArrayList<Port> ports = new ArrayList<Port>();
+      ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
+      if(nodeId.hasSSLPort()) {
+        ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
+      }
+      networkServer = new SocketServer(networkConfig, registry, ports);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
