@@ -1172,7 +1172,6 @@ public class ServerTest {
         channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       } else if (targetPort1.getPortType() == PortType.SSL) {
         channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
-        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
       }
 
       if (targetPort2.getPortType() == PortType.PLAINTEXT) {
