@@ -3,6 +3,8 @@ package com.github.ambry.network;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -18,11 +20,12 @@ import java.util.Random;
 
 
 public class SocketServerTest {
-
+  private SSLFactory sslFactory;
+  private SSLSocketFactory sslSocketFactory;
   private SocketServer server = null;
 
   public SocketServerTest()
-      throws InterruptedException, IOException {
+      throws Exception {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
@@ -31,6 +34,9 @@ public class SocketServerTest {
     ports.add(new Port(config.port + 1000, PortType.SSL));
     server = new SocketServer(config, new MetricRegistry(), ports);
     server.start();
+    sslFactory = TestUtils.createSSLFactory();
+    SSLContext sslContext = sslFactory.createSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
   }
 
   @After
@@ -44,7 +50,7 @@ public class SocketServerTest {
     simpleRequest(new Port(server.getPort(), PortType.PLAINTEXT));
   }
 
-  @Test
+  //@Test
   public void simpleSSLRequest()
       throws IOException, InterruptedException {
     simpleRequest(new Port(server.getSSLPort(), PortType.SSL));
@@ -59,7 +65,7 @@ public class SocketServerTest {
     BoundedByteBufferSend bufferToSend = new BoundedByteBufferSend(byteBufferToSend);
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
+      channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, sslSocketFactory);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }

@@ -53,7 +53,7 @@ public class ServerTool {
 
   public ServerTool() {
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry(), null);
     connectionPool.start();
   }
 

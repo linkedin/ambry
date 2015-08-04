@@ -58,6 +58,69 @@ public class CoordinatorConfig {
   @Config("coordinator.ssl.enabled.datacenters")
   public final String sslEnabledDatacenters;
 
+  /**
+   * The SSL protocol
+   */
+  @Config("coordinator.ssl.protocol")
+  @Default("TLS")
+  public final String sslProtocol;
+
+  /**
+   * The SSL key store type
+   */
+  @Config("coordinator.ssl.keystore.type")
+  @Default("JKS")
+  public final String sslKeyStoreType;
+
+  /**
+   * The SSL key store path
+   */
+  @Config("coordinator.ssl.keystore.path")
+  @Default("selfsigned-keystore.jks")
+  public final String sslKeyStorePath;
+
+  /**
+   * The SSL key store password
+   */
+  @Config("coordinator.ssl.keystore.password")
+  @Default("unittestonly")
+  public final String sslKeyStorePassword;
+
+  /**
+   * The SSL key password
+   */
+  @Config("coordinator.ssl.key.password")
+  @Default("unittestonly")
+  public final String sslKeyPassword;
+
+  /**
+   * The SSL trust store type
+   */
+  @Config("coordinator.ssl.truststore.type")
+  @Default("JKS")
+  public final String sslTrustStoreType;
+
+  /**
+   * The SSL trust store path
+   */
+  @Config("coordinator.ssl.truststore.path")
+  @Default("selfsigned-truststore.ts")
+  public final String sslTrustStorePath;
+
+  /**
+   * The SSL trust store password
+   */
+  @Config("coordinator.ssl.truststore.password")
+  @Default("unittestonly")
+  public final String sslTrustStorePassword;
+
+  /**
+   * The SSL supported cipher suits
+   */
+  @Config("coordinator.ssl.cipher.suits")
+  @Default("TLS_RSA_WITH_AES_128_CBC_SHA256")
+  public final String sslCipherSuits;
+
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
     this.hostname = verifiableProperties.getString("coordinator.hostname");
     this.datacenterName = verifiableProperties.getString("coordinator.datacenter.name");
@@ -71,5 +134,16 @@ public class CoordinatorConfig {
         verifiableProperties.getIntInRange("coordinator.connection.pool.checkout.timeout.ms", 1000, 1, 5000);
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
     this.sslEnabledDatacenters = verifiableProperties.getString("coordinator.ssl.enabled.datacenters", "");
+    this.sslProtocol = verifiableProperties.getString("coordinator.ssl.protocol", "TLS");
+    this.sslKeyStoreType = verifiableProperties.getString("coordinator.ssl.keystore.type", "JKS");
+    this.sslKeyStorePath = verifiableProperties.getString("coordinator.ssl.keystore.path", "selfsigned-keystore.jks");
+    this.sslKeyStorePassword = verifiableProperties.getString("coordinator.ssl.keystore.password", "unittestonly");
+    this.sslKeyPassword = verifiableProperties.getString("coordinator.ssl.key.password", "unittestonly");
+    this.sslTrustStoreType = verifiableProperties.getString("coordinator.ssl.truststore.type", "JKS");
+    this.sslTrustStorePath =
+        verifiableProperties.getString("coordinator.ssl.truststore.path", "selfsigned-truststore.ts");
+    this.sslTrustStorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "unittestonly");
+    this.sslCipherSuits =
+        verifiableProperties.getString("coordinator.ssl.cipher.suits", "TLS_RSA_WITH_AES_128_CBC_SHA256");
   }
 }

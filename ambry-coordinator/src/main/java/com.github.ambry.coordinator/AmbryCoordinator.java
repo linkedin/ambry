@@ -12,6 +12,7 @@ import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
@@ -19,6 +20,8 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,8 +100,24 @@ public class AmbryCoordinator implements Coordinator {
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
       logger.info("Getting connection pool");
+      SSLFactory sslFactory = new SSLFactory();
+      sslFactory.setProtocol(coordinatorConfig.sslProtocol);
+      if (coordinatorConfig.sslEnabledDatacenters.length() > 0) {
+        sslFactory.setKeyStore(coordinatorConfig.sslKeyStoreType, coordinatorConfig.sslKeyStorePath,
+            coordinatorConfig.sslKeyStorePassword, coordinatorConfig.sslKeyPassword);
+        sslFactory.setTrustStore(coordinatorConfig.sslTrustStoreType, coordinatorConfig.sslTrustStorePath,
+            coordinatorConfig.sslTrustStorePassword);
+        ArrayList<String> supportedCipherSuites = Utils.splitString(coordinatorConfig.sslCipherSuits, ",");
+        sslFactory.setCipherSuites(supportedCipherSuites);
+        ArrayList<String> supportedProtocols = new ArrayList<String>();
+        supportedProtocols.add(coordinatorConfig.sslProtocol);
+        sslFactory.setEnabledProtocols(supportedProtocols);
+      }
+      SSLContext sslContext = sslFactory.createSSLContext();
+      SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
       ConnectionPoolFactory connectionPoolFactory =
-          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry);
+          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry, sslSocketFactory);
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 

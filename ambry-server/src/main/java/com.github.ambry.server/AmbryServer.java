@@ -15,6 +15,7 @@ import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
@@ -30,6 +31,8 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +106,24 @@ public class AmbryServer {
               new BlobStoreRecovery(), new BlobStoreHardDelete());
       storeManager.start();
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
+      SSLSocketFactory sslSocketFactory = null;
+      if (replicationConfig.replicationSslEnabledDatacenters.length() > 0) {
+        SSLFactory sslFactory = new SSLFactory();
+        sslFactory.setProtocol(replicationConfig.replicationSslProtocol);
+        sslFactory
+            .setKeyStore(replicationConfig.replicationSslKeyStoreType, replicationConfig.replicationSslKeyStorePath,
+                replicationConfig.replicationSslKeyStorePassword, replicationConfig.replicationSslKeyPassword);
+        sslFactory.setTrustStore(replicationConfig.sslTrustStoreType, replicationConfig.replicationSslTrustStorePath,
+            replicationConfig.replicationSslTrustStorePassword);
+        ArrayList<String> supportedCipherSuites = Utils.splitString(replicationConfig.replicationSslCipherSuits, ",");
+        sslFactory.setCipherSuites(supportedCipherSuites);
+        ArrayList<String> supportedProtocols = new ArrayList<String>();
+        supportedProtocols.add(replicationConfig.replicationSslProtocol);
+        sslFactory.setEnabledProtocols(supportedProtocols);
+        SSLContext sslContext = sslFactory.createSSLContext();
+        sslSocketFactory = sslContext.getSocketFactory();
+      }
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry, sslSocketFactory);
       connectionPool.start();
 
       replicationManager =
@@ -113,7 +133,7 @@ public class AmbryServer {
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
-      if(nodeId.hasSSLPort()) {
+      if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, registry, ports);
