@@ -4,7 +4,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
