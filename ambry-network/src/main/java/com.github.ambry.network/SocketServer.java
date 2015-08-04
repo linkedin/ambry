@@ -138,16 +138,28 @@ public class SocketServer implements NetworkServer {
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
 
-    Port sslPort = ports.get(PortType.SSL);
-    if (sslPort != null) {
-      SSLAcceptor sslAcceptor = new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
-      acceptors.add(sslAcceptor);
-      Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
-    }
+    startAcceptors();
     for (Acceptor acceptor : acceptors) {
       acceptor.awaitStartup();
     }
     logger.info("Started server");
+  }
+
+  private void startAcceptors()
+      throws IOException {
+    try {
+      Port sslPort = ports.get(PortType.SSL);
+      if (sslPort != null) {
+        SSLAcceptor sslAcceptor =
+            new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
+        acceptors.add(sslAcceptor);
+        Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
+      }
+    } catch (IOException e) {
+      // shutdown rest of the acceptors (plain text) if new acceptors fail
+      shutdown();
+      throw e;
+    }
   }
 
   public void shutdown() {
@@ -321,7 +333,12 @@ class Acceptor extends AbstractServerThread {
     }
     ServerSocketChannel serverChannel = ServerSocketChannel.open();
     serverChannel.configureBlocking(false);
-    serverChannel.socket().bind(address);
+    try {
+      serverChannel.socket().bind(address);
+    } catch (IOException e) {
+      logger.error("Failed to bind to address " + address);
+      throw e;
+    }
     logger.info("Awaiting socket connections on {}:{}", address.getHostName(), port);
     return serverChannel;
   }

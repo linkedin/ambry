@@ -78,7 +78,9 @@ public class ServerTest {
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
     System.out.println("About to invoke cluster.cleanup()");
-    cluster.cleanup();
+    if(cluster != null) {
+      cluster.cleanup();
+    }
     System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
@@ -98,7 +100,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "DC2", "DC1", "DC1,DC2");
+    endToEndTest(new Port(54422, PortType.SSL), true, "DC1", "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
   private void endToEndTest(Port targetPort, boolean enableSSLPorts, String coordinatorDatacenter,
@@ -647,7 +649,7 @@ public class ServerTest {
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC2,DC3", new Port(64422, PortType.PLAINTEXT),
-        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC3", "DC2");
+        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(String sslEnabledDatacenters, Port sourcePort,
@@ -1127,7 +1129,7 @@ public class ServerTest {
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
     endToEndReplicationWithMultiNodeMultiPartitionTest(new Port(64422, PortType.PLAINTEXT),
-        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC1,DC2", "DC1,DC2", "DC1,DC2");
+        new Port(54423, PortType.SSL), new Port(54424, PortType.SSL), true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
   private void endToEndReplicationWithMultiNodeMultiPartitionTest(Port sourcePort, Port targetPort1, Port targetPort2,
@@ -1764,7 +1766,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", true, "DC2,DC3", "DC2,DC3", "DC2,DC3");
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
   private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,

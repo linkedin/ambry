@@ -37,14 +37,20 @@ public class MockCluster {
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
-    for (MockDataNodeId dataNodeId : dataNodes) {
-      if (dataNodeId.getDatacenterName() == "DC1") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC1);
-      } else if (dataNodeId.getDatacenterName() == "DC2") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC2);
-      } else if (dataNodeId.getDatacenterName() == "DC3") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC3);
+    try {
+      for (MockDataNodeId dataNodeId : dataNodes) {
+        if (dataNodeId.getDatacenterName() == "DC1") {
+          startServer(dataNodeId, sslEnabledDatacentersForDC1);
+        } else if (dataNodeId.getDatacenterName() == "DC2") {
+          startServer(dataNodeId, sslEnabledDatacentersForDC2);
+        } else if (dataNodeId.getDatacenterName() == "DC3") {
+          startServer(dataNodeId, sslEnabledDatacentersForDC3);
+        }
       }
+    } catch (InstantiationException e) {
+      // clean up other servers which was started already
+      cleanup();
+      throw e;
     }
   }
 
