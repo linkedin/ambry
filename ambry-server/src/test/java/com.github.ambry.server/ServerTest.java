@@ -702,13 +702,13 @@ public class ServerTest {
 
       if (targetPort1.getPortType() == PortType.PLAINTEXT) {
         channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
-      } else if (sourcePort.getPortType() == PortType.SSL) {
+      } else if (targetPort1.getPortType() == PortType.SSL) {
         channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
       }
 
       if (targetPort2.getPortType() == PortType.PLAINTEXT) {
         channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      } else if (sourcePort.getPortType() == PortType.SSL) {
+      } else if (targetPort2.getPortType() == PortType.SSL) {
         channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
       }
 
@@ -1164,7 +1164,7 @@ public class ServerTest {
 
       if (sourcePort.getPortType() == PortType.PLAINTEXT) {
         channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort1.getPortType() == PortType.SSL) {
+      } else if (sourcePort.getPortType() == PortType.SSL) {
         channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
       }
 
@@ -1176,7 +1176,7 @@ public class ServerTest {
 
       if (targetPort2.getPortType() == PortType.PLAINTEXT) {
         channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort1.getPortType() == PortType.SSL) {
+      } else if (targetPort2.getPortType() == PortType.SSL) {
         channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
       }
 
