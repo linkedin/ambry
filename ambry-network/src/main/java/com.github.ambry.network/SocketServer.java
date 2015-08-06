@@ -6,6 +6,9 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.net.BindException;
+import java.net.Socket;
+import java.net.SocketOption;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -333,9 +336,10 @@ class Acceptor extends AbstractServerThread {
     }
     ServerSocketChannel serverChannel = ServerSocketChannel.open();
     serverChannel.configureBlocking(false);
+    serverChannel.socket().setReuseAddress(true);
     try {
       serverChannel.socket().bind(address);
-    } catch (IOException e) {
+    } catch (BindException e) {
       logger.error("Failed to bind to address " + address);
       throw e;
     }
