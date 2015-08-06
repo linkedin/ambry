@@ -28,23 +28,23 @@ public class MockClusterMap implements ClusterMap {
     this(false, 64422, 54422);
   }
 
-  public MockClusterMap(boolean enableSSLPorts, int basePort, int sslPort)
+  public MockClusterMap(boolean enableSSLPorts, int basePlainTextPort, int sslPort)
       throws IOException {
 
     dataNodes = new ArrayList<MockDataNodeId>(9);
     // create 3 nodes with each having 3 mount paths
     if (enableSSLPorts) {
-      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC1");
-      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC1");
-      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC1");
+      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC1");
+      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC1");
+      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC1");
 
-      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC2");
-      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC2");
-      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC2");
+      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC2");
+      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC2");
+      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC2");
 
-      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC3");
-      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC3");
-      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(basePort++, sslPort++), "DC3");
+      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC3");
+      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC3");
+      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(basePlainTextPort++, sslPort++), "DC3");
 
       dataNodes.add(dataNodeId1);
       dataNodes.add(dataNodeId2);
@@ -56,17 +56,17 @@ public class MockClusterMap implements ClusterMap {
       dataNodes.add(dataNodeId8);
       dataNodes.add(dataNodeId9);
     } else {
-      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(basePort++), "DC1");
-      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(basePort++), "DC1");
-      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(basePort++), "DC1");
+      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(basePlainTextPort++), "DC1");
+      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(basePlainTextPort++), "DC1");
+      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(basePlainTextPort++), "DC1");
 
-      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(basePort++), "DC2");
-      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(basePort++), "DC2");
-      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(basePort++), "DC2");
+      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(basePlainTextPort++), "DC2");
+      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(basePlainTextPort++), "DC2");
+      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(basePlainTextPort++), "DC2");
 
-      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(basePort++), "DC3");
-      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(basePort++), "DC3");
-      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(basePort++), "DC3");
+      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(basePlainTextPort++), "DC3");
+      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(basePlainTextPort++), "DC3");
+      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(basePlainTextPort++), "DC3");
 
       dataNodes.add(dataNodeId1);
       dataNodes.add(dataNodeId2);

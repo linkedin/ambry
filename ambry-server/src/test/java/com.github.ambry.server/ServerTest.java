@@ -66,8 +66,9 @@ public class ServerTest {
 
   private MockCluster cluster;
   private MockNotificationSystem notificationSystem;
-  private static int basePort = 64422;
-  private static int baseSSLPort = 54422;
+  private static int globalBasePlainTextPort = 64422;
+  private static int globalBaseSSLPort = 54422;
+  private final int TOTAL_SERVER_COUNT = 9;
 
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
@@ -75,13 +76,13 @@ public class ServerTest {
   }
 
   public int generateBasePort() {
-    basePort += 9;
-    return basePort;
+    globalBasePlainTextPort += TOTAL_SERVER_COUNT;
+    return globalBasePlainTextPort;
   }
 
   public int generateBaseSSLPort() {
-    baseSSLPort += 9;
-    return baseSSLPort;
+    globalBaseSSLPort += TOTAL_SERVER_COUNT;
+    return globalBaseSSLPort;
   }
 
   @After
@@ -106,26 +107,29 @@ public class ServerTest {
   @Test
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
-    int baseSSLPort = generateBaseSSLPort();
-    endToEndTest(basePort, baseSSLPort, new Port(basePort, PortType.PLAINTEXT), false, "DC1", "", "", "");
+    int basePlainTextPort = generateBasePort();
+    int sslPort = generateBaseSSLPort();
+    // test involves contacting one server with plaintext port
+    endToEndTest(basePlainTextPort, sslPort, new Port(basePlainTextPort, PortType.PLAINTEXT), false, "DC1", "", "", "");
   }
 
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    endToEndTest(basePort, baseSSLPort, new Port(baseSSLPort, PortType.SSL), true, "DC1", "DC2,DC3", "DC1,DC3",
+    // test involves contacting one server with SSL port
+    endToEndTest(basePlainTextPort, baseSSLPort, new Port(baseSSLPort, PortType.SSL), true, "DC1", "DC2,DC3", "DC1,DC3",
         "DC1,DC2");
   }
 
-  private void endToEndTest(int basePort, int baseSSLPort, Port targetPort, boolean enableSSLPorts,
+  private void endToEndTest(int basePlainTextPort, int baseSSLPort, Port targetPort, boolean enableSSLPorts,
       String coordinatorDatacenter, String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2,
       String sslEnabledDatacentersForDC3)
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, basePort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
-        sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
+    cluster =
+        new MockCluster(notificationSystem, basePlainTextPort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
+            sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -142,12 +146,7 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel = null;
-      if (targetPort.getPortType() == PortType.PLAINTEXT) {
-        channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort.getPortType() == PortType.SSL) {
-        channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 10000, 2000);
-      }
+      BlockingChannel channel = getBlockingChannelBasedOnPortType(targetPort, "localhost");
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
@@ -353,9 +352,9 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    cluster = new MockCluster(notificationSystem, basePort, baseSSLPort, true, "", "", "");
+    cluster = new MockCluster(notificationSystem, basePlainTextPort, baseSSLPort, true, "", "", "");
     MockClusterMap clusterMap = cluster.getClusterMap();
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -393,7 +392,8 @@ public class ServerTest {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobIdList.get(0), properties.get(0), ByteBuffer.wrap(usermetadata.get(0)),
             new ByteBufferInputStream(ByteBuffer.wrap(data.get(0))));
-    BlockingChannel channel = new BlockingChannel("localhost", basePort, 10000, 10000, 10000, 2000);
+    BlockingChannel channel =
+        getBlockingChannelBasedOnPortType(new Port(basePlainTextPort, PortType.PLAINTEXT), "localhost");
     channel.connect();
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
@@ -660,30 +660,34 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    endToEndReplicationWithMultiNodeSinglePartitionTest(basePort, baseSSLPort, "",
-        new Port(basePort, PortType.PLAINTEXT), new Port(basePort + 1, PortType.PLAINTEXT),
-        new Port(basePort + 2, PortType.PLAINTEXT), false, "", "", "");
+    // test involves contacting three servers and checking tokens in one dataNode identified by basePlainTextPort
+    endToEndReplicationWithMultiNodeSinglePartitionTest(basePlainTextPort, baseSSLPort, "", basePlainTextPort,
+        new Port(basePlainTextPort, PortType.PLAINTEXT), new Port(basePlainTextPort + 1, PortType.PLAINTEXT),
+        new Port(basePlainTextPort + 2, PortType.PLAINTEXT), false, "", "", "");
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    endToEndReplicationWithMultiNodeSinglePartitionTest(basePort, baseSSLPort, "DC2,DC3",
-        new Port(basePort, PortType.PLAINTEXT), new Port(baseSSLPort + 1, PortType.SSL),
+    // test involves contacting three servers and checking tokens in one dataNode identified by basePlainTextPort
+    endToEndReplicationWithMultiNodeSinglePartitionTest(basePlainTextPort, baseSSLPort, "DC2,DC3", basePlainTextPort,
+        new Port(baseSSLPort, PortType.SSL), new Port(baseSSLPort + 1, PortType.SSL),
         new Port(baseSSLPort + 2, PortType.SSL), true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
-  private void endToEndReplicationWithMultiNodeSinglePartitionTest(int basePort, int baseSSLPort,
-      String sslEnabledDatacenters, Port sourcePort, Port targetPort1, Port targetPort2, boolean enableSSLPorts,
-      String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+  private void endToEndReplicationWithMultiNodeSinglePartitionTest(int basePlainTextPort, int baseSSLPort,
+      String sslEnabledDatacenters, int sourceDataNodePort, Port dataNode1, Port dataNode2, Port dataNode3,
+      boolean enableSSLPorts, String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2,
+      String sslEnabledDatacentersForDC3)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainText port
-    cluster = new MockCluster(notificationSystem, basePort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
-        sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
+    cluster =
+        new MockCluster(notificationSystem, basePlainTextPort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
+            sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -707,27 +711,9 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = null;
-      BlockingChannel channel2 = null;
-      BlockingChannel channel3 = null;
-
-      if (sourcePort.getPortType() == PortType.PLAINTEXT) {
-        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
-      } else if (sourcePort.getPortType() == PortType.SSL) {
-        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
-      }
-
-      if (targetPort1.getPortType() == PortType.PLAINTEXT) {
-        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort1.getPortType() == PortType.SSL) {
-        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
-      }
-
-      if (targetPort2.getPortType() == PortType.PLAINTEXT) {
-        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort2.getPortType() == PortType.SSL) {
-        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      }
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1, "localhost");
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2, "localhost");
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3, "localhost");
 
       channel1.connect();
       channel2.connect();
@@ -900,7 +886,7 @@ public class ServerTest {
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourcePort.getPort());
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourceDataNodePort);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
@@ -1145,29 +1131,33 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    endToEndReplicationWithMultiNodeMultiPartitionTest(basePort, baseSSLPort, new Port(basePort, PortType.PLAINTEXT),
-        new Port(basePort + 1, PortType.PLAINTEXT), new Port(basePort + 2, PortType.PLAINTEXT), false, "", "", "");
+    // test involves contacting three servers and doing some operations with one dataNode identified by basePlainTextPort
+    endToEndReplicationWithMultiNodeMultiPartitionTest(basePlainTextPort, baseSSLPort, basePlainTextPort,
+        new Port(basePlainTextPort, PortType.PLAINTEXT), new Port(basePlainTextPort + 1, PortType.PLAINTEXT),
+        new Port(basePlainTextPort + 2, PortType.PLAINTEXT), false, "", "", "");
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    endToEndReplicationWithMultiNodeMultiPartitionTest(basePort, baseSSLPort, new Port(basePort, PortType.PLAINTEXT),
-        new Port(baseSSLPort + 1, PortType.SSL), new Port(baseSSLPort + 2, PortType.SSL), true, "DC2,DC3", "DC1,DC3",
-        "DC1,DC2");
+    // test involves contacting three servers and doing some operations with one dataNode identified by basePlainTextPort
+    endToEndReplicationWithMultiNodeMultiPartitionTest(basePlainTextPort, baseSSLPort, basePlainTextPort,
+        new Port(baseSSLPort, PortType.SSL), new Port(baseSSLPort + 1, PortType.SSL),
+        new Port(baseSSLPort + 2, PortType.SSL), true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionTest(int basePort, int baseSSLPort, Port sourcePort,
-      Port targetPort1, Port targetPort2, boolean enableSSLPorts, String sslEnabledDatacentersForDC1,
-      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+  private void endToEndReplicationWithMultiNodeMultiPartitionTest(int basePlainTextPort, int baseSSLPort,
+      int sourceDataNodePort, Port dataNode1, Port dataNode2, Port dataNode3, boolean enableSSLPorts,
+      String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainTextPort
-    cluster = new MockCluster(notificationSystem, basePort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
-        sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
+    cluster =
+        new MockCluster(notificationSystem, basePlainTextPort, baseSSLPort, enableSSLPorts, sslEnabledDatacentersForDC1,
+            sslEnabledDatacentersForDC2, sslEnabledDatacentersForDC3);
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -1179,30 +1169,11 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = null;
-      BlockingChannel channel2 = null;
-      BlockingChannel channel3 = null;
-
-      if (sourcePort.getPortType() == PortType.PLAINTEXT) {
-        channel1 = new BlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
-      } else if (sourcePort.getPortType() == PortType.SSL) {
-        channel1 = new SSLBlockingChannel("localhost", sourcePort.getPort(), 10000, 10000, 10000, 2000);
-      }
-
-      if (targetPort1.getPortType() == PortType.PLAINTEXT) {
-        channel2 = new BlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort1.getPortType() == PortType.SSL) {
-        channel2 = new SSLBlockingChannel("localhost", targetPort1.getPort(), 10000, 10000, 10000, 2000);
-      }
-
-      if (targetPort2.getPortType() == PortType.PLAINTEXT) {
-        channel3 = new BlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      } else if (targetPort2.getPortType() == PortType.SSL) {
-        channel3 = new SSLBlockingChannel("localhost", targetPort2.getPort(), 10000, 10000, 10000, 2000);
-      }
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1, "localhost");
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2, "localhost");
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3, "localhost");
 
       // put all the blobs to random servers
-
       channel1.connect();
       channel2.connect();
       channel3.connect();
@@ -1369,7 +1340,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourceDataNodePort);
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -1483,7 +1454,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourcePort.getPort());
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", sourceDataNodePort);
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
@@ -1677,7 +1648,8 @@ public class ServerTest {
             notificationSystem.awaitBlobCreations(payload.blobId);
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
               BlockingChannel channel1 =
-                  new BlockingChannel(dataNodeId.getHostname(), dataNodeId.getPort(), 10000, 10000, 10000, 2000);
+                  getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
+                      dataNodeId.getHostname());
               channel1.connect();
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
               ids.add(new BlobId(payload.blobId, clusterMap));
@@ -1800,9 +1772,9 @@ public class ServerTest {
   private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
       boolean enableSSLPorts, String sslEnabledDatacenter1, String sslEnabledDatacenter2, String sslEnabledDatacenter3)
       throws InterruptedException, IOException, InstantiationException {
-    int basePort = generateBasePort();
+    int basePlainTextPort = generateBasePort();
     int baseSSLPort = generateBaseSSLPort();
-    cluster = new MockCluster(notificationSystem, basePort, baseSSLPort, enableSSLPorts, sslEnabledDatacenter1,
+    cluster = new MockCluster(notificationSystem, basePlainTextPort, baseSSLPort, enableSSLPorts, sslEnabledDatacenter1,
         sslEnabledDatacenter2, sslEnabledDatacenter3);
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
@@ -1897,5 +1869,15 @@ public class ServerTest {
     if (deleteParentFolder) {
       folder.delete();
     }
+  }
+
+  public BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName) {
+    BlockingChannel channel = null;
+    if (targetPort.getPortType() == PortType.PLAINTEXT) {
+      channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
+    } else if (targetPort.getPortType() == PortType.SSL) {
+      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
+    }
+    return channel;
   }
 }

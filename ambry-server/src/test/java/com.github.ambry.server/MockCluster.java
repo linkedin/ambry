@@ -30,11 +30,11 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem, int basePort, int baseSSLPort, boolean enableSSL,
+  public MockCluster(NotificationSystem notificationSystem, int basePlainTextPort, int baseSSLPort, boolean enableSSL,
       String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap(enableSSL, basePort, baseSSLPort);
+    clusterMap = new MockClusterMap(enableSSL, basePlainTextPort, baseSSLPort);
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
