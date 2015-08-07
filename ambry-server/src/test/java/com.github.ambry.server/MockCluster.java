@@ -98,7 +98,6 @@ public class MockCluster {
   public DataNodeId getFirstDataNode() {
     return this.clusterMap.getDataNodeIds().get(0);
   }
-
 }
 
 class ServerShutdown implements Runnable {
@@ -216,5 +215,4 @@ class MockNotificationSystem implements NotificationSystem {
       tracker.totalReplicasDeleted.countDown();
     }
   }
-
 }

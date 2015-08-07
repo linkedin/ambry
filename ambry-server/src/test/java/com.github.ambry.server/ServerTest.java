@@ -644,6 +644,9 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
     // test involves contacting three servers and checking tokens in one dataNode identified by dataNodeId port
+    // 3 servers are chosen from 3 different datacenters
+    // adding 3 and 6 to first datanode port ensures we get port number from different datacenters. This is due to the way
+    // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeSinglePartitionTest(nonSSLCluster, "", dataNodeId.getPort(),
         new Port(dataNodeId.getPort(), PortType.PLAINTEXT), new Port(dataNodeId.getPort() + 3, PortType.PLAINTEXT),
         new Port(dataNodeId.getPort() + 6, PortType.PLAINTEXT));
@@ -654,6 +657,9 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     DataNodeId dataNodeId = sslCluster.getFirstDataNode();
     // test involves contacting three servers and checking tokens in one dataNode identified by dataNodeId port
+    // 3 servers are chosen from 3 different datacenters
+    // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
+    // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodeId.getSSLPort(), PortType.SSL), new Port(dataNodeId.getSSLPort() + 3, PortType.SSL),
         new Port(dataNodeId.getSSLPort() + 6, PortType.SSL));
@@ -1107,7 +1113,10 @@ public class ServerTest {
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
     DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
-    // test involves contacting three servers and doing some operations with one dataNode identified by basePlainTextPort
+    // test involves contacting three servers and doing some operations with one dataNode identified by dataNodeId port
+    // 3 servers are chosen from 3 different datacenters
+    // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
+    // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeMultiPartitionTest(nonSSLCluster, dataNodeId.getPort(),
         new Port(dataNodeId.getPort(), PortType.PLAINTEXT), new Port(dataNodeId.getPort() + 3, PortType.PLAINTEXT),
         new Port(dataNodeId.getPort() + 6, PortType.PLAINTEXT));
@@ -1117,7 +1126,10 @@ public class ServerTest {
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
     DataNodeId dataNodeId = sslCluster.getFirstDataNode();
-    // test involves contacting three servers and doing some operations with one dataNode identified by basePlainTextPort
+    // test involves contacting three servers and doing some operations with one dataNode identified by dataNodeId port
+    // 3 servers are chosen from 3 different datacenters
+    // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
+    // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster, dataNodeId.getPort(),
         new Port(dataNodeId.getPort(), PortType.SSL), new Port(dataNodeId.getPort() + 3, PortType.SSL),
         new Port(dataNodeId.getPort() + 6, PortType.SSL));
