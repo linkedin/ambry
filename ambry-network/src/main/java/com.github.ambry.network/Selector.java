@@ -283,7 +283,7 @@ public class Selector implements Selectable {
 
         Transmissions transmissions = transmissions(key);
         // register all per-node metrics at once
-        metrics.initializeSelectorNodeMetricIfRequired(transmissions.remoteHostName, transmissions.remotePort);
+        //metrics.initializeSelectorNodeMetricIfRequired(transmissions.remoteHostName, transmissions.remotePort);
         try {
           if (key.isConnectable()) {
             handleConnect(key, transmissions);
@@ -441,7 +441,7 @@ public class Selector implements Selectable {
     key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
     this.connected.add(transmissions.getConnectionId());
     this.metrics.selectorConnectionCreated.inc();
-    this.metrics.initializeSelectorNodeMetricIfRequired(transmissions.remoteHostName, transmissions.remotePort);
+    //this.metrics.initializeSelectorNodeMetricIfRequired(transmissions.remoteHostName, transmissions.remotePort);
   }
 
   /**
@@ -467,9 +467,9 @@ public class Selector implements Selectable {
 
       if (transmissions.receive.getReceivedBytes().isReadComplete()) {
         this.completedReceives.add(transmissions.receive);
-        metrics.updateNodeReceiveMetric(transmissions.remoteHostName, transmissions.remotePort,
-            transmissions.receive.getReceivedBytes().getPayload().limit(),
-            time.milliseconds() - transmissions.receive.getReceiveStartTimeInMs());
+        //metrics.updateNodeReceiveMetric(transmissions.remoteHostName, transmissions.remotePort,
+        //    transmissions.receive.getReceivedBytes().getPayload().limit(),
+        //    time.milliseconds() - transmissions.receive.getReceiveStartTimeInMs());
         transmissions.clearReceive();
       }
     } finally {
@@ -501,8 +501,8 @@ public class Selector implements Selectable {
         networkSend.onSendComplete();
         this.completedSends.add(networkSend);
         metrics.sendInFlight.dec();
-        metrics.updateNodeSendMetric(transmissions.remoteHostName, transmissions.remotePort, send.sizeInBytes(),
-            time.milliseconds() - networkSend.getSendStartTimeInMs());
+        //metrics.updateNodeSendMetric(transmissions.remoteHostName, transmissions.remotePort, send.sizeInBytes(),
+        //    time.milliseconds() - networkSend.getSendStartTimeInMs());
         transmissions.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
       }
