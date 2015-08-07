@@ -666,7 +666,7 @@ public class ServerTest {
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String sslEnabledDatacenters,
-      int sourceDataNodePort, Port dataNode1, Port dataNode2, Port dataNode3)
+      int sourceDataNodePort, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainText port
     try {
@@ -692,9 +692,9 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1, "localhost");
-      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2, "localhost");
-      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3, "localhost");
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost");
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost");
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost");
 
       channel1.connect();
       channel2.connect();
@@ -1136,7 +1136,7 @@ public class ServerTest {
   }
 
   private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster, int firstDataNodePort,
-      Port dataNode1, Port dataNode2, Port dataNode3)
+      Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainTextPort
     try {
@@ -1149,9 +1149,9 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1, "localhost");
-      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2, "localhost");
-      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3, "localhost");
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost");
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost");
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost");
 
       // put all the blobs to random servers
       channel1.connect();
@@ -1850,6 +1850,13 @@ public class ServerTest {
     }
   }
 
+  /**
+   * Returns BlockingChannel or SSLBlockingChannel depending on whether the port type is PlainText or SSL
+   * for the given targetPort
+   * @param targetPort upon which connection has to be established
+   * @param hostName upon which connection has to be established
+   * @return BlockingChannel
+   */
   public BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
