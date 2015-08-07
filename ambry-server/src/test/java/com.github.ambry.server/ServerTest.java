@@ -666,7 +666,7 @@ public class ServerTest {
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String sslEnabledDatacenters,
-      int sourceDataNodePort, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
+      int interestedDataNodePort, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainText port
     try {
@@ -867,7 +867,7 @@ public class ServerTest {
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", sourceDataNodePort);
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePort);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
