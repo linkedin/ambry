@@ -30,11 +30,11 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem, int basePlainTextPort, int baseSSLPort, boolean enableSSL,
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL,
       String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap(enableSSL, basePlainTextPort, baseSSLPort);
+    clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
@@ -94,6 +94,11 @@ public class MockCluster {
 
     clusterMap.cleanup();
   }
+
+  public DataNodeId getFirstDataNode() {
+    return this.clusterMap.getDataNodeIds().get(0);
+  }
+
 }
 
 class ServerShutdown implements Runnable {
@@ -211,4 +216,5 @@ class MockNotificationSystem implements NotificationSystem {
       tracker.totalReplicasDeleted.countDown();
     }
   }
+
 }
