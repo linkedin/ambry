@@ -2,14 +2,13 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-
 import java.nio.ByteBuffer;
 
 
 /**
  * Blob stored in Ambry. Blob consists of properties, user metadata, and data.
  */
-class Blob {
+public class Blob {
   private final BlobProperties blobProperties;
   private final ByteBuffer userMetadata;
   private final BlobOutput blobOutput;
