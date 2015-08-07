@@ -28,8 +28,8 @@ class EchoHandler {
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} in the request). Any other content is ignored.
-   * @param restRequestInfo
-   * @param adminMetrics
+   * @param restRequestInfo {@link RestRequestInfo} containing details of the request.
+   * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
    * @throws RestServiceException
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, AdminMetrics adminMetrics)

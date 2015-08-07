@@ -13,7 +13,7 @@ public interface RestRequestHandlerController {
 
   /**
    * Does startup tasks for the RestRequestHandlerController. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException
+   * @throws InstantiationException - if the RestRequestHandlerController is unable to start.
    */
   public void start()
       throws InstantiationException;
@@ -32,7 +32,7 @@ public interface RestRequestHandlerController {
    * Multiple calls to this function (even by the same thread) can return different instances of
    * {@link RestRequestHandler} and no order/pattern can be expected.
    * @return - a {@link RestRequestHandler} that can be used to handle requests.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was an error while getting a {@link RestRequestHandler}.
    */
   public RestRequestHandler getRequestHandler()
       throws RestServiceException;

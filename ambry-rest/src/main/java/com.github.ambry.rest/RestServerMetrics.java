@@ -130,6 +130,10 @@ class RestServerMetrics {
     restServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ShutdownTimeInMs"));
   }
 
+  /**
+   * Registers an {@link AsyncRequestHandler} so that its metrics (queue occupancy, requests in flight) can be tracked.
+   * @param requestHandler - the {@link AsyncRequestHandler} whose metrics need to be tracked.
+   */
   public void registerAsyncRequestHandler(final AsyncRequestHandler requestHandler) {
     synchronized (asyncRequestHandlerRegisterLock) {
       assert asyncRequestHandlerQueueOccupancyGauges.size() == asyncRequestHandlerRequestsInFlightGauges.size();
@@ -162,6 +166,11 @@ class RestServerMetrics {
     }
   }
 
+  /**
+   * Tracks the state of the {@link RestRequestHandler}s provided as input and periodically reports how many of them are
+   * alive and well.
+   * @param requestHandlers - the list of {@link RestRequestHandler}s whose state needs to be reported.
+   */
   public void trackRequestHandlerHealth(final List<RestRequestHandler> requestHandlers) {
     requestHandlersAlive = new Gauge<Integer>() {
       @Override

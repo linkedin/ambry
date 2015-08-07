@@ -34,9 +34,9 @@ class GetReplicasForBlobIdHandler {
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} of the request). Any other content is ignored.
-   * @param restRequestInfo
-   * @param clusterMap
-   * @param adminMetrics
+   * @param restRequestInfo {@link RestRequestInfo} containing details of the request.
+   * @param clusterMap {@link ClusterMap} to use to find the replicas of the blob id.
+   * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
    * @throws RestServiceException
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, ClusterMap clusterMap, AdminMetrics adminMetrics)

@@ -46,12 +46,10 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
 
   /**
    * Returns a new instance of {@link AdminBlobStorageService}.
-   * @return
-   * @throws InstantiationException
+   * @return - a new instance of {@link AdminBlobStorageService}.
    */
   @Override
-  public BlobStorageService getBlobStorageService()
-      throws InstantiationException {
+  public BlobStorageService getBlobStorageService() {
     return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap);
   }
 }

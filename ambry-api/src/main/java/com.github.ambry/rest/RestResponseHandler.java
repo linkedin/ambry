@@ -27,7 +27,7 @@ public interface RestResponseHandler {
    * Be sure to call {@link RestResponseHandler#flush()} once you want to send all pending data to the actual transport.
    * @param data - the bytes of data that need to be written.
    * @param isLast - whether this is the last piece of the response.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there is an error adding to response body or with writing to the channel.
    */
   public void addToResponseBody(byte[] data, boolean isLast)
       throws RestServiceException;
@@ -35,7 +35,7 @@ public interface RestResponseHandler {
   /**
    * Flushes all pending messages in the channel to transport. A response of OK is returned if no response body was
    * constructed (i.e if there were no {@link RestResponseHandler#addToResponseBody(byte[], boolean)} calls).
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was error while flushing to channel.
    */
   public void flush()
       throws RestServiceException;
@@ -66,7 +66,8 @@ public interface RestResponseHandler {
 
   /**
    * Returns completion status of the request represented by the given {@link RestRequestMetadata}.
-   * @return
+   * @return {@code true} if there has been a call to {@link #onRequestComplete(Throwable, boolean)} and the request has
+   * been marked complete. {@code false} otherwise.
    */
   public boolean isRequestComplete();
 
@@ -84,7 +85,7 @@ public interface RestResponseHandler {
   /**
    * Sets the content-type of the response. Expected to be MIME types.
    * @param type - the content-type of the data in the response.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was error while setting the content-type.
    */
   public void setContentType(String type)
       throws RestServiceException;

@@ -261,6 +261,7 @@ class NettyResponseHandler implements RestResponseHandler {
    * <p/>
    * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
    * their responsibility to ensure it.
+   * @throws RestServiceException - if response metadata has already been sent.
    */
   private void verifyResponseAlive()
       throws RestServiceException {
@@ -275,6 +276,7 @@ class NettyResponseHandler implements RestResponseHandler {
    * <p/>
    * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
    * their responsibility to ensure it.
+   * @throws RestServiceException - if channel has been already been closed.
    */
   private void verifyChannelActive()
       throws RestServiceException {
@@ -310,8 +312,8 @@ class NettyResponseHandler implements RestResponseHandler {
 
   /**
    * Converts a {@link RestServiceErrorCode} into a {@link HttpResponseStatus}.
-   * @param restServiceErrorCode
-   * @return
+   * @param restServiceErrorCode - {@link RestServiceErrorCode} that needs to be mapped to a {@link HttpResponseStatus}.
+   * @return - the {@link HttpResponseStatus} that maps to the {@link RestServiceErrorCode}.
    */
   private HttpResponseStatus getHttpResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     RestServiceErrorCode errorCodeGroup = RestServiceErrorCode.getErrorCodeGroup(restServiceErrorCode);
@@ -366,7 +368,6 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
   /**
    * Callback for when the operation represented by the {@link ChannelFuture} is done.
    * @param future - the {@link ChannelFuture} whose operation finished.
-   * @throws Exception
    */
   @Override
   public void operationComplete(ChannelFuture future) {

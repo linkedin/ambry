@@ -81,7 +81,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * While a new instance of {@link NettyResponseHandler} is created, an instance of {@link RestRequestHandler} is
    * requested from the {@link RestRequestHandlerController}.
    * @param ctx  - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
-   * @throws RestServiceException
+   * @throws RestServiceException - if the tasks required on channel activation fail.
    */
   @Override
   public void channelActive(ChannelHandlerContext ctx)
@@ -129,7 +129,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * If this function throws an Exception, it is bubbled up to the handler before this one in the Netty pipeline.
    * @param ctx - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
    * @param cause - The cause of the error.
-   * @throws Exception
+   * @throws Exception - if there was an {@link Exception} while handling the {@code cause} caught.
    */
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
@@ -159,11 +159,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * for {@link IdleStateEvent} so that we close connections that have been idle too long - maybe due to client failure)
    * @param ctx - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
    * @param event - The event that occurred.
-   * @throws Exception
    */
   @Override
-  public void userEventTriggered(ChannelHandlerContext ctx, Object event)
-      throws Exception {
+  public void userEventTriggered(ChannelHandlerContext ctx, Object event) {
     // NOTE: This is specifically in place to handle connections that close unexpectedly from the client side.
     // Even in that situation, any cleanup code that we have in the handlers will have to be called.
     // This ensures that multiple chunk requests that a handler may be tracking is cleaned up properly. We need this
@@ -187,7 +185,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * {@link RestRequestHandler} for handling.
    * @param ctx - The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
    * @param obj - The {@link HttpObject} that forms a part of a request.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was an error handling the processing of the current {@link HttpObject}.
    */
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
@@ -219,7 +217,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Does some state maintenance before passing a {@link RestRequestInfo} containing the {@link RestRequestMetadata}
    * wrapping this {@link HttpRequest} and an instance of {@link RestResponseHandler} to the {@link RestRequestHandler}.
    * @param httpRequest - the {@link HttpRequest} that needs to be handled.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was an error handling the current {@link HttpRequest}.
    */
   private void handleRequest(HttpRequest httpRequest)
       throws RestServiceException {
@@ -246,7 +244,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * passes a {@link RestRequestInfo} containing a {@link RestRequestContent} wrapping this
    * {@link HttpContent} and an instance of {@link RestResponseHandler} to the {@link RestRequestHandler}.
    * @param httpContent - the {@link HttpContent} that needs to be handled.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was an error handling the current {@link HttpContent}.
    */
   private void handleContent(HttpContent httpContent)
       throws RestServiceException {

@@ -45,8 +45,7 @@ public class NettyServerFactory implements NioServerFactory {
 
   /**
    * Returns a new instance of {@link NettyServer}.
-   * @return
-   * @throws InstantiationException
+   * @return - a new instance of {@link NettyServer}.
    */
   public NioServer getNioServer() {
     return new NettyServer(nettyConfig, nettyMetrics, restRequestHandlerController);

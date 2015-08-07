@@ -149,8 +149,8 @@ class NettyServerDeployer implements Runnable {
    * Wait for the specified time for the startup to complete.
    * @param timeout - time to wait.
    * @param timeUnit - unit of timeout
-   * @return - true if startup was done within the timeout, false otherwise.
-   * @throws InterruptedException
+   * @return - {@code true} if startup was completed within the timeout, {@code false} otherwise.
+   * @throws InterruptedException - if the wait for startup was interrupted.
    */
   public boolean awaitStartup(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
@@ -159,7 +159,7 @@ class NettyServerDeployer implements Runnable {
 
   /**
    * Gets exceptions that occurred during startup if any.
-   * @return - null if no exception occurred during startup, the exception that occurred otherwise.
+   * @return - null if no {@link Exception} occurred during startup, the exception that occurred otherwise.
    */
   public Exception getException() {
     return exception;

@@ -22,7 +22,7 @@ public interface RestRequestHandler {
 
   /**
    * Does startup tasks for the RestRequestHandler. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException
+   * @throws InstantiationException - if the RestRequestHandler is unable to start.
    */
   public void start()
       throws InstantiationException;
@@ -44,7 +44,7 @@ public interface RestRequestHandler {
    * time. If this is the case, then the implementation will (is expected to) notify listeners that are registered to
    * listen to events on the {@link RestRequestInfo} of handling completion.
    * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there is any error while processing the {@link RestRequestInfo}.
    */
   public void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -64,7 +64,6 @@ public interface RestRequestHandler {
    * <p/>
    * This operation has to be idempotent.
    * @param restRequestMetadata - the metadata of the request that just completed.
-   * @throws Exception
    */
   public void onRequestComplete(RestRequestMetadata restRequestMetadata);
 

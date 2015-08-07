@@ -44,7 +44,8 @@ public interface BlobStorageService {
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
    * {@link RestResponseHandler}.
    * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * @throws RestServiceException - on any exception related to handling of the request.
+   * @throws NullPointerException - if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleGet(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -67,7 +68,8 @@ public interface BlobStorageService {
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
    * {@link RestResponseHandler}.
    * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * @throws RestServiceException - on any exception related to handling of the request.
+   * @throws NullPointerException - if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handlePost(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -90,7 +92,8 @@ public interface BlobStorageService {
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
    * {@link RestResponseHandler}.
    * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * @throws RestServiceException - on any exception related to handling of the request.
+   * @throws NullPointerException - if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleDelete(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -113,7 +116,8 @@ public interface BlobStorageService {
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
    * {@link RestResponseHandler}.
    * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * @throws RestServiceException - on any exception related to handling of the request.
+   * @throws NullPointerException - if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleHead(RestRequestInfo restRequestInfo)
       throws RestServiceException;

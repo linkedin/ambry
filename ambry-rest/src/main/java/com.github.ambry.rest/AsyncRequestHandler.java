@@ -66,7 +66,6 @@ class AsyncRequestHandler implements RestRequestHandler {
    * <p/>
    * If the graceful shutdown fails, then a shutdown is forced. Any outstanding {@link RestRequestInfo}s are not
    * handled and resources held by them are not released.
-   * @throws RestServiceException
    */
   @Override
   public void shutdown() {
@@ -102,7 +101,7 @@ class AsyncRequestHandler implements RestRequestHandler {
    * To receive a callback on handling completion, a {@link RestRequestInfoEventListener}
    * needs to be added to the {@link RestRequestInfo}.
    * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was error in preparing and queueing the {@link RestRequestInfo}.
    */
   @Override
   public void handleRequest(RestRequestInfo restRequestInfo)
@@ -149,7 +148,7 @@ class AsyncRequestHandler implements RestRequestHandler {
   /**
    * Adds the {@link RestRequestInfo} to the queue of {@link RestRequestInfo}s waiting to be handled.
    * @param restRequestInfo - the {@link RestRequestInfo} that needs to be added to the queue.
-   * @throws RestServiceException
+   * @throws RestServiceException - if there was error in preparing and queueing the {@link RestRequestInfo}.
    */
   private void queue(RestRequestInfo restRequestInfo)
       throws RestServiceException {
@@ -295,6 +294,10 @@ class DequeuedRequestHandler implements Runnable {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Cleans up after a request is complete. Destroys any state that was being maintained.
+   * @param restRequestMetadata - the {@link RestRequestMetadata} of the request that was completed.
+   */
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
     if (restRequestMetadata != null) {
       if (requestsInFlight.remove(restRequestMetadata) != null) {
@@ -310,7 +313,7 @@ class DequeuedRequestHandler implements Runnable {
    * Process a dequeued {@link RestRequestInfo}. Discerns the type of {@link RestMethod} and calls the right function
    * of the {@link BlobStorageService}.
    * @param restRequestInfo - The currently de-queued {@link RestRequestInfo}.
-   * @throws RestServiceException
+   * @throws RestServiceException - - if there was error in handling the {@link RestRequestInfo}.
    */
   private void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
@@ -358,8 +361,8 @@ class DequeuedRequestHandler implements Runnable {
    * Wait for the shutdown of this instance for the specified time.
    * @param timeout - the amount of time to wait for shutdown.
    * @param timeUnit - time unit of timeout
-   * @return
-   * @throws InterruptedException
+   * @return - {@code true} if shutdown succeeded within the timeout. {@code false} otherwise.
+   * @throws InterruptedException - if the wait for shutdown was interrupted.
    */
   public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
@@ -426,6 +429,10 @@ class DequeuedRequestHandler implements Runnable {
     }
   }
 
+  /**
+   * Tracks required metrics once the {@link RestRequestInfo} is dequeued.
+   * @param restRequestInfo - the {@link RestRequestInfo} that was just dequeued.
+   */
   private void trackMetricsOnDequeue(RestRequestInfo restRequestInfo) {
     Long queueTime = queuingTimeTracker.stopTracking(restRequestInfo);
     if (queueTime != null) {
