@@ -36,6 +36,7 @@ class GetReplicasForBlobIdHandler {
    * {@link com.github.ambry.rest.RestRequestContent} of the request). Any other content is ignored.
    * @param restRequestInfo
    * @param clusterMap
+   * @param adminMetrics
    * @throws RestServiceException
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, ClusterMap clusterMap, AdminMetrics adminMetrics)
@@ -70,6 +71,7 @@ class GetReplicasForBlobIdHandler {
    * based on the cluster map. Using the partition information, returns the list of replicas as a part of a JSONObject.
    * @param restRequestMetadata
    * @param clusterMap
+   * @param adminMetrics
    * @return - A {@link JSONObject} that wraps the replica list.
    * @throws RestServiceException
    */

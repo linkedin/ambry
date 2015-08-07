@@ -94,11 +94,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     // same handlers for the whole request.
     requestHandler = requestHandlerController.getRequestHandler();
     responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
-    if (requestHandler == null || responseHandler == null) {
+    if (requestHandler == null) {
       nettyMetrics.channelActiveTasksError.inc();
-      String msg = (requestHandler == null) ? "RestRequestHandler received during channel bootstrap was null"
-          : "RestResponseHandler received during channel bootstrap was null";
-      throw new RestServiceException(msg, RestServiceErrorCode.ChannelActiveTasksFailure);
+      throw new RestServiceException("RestRequestHandler received during channel bootstrap was null",
+          RestServiceErrorCode.ChannelActiveTasksFailure);
     }
     nettyMetrics.channelCreationRate.mark();
   }

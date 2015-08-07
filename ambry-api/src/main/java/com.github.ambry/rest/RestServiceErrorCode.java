@@ -47,6 +47,7 @@ public enum RestServiceErrorCode {
    * Client has requested for an operation that is not supported by the {@link BlobStorageService}.
    */
   UnsupportedOperation,
+
   /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
@@ -111,6 +112,7 @@ public enum RestServiceErrorCode {
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
    */
   UnsupportedRestMethod,
+
   /**
    * Error code group that catches all RestServiceErrorCodes that are not defined as part of a group.
    */
