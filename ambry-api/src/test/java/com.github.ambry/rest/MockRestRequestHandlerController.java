@@ -57,15 +57,14 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
     if (!isFaulty) {
       try {
         int index = currIndex.getAndIncrement();
-        RestRequestHandler restRequestHandler = restRequestHandlers.get(index % restRequestHandlers.size());
-        return restRequestHandler;
+        return restRequestHandlers.get(index % restRequestHandlers.size());
       } catch (Exception e) {
         throw new RestServiceException("Error while trying to pick a handler to return", e,
             RestServiceErrorCode.RequestHandlerSelectionError);
       }
     } else {
       if (failureProperties != null && failureProperties.containsKey(RETURN_NULL_ON_GET_REQUEST_HANDLER)
-          && failureProperties.getBoolean(RETURN_NULL_ON_GET_REQUEST_HANDLER) == true) {
+          && failureProperties.getBoolean(RETURN_NULL_ON_GET_REQUEST_HANDLER)) {
         return null;
       }
       throw new RestServiceException("Requested handler error", RestServiceErrorCode.RequestHandlerSelectionError);

@@ -133,7 +133,7 @@ class MockBlockingChannel extends BlockingChannel {
               ByteBuffer userMetadata = umae.getUserMetadata();
               byteBufferSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              userMetadata.flip();
+              userMetadata.rewind();
               MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             }
             break;
