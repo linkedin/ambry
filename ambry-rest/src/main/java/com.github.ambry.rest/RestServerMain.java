@@ -49,7 +49,7 @@ public class RestServerMain {
     } catch (Exception e) {
       logger.error("Exception during bootstrap of RestServer", e);
     } finally {
-      logger.info("Exiting");
+      logger.info("Exiting RestServerMain");
       System.exit(0);
     }
   }
