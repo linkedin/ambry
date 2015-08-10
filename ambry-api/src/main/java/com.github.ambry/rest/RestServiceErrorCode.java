@@ -106,7 +106,7 @@ public enum RestServiceErrorCode {
   /**
    * Indicates that an object that is needed for the request could not be created due to an internal server error.
    */
-  SupportObjectCreationError,
+  InternalObjectCreationError,
   /**
    * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
@@ -148,7 +148,7 @@ public enum RestServiceErrorCode {
       case ResponseBuildingFailure:
       case ResponseHandlerNull:
       case RequestMetadataNull:
-      case SupportObjectCreationError:
+      case InternalObjectCreationError:
       case UnsupportedRestMethod:
         return InternalServerError;
       default:

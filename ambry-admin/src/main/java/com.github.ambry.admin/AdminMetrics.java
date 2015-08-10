@@ -25,8 +25,9 @@ class AdminMetrics {
   public final Meter getReplicasForBlobIdRate;
 
   // Latencies
-  // GetReplicasForBlobIdHandler
+  // EchoHandler
   public final Histogram echoProcessingTimeInMs;
+  // GetReplicasForBlobIdHandler
   public final Histogram getReplicasForBlobIdProcessingTimeInMs;
 
   // Errors
