@@ -101,7 +101,7 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     // test involves contacting one server with plaintext port
     DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
-    endToEndTest(nonSSLCluster, new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1");
+    endToEndTest(nonSSLCluster, new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
   }
 
   @Test
@@ -109,10 +109,11 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     // test involves contacting one server with SSL port
     DataNodeId dataNodeId = sslCluster.getFirstDataNode();
-    endToEndTest(sslCluster, new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1");
+    endToEndTest(sslCluster, new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3");
   }
 
-  private void endToEndTest(MockCluster cluster, Port targetPort, String coordinatorDatacenter)
+  private void endToEndTest(MockCluster cluster, Port targetPort, String coordinatorDatacenter,
+      String sslEnabledDatacenters)
       throws InterruptedException, IOException, InstantiationException {
 
     try {
@@ -258,12 +259,8 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator = null;
-        if (targetPort.getPortType() == PortType.SSL) {
-          coordinator = new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter), clusterMap);
-        } else {
-          coordinator = new AmbryCoordinator(getCoordinatorProperties(""), clusterMap);
-        }
+        Coordinator coordinator =
+            new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters), clusterMap);
         BlobOutput output = coordinator.getBlob(blobId1.getID());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
@@ -647,7 +644,7 @@ public class ServerTest {
     // 3 servers are chosen from 3 different datacenters
     // adding 3 and 6 to first datanode port ensures we get port number from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
-    endToEndReplicationWithMultiNodeSinglePartitionTest(nonSSLCluster, "", dataNodeId.getPort(),
+    endToEndReplicationWithMultiNodeSinglePartitionTest(nonSSLCluster, "DC1", "", dataNodeId.getPort(),
         new Port(dataNodeId.getPort(), PortType.PLAINTEXT), new Port(dataNodeId.getPort() + 3, PortType.PLAINTEXT),
         new Port(dataNodeId.getPort() + 6, PortType.PLAINTEXT));
   }
@@ -660,13 +657,14 @@ public class ServerTest {
     // 3 servers are chosen from 3 different datacenters
     // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
-    endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC2,DC3", dataNodeId.getPort(),
+    endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC1", "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodeId.getSSLPort(), PortType.SSL), new Port(dataNodeId.getSSLPort() + 3, PortType.SSL),
         new Port(dataNodeId.getSSLPort() + 6, PortType.SSL));
   }
 
-  private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String sslEnabledDatacenters,
-      int interestedDataNodePort, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
+  private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String coordinatorDatacenter,
+      String sslEnabledDatacenters, int interestedDataNodePort, Port dataNode1Port, Port dataNode2Port,
+      Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainText port
     try {
@@ -812,7 +810,8 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator = new AmbryCoordinator(getCoordinatorProperties(sslEnabledDatacenters), clusterMap);
+        Coordinator coordinator =
+            new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters), clusterMap);
         checkBlobId(coordinator, blobId1, data);
         checkBlobId(coordinator, blobId2, data);
         checkBlobId(coordinator, blobId3, data);
@@ -1117,7 +1116,7 @@ public class ServerTest {
     // 3 servers are chosen from 3 different datacenters
     // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
-    endToEndReplicationWithMultiNodeMultiPartitionTest(nonSSLCluster, dataNodeId.getPort(),
+    endToEndReplicationWithMultiNodeMultiPartitionTest(nonSSLCluster,
         new Port(dataNodeId.getPort(), PortType.PLAINTEXT), new Port(dataNodeId.getPort() + 3, PortType.PLAINTEXT),
         new Port(dataNodeId.getPort() + 6, PortType.PLAINTEXT));
   }
@@ -1130,12 +1129,12 @@ public class ServerTest {
     // 3 servers are chosen from 3 different datacenters
     // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
-    endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster, dataNodeId.getPort(),
+    endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster,
         new Port(dataNodeId.getPort(), PortType.SSL), new Port(dataNodeId.getPort() + 3, PortType.SSL),
         new Port(dataNodeId.getPort() + 6, PortType.SSL));
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster, int firstDataNodePort,
+  private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster,
       Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // sourceNode is used to locate the datanode and hence has to be PlainTextPort
@@ -1321,7 +1320,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", firstDataNodePort);
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", dataNode1Port.getPort());
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -1435,7 +1434,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", firstDataNodePort);
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", dataNode1Port.getPort());
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
@@ -1826,10 +1825,10 @@ public class ServerTest {
     Assert.assertArrayEquals(blobout, dataToCheck);
   }
 
-  private VerifiableProperties getCoordinatorProperties(String sslEnabledDatacenters) {
+  private VerifiableProperties getCoordinatorProperties(String coordinatorDatacenter, String sslEnabledDatacenters) {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
-    properties.setProperty("coordinator.datacenter.name", "DC1");
+    properties.setProperty("coordinator.datacenter.name", coordinatorDatacenter);
     properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
     return new VerifiableProperties(properties);
   }
@@ -1866,5 +1865,4 @@ public class ServerTest {
     }
     return channel;
   }
-
 }
