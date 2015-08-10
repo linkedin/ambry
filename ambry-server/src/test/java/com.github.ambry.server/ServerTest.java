@@ -658,8 +658,8 @@ public class ServerTest {
     // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC1", "DC2,DC3", dataNodeId.getPort(),
-        new Port(dataNodeId.getSSLPort(), PortType.SSL), new Port(dataNodeId.getSSLPort() + 3, PortType.SSL),
-        new Port(dataNodeId.getSSLPort() + 6, PortType.SSL));
+        new Port(dataNodeId.getSSLPort(), PortType.SSL), new Port(dataNodeId.getSSLPort() + (sslCluster.getClusterMap().TOTAL_DATANODE_COUNT/3), PortType.SSL),
+        new Port(dataNodeId.getSSLPort() + 2*(sslCluster.getClusterMap().TOTAL_DATANODE_COUNT/3), PortType.SSL));
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String coordinatorDatacenter,
@@ -1130,8 +1130,8 @@ public class ServerTest {
     // adding 3 and 6 to first datanode port ensures we get port numbers from different datacenters. This is due to the way
     // mockclustermap is implemented which creates dataNodes in 9 consecutive port numbers
     endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster,
-        new Port(dataNodeId.getPort(), PortType.SSL), new Port(dataNodeId.getPort() + 3, PortType.SSL),
-        new Port(dataNodeId.getPort() + 6, PortType.SSL));
+        new Port(dataNodeId.getPort(), PortType.SSL), new Port(dataNodeId.getPort() + (sslCluster.getClusterMap().TOTAL_DATANODE_COUNT/3), PortType.SSL),
+        new Port(dataNodeId.getPort() + 2*(sslCluster.getClusterMap().TOTAL_DATANODE_COUNT/3), PortType.SSL));
   }
 
   private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster,

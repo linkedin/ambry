@@ -26,7 +26,7 @@ public class MockClusterMap implements ClusterMap {
   private final List<MockDataNodeId> dataNodes;
   private static int START_PLAINTEXT_PORT_NUMBER = 50000;
   private static int START_SSL_PORT_NUMBER = 60000;
-  private final int TOTAL_DATANODE_COUNT = 9;
+  public final int TOTAL_DATANODE_COUNT = 9;
 
   public MockClusterMap()
       throws IOException {
