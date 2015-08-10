@@ -10,6 +10,7 @@ import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -30,8 +31,8 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL,
-      String sslEnabledDatacentersForDC1, String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
+      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
@@ -76,7 +77,12 @@ public class MockCluster {
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
-    server.startup();
+    try {
+      server.startup();
+    } catch (InstantiationException e) {
+      // shutting down partially instantiated acceptors and other resources
+      server.shutdown();
+    }
     serverList.add(server);
   }
 
@@ -97,6 +103,18 @@ public class MockCluster {
 
   public DataNodeId getFirstDataNode() {
     return this.clusterMap.getDataNodeIds().get(0);
+  }
+
+  public List<DataNodeId> getThreeDataNodesFromDifferentDatacenters() {
+    HashSet<String> datacenters = new HashSet<String>();
+    List<DataNodeId> toReturn = new ArrayList<DataNodeId>();
+    for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
+      if (!datacenters.contains(dataNodeId.getDatacenterName())) {
+        datacenters.add(dataNodeId.getDatacenterName());
+        toReturn.add(dataNodeId);
+      }
+    }
+    return toReturn;
   }
 }
 

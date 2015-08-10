@@ -134,12 +134,7 @@ public class SocketServer implements NetworkServer {
         processors.get(processorId).wakeup();
       }
     });
-    try {
-      startAcceptors();
-    } catch (IOException e) {
-      shutdown();
-      throw e;
-    }
+    startAcceptors();
     for (Acceptor acceptor : acceptors) {
       acceptor.awaitStartup();
     }
@@ -334,13 +329,7 @@ class Acceptor extends AbstractServerThread {
     }
     ServerSocketChannel serverChannel = ServerSocketChannel.open();
     serverChannel.configureBlocking(false);
-    serverChannel.socket().setReuseAddress(true);
-    try {
-      serverChannel.socket().bind(address);
-    } catch (BindException e) {
-      logger.error("Failed to bind to address " + address);
-      throw e;
-    }
+    serverChannel.socket().bind(address);
     logger.info("Awaiting socket connections on {}:{}", address.getHostName(), port);
     return serverChannel;
   }
