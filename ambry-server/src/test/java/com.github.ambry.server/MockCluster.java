@@ -76,6 +76,7 @@ public class MockCluster {
     } catch (InstantiationException e) {
       // shutting down partially instantiated acceptors and other resources
       server.shutdown();
+      throw e;
     }
     serverList.add(server);
   }
