@@ -31,8 +31,8 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
-      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL,
+      HashMap<String, String> datacenterToSSLEnabledDatacentersMap)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
@@ -40,13 +40,7 @@ public class MockCluster {
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-        if (dataNodeId.getDatacenterName() == "DC1") {
-          startServer(dataNodeId, sslEnabledDatacentersForDC1);
-        } else if (dataNodeId.getDatacenterName() == "DC2") {
-          startServer(dataNodeId, sslEnabledDatacentersForDC2);
-        } else if (dataNodeId.getDatacenterName() == "DC3") {
-          startServer(dataNodeId, sslEnabledDatacentersForDC3);
-        }
+          startServer(dataNodeId, datacenterToSSLEnabledDatacentersMap.get(dataNodeId.getDatacenterName()));
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -99,10 +93,6 @@ public class MockCluster {
     }
 
     clusterMap.cleanup();
-  }
-
-  public DataNodeId getFirstDataNode() {
-    return this.clusterMap.getDataNodeIds().get(0);
   }
 
   public List<DataNodeId> getThreeDataNodesFromDifferentDatacenters() {

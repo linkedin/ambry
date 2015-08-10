@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -71,8 +72,15 @@ public class ServerTest {
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
     notificationSystem = new MockNotificationSystem(9);
-    nonSSLCluster = new MockCluster(notificationSystem, false, "", "", "");
-    sslCluster = new MockCluster(notificationSystem, true, "DC2,DC3", "DC1,DC3", "DC1,DC2");
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = new HashMap<String, String>();
+    datacenterToSSLEnabledDatacentersMap.put("DC1", "");
+    datacenterToSSLEnabledDatacentersMap.put("DC2", "");
+    datacenterToSSLEnabledDatacentersMap.put("DC3", "");
+    nonSSLCluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    datacenterToSSLEnabledDatacentersMap.put("DC1", "DC2,DC3");
+    datacenterToSSLEnabledDatacentersMap.put("DC2", "DC1,DC3");
+    datacenterToSSLEnabledDatacentersMap.put("DC3", "DC1,DC2");
+    sslCluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
   }
 
   @After
@@ -99,14 +107,14 @@ public class ServerTest {
   @Test
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
+    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(nonSSLCluster, new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
   }
 
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = sslCluster.getFirstDataNode();
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(sslCluster, new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3");
   }
 
@@ -332,7 +340,7 @@ public class ServerTest {
   public void endToEndTestHardDeletes()
       throws Exception {
     MockClusterMap clusterMap = nonSSLCluster.getClusterMap();
-    DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
+    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
     for (int i = 0; i < 9; i++) {
@@ -637,7 +645,7 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = nonSSLCluster.getFirstDataNode();
+    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = nonSSLCluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeSinglePartitionTest(nonSSLCluster, "DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
@@ -648,7 +656,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = sslCluster.getFirstDataNode();
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = sslCluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC1", "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
@@ -656,10 +664,10 @@ public class ServerTest {
   }
 
   private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String coordinatorDatacenter,
-      String sslEnabledDatacenters, int interestedDataNodePort, Port dataNode1Port, Port dataNode2Port,
+      String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
       Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
-    // sourceNode is used to locate the datanode and hence has to be PlainText port
+    // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -859,7 +867,7 @@ public class ServerTest {
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePort);
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
       Set<String> setToCheck = new HashSet<String>();
 
@@ -1104,7 +1112,7 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId firstDataNode = nonSSLCluster.getFirstDataNode();
+    DataNodeId firstDataNode = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = nonSSLCluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeMultiPartitionTest(nonSSLCluster, firstDataNode.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
@@ -1115,17 +1123,17 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId firstDataNode = sslCluster.getFirstDataNode();
+    DataNodeId firstDataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = sslCluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster, firstDataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL));
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster, int firstDataNodePortNumber,
+  private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster, int interestedDataNodePortNumber,
       Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
-    // sourceNode is used to locate the datanode and hence has to be PlainTextPort
+    // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainTextPort
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       List<AmbryServer> serverList = cluster.getServers();
@@ -1308,7 +1316,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", firstDataNodePortNumber);
+      MockDataNodeId dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(0));
       for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {
         if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
@@ -1422,7 +1430,7 @@ public class ServerTest {
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
 
-      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", firstDataNodePortNumber);
+      dataNode = (MockDataNodeId) clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       for (int i = 0; i < dataNode.getMountPaths().size(); i++) {
         System.out.println("Cleaning mount path " + dataNode.getMountPaths().get(i));
         for (ReplicaId replicaId : clusterMap.getReplicaIds(dataNode)) {

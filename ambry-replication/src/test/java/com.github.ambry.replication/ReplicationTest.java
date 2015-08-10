@@ -511,11 +511,11 @@ public class ReplicationTest {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
-      DataNodeId firstDataNodeId = clusterMap.getDataNodeIds().get(0);
-      DataNodeId secondDataNodeId = clusterMap.getDataNodeIds().get(1);
+      DataNodeId dataNode1 = clusterMap.getDataNodeIds().get(0);
+      DataNodeId dataNode2 = clusterMap.getDataNodeIds().get(1);
 
       List<ReplicaId> replicaIds =
-          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()));
+          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", dataNode1.getPort()));
 
       Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
           new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
@@ -564,8 +564,8 @@ public class ReplicationTest {
         messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
         bufferListNode2.put(partitionIds.get(i), messageBufferListLocalReplica2);
       }
-      replicaStores.put("localhost" + secondDataNodeId.getPort(), messageInfoNode2);
-      replicaBuffers.put("localhost" + secondDataNodeId.getPort(), bufferListNode2);
+      replicaStores.put("localhost" + dataNode2.getPort(), messageInfoNode2);
+      replicaBuffers.put("localhost" + dataNode2.getPort(), bufferListNode2);
 
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
       for (ReplicaId replicaId : replicaIds) {
@@ -581,7 +581,7 @@ public class ReplicationTest {
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       DataNodeId dataNodeId = null;
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
-        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == secondDataNodeId.getPort()) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == dataNode2.getPort()) {
           dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
           List<RemoteReplicaInfo> remoteReplicaInfoList =
               replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
@@ -609,13 +609,13 @@ public class ReplicationTest {
 
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
-              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()),
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
               storeKeyFactory, true, clusterMap.getMetricRegistry());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", secondDataNodeId.getPort(),
-              replicaStores.get("localhost" + secondDataNodeId.getPort()),
-              replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId),
+          new MockConnection("localhost", dataNode2.getPort(),
+              replicaStores.get("localhost" + dataNode2.getPort()),
+              replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId),
           false, false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -624,9 +624,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -635,9 +635,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -645,34 +645,34 @@ public class ReplicationTest {
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 11);
       }
 
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
       }
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -719,11 +719,11 @@ public class ReplicationTest {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
-      DataNodeId firstDataNodeId = clusterMap.getDataNodeIds().get(0);
-      DataNodeId secondDataNodeId = clusterMap.getDataNodeIds().get(1);
+      DataNodeId dataNode1 = clusterMap.getDataNodeIds().get(0);
+      DataNodeId dataNode2 = clusterMap.getDataNodeIds().get(1);
 
       List<ReplicaId> replicaIds =
-          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()));
+          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", dataNode1.getPort()));
 
       Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
           new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
@@ -773,8 +773,8 @@ public class ReplicationTest {
         messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
         bufferListNode2.put(partitionIds.get(i), messageBufferListLocalReplica2);
       }
-      replicaStores.put("localhost" + secondDataNodeId.getPort(), messageInfoNode2);
-      replicaBuffers.put("localhost" + secondDataNodeId.getPort(), bufferListNode2);
+      replicaStores.put("localhost" + dataNode2.getPort(), messageInfoNode2);
+      replicaBuffers.put("localhost" + dataNode2.getPort(), bufferListNode2);
 
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
       for (ReplicaId replicaId : replicaIds) {
@@ -790,7 +790,7 @@ public class ReplicationTest {
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       DataNodeId dataNodeId = null;
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
-        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == secondDataNodeId.getPort()) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == dataNode2.getPort()) {
           dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
           List<RemoteReplicaInfo> remoteReplicaInfoList =
               replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
@@ -818,13 +818,13 @@ public class ReplicationTest {
 
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
-              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()),
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
               storeKeyFactory, true, clusterMap.getMetricRegistry());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", secondDataNodeId.getPort(),
-              replicaStores.get("localhost" + secondDataNodeId.getPort()),
-              replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId),
+          new MockConnection("localhost", dataNode2.getPort(),
+              replicaStores.get("localhost" + dataNode2.getPort()),
+              replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId),
           false, false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -833,9 +833,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -844,9 +844,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -854,34 +854,34 @@ public class ReplicationTest {
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 11);
       }
 
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
       }
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -889,17 +889,17 @@ public class ReplicationTest {
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 15);
       }
 
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -946,11 +946,11 @@ public class ReplicationTest {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
-      DataNodeId firstDataNodeId = clusterMap.getDataNodeIds().get(0);
-      DataNodeId secondDataNodeId = clusterMap.getDataNodeIds().get(1);
+      DataNodeId dataNode1 = clusterMap.getDataNodeIds().get(0);
+      DataNodeId dataNode2 = clusterMap.getDataNodeIds().get(1);
 
       List<ReplicaId> replicaIds =
-          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()));
+          clusterMap.getReplicaIds(clusterMap.getDataNodeId("localhost", dataNode1.getPort()));
 
       Map<String, Map<PartitionId, List<MessageInfo>>> replicaStores =
           new HashMap<String, Map<PartitionId, List<MessageInfo>>>();
@@ -1013,8 +1013,8 @@ public class ReplicationTest {
         messageInfoNode2.put(partitionIds.get(i), messageInfoListRemoteReplica2);
         bufferListNode2.put(partitionIds.get(i), messageBufferListRemoteReplica2);
       }
-      replicaStores.put("localhost" + secondDataNodeId.getPort(), messageInfoNode2);
-      replicaBuffers.put("localhost" + secondDataNodeId.getPort(), bufferListNode2);
+      replicaStores.put("localhost" + dataNode2.getPort(), messageInfoNode2);
+      replicaBuffers.put("localhost" + dataNode2.getPort(), bufferListNode2);
 
       List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();
       for (ReplicaId replicaId : replicaIds) {
@@ -1030,7 +1030,7 @@ public class ReplicationTest {
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       DataNodeId dataNodeId = null;
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicas) {
-        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == secondDataNodeId.getPort()) {
+        if (remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == dataNode2.getPort()) {
           dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
           List<RemoteReplicaInfo> remoteReplicaInfoList =
               replicasToReplicate.get(remoteReplicaInfo.getReplicaId().getDataNodeId());
@@ -1058,13 +1058,13 @@ public class ReplicationTest {
 
       ReplicaThread replicaThread =
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
-              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", firstDataNodeId.getPort()),
+              new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
               storeKeyFactory, true, clusterMap.getMetricRegistry());
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
-          new MockConnection("localhost", secondDataNodeId.getPort(),
-              replicaStores.get("localhost" + secondDataNodeId.getPort()),
-              replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId),
+          new MockConnection("localhost", dataNode2.getPort(),
+              replicaStores.get("localhost" + dataNode2.getPort()),
+              replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId),
           false, false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -1073,9 +1073,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -1084,9 +1084,9 @@ public class ReplicationTest {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -1095,34 +1095,34 @@ public class ReplicationTest {
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 11);
       }
 
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 14);
       }
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
@@ -1131,17 +1131,17 @@ public class ReplicationTest {
         Assert.assertEquals(((MockFindToken) response.get(i).remoteToken).getIndex(), 16);
       }
 
-      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      replicaThread.fixMissingStoreKeys(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           response, false);
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
 
-      response = replicaThread.exchangeMetadata(new MockConnection("localhost", secondDataNodeId.getPort(),
-          replicaStores.get("localhost" + secondDataNodeId.getPort()),
-          replicaBuffers.get("localhost" + secondDataNodeId.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
+      response = replicaThread.exchangeMetadata(new MockConnection("localhost", dataNode2.getPort(),
+          replicaStores.get("localhost" + dataNode2.getPort()),
+          replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
           false);
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
