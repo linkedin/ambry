@@ -71,14 +71,8 @@ public class MockCluster {
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters == null ? "" : sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
-    try {
-      server.startup();
-    } catch (InstantiationException e) {
-      // shutting down partially instantiated acceptors and other resources
-      server.shutdown();
-      throw e;
-    }
     serverList.add(server);
+    server.startup();
   }
 
   public void cleanup() {
