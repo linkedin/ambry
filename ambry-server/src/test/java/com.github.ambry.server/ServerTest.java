@@ -73,9 +73,6 @@ public class ServerTest {
       throws InterruptedException, IOException, StoreException, InstantiationException {
     notificationSystem = new MockNotificationSystem(9);
     HashMap<String, String> datacenterToSSLEnabledDatacentersMap = new HashMap<String, String>();
-    datacenterToSSLEnabledDatacentersMap.put("DC1", "");
-    datacenterToSSLEnabledDatacentersMap.put("DC2", "");
-    datacenterToSSLEnabledDatacentersMap.put("DC3", "");
     nonSSLCluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
     datacenterToSSLEnabledDatacentersMap.put("DC1", "DC2,DC3");
     datacenterToSSLEnabledDatacentersMap.put("DC2", "DC1,DC3");

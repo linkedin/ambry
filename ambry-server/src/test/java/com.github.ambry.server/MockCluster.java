@@ -40,7 +40,7 @@ public class MockCluster {
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-          startServer(dataNodeId, datacenterToSSLEnabledDatacentersMap.get(dataNodeId.getDatacenterName()));
+        startServer(dataNodeId, datacenterToSSLEnabledDatacentersMap.get(dataNodeId.getDatacenterName()));
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -68,7 +68,7 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
-    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters == null ? "" : sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     try {
