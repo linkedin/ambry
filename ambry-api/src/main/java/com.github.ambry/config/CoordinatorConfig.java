@@ -76,21 +76,18 @@ public class CoordinatorConfig {
    * The SSL key store path
    */
   @Config("coordinator.ssl.keystore.path")
-  @Default("selfsigned-keystore.jks")
   public final String sslKeyStorePath;
 
   /**
    * The SSL key store password
    */
   @Config("coordinator.ssl.keystore.password")
-  @Default("unittestonly")
   public final String sslKeyStorePassword;
 
   /**
    * The SSL key password
    */
   @Config("coordinator.ssl.key.password")
-  @Default("unittestonly")
   public final String sslKeyPassword;
 
   /**
@@ -104,21 +101,18 @@ public class CoordinatorConfig {
    * The SSL trust store path
    */
   @Config("coordinator.ssl.truststore.path")
-  @Default("selfsigned-truststore.ts")
   public final String sslTrustStorePath;
 
   /**
    * The SSL trust store password
    */
   @Config("coordinator.ssl.truststore.password")
-  @Default("unittestonly")
   public final String sslTrustStorePassword;
 
   /**
    * The SSL supported cipher suits
    */
   @Config("coordinator.ssl.cipher.suits")
-  @Default("TLS_RSA_WITH_AES_128_CBC_SHA256")
   public final String sslCipherSuits;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
@@ -136,14 +130,12 @@ public class CoordinatorConfig {
     this.sslEnabledDatacenters = verifiableProperties.getString("coordinator.ssl.enabled.datacenters", "");
     this.sslProtocol = verifiableProperties.getString("coordinator.ssl.protocol", "TLS");
     this.sslKeyStoreType = verifiableProperties.getString("coordinator.ssl.keystore.type", "JKS");
-    this.sslKeyStorePath = verifiableProperties.getString("coordinator.ssl.keystore.path", "selfsigned-keystore.jks");
-    this.sslKeyStorePassword = verifiableProperties.getString("coordinator.ssl.keystore.password", "unittestonly");
-    this.sslKeyPassword = verifiableProperties.getString("coordinator.ssl.key.password", "unittestonly");
+    this.sslKeyStorePath = verifiableProperties.getString("coordinator.ssl.keystore.path", "");
+    this.sslKeyStorePassword = verifiableProperties.getString("coordinator.ssl.keystore.password", "");
+    this.sslKeyPassword = verifiableProperties.getString("coordinator.ssl.key.password", "");
     this.sslTrustStoreType = verifiableProperties.getString("coordinator.ssl.truststore.type", "JKS");
-    this.sslTrustStorePath =
-        verifiableProperties.getString("coordinator.ssl.truststore.path", "selfsigned-truststore.ts");
-    this.sslTrustStorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "unittestonly");
-    this.sslCipherSuits =
-        verifiableProperties.getString("coordinator.ssl.cipher.suits", "TLS_RSA_WITH_AES_128_CBC_SHA256");
+    this.sslTrustStorePath = verifiableProperties.getString("coordinator.ssl.truststore.path", "");
+    this.sslTrustStorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "");
+    this.sslCipherSuits = verifiableProperties.getString("coordinator.ssl.cipher.suits", "");
   }
 }

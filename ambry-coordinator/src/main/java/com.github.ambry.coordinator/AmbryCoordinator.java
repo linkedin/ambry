@@ -99,10 +99,11 @@ public class AmbryCoordinator implements Coordinator {
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
-      logger.info("Getting connection pool");
-      SSLFactory sslFactory = new SSLFactory();
-      sslFactory.setProtocol(coordinatorConfig.sslProtocol);
+      ConnectionPoolFactory connectionPoolFactory;
       if (coordinatorConfig.sslEnabledDatacenters.length() > 0) {
+        logger.info("Setting up SSL");
+        SSLFactory sslFactory = new SSLFactory();
+        sslFactory.setProtocol(coordinatorConfig.sslProtocol);
         sslFactory.setKeyStore(coordinatorConfig.sslKeyStoreType, coordinatorConfig.sslKeyStorePath,
             coordinatorConfig.sslKeyStorePassword, coordinatorConfig.sslKeyPassword);
         sslFactory.setTrustStore(coordinatorConfig.sslTrustStoreType, coordinatorConfig.sslTrustStorePath,
@@ -112,12 +113,15 @@ public class AmbryCoordinator implements Coordinator {
         ArrayList<String> supportedProtocols = new ArrayList<String>();
         supportedProtocols.add(coordinatorConfig.sslProtocol);
         sslFactory.setEnabledProtocols(supportedProtocols);
+        SSLContext sslContext = sslFactory.createSSLContext();
+        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+        connectionPoolFactory =
+            Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry, sslSocketFactory);
+      } else {
+        connectionPoolFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry);
       }
-      SSLContext sslContext = sslFactory.createSSLContext();
-      SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
 
-      ConnectionPoolFactory connectionPoolFactory =
-          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry, sslSocketFactory);
+      logger.info("Getting connection pool");
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 

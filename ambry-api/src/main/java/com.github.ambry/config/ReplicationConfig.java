@@ -102,21 +102,18 @@ public class ReplicationConfig {
    * The SSL key store path
    */
   @Config("replication.ssl.keystore.path")
-  @Default("selfsigned-keystore.jks")
   public final String replicationSslKeyStorePath;
 
   /**
    * The SSL key store password
    */
   @Config("replication.ssl.keystore.password")
-  @Default("unittestonly")
   public final String replicationSslKeyStorePassword;
 
   /**
    * The SSL key password
    */
   @Config("replication.ssl.key.password")
-  @Default("unittestonly")
   public final String replicationSslKeyPassword;
 
   /**
@@ -130,21 +127,18 @@ public class ReplicationConfig {
    * The SSL trust store path
    */
   @Config("replication.ssl.truststore.path")
-  @Default("selfsigned-truststore.ts")
   public final String replicationSslTrustStorePath;
 
   /**
    * The SSL trust store password
    */
   @Config("replication.ssl.truststore.password")
-  @Default("unittestonly")
   public final String replicationSslTrustStorePassword;
 
   /**
    * The SSL supported cipher suits
    */
   @Config("replication.ssl.cipher.suits")
-  @Default("TLS_RSA_WITH_AES_128_CBC_SHA256")
   public final String replicationSslCipherSuits;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
@@ -171,17 +165,12 @@ public class ReplicationConfig {
     replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.datacenters", "");
     replicationSslProtocol = verifiableProperties.getString("replication.ssl.protocol", "TLS");
     replicationSslKeyStoreType = verifiableProperties.getString("replication.ssl.keystore.type", "JKS");
-    replicationSslKeyStorePath =
-        verifiableProperties.getString("replication.ssl.keystore.path", "selfsigned-keystore.jks");
-    replicationSslKeyStorePassword =
-        verifiableProperties.getString("replication.ssl.keystore.password", "unittestonly");
-    replicationSslKeyPassword = verifiableProperties.getString("replication.ssl.key.password", "unittestonly");
+    replicationSslKeyStorePath = verifiableProperties.getString("replication.ssl.keystore.path", "");
+    replicationSslKeyStorePassword = verifiableProperties.getString("replication.ssl.keystore.password", "");
+    replicationSslKeyPassword = verifiableProperties.getString("replication.ssl.key.password", "");
     sslTrustStoreType = verifiableProperties.getString("replication.ssl.truststore.type", "JKS");
-    replicationSslTrustStorePath =
-        verifiableProperties.getString("replication.ssl.truststore.path", "selfsigned-truststore.ts");
-    replicationSslTrustStorePassword =
-        verifiableProperties.getString("replication.ssl.truststore.password", "unittestonly");
-    replicationSslCipherSuits =
-        verifiableProperties.getString("replication.ssl.cipher.suits", "TLS_RSA_WITH_AES_128_CBC_SHA256");
+    replicationSslTrustStorePath = verifiableProperties.getString("replication.ssl.truststore.path", "");
+    replicationSslTrustStorePassword = verifiableProperties.getString("replication.ssl.truststore.password", "");
+    replicationSslCipherSuits = verifiableProperties.getString("replication.ssl.cipher.suits", "");
   }
 }

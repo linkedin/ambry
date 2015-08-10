@@ -43,7 +43,7 @@ public class SSLBlockingChannelTest {
     long blobSize = 1028;
     BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
     try {
-      byte[] bytesToSend = new byte[(int)blobSize];
+      byte[] bytesToSend = new byte[(int) blobSize];
       new Random().nextBytes(bytesToSend);
       ByteBuffer byteBufferToSend = ByteBuffer.wrap(bytesToSend);
       byteBufferToSend.putLong(0, blobSize);
@@ -54,7 +54,7 @@ public class SSLBlockingChannelTest {
       // receive response
       InputStream streamResponse = channel.receive().getInputStream();
       DataInputStream input = new DataInputStream(streamResponse);
-      byte[] bytesReceived = new byte[(int)blobSize - 8];
+      byte[] bytesReceived = new byte[(int) blobSize - 8];
       input.readFully(bytesReceived);
       for (int i = 0; i < blobSize - 8; i++) {
         Assert.assertEquals(bytesToSend[8 + i], bytesReceived[i]);

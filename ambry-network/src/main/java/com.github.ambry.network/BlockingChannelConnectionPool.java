@@ -35,6 +35,10 @@ class BlockingChannelInfo {
   private int maxConnectionsPerHostPerPort;
   private final SSLSocketFactory sslSocketFactory;
 
+  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry) {
+    this(config, host, port, registry, null);
+  }
+
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
       SSLSocketFactory sslSocketFactory) {
     this.config = config;
@@ -339,7 +343,11 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port.getPort());
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
+            if (port.getPortType() == PortType.SSL) {
+              blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
+            } else {
+              blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
+            }
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort()

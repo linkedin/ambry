@@ -12,6 +12,10 @@ public class MockConnectionPoolFactory implements ConnectionPoolFactory {
   private final MetricRegistry registry;
   private final SSLSocketFactory sslSocketFactory;
 
+  public MockConnectionPoolFactory(ConnectionPoolConfig config, MetricRegistry registry) {
+    this(config, registry, null);
+  }
+
   public MockConnectionPoolFactory(ConnectionPoolConfig config, MetricRegistry registry,
       SSLSocketFactory sslSocketFactory) {
     this.config = config;
