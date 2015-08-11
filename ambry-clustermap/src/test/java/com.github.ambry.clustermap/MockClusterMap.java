@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 
 /**
@@ -22,8 +23,8 @@ public class MockClusterMap implements ClusterMap {
 
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
-  private static int currentPlainTextPort = 50000;
-  private static int currentSSLPort = 60000;
+  private static int currentPlainTextPort = (50000) + new Random().nextInt(10000);
+  private static int currentSSLPort = (60000) + new Random().nextInt(10000);
 
   public MockClusterMap()
       throws IOException {
