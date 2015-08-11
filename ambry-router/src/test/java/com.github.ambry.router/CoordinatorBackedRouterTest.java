@@ -42,10 +42,15 @@ import static org.junit.Assert.fail;
 
 
 /**
- * TODO: write description
+ * Tests functionality of {@link CoordinatorBackedRouter}.
  */
 public class CoordinatorBackedRouterTest {
 
+  /**
+   * Tests instantiation of {@link CoordinatorBackedRouter} with various errors and checks that the right
+   * exceptions are thrown.
+   * @throws IOException
+   */
   @Test
   public void instantiationTest()
       throws IOException {
@@ -54,7 +59,7 @@ public class CoordinatorBackedRouterTest {
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
 
     try {
-      new CoordinatorBackedRouter(null, clusterMap, coordinator);
+      new CoordinatorBackedRouter(null, clusterMap.getMetricRegistry(), coordinator);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -66,7 +71,7 @@ public class CoordinatorBackedRouterTest {
     }
 
     try {
-      new CoordinatorBackedRouter(verifiableProperties, clusterMap, null);
+      new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), null);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -75,24 +80,42 @@ public class CoordinatorBackedRouterTest {
     properties.setProperty("router.operation.pool.size", "0");
     verifiableProperties = getVProps(properties);
     try {
-      new CoordinatorBackedRouter(verifiableProperties, clusterMap, coordinator);
+      new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
   }
 
+  /**
+   * Closes the {@link CoordinatorBackedRouter} multiple times and checks that there is no exception.
+   * @throws IOException
+   */
   @Test
   public void multipleCloseTest()
       throws IOException {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     ClusterMap clusterMap = new MockClusterMap();
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap, coordinator);
+    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
     router.close();
     // should not throw exception
     router.close();
   }
 
+  /**
+   * Tests the functionality of all variants of {@link CoordinatorBackedRouter#getBlob(String)},
+   * {@link CoordinatorBackedRouter#getBlobInfo(String)}, {@link CoordinatorBackedRouter#deleteBlob(String)} and
+   * {@link CoordinatorBackedRouter#putBlob(BlobProperties, byte[], ReadableByteChannel)} by performing the following
+   * operations with a link {@link AmbryCoordinator}:
+   * 1. Generate random user metadata and blob data.
+   * 2. Put blob and check that it succeeds. Use the obtained blob id for all subsequent operations.
+   * 3. Obtain blob info and check that it matches with what was inserted.
+   * 4. Obtain blob and check that it matches with what was inserted.
+   * 5. Delete blob and check that it succeeds.
+   * 6. Try to get blob info and blob again and check that both throw an exception indicating that the blob is deleted.
+   * 7. Delete blob again and check that no exception is thrown.
+   * @throws Exception
+   */
   @Test
   public void putGetDeleteTest()
       throws Exception {
@@ -107,6 +130,11 @@ public class CoordinatorBackedRouterTest {
     triggerPutGetDeleteTest(verifiableProperties, clusterMap, coordinator);
   }
 
+  /**
+   * Uses a {@link MockCoordinator} as the backing {@link Coordinator} for a {@link CoordinatorBackedRouter} and induces
+   * various exceptions in the {@link MockCoordinator} to check for their handling in {@link CoordinatorBackedRouter}.
+   * @throws Exception
+   */
   @Test
   public void exceptionHandlingTest()
       throws Exception {
@@ -276,7 +304,7 @@ public class CoordinatorBackedRouterTest {
   private void triggerPutGetDeleteTest(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       Coordinator coordinator)
       throws Exception {
-    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap, coordinator);
+    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
     for (int i = 0; i < 200; i++) {
       doPutGetDeleteTest(router, RouterUsage.WithCallback);
       doPutGetDeleteTest(router, RouterUsage.WithoutCallback);
@@ -336,7 +364,7 @@ public class CoordinatorBackedRouterTest {
   private void triggerExceptionHandlingTest(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       Coordinator coordinator, String expectedErrorMsg)
       throws Exception {
-    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap, coordinator);
+    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
     doExceptionHandlingTest(router, RouterUsage.WithCallback, expectedErrorMsg);
     doExceptionHandlingTest(router, RouterUsage.WithoutCallback, expectedErrorMsg);
     router.close();
@@ -399,20 +427,41 @@ public class CoordinatorBackedRouterTest {
   }
 }
 
+/**
+ * Enum used to select whether to use the callback or non callback variant of {@link Router} APIs.
+ */
 enum RouterUsage {
   WithCallback,
   WithoutCallback
 }
 
+/**
+ * Class that can be used to receive callbacks from {@link Router}.
+ * <p/>
+ * On callback, stores the result and exception to be retrieved for later use.
+ * @param <T> the type of result expected.
+ */
 class RouterOperationCallback<T> implements Callback<T> {
   private CountDownLatch callbackReceived = new CountDownLatch(1);
-  private T result;
-  private Exception exception;
+  private T result = null;
+  private Exception exception = null;
 
+  /**
+   * Contains the result of the operation for which this was set as callback.
+   * <p/>
+   * If there was no result or if this was called before callback is received, it will return null.
+   * @return the result of the operation (if any) for which this was set as callback.
+   */
   public T getResult() {
     return result;
   }
 
+  /**
+   * Stores any exception thrown by the operation for which this was set as callback.
+   * <p/>
+   * If there was no exception or if this was called before callback is received, it will return null.
+   * @return the exception encountered while performing the operation (if any) for which this was set as callback.
+   */
   public Exception getException() {
     return exception;
   }
@@ -424,11 +473,21 @@ class RouterOperationCallback<T> implements Callback<T> {
     callbackReceived.countDown();
   }
 
+  /**
+   * Waits for the callback to be received.
+   * @param timeout the time to wait for.
+   * @param timeUnit the time unit of {@code timeout}.
+   * @return {@code true} if callback was received within the timeout, {@code false} otherwise.
+   * @throws InterruptedException if the wait for callback was interrupted.
+   */
   public boolean awaitCallback(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
     return callbackReceived.await(timeout, timeUnit);
   }
 
+  /**
+   * Reset the state of this callback.
+   */
   public void reset() {
     callbackReceived = new CountDownLatch(1);
     result = null;
@@ -436,6 +495,11 @@ class RouterOperationCallback<T> implements Callback<T> {
   }
 }
 
+//TODO: should move to com.github.ambry.coordinator in ambry-api?
+/**
+ * An implementation of {@link Coordinator} for use in tests. Can be configured for custom behaviour to check for
+ * various scenarios.
+ */
 class MockCoordinator implements Coordinator {
   protected static String CHECKED_EXCEPTION_ON_OPERATION_START = "coordinator.checked.exception.on.operation.start";
   protected static String RUNTIME_EXCEPTION_ON_OPERATION_START = "coordinator.runtime.exception.on.operation.start";
@@ -445,7 +509,12 @@ class MockCoordinator implements Coordinator {
   private final MockCluster cluster;
   private final VerifiableProperties verifiableProperties;
 
-  MockCoordinator(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
+  /**
+   * Creates an instance of MockCoordinator
+   * @param verifiableProperties properties map that defines the behaviour of this instance.
+   * @param clusterMap the cluster map to use.
+   */
+  public MockCoordinator(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
     this.verifiableProperties = verifiableProperties;
     this.clusterMap = clusterMap;
     cluster = new MockCluster(clusterMap);
@@ -616,6 +685,12 @@ class MockCoordinator implements Coordinator {
     open.set(false);
   }
 
+  /**
+   * Converts a {@link ServerErrorCode} encountered during {@link #getBlob(String)}, {@link #getBlobProperties(String)}
+   * and {@link #getBlobUserMetadata(String)} to a {@link CoordinatorException} (if required).
+   * @param error the {@link ServerErrorCode} that needs to be converted to a {@link CoordinatorException}.
+   * @throws CoordinatorException the {@link CoordinatorException} that matches the {@code error}.
+   */
   private void handleGetError(ServerErrorCode error)
       throws CoordinatorException {
     switch (error) {

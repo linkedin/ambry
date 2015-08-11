@@ -33,7 +33,7 @@ public interface ReadableChannel extends ReadableByteChannel {
    * <p/>
    * When there is no more data left to write, a call to this function will return -1 (end of stream).
    * @param channel the {@link WritableByteChannel} to write to
-   * @return the actual number of bytes written. Can be 0. If -1 is returned, there is no more data to write (end of
+   * @return the actual number of bytes written (can be 0). If -1 is returned, there is no more data to write (end of
    *          stream).
    * @throws java.nio.channels.NonReadableChannelException if the channel has not been opened for reading
    * @throws java.nio.channels.ClosedChannelException if channel has already been closed

@@ -21,7 +21,9 @@ public class BlobOutputTest {
 
   /**
    * Tests the common case i.e
-   * 1. Create {@link BlobOutput} with
+   * 1. Create {@link BlobOutput} with some random data and opens it as a channel for reading.
+   * 2. Calls {@link BlobOutput#read(ByteBuffer)} or {@link BlobOutput#writeTo(WritableByteChannel)} and checks that
+   * the data read matches the data used to create the {@link BlobOutput}.
    * @throws IOException
    */
   @Test
@@ -31,12 +33,17 @@ public class BlobOutputTest {
     writeToTest();
   }
 
+  /**
+   * Tests that the right exceptions are thrown if {@link BlobOutput#open()} fails.
+   * @throws IOException
+   */
   @Test
-  public void openForReadingFailureTests()
+  public void openFailureTests()
       throws IOException {
     byte[] in = new byte[1024];
     // try to reopen channel
-    BlobOutput blobOutput = getRandomBlobOutputAsOpenedChannel(in);
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
     try {
       blobOutput.open();
       fail("Tried to reopen BlobOutput for reading. Should have failed.");
@@ -81,6 +88,11 @@ public class BlobOutputTest {
     }
   }
 
+  /**
+   * Tests that the right exceptions are thrown when {@link BlobOutput#read(ByteBuffer)} or
+   * {@link BlobOutput#writeTo(WritableByteChannel)} fail.
+   * @throws IOException
+   */
   @Test
   public void readAndWriteToFailureTest()
       throws IOException {
@@ -121,12 +133,21 @@ public class BlobOutputTest {
     }
   }
 
+  /**
+   * Tests behaviour of {@link BlobOutput#read(ByteBuffer)} and {@link BlobOutput#writeTo(WritableByteChannel)} on some
+   * corner cases.
+   * <p/>
+   * Corner case list:
+   * 1. Blob size is 0.
+   * @throws IOException
+   */
   @Test
   public void readAndWriteCornerCasesTest()
       throws IOException {
     // 0 sized blob.
     ByteChannel channel = new ByteChannel(0);
-    BlobOutput blobOutput = getRandomBlobOutputAsOpenedChannel(new byte[0]);
+    BlobOutput blobOutput = getRandomBlobOutput(new byte[0]).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
     ByteBuffer buffer = ByteBuffer.allocate(0);
 
     assertEquals("There should have been no bytes to read", -1, blobOutput.read(buffer));
@@ -150,7 +171,8 @@ public class BlobOutputTest {
   private void readTest()
       throws IOException {
     byte[] in = new byte[1024];
-    BlobOutput blobOutput = getRandomBlobOutputAsOpenedChannel(in);
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
     byte[] out = new byte[in.length];
     ByteBuffer dst = ByteBuffer.wrap(out);
     // should be able to load all data in one read
@@ -163,7 +185,8 @@ public class BlobOutputTest {
   private void writeToTest()
       throws IOException {
     byte[] in = new byte[1024];
-    BlobOutput blobOutput = getRandomBlobOutputAsOpenedChannel(in);
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
     ByteChannel channel = new ByteChannel(in.length);
     // should be able to write all data in one writeTo
     int bytesWritten = blobOutput.writeTo(channel);
@@ -173,13 +196,11 @@ public class BlobOutputTest {
     cleanUpBlobOutput(blobOutput);
   }
 
-  private BlobOutput getRandomBlobOutputAsOpenedChannel(byte[] in)
+  private BlobOutput getRandomBlobOutput(byte[] in)
       throws IOException {
     fillRandomBytes(in);
     InputStream data = new ByteArrayInputStream(in);
-    BlobOutput blobOutput = new BlobOutput(in.length, data).open();
-    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
-    return blobOutput;
+    return new BlobOutput(in.length, data);
   }
 }
 

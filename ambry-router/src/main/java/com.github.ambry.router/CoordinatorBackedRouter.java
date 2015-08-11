@@ -1,6 +1,6 @@
 package com.github.ambry.router;
 
-import com.github.ambry.clustermap.ClusterMap;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
@@ -22,7 +22,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * TODO: write description
+ * A {@link Router} that uses a {@link Coordinator} in the background to perform its operations.
+ * <p/>
+ * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerOperationPoolSize} on
+ * instantiation. This thread pool is used to provide non-blocking behaviour by executing the blocking operations of the
+ * {@link Coordinator} in the background.
+ * <p/>
+ * If the thread pool is exhausted, the CoordinatorBackedRouter remains non-blocking but latency of operations will
+ * spike.
  */
 public class CoordinatorBackedRouter implements Router {
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
@@ -31,16 +38,24 @@ public class CoordinatorBackedRouter implements Router {
   private final RouterConfig routerConfig;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorBackedRouter(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+  /**
+   * Create a CoordinatorBackedRouter instance.
+   * @param verifiableProperties the properties map to refer to.
+   * @param metricRegistry the {@link MetricRegistry} to use for metrics.
+   * @param coordinator the {@link Coordinator} that will back this router.
+   * @throws IllegalArgumentException if any of the arguments received are null or if
+   * {@link RouterConfig#routerOperationPoolSize} is less than or equal to 0.
+   */
+  public CoordinatorBackedRouter(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Coordinator coordinator) {
-    if (verifiableProperties == null || clusterMap == null || coordinator == null) {
+    if (verifiableProperties == null || metricRegistry == null || coordinator == null) {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouter -");
       if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if (clusterMap == null) {
-        errorMessage.append(" [ClusterMap] ");
+      if (metricRegistry == null) {
+        errorMessage.append(" [MetricRegistry] ");
       }
       if (coordinator == null) {
         errorMessage.append(" [Coordinator] ");
@@ -131,6 +146,9 @@ public class CoordinatorBackedRouter implements Router {
   }
 }
 
+/**
+ * Specifies the operation required of the {@link Coordinator}.
+ */
 enum CoordinatorOperationType {
   GetBlob,
   GetBlobInfo,
@@ -138,6 +156,9 @@ enum CoordinatorOperationType {
   DeleteBlob
 }
 
+/**
+ * Thread that performs the required {@link CoordinatorOperationType} using the blocking APIs of a {@link Coordinator}.
+ */
 class CoordinatorOperation implements Runnable {
   // general
   private final Coordinator coordinator;
@@ -153,26 +174,51 @@ class CoordinatorOperation implements Runnable {
   private byte[] usermetadata = null;
   private ReadableByteChannel channel = null;
 
-  public CoordinatorOperation(Coordinator coordinator, FutureRouterResult futureRouterResult, Callback callback,
-      CoordinatorOperationType opType) {
-    this.coordinator = coordinator;
-    this.futureRouterResult = futureRouterResult;
-    this.callback = callback;
-    this.opType = opType;
-  }
-
+  /**
+   * Constructor used to invoke {@link Coordinator} equivalent operations for {@link Router#getBlob(String)},
+   * {@link Router#getBlobInfo(String)} and {@link Router#deleteBlob(String)} (and their variants).
+   * @param coordinator the {@link Coordinator} to use to perform the operation.
+   * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
+   * @param blobId the blob id that the operation needs to be performed on.
+   * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
+   * @param opType the {@link CoordinatorOperationType} required. Can only be one of
+   *                {@link CoordinatorOperationType#GetBlob}, {@link CoordinatorOperationType#GetBlobInfo} or
+   *                {@link CoordinatorOperationType#DeleteBlob}.
+   * @throws IllegalArgumentException if {@code opType} is {@link CoordinatorOperationType#PutBlob}.
+   */
   public CoordinatorOperation(Coordinator coordinator, FutureRouterResult futureRouterResult, String blobId,
       Callback callback, CoordinatorOperationType opType) {
     this(coordinator, futureRouterResult, callback, opType);
+    if (CoordinatorOperationType.PutBlob.equals(opType)) {
+      throw new IllegalArgumentException("This constructor cannot be used for the putBlob operation");
+    }
     this.blobId = blobId;
   }
 
+  /**
+   * Constructor used to invoke {@link Coordinator} equivalent operations for
+   * {@link Router#putBlob(BlobProperties, byte[], ReadableByteChannel)} and its variant.
+   * @param coordinator the {@link Coordinator} to use to perform the operation.
+   * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
+   * @param blobProperties the properties of the blob.
+   * @param usermetadata user specified metadata as a byte array.
+   * @param channel the {@link ReadableByteChannel} to read the blob data from.
+   * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
+   */
   public CoordinatorOperation(Coordinator coordinator, FutureRouterResult futureRouterResult,
       BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel, Callback callback) {
     this(coordinator, futureRouterResult, callback, CoordinatorOperationType.PutBlob);
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
     this.channel = channel;
+  }
+
+  private CoordinatorOperation(Coordinator coordinator, FutureRouterResult futureRouterResult, Callback callback,
+      CoordinatorOperationType opType) {
+    this.coordinator = coordinator;
+    this.futureRouterResult = futureRouterResult;
+    this.callback = callback;
+    this.opType = opType;
   }
 
   @Override
@@ -197,8 +243,9 @@ class CoordinatorOperation implements Runnable {
           operationResult = new BlobInfo(rcvdBlobProperties, rcvdUserMetadataArray);
           break;
         case PutBlob:
-          // TODO: might need rethinking. Will probably have to provide custom implementation of InputStream here.
-          // TODO: because it seems like Channels.newInputStream() does not like non-blocking channels
+          // TODO: Might need rethinking. Will probably have to provide custom implementation of InputStream here.
+          // TODO: because it seems like Channels.newInputStream() does not like non-blocking channels. Will do this
+          // TODO: while implementing POST.
           operationResult =
               coordinator.putBlob(blobProperties, ByteBuffer.wrap(usermetadata), Channels.newInputStream(channel));
           break;

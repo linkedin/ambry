@@ -15,6 +15,10 @@ public class RouterConfig {
   @Default("200")
   public final int routerOperationPoolSize;
 
+  /**
+   * Create a RouterConfig instance.
+   * @param verifiableProperties the properties map to refer to.
+   */
   public RouterConfig(VerifiableProperties verifiableProperties) {
     routerOperationPoolSize = verifiableProperties.getInt("router.operation.pool.size", 200);
   }
