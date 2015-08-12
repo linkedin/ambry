@@ -109,10 +109,10 @@ public class RestRequestInfo {
    * @param e - the {@link Exception} that caused the handling to fail.
    */
   public void onComplete(Exception e) {
-    logger.trace("Firing onComplete() for listeners");
-    synchronized (listeners) {
+    if (operationComplete.compareAndSet(false, true)) {
+      logger.trace("Firing onComplete() for listeners");
       exception = e;
-      if (operationComplete.compareAndSet(false, true)) {
+      synchronized (listeners) {
         for (RestRequestInfoEventListener listener : listeners) {
           try {
             listener.onHandlingComplete(this, e);
@@ -120,16 +120,15 @@ public class RestRequestInfo {
             logger.error("Swallowing onComplete listener exception", ee);
           }
         }
-      } else {
-        logger.error("onComplete for RestRequestInfo has already been fired. Ignoring current invocation");
       }
+    } else {
+      logger.error("onComplete for RestRequestInfo has already been fired. Ignoring current invocation");
     }
   }
 
   @Override
   public String toString() {
-    return "Request metadata: " + (restRequestMetadata != null ? restRequestMetadata.toString() : "null") +
-        " Request content: " + (restRequestContent != null ? restRequestContent.toString() : "null") +
-        " Response handler: " + (restResponseHandler != null ? restResponseHandler.toString() : "null");
+    return "Request metadata: " + restRequestMetadata + " Request content: " + restRequestContent
+        + " Response handler: " + restResponseHandler;
   }
 }

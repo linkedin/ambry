@@ -73,7 +73,7 @@ class AsyncRequestHandler implements RestRequestHandler {
       logger.info("Shutting down AsyncRequestHandler");
       long shutdownBeginTime = System.currentTimeMillis();
       try {
-        queue(new PoisonInfo());
+        queueRequest(new PoisonInfo());
         if (!(dequeuedRequestHandler.awaitShutdown(60, TimeUnit.SECONDS) || shutdownNow())) {
           logger.error("Shutdown of AsyncRequestHandler failed. This should not happen");
           restServerMetrics.asyncRequestHandlerShutdownError.inc();
@@ -101,7 +101,7 @@ class AsyncRequestHandler implements RestRequestHandler {
    * To receive a callback on handling completion, a {@link RestRequestInfoEventListener}
    * needs to be added to the {@link RestRequestInfo}.
    * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
-   * @throws RestServiceException - if there was error in preparing and queueing the {@link RestRequestInfo}.
+   * @throws RestServiceException - if there is an error in preparing and queueing the {@link RestRequestInfo}.
    */
   @Override
   public void handleRequest(RestRequestInfo restRequestInfo)
@@ -119,7 +119,7 @@ class AsyncRequestHandler implements RestRequestHandler {
         throw new RestServiceException("RestResponseHandler is null in received RestRequestInfo",
             RestServiceErrorCode.ResponseHandlerNull);
       }
-      queue(restRequestInfo);
+      queueRequest(restRequestInfo);
     } else {
       restServerMetrics.asyncRequestHandlerUnavailableError.inc();
       throw new RestServiceException("Requests cannot be handled because the AsyncRequestHandler is not available",
@@ -148,9 +148,9 @@ class AsyncRequestHandler implements RestRequestHandler {
   /**
    * Adds the {@link RestRequestInfo} to the queue of {@link RestRequestInfo}s waiting to be handled.
    * @param restRequestInfo - the {@link RestRequestInfo} that needs to be added to the queue.
-   * @throws RestServiceException - if there was error in preparing and queueing the {@link RestRequestInfo}.
+   * @throws RestServiceException - if there is an error in preparing and queueing the {@link RestRequestInfo}.
    */
-  private void queue(RestRequestInfo restRequestInfo)
+  private void queueRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     String uri =
         (restRequestInfo.getRestRequestMetadata() != null) ? restRequestInfo.getRestRequestMetadata().getUri() : null;
@@ -375,27 +375,25 @@ class DequeuedRequestHandler implements Runnable {
    * @param e - If handling failed, the reason for failure. If handling succeeded, null.
    */
   private void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
-    if (restRequestInfo != null) {
-      String uri =
-          (restRequestInfo.getRestRequestMetadata() != null) ? restRequestInfo.getRestRequestMetadata().getUri() : null;
-      logger.trace("Performing onComplete tasks for RestRequestInfo of request {}", uri);
-      try {
-        restRequestInfo.onComplete(e);
-      } catch (Exception ee) {
-        logger.error("Swallowing exception during onComplete tasks.", ee);
-        restServerMetrics.dequeuedRequestHandlerHandlingCompleteTasksError.inc();
-      } finally {
-        RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
-        if (e != null) {
-          responseHandler.onRequestComplete(e, false);
-        }
-        if (responseHandler.isRequestComplete()) {
-          logger.trace("Marking request {} as complete based on information from the RestResponseHandler", uri);
-          onRequestComplete(restRequestInfo.getRestRequestMetadata());
-        }
-        logger.trace("Handling of RestRequestInfo of request {} completed", uri);
+    String uri = restRequestInfo.getRestRequestMetadata().getUri();
+    logger.trace("Performing onComplete tasks for RestRequestInfo of request {}", uri);
+    try {
+      restRequestInfo.onComplete(e);
+    } catch (Exception ee) {
+      logger.error("Swallowing exception during onComplete tasks.", ee);
+      restServerMetrics.dequeuedRequestHandlerHandlingCompleteTasksError.inc();
+    } finally {
+      RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
+      if (e != null) {
+        responseHandler.onRequestComplete(e, false);
       }
+      if (responseHandler.isRequestComplete()) {
+        logger.trace("Marking request {} as complete based on information from the RestResponseHandler", uri);
+        onRequestComplete(restRequestInfo.getRestRequestMetadata());
+      }
+      logger.trace("Handling of RestRequestInfo of request {} completed", uri);
     }
+
   }
 
   /**

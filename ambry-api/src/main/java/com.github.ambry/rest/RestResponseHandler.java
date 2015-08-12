@@ -85,7 +85,7 @@ public interface RestResponseHandler {
   /**
    * Sets the content-type of the response. Expected to be MIME types.
    * @param type - the content-type of the data in the response.
-   * @throws RestServiceException - if there was error while setting the content-type.
+   * @throws RestServiceException - if there is an error while setting the content-type.
    */
   public void setContentType(String type)
       throws RestServiceException;

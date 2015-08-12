@@ -32,7 +32,7 @@ public interface RestRequestHandlerController {
    * Multiple calls to this function (even by the same thread) can return different instances of
    * {@link RestRequestHandler} and no order/pattern can be expected.
    * @return - a {@link RestRequestHandler} that can be used to handle requests.
-   * @throws RestServiceException - if there was an error while getting a {@link RestRequestHandler}.
+   * @throws RestServiceException - if there is an error while getting a {@link RestRequestHandler}.
    */
   public RestRequestHandler getRequestHandler()
       throws RestServiceException;
