@@ -67,12 +67,10 @@ public class ServerTest {
 
   private MockNotificationSystem notificationSystem;
   private MockCluster cluster;
-  private HashMap<String, String> datacenterToSSLEnabledDatacentersMap;
 
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
     notificationSystem = new MockNotificationSystem(9);
-    datacenterToSSLEnabledDatacentersMap = new HashMap<String, String>();
   }
 
   @After
@@ -91,13 +89,21 @@ public class ServerTest {
   public void startStopTest()
       throws IOException, InstantiationException {
     // do nothing
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
+  }
+
+  @Test
+  public void startStopSSLTest()
+      throws IOException, InstantiationException {
+    // do nothing
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = populateDatacenterMap();
+    cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
   }
 
   @Test
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
   }
@@ -105,7 +111,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    populateDatacenterMap();
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = populateDatacenterMap();
     cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", datacenterToSSLEnabledDatacentersMap.get("DC1"));
@@ -332,7 +338,7 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
     MockClusterMap clusterMap = cluster.getClusterMap();
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
@@ -639,7 +645,7 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
@@ -651,7 +657,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    populateDatacenterMap();
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = populateDatacenterMap();
     cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
@@ -1109,7 +1115,7 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
     endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
@@ -1121,7 +1127,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    populateDatacenterMap();
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = populateDatacenterMap();
     cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
@@ -1738,14 +1744,14 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    cluster = new MockCluster(notificationSystem);
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT);
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    populateDatacenterMap();
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = populateDatacenterMap();
     cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL);
   }
@@ -1865,9 +1871,11 @@ public class ServerTest {
     return channel;
   }
 
-  private void populateDatacenterMap(){
+  private HashMap<String, String> populateDatacenterMap(){
+    HashMap<String, String> datacenterToSSLEnabledDatacentersMap = new HashMap<String, String>();
     datacenterToSSLEnabledDatacentersMap.put("DC1", "DC2,DC3");
     datacenterToSSLEnabledDatacentersMap.put("DC2", "DC1,DC3");
     datacenterToSSLEnabledDatacentersMap.put("DC3", "DC1,DC2");
+    return datacenterToSSLEnabledDatacentersMap;
   }
 }

@@ -304,7 +304,6 @@ class Acceptor extends AbstractServerThread {
         }
       }
       logger.debug("Closing server socket and selector.");
-      serverChannel.socket().close();
       serverChannel.close();
       nioSelector.close();
       shutdownComplete();

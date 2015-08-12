@@ -31,6 +31,11 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
+  public MockCluster(NotificationSystem notificationSystem)
+      throws IOException, InstantiationException{
+    this(notificationSystem, false, new HashMap<String, String>());
+  }
+
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL,
       HashMap<String, String> datacenterToSSLEnabledDatacentersMap)
       throws IOException, InstantiationException {
