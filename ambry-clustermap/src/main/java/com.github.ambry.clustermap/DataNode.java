@@ -1,7 +1,13 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,6 +31,7 @@ public class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int port;
+  private final Map<PortType, Integer> ports;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -56,8 +63,18 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-
+    this.ports = new HashMap<PortType, Integer>();
+    this.ports.put(PortType.PLAINTEXT, port);
+    populatePorts(jsonObject);
     validate();
+  }
+
+  private void populatePorts(JSONObject jsonObject)
+      throws JSONException {
+    if (jsonObject.has("sslport")) {
+      int sslPort = jsonObject.getInt("sslport");
+      this.ports.put(PortType.SSL, sslPort);
+    }
   }
 
   /**
@@ -89,6 +106,32 @@ public class DataNode extends DataNodeId {
   @Override
   public int getPort() {
     return port;
+  }
+
+  @Override
+  public boolean hasSSLPort() {
+    return ports.containsKey(PortType.SSL);
+  }
+
+  @Override
+  public int getSSLPort() {
+    if (hasSSLPort()) {
+      return ports.get(PortType.SSL);
+    } else {
+      throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + port);
+    }
+  }
+
+  @Override
+  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
+    if (sslEnabledDataCenters.contains(datacenter)) {
+      if (ports.containsKey(PortType.SSL)) {
+        return new Port(ports.get(PortType.SSL), PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+      }
+    }
+    return new Port(port, PortType.PLAINTEXT);
   }
 
   @Override
@@ -147,11 +190,19 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validatePort() {
-    if (port < MinPort) {
-      throw new IllegalStateException("Invalid port: " + port + " is less than " + MinPort);
-    } else if (port > MaxPort) {
-      throw new IllegalStateException("Invalid port: " + port + " is less than " + MaxPort);
+  protected void validatePorts() {
+    Set<Integer> portNumbers = new HashSet<Integer>();
+    for (PortType portType : ports.keySet()) {
+      int portNo = ports.get(portType);
+      if (portNumbers.contains(portNo)) {
+        throw new IllegalStateException("Same port number " + portNo + " found for two port types");
+      }
+      portNumbers.add(portNo);
+      if (portNo < MinPort) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MinPort);
+      } else if (portNo > MaxPort) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MaxPort);
+      }
     }
   }
 
@@ -159,7 +210,7 @@ public class DataNode extends DataNodeId {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostname();
-    validatePort();
+    validatePorts();
     for (Disk disk : disks) {
       disk.validate();
     }
@@ -168,13 +219,24 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port)
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port);
+    addSSLPortToJson(jsonObject);
+    jsonObject
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
     }
     return jsonObject;
+  }
+
+  private void addSSLPortToJson(JSONObject jsonObject)
+      throws JSONException {
+    for (PortType portType : ports.keySet()) {
+      if (portType == PortType.SSL) {
+        jsonObject.put("sslport", ports.get(portType));
+      }
+    }
   }
 
   @Override

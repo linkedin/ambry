@@ -1,5 +1,9 @@
 package com.github.ambry.clustermap;
 
+import com.github.ambry.network.Port;
+import java.util.ArrayList;
+
+
 /**
  * A DataNodeId has many devices. A DataNodeId stores one or more {@link ReplicaId}s upon each device.
  */
@@ -18,6 +22,29 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
    * @return port upon which to establish a connection with the DataNodeId.
    */
   public abstract int getPort();
+
+  /**
+   * Gets the DataNodeId's SSL connection port.
+   *
+   * @return port upon which to establish an SSL encrypted connection with the DataNodeId
+   * if no SSL port exists, throws IllegalArgumentException
+   */
+  public abstract int getSSLPort();
+
+  /**
+   * Returns true is SSL port exists for the DataNodeId.
+   *
+   * @return true if SSL port exists for the datanode, false otherwise
+   */
+  public abstract boolean hasSSLPort();
+
+  /**
+   * Returns the Port to connect to based on the whether the {@DataNodeId} belongs to the list of ssl-enabled
+   * Datacenters
+   * @param sslEnabledDataCenters List of ssl enabled Datacenters
+   * @return {@Port} to which the caller can connect to
+   */
+  public abstract Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters);
 
   /**
    * Gets the state of the DataNodeId.

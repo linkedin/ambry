@@ -1,21 +1,39 @@
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HardwareState;
-
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class MockDataNodeId extends DataNodeId {
   int port;
+  Map<PortType, Integer> ports;
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
 
-  public MockDataNodeId(int port, List<String> mountPaths, String dataCenter) {
-    this.port = port;
+  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
+    this.ports = new HashMap<PortType, Integer>();
+    populatePorts(ports);
+  }
+
+  private void populatePorts(ArrayList<Port> ports) {
+    boolean plainTextPortFound = false;
+    for (Port port : ports) {
+      if (port.getPortType() == PortType.PLAINTEXT) {
+        plainTextPortFound = true;
+        this.port = port.getPort();
+      }
+      this.ports.put(port.getPortType(), port.getPort());
+    }
+    if (!plainTextPortFound) {
+      throw new IllegalArgumentException("No Plain Text port found");
+    }
   }
 
   @Override
@@ -26,6 +44,35 @@ public class MockDataNodeId extends DataNodeId {
   @Override
   public int getPort() {
     return port;
+  }
+
+  @Override
+  public int getSSLPort() {
+    if (hasSSLPort()) {
+      return ports.get(PortType.SSL);
+    }
+    throw new IllegalArgumentException("No SSL port exists for the datanode " + hostname + ":" + port);
+  }
+
+  @Override
+  public boolean hasSSLPort() {
+    if (ports.containsKey(PortType.SSL)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
+    if (sslEnabledDataCenters.contains(datacenter)) {
+      if (ports.containsKey(PortType.SSL)) {
+        return new Port(ports.get(PortType.SSL), PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+      }
+    }
+    return new Port(port, PortType.PLAINTEXT);
   }
 
   @Override

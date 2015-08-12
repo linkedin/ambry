@@ -24,6 +24,7 @@ public class HardwareLayoutTest {
   private static final int dataNodeCount = 6;
   private static final int datacenterCount = 3;
   private static final int basePort = 6666;
+  private static final int baseSslPort = 7666;
 
   private JSONArray getDisks()
       throws JSONException {
@@ -35,17 +36,17 @@ public class HardwareLayoutTest {
     return TestUtils.getJsonArrayDuplicateDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
-  private JSONArray getDataNodes(int basePort, JSONArray disks)
+  private JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks)
       throws JSONException {
     return TestUtils
-        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, HardwareState.AVAILABLE, disks);
+        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE,
+            disks);
   }
 
-  private JSONArray getDuplicateDataNodes(int basePort, JSONArray disks)
+  private JSONArray getDuplicateDataNodes(int basePort, int sslPort, JSONArray disks)
       throws JSONException {
-    return TestUtils
-        .getJsonArrayDuplicateDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, HardwareState.AVAILABLE,
-            disks);
+    return TestUtils.getJsonArrayDuplicateDataNodes(dataNodeCount, TestUtils.getLocalHost(), basePort, sslPort,
+        HardwareState.AVAILABLE, disks);
   }
 
   private JSONArray getDatacenters()
@@ -54,10 +55,12 @@ public class HardwareLayoutTest {
     List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
     int curBasePort = basePort;
+    int curSslBasePort = baseSslPort + 1000;
     for (int i = 0; i < datacenterCount; i++) {
       names.add(i, "DC" + i);
-      dataNodes.add(i, getDataNodes(curBasePort, getDisks()));
+      dataNodes.add(i, getDataNodes(curBasePort, curSslBasePort, getDisks()));
       curBasePort += dataNodeCount;
+      curSslBasePort += dataNodeCount;
     }
 
     return TestUtils.getJsonArrayDatacenters(names, dataNodes);
@@ -69,10 +72,12 @@ public class HardwareLayoutTest {
     List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
     int curBasePort = basePort;
+    int curSslBasePort = baseSslPort + 1000;
     for (int i = 0; i < datacenterCount; i++) {
       names.add(i, "DC" + i);
-      dataNodes.add(i, getDataNodes(curBasePort, getDuplicateDisks()));
+      dataNodes.add(i, getDataNodes(curBasePort, curSslBasePort, getDuplicateDisks()));
       curBasePort += dataNodeCount;
+      curSslBasePort += dataNodeCount;
     }
 
     return TestUtils.getJsonArrayDatacenters(names, dataNodes);
@@ -85,10 +90,12 @@ public class HardwareLayoutTest {
     List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
     int curBasePort = basePort;
+    int curSslBasePort = baseSslPort + 1000;
     for (int i = 0; i < datacenterCount; i++) {
       names.add(i, "DC" + i);
-      dataNodes.add(i, getDuplicateDataNodes(curBasePort, getDisks()));
+      dataNodes.add(i, getDuplicateDataNodes(curBasePort, curSslBasePort, getDisks()));
       curBasePort += dataNodeCount;
+      curSslBasePort += dataNodeCount;
     }
 
     return TestUtils.getJsonArrayDatacenters(names, dataNodes);
@@ -100,10 +107,12 @@ public class HardwareLayoutTest {
     List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
     int curBasePort = basePort;
+    int curSslBasePort = baseSslPort + 1000;
     for (int i = 0; i < datacenterCount; i++) {
       names.add(i, "DC");
-      dataNodes.add(i, getDataNodes(curBasePort, getDisks()));
+      dataNodes.add(i, getDataNodes(curBasePort, curSslBasePort, getDisks()));
       curBasePort += dataNodeCount;
+      curSslBasePort += dataNodeCount;
     }
 
     return TestUtils.getJsonArrayDatacenters(names, dataNodes);

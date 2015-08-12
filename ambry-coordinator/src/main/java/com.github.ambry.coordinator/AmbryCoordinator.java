@@ -16,6 +16,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +55,7 @@ public class AmbryCoordinator implements Coordinator {
   private ConnectionPool connectionPool;
   private final Random randomForPartitionSelection;
   private AtomicBoolean crossDCProxyCallsEnabled;
+  private ArrayList<String> sslEnabledDatacenters;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -88,6 +91,7 @@ public class AmbryCoordinator implements Coordinator {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
             "Coordinator cannot start.");
       }
+      sslEnabledDatacenters = Utils.splitString(coordinatorConfig.sslEnabledDatacenters, ",");
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
@@ -142,7 +146,7 @@ public class AmbryCoordinator implements Coordinator {
 
   private OperationContext getOperationContext() {
     return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
-        coordinatorMetrics, responseHandler);
+        coordinatorMetrics, responseHandler, sslEnabledDatacenters);
   }
 
   private PartitionId getPartitionForPut()

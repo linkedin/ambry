@@ -1,5 +1,7 @@
 package com.github.ambry.utils;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -557,5 +559,21 @@ public class Utils {
       offset += sizeRead;
     }
     return data;
+  }
+
+  /**
+   * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
+   * @param data
+   * @param delimiter
+   * @return
+   */
+  public static ArrayList<String> splitString(String data, String delimiter) {
+    if (data == null) {
+      throw new IllegalArgumentException("Passed in string is null ");
+    }
+    ArrayList<String> toReturn = new ArrayList<String>();
+    String[] slices = data.split(delimiter);
+    toReturn.addAll(Arrays.asList(slices));
+    return toReturn;
   }
 }
