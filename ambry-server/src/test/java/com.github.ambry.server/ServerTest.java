@@ -66,19 +66,13 @@ import org.junit.Test;
 public class ServerTest {
 
   private MockNotificationSystem notificationSystem;
-  private MockCluster nonSSLCluster;
-  private MockCluster sslCluster;
+  private MockCluster cluster;
   private HashMap<String, String> datacenterToSSLEnabledDatacentersMap;
 
   public ServerTest()
       throws InterruptedException, IOException, StoreException, InstantiationException {
     notificationSystem = new MockNotificationSystem(9);
     datacenterToSSLEnabledDatacentersMap = new HashMap<String, String>();
-    nonSSLCluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
-    datacenterToSSLEnabledDatacentersMap.put("DC1", "DC2,DC3");
-    datacenterToSSLEnabledDatacentersMap.put("DC2", "DC1,DC3");
-    datacenterToSSLEnabledDatacentersMap.put("DC3", "DC1,DC2");
-    sslCluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
   }
 
   @After
@@ -87,11 +81,8 @@ public class ServerTest {
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
     System.out.println("About to invoke cluster.cleanup()");
-    if (nonSSLCluster != null) {
-      nonSSLCluster.cleanup();
-    }
-    if (sslCluster != null) {
-      sslCluster.cleanup();
+    if (cluster != null) {
+      cluster.cleanup();
     }
     System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
@@ -100,23 +91,27 @@ public class ServerTest {
   public void startStopTest()
       throws IOException, InstantiationException {
     // do nothing
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
   }
 
   @Test
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
-    endToEndTest(nonSSLCluster, new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
+    endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
   }
 
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    endToEndTest(sslCluster, new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", datacenterToSSLEnabledDatacentersMap.get("DC1"));
+    populateDatacenterMap();
+    cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
+    endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", datacenterToSSLEnabledDatacentersMap.get("DC1"));
   }
 
-  private void endToEndTest(MockCluster cluster, Port targetPort, String coordinatorDatacenter,
+  private void endToEndTest(Port targetPort, String coordinatorDatacenter,
       String sslEnabledDatacenters)
       throws InterruptedException, IOException, InstantiationException {
 
@@ -337,8 +332,9 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    MockClusterMap clusterMap = nonSSLCluster.getClusterMap();
-    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    MockClusterMap clusterMap = cluster.getClusterMap();
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
     for (int i = 0; i < 9; i++) {
@@ -643,9 +639,10 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
-    List<DataNodeId> dataNodes = nonSSLCluster.getThreeDataNodesFromDifferentDatacenters();
-    endToEndReplicationWithMultiNodeSinglePartitionTest(nonSSLCluster, "DC1", "", dataNodeId.getPort(),
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
+    List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
+    endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT));
@@ -654,14 +651,16 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    List<DataNodeId> dataNodes = sslCluster.getThreeDataNodesFromDifferentDatacenters();
-    endToEndReplicationWithMultiNodeSinglePartitionTest(sslCluster, "DC1", datacenterToSSLEnabledDatacentersMap.get("DC1"), dataNodeId.getPort(),
+    populateDatacenterMap();
+    cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
+    List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
+    endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", datacenterToSSLEnabledDatacentersMap.get("DC1"), dataNodeId.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL));
   }
 
-  private void endToEndReplicationWithMultiNodeSinglePartitionTest(MockCluster cluster, String coordinatorDatacenter,
+  private void endToEndReplicationWithMultiNodeSinglePartitionTest(String coordinatorDatacenter,
       String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
       Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
@@ -1110,9 +1109,10 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNode = nonSSLCluster.getClusterMap().getDataNodeIds().get(0);
-    List<DataNodeId> dataNodes = nonSSLCluster.getThreeDataNodesFromDifferentDatacenters();
-    endToEndReplicationWithMultiNodeMultiPartitionTest(nonSSLCluster, dataNode.getPort(),
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
+    List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
+    endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT));
@@ -1121,14 +1121,16 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    List<DataNodeId> dataNodes = sslCluster.getThreeDataNodesFromDifferentDatacenters();
-    endToEndReplicationWithMultiNodeMultiPartitionTest(sslCluster, dataNode.getPort(),
+    populateDatacenterMap();
+    cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
+    DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
+    List<DataNodeId> dataNodes = cluster.getThreeDataNodesFromDifferentDatacenters();
+    endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL));
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionTest(MockCluster cluster, int interestedDataNodePortNumber,
+  private void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber,
       Port dataNode1Port, Port dataNode2Port, Port dataNode3Port)
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainTextPort
@@ -1736,16 +1738,19 @@ public class ServerTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(nonSSLCluster, "DC1", PortType.PLAINTEXT);
+    cluster = new MockCluster(notificationSystem, false, datacenterToSSLEnabledDatacentersMap);
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT);
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(sslCluster, "DC1", PortType.SSL);
+    populateDatacenterMap();
+    cluster = new MockCluster(notificationSystem, true, datacenterToSSLEnabledDatacentersMap);
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL);
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(MockCluster cluster, String sourceDatacenter,
+  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
       PortType portType)
       throws InterruptedException, IOException, InstantiationException {
     Properties props = new Properties();
@@ -1858,5 +1863,11 @@ public class ServerTest {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     }
     return channel;
+  }
+
+  private void populateDatacenterMap(){
+    datacenterToSSLEnabledDatacentersMap.put("DC1", "DC2,DC3");
+    datacenterToSSLEnabledDatacentersMap.put("DC2", "DC1,DC3");
+    datacenterToSSLEnabledDatacentersMap.put("DC3", "DC1,DC2");
   }
 }
