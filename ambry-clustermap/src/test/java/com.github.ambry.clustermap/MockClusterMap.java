@@ -23,8 +23,8 @@ public class MockClusterMap implements ClusterMap {
 
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
-  private static AtomicInteger currentPlainTextPort = new AtomicInteger(16000);
-  private static AtomicInteger currentSSLPort = new AtomicInteger(26000);
+  private static AtomicInteger currentPlainTextPort = new AtomicInteger(62000);
+  private static AtomicInteger currentSSLPort = new AtomicInteger(63000);
 
   public MockClusterMap()
       throws IOException {
