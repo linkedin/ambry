@@ -6,7 +6,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.net.BindException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
