@@ -110,10 +110,10 @@ public class CoordinatorConfig {
   public final String sslTrustStorePassword;
 
   /**
-   * The SSL supported cipher suits
+   * The SSL supported cipher suites
    */
-  @Config("coordinator.ssl.cipher.suits")
-  public final String sslCipherSuits;
+  @Config("coordinator.ssl.cipher.suites")
+  public final String sslCipherSuites;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
     this.hostname = verifiableProperties.getString("coordinator.hostname");
@@ -136,6 +136,6 @@ public class CoordinatorConfig {
     this.sslTrustStoreType = verifiableProperties.getString("coordinator.ssl.truststore.type", "JKS");
     this.sslTrustStorePath = verifiableProperties.getString("coordinator.ssl.truststore.path", "");
     this.sslTrustStorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "");
-    this.sslCipherSuits = verifiableProperties.getString("coordinator.ssl.cipher.suits", "");
+    this.sslCipherSuites = verifiableProperties.getString("coordinator.ssl.cipher.suites", "");
   }
 }

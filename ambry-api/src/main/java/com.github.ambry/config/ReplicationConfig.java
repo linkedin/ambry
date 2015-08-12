@@ -121,7 +121,7 @@ public class ReplicationConfig {
    */
   @Config("replication.ssl.truststore.type")
   @Default("JKS")
-  public final String sslTrustStoreType;
+  public final String replicationSslTrustStoreType;
 
   /**
    * The SSL trust store path
@@ -136,10 +136,10 @@ public class ReplicationConfig {
   public final String replicationSslTrustStorePassword;
 
   /**
-   * The SSL supported cipher suits
+   * The SSL supported cipher suites
    */
-  @Config("replication.ssl.cipher.suits")
-  public final String replicationSslCipherSuits;
+  @Config("replication.ssl.cipher.suites")
+  public final String replicationSslCipherSuites;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -168,9 +168,9 @@ public class ReplicationConfig {
     replicationSslKeyStorePath = verifiableProperties.getString("replication.ssl.keystore.path", "");
     replicationSslKeyStorePassword = verifiableProperties.getString("replication.ssl.keystore.password", "");
     replicationSslKeyPassword = verifiableProperties.getString("replication.ssl.key.password", "");
-    sslTrustStoreType = verifiableProperties.getString("replication.ssl.truststore.type", "JKS");
+    replicationSslTrustStoreType = verifiableProperties.getString("replication.ssl.truststore.type", "JKS");
     replicationSslTrustStorePath = verifiableProperties.getString("replication.ssl.truststore.path", "");
     replicationSslTrustStorePassword = verifiableProperties.getString("replication.ssl.truststore.password", "");
-    replicationSslCipherSuits = verifiableProperties.getString("replication.ssl.cipher.suits", "");
+    replicationSslCipherSuites = verifiableProperties.getString("replication.ssl.cipher.suites", "");
   }
 }

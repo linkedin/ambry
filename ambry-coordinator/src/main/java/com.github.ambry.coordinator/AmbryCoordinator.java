@@ -18,7 +18,6 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -108,20 +107,21 @@ public class AmbryCoordinator implements Coordinator {
             coordinatorConfig.sslKeyStorePassword, coordinatorConfig.sslKeyPassword);
         sslFactory.setTrustStore(coordinatorConfig.sslTrustStoreType, coordinatorConfig.sslTrustStorePath,
             coordinatorConfig.sslTrustStorePassword);
-        ArrayList<String> supportedCipherSuites = Utils.splitString(coordinatorConfig.sslCipherSuits, ",");
+        ArrayList<String> supportedCipherSuites = Utils.splitString(coordinatorConfig.sslCipherSuites, ",");
         sslFactory.setCipherSuites(supportedCipherSuites);
         ArrayList<String> supportedProtocols = new ArrayList<String>();
         supportedProtocols.add(coordinatorConfig.sslProtocol);
         sslFactory.setEnabledProtocols(supportedProtocols);
         SSLContext sslContext = sslFactory.createSSLContext();
         SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+        logger.info("Getting connection pool");
         connectionPoolFactory =
             Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry, sslSocketFactory);
       } else {
+        logger.info("Getting connection pool");
         connectionPoolFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry);
       }
 
-      logger.info("Getting connection pool");
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 

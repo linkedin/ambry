@@ -113,9 +113,9 @@ public class AmbryServer {
         sslFactory
             .setKeyStore(replicationConfig.replicationSslKeyStoreType, replicationConfig.replicationSslKeyStorePath,
                 replicationConfig.replicationSslKeyStorePassword, replicationConfig.replicationSslKeyPassword);
-        sslFactory.setTrustStore(replicationConfig.sslTrustStoreType, replicationConfig.replicationSslTrustStorePath,
+        sslFactory.setTrustStore(replicationConfig.replicationSslTrustStoreType, replicationConfig.replicationSslTrustStorePath,
             replicationConfig.replicationSslTrustStorePassword);
-        ArrayList<String> supportedCipherSuites = Utils.splitString(replicationConfig.replicationSslCipherSuits, ",");
+        ArrayList<String> supportedCipherSuites = Utils.splitString(replicationConfig.replicationSslCipherSuites, ",");
         sslFactory.setCipherSuites(supportedCipherSuites);
         ArrayList<String> supportedProtocols = new ArrayList<String>();
         supportedProtocols.add(replicationConfig.replicationSslProtocol);
