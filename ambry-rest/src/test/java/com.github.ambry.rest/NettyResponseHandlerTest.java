@@ -1,10 +1,6 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.rest.RestRequestMetadata;
-import com.github.ambry.rest.RestResponseHandler;
-import com.github.ambry.rest.RestServiceErrorCode;
-import com.github.ambry.rest.RestServiceException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -87,7 +83,7 @@ public class NettyResponseHandlerTest {
   }
 
   /**
-   * Checks {@link com.github.ambry.rest.RestResponseHandler#onRequestComplete(Throwable, boolean)}
+   * Checks {@link RestResponseHandler#onRequestComplete(Throwable, boolean)}
    * with a valid {@link RestServiceException} and with a null exception.
    * @throws JSONException
    */

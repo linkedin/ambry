@@ -57,15 +57,14 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
     if (!isFaulty) {
       try {
         int index = currIndex.getAndIncrement();
-        RestRequestHandler restRequestHandler = restRequestHandlers.get(index % restRequestHandlers.size());
-        return restRequestHandler;
+        return restRequestHandlers.get(index % restRequestHandlers.size());
       } catch (Exception e) {
         throw new RestServiceException("Error while trying to pick a handler to return", e,
             RestServiceErrorCode.RequestHandlerSelectionError);
       }
     } else {
       if (failureProperties != null && failureProperties.containsKey(RETURN_NULL_ON_GET_REQUEST_HANDLER)
-          && failureProperties.getBoolean(RETURN_NULL_ON_GET_REQUEST_HANDLER) == true) {
+          && failureProperties.getBoolean(RETURN_NULL_ON_GET_REQUEST_HANDLER)) {
         return null;
       }
       throw new RestServiceException("Requested handler error", RestServiceErrorCode.RequestHandlerSelectionError);
@@ -74,7 +73,7 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
 
   /**
    * Makes the MockRestRequestHandlerController faulty.
-   * @param props - failure properties. Defines the faulty behaviour. Can be null.
+   * @param props failure properties. Defines the faulty behaviour. Can be null.
    */
   public void breakdown(VerifiableProperties props) {
     isFaulty = true;
@@ -90,8 +89,8 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
 
   /**
    * Creates handlerCount instances of {@link MockRestRequestHandler}.
-   * @param handlerCount - the number of instances of {@link MockRestRequestHandler} to be created.
-   * @param blobStorageService - the BlobStorageService implementation to be used.
+   * @param handlerCount the number of instances of {@link MockRestRequestHandler} to be created.
+   * @param blobStorageService the {@link BlobStorageService} implementation to be used.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
     for (int i = 0; i < handlerCount; i++) {

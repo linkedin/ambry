@@ -27,7 +27,7 @@ import org.json.JSONObject;
  * and reset. The {@link StringBuilder} represents the flushed responseBody.
  * <p/>
  * All functions are synchronized because this is expected to be thread safe (very coarse grained but this is not
- * expected to be performant, just .
+ * expected to be performant, just usable).
  */
 public class MockRestResponseHandler implements RestResponseHandler {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
@@ -134,7 +134,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the current responseMetadata whether it has been flushed or not (Might not be the final response metadata).
-   * @return - get response metadata.
+   * @return the response metadata as a {@link JSONObject}.
    */
   public synchronized JSONObject getResponseMetadata() {
     return responseMetadata;
@@ -142,7 +142,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the responseMetadata if it has been flushed.
-   * @return  - get response metadata if flushed.
+   * @return the response metadata as a {@link JSONObject} if it has been flushed.
    */
   public synchronized JSONObject getFlushedResponseMetadata() {
     if (responseMetadataFlushed.get()) {
@@ -153,7 +153,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the responseMetadata body including both flushed and un-flushed data.
-   * @return - flushed and un-flushed response body.
+   * @return both the flushed and un-flushed response body as a {@link String}.
    * @throws RestServiceException
    */
   public synchronized String getResponseBody()
@@ -163,7 +163,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the responseMetadata body that has already been flushed.
-   * @return - flushed response body.
+   * @return flushed response body as a {@link String}.
    * @throws RestServiceException
    */
   public synchronized String getFlushedResponseBody()
@@ -173,7 +173,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the active state of the channel.
-   * @return - true if active, false if not
+   * @return {@code true} if channel is active, {@code false} if not
    */
   public synchronized boolean getChannelActive() {
     return channelActive.get();

@@ -23,8 +23,7 @@ public class MockNioServerFactory implements NioServerFactory {
 
   /**
    * Returns a new instance of {@link MockNioServer}.
-   * @return
-   * @throws InstantiationException
+   * @return a new instance of {@link MockNioServer}.
    */
   @Override
   public NioServer getNioServer() {
