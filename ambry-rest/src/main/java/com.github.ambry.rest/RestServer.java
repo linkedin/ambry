@@ -94,7 +94,7 @@ public class RestServer {
 
   /**
    * Starts up all the components required. Returns when startup is FULLY complete.
-   * @throws InstantiationException - if the RestServer was unable to start.
+   * @throws InstantiationException if the RestServer is unable to start.
    */
   public void start()
       throws InstantiationException {
@@ -133,7 +133,7 @@ public class RestServer {
 
   /**
    * Wait for shutdown to be triggered and for it to complete.
-   * @throws InterruptedException - if the wait for shutdown was interrupted.
+   * @throws InterruptedException if the wait for shutdown is interrupted.
    */
   public void awaitShutdown()
       throws InterruptedException {

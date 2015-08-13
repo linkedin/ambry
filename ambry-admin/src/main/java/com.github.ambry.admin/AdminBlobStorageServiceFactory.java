@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Admin specific implementation of {@link BlobStorageServiceFactory}
+ * Admin specific implementation of {@link BlobStorageServiceFactory}.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link AdminBlobStorageService} and returns a new
  * instance on {@link AdminBlobStorageServiceFactory#getBlobStorageService()}.
@@ -46,7 +46,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
 
   /**
    * Returns a new instance of {@link AdminBlobStorageService}.
-   * @return - a new instance of {@link AdminBlobStorageService}.
+   * @return a new instance of {@link AdminBlobStorageService}.
    */
   @Override
   public BlobStorageService getBlobStorageService() {

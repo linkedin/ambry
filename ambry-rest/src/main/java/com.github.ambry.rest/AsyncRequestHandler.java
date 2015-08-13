@@ -100,8 +100,8 @@ class AsyncRequestHandler implements RestRequestHandler {
    * <p/>
    * To receive a callback on handling completion, a {@link RestRequestInfoEventListener}
    * needs to be added to the {@link RestRequestInfo}.
-   * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
-   * @throws RestServiceException - if there is an error in preparing and queueing the {@link RestRequestInfo}.
+   * @param restRequestInfo the {@link RestRequestInfo} that needs to be handled.
+   * @throws RestServiceException if there is an error in preparing and queueing the {@link RestRequestInfo}.
    */
   @Override
   public void handleRequest(RestRequestInfo restRequestInfo)
@@ -147,8 +147,8 @@ class AsyncRequestHandler implements RestRequestHandler {
 
   /**
    * Adds the {@link RestRequestInfo} to the queue of {@link RestRequestInfo}s waiting to be handled.
-   * @param restRequestInfo - the {@link RestRequestInfo} that needs to be added to the queue.
-   * @throws RestServiceException - if there is an error in preparing and queueing the {@link RestRequestInfo}.
+   * @param restRequestInfo the {@link RestRequestInfo} that needs to be added to the queue.
+   * @throws RestServiceException if there is an error in preparing and queueing the {@link RestRequestInfo}.
    */
   private void queueRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
@@ -296,7 +296,7 @@ class DequeuedRequestHandler implements Runnable {
 
   /**
    * Cleans up after a request is complete. Destroys any state that was being maintained.
-   * @param restRequestMetadata - the {@link RestRequestMetadata} of the request that was completed.
+   * @param restRequestMetadata the {@link RestRequestMetadata} of the request that was completed.
    */
   public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
     if (restRequestMetadata != null) {
@@ -312,8 +312,8 @@ class DequeuedRequestHandler implements Runnable {
   /**
    * Process a dequeued {@link RestRequestInfo}. Discerns the type of {@link RestMethod} and calls the right function
    * of the {@link BlobStorageService}.
-   * @param restRequestInfo - The currently de-queued {@link RestRequestInfo}.
-   * @throws RestServiceException - - if there was error in handling the {@link RestRequestInfo}.
+   * @param restRequestInfo The currently de-queued {@link RestRequestInfo}.
+   * @throws RestServiceException if there is an error in handling the {@link RestRequestInfo}.
    */
   private void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
@@ -359,10 +359,10 @@ class DequeuedRequestHandler implements Runnable {
 
   /**
    * Wait for the shutdown of this instance for the specified time.
-   * @param timeout - the amount of time to wait for shutdown.
-   * @param timeUnit - time unit of timeout
-   * @return - {@code true} if shutdown succeeded within the timeout. {@code false} otherwise.
-   * @throws InterruptedException - if the wait for shutdown was interrupted.
+   * @param timeout the amount of time to wait for shutdown.
+   * @param timeUnit time unit of {@code timeout}.
+   * @return {@code true} if shutdown succeeded within the {@code timeout}. {@code false} otherwise.
+   * @throws InterruptedException if the wait for shutdown is interrupted.
    */
   public boolean awaitShutdown(long timeout, TimeUnit timeUnit)
       throws InterruptedException {
@@ -371,8 +371,8 @@ class DequeuedRequestHandler implements Runnable {
 
   /**
    * Do tasks that are required to be done on completion of {@link RestRequestInfo} handling.
-   * @param restRequestInfo - The {@link RestRequestInfo} whose handling completed.
-   * @param e - If handling failed, the reason for failure. If handling succeeded, null.
+   * @param restRequestInfo The {@link RestRequestInfo} whose handling completed.
+   * @param e If handling failed, the reason for failure. If handling succeeded, null.
    */
   private void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     String uri = restRequestInfo.getRestRequestMetadata().getUri();
@@ -393,7 +393,6 @@ class DequeuedRequestHandler implements Runnable {
       }
       logger.trace("Handling of RestRequestInfo of request {} completed", uri);
     }
-
   }
 
   /**
@@ -429,7 +428,7 @@ class DequeuedRequestHandler implements Runnable {
 
   /**
    * Tracks required metrics once the {@link RestRequestInfo} is dequeued.
-   * @param restRequestInfo - the {@link RestRequestInfo} that was just dequeued.
+   * @param restRequestInfo the {@link RestRequestInfo} that was just dequeued.
    */
   private void trackMetricsOnDequeue(RestRequestInfo restRequestInfo) {
     Long queueTime = queuingTimeTracker.stopTracking(restRequestInfo);
@@ -462,7 +461,7 @@ class QueuingTimeTracker {
 
   /**
    * Starts tracking the time spent being queued.
-   * @param restRequestInfo - the {@link RestRequestInfo} whose queueing time needs to be tracked.
+   * @param restRequestInfo the {@link RestRequestInfo} whose queueing time needs to be tracked.
    */
   public void startTracking(RestRequestInfo restRequestInfo) {
     Long queueStartTime = System.currentTimeMillis();
@@ -477,8 +476,8 @@ class QueuingTimeTracker {
    * Stops tracking the time elapsed since {@link #startTracking(RestRequestInfo)} was called on this
    * {@link RestRequestInfo} and returns it. If {@link #startTracking(RestRequestInfo)} was never called on this
    * {@link RestRequestInfo}, returns null.
-   * @param restRequestInfo - the {@link RestRequestInfo} whose queueing time tracking needs to be stopped and recorded.
-   * @return - time elapsed since {@link #startTracking(RestRequestInfo)} was called on the {@link RestRequestInfo}. If
+   * @param restRequestInfo the {@link RestRequestInfo} whose queueing time tracking needs to be stopped and recorded.
+   * @return time elapsed since {@link #startTracking(RestRequestInfo)} was called on the {@link RestRequestInfo}. If
    * {@link #startTracking(RestRequestInfo)} was never called, returns null.
    */
   public Long stopTracking(RestRequestInfo restRequestInfo) {

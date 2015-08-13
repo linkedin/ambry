@@ -10,8 +10,8 @@ enum AdminOperationType {
 
   /**
    * Converts the operation specified by the input string into an {@link AdminOperationType}.
-   * @param operationTypeStr - the operation requested as a string.
-   * @return - the operation requested as a valid {@link AdminOperationType} if operation is known, otherwise returns
+   * @param operationTypeStr the operation requested as a string.
+   * @return the operation requested as a valid {@link AdminOperationType} if operation is known, otherwise returns
    * {@link AdminOperationType#unknown}.
    */
   public static AdminOperationType getAdminOperationType(String operationTypeStr) {

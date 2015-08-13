@@ -29,10 +29,10 @@ public interface RestRequestContent {
    * <p/>
    * Will throw exceptions if srcIndex < 0, dstIndex < 0, length < 0, src does not have enough data or if dst does not
    * have enough space.
-   * @param srcIndex - the index to start from in the underlying content.
-   * @param dst - the destination for the bytes requested.
-   * @param dstIndex - the index from which the copying has to start in {@code dst}.
-   * @param length - the number of bytes to get.
+   * @param srcIndex the index to start from in the underlying content.
+   * @param dst the destination for the bytes requested.
+   * @param dstIndex the index from which the copying has to start in {@code dst}.
+   * @param length the number of bytes to get.
    */
   public void getBytes(int srcIndex, byte[] dst, int dstIndex, int length);
 

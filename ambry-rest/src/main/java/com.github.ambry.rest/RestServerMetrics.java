@@ -132,7 +132,7 @@ class RestServerMetrics {
 
   /**
    * Registers an {@link AsyncRequestHandler} so that its metrics (queue occupancy, requests in flight) can be tracked.
-   * @param requestHandler - the {@link AsyncRequestHandler} whose metrics need to be tracked.
+   * @param requestHandler the {@link AsyncRequestHandler} whose metrics need to be tracked.
    */
   public void registerAsyncRequestHandler(final AsyncRequestHandler requestHandler) {
     synchronized (asyncRequestHandlerRegisterLock) {
@@ -169,7 +169,7 @@ class RestServerMetrics {
   /**
    * Tracks the state of the {@link RestRequestHandler}s provided as input and periodically reports how many of them are
    * alive and well.
-   * @param requestHandlers - the list of {@link RestRequestHandler}s whose state needs to be reported.
+   * @param requestHandlers the list of {@link RestRequestHandler}s whose state needs to be reported.
    */
   public void trackRequestHandlerHealth(final List<RestRequestHandler> requestHandlers) {
     requestHandlersAlive = new Gauge<Integer>() {

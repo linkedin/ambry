@@ -59,9 +59,9 @@ class EchoHandler {
 
   /**
    * Refers to the text provided by the client in the URI and returns a {@link JSONObject} representation of the echo.
-   * @param restRequestMetadata
-   * @param adminMetrics
-   * @return - A {@link JSONObject} that wraps the echoed string.
+   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
+   * @return A {@link JSONObject} that wraps the echoed string.
    * @throws RestServiceException
    */
   private static JSONObject echo(RestRequestMetadata restRequestMetadata, AdminMetrics adminMetrics)
@@ -86,8 +86,8 @@ class EchoHandler {
 
   /**
    * Packages the echoed string into a {@link JSONObject}.
-   * @param text - the echoed text.
-   * @return - A {@link JSONObject} that wraps the text.
+   * @param text the echoed text.
+   * @return A {@link JSONObject} that wraps the text.
    * @throws JSONException
    */
   private static JSONObject packageResult(String text)

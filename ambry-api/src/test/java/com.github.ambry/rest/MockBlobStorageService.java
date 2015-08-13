@@ -55,7 +55,7 @@ public class MockBlobStorageService implements BlobStorageService {
    * Performs any custom operations required by the request (usually tests use this).
    * <p/>
    * All other requests are handled by echoing the {@link RestMethod} back to the client.
-   * @param restRequestInfo - a piece of the request that needs to be handled.
+   * @param restRequestInfo {@link RestRequestInfo } that defines a piece of the request that needs to be handled.
    * @throws RestServiceException
    */
   private void doHandleRequest(RestRequestInfo restRequestInfo)
@@ -76,7 +76,7 @@ public class MockBlobStorageService implements BlobStorageService {
 
   /**
    * Determines the operation desired by the request.
-   * @param restRequestMetadata - metadata about the request.
+   * @param restRequestMetadata {@link RestRequestMetadata} metadata about the request.
    * @return the operation desired by the request.
    */
   private String getOperationType(RestRequestMetadata restRequestMetadata) {
@@ -86,7 +86,7 @@ public class MockBlobStorageService implements BlobStorageService {
 
   /**
    * Echoes the {@link RestMethod} defined in {@link RestRequestMetadata} and writes the response to the channel.
-   * @param restRequestInfo - a piece of the request that needs to be handled.
+   * @param restRequestInfo {@link RestRequestInfo } that defines a piece of the request that needs to be handled.
    * @throws RestServiceException
    */
   private void echoRestMethod(RestRequestInfo restRequestInfo)

@@ -67,9 +67,9 @@ class InvocationOptions {
 
   /**
    * Parses the arguments provided and extracts them into variables that can be retrieved through APIs.
-   * @param args - the command line argument list.
-   * @throws InstantiationException - if all required arguments were not provided.
-   * @throws IOException - if help text could not be printed.
+   * @param args the command line argument list.
+   * @throws InstantiationException if all required arguments were not provided.
+   * @throws IOException if help text could not be printed.
    */
   public InvocationOptions(String args[])
       throws InstantiationException, IOException {
@@ -111,9 +111,9 @@ class InvocationOptions {
 
   /**
    * Checks if all required arguments are present. Prints the ones that are not.
-   * @param requiredArgs - the list of required arguments.
-   * @param options - the list of received options.
-   * @return - whether required options are present.
+   * @param requiredArgs the list of required arguments.
+   * @param options the list of received options.
+   * @return whether required options are present.
    */
   private boolean hasRequiredOptions(ArrayList<OptionSpec<?>> requiredArgs, OptionSet options) {
     boolean haveAll = true;

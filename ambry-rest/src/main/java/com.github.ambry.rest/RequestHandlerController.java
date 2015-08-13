@@ -76,8 +76,8 @@ class RequestHandlerController implements RestRequestHandlerController {
 
   /**
    * Creates handlerCount instances of {@link AsyncRequestHandler}. They are not started.
-   * @param handlerCount - The number of instances of {@link AsyncRequestHandler} to be created.
-   * @param blobStorageService - The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
+   * @param handlerCount The number of instances of {@link AsyncRequestHandler} to be created.
+   * @param blobStorageService The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
     logger.trace("Creating {} instances of AsyncRequestHandler", handlerCount);

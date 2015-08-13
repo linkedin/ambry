@@ -132,10 +132,10 @@ class NettyResponseHandler implements RestResponseHandler {
    * Other than Netty write failures, this operation can fail for three reasons: -
    * 1. Response metadata has already been written - results in a {@link RestServiceException}.
    * 2. Channel is inactive - results in a {@link RestServiceException}.
-   * 3. Synchronize for response metadata write was interrupted- results in a {@link InterruptedException}.
+   * 3. Synchronize for response metadata write is interrupted- results in a {@link InterruptedException}.
    * In all three cases, a failed {@link ChannelFuture} wrapping the exact exception is returned.
-   * @param responseMetadata - The response metadata to be written.
-   * @return - A {@link ChannelFuture} that tracks the write operation if sanity checks succeeded. Else, a failed
+   * @param responseMetadata The response metadata to be written.
+   * @return A {@link ChannelFuture} that tracks the write operation if sanity checks succeeded. Else, a failed
    * {@link ChannelFuture} wrapping the exact exception.
    */
   private ChannelFuture maybeWriteResponseMetadata(HttpResponse responseMetadata) {
@@ -162,9 +162,9 @@ class NettyResponseHandler implements RestResponseHandler {
    * </p>
    * This function is thread safe but offers no ordering guarantees. The write can fail if synchronization to write to
    * channel is interrupted.
-   * @param httpObject - the {@link HttpObject} to be written.
-   * @return - A {@link ChannelFuture} that tracks the write operation.
-   * @throws RestServiceException - If the channel is not active.
+   * @param httpObject the {@link HttpObject} to be written.
+   * @return A {@link ChannelFuture} that tracks the write operation.
+   * @throws RestServiceException If the channel is not active.
    */
   private ChannelFuture writeToChannel(HttpObject httpObject)
       throws RestServiceException {
@@ -198,14 +198,14 @@ class NettyResponseHandler implements RestResponseHandler {
    * sent.
    * <p/>
    * The update can fail for two reasons: -
-   * 1. Synchronization for response metadata write was interrupted - results in a {@link InterruptedException}. This is
+   * 1. Synchronization for response metadata write is interrupted - results in a {@link InterruptedException}. This is
    * wrapped in a {@link RestServiceException}.
    * 2. The response metadata was already sent or is being sent - results in a {@link RestServiceException} that is
    * thrown as is.
-   * @param headerName - The name of the header.
-   * @param headerValue - The intended value of the header.
-   * @return - The updated headers.
-   * @throws RestServiceException - if the response metadata is already sent or is being sent.
+   * @param headerName The name of the header.
+   * @param headerValue The intended value of the header.
+   * @return The updated headers.
+   * @throws RestServiceException if the response metadata is already sent or is being sent.
    */
   private HttpHeaders changeResponseHeader(String headerName, Object headerValue)
       throws RestServiceException {
@@ -261,7 +261,7 @@ class NettyResponseHandler implements RestResponseHandler {
    * <p/>
    * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
    * their responsibility to ensure it.
-   * @throws RestServiceException - if response metadata has already been sent.
+   * @throws RestServiceException if response metadata has already been sent.
    */
   private void verifyResponseAlive()
       throws RestServiceException {
@@ -276,7 +276,7 @@ class NettyResponseHandler implements RestResponseHandler {
    * <p/>
    * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
    * their responsibility to ensure it.
-   * @throws RestServiceException - if channel has been already been closed.
+   * @throws RestServiceException if channel has been already been closed.
    */
   private void verifyChannelActive()
       throws RestServiceException {
@@ -288,7 +288,7 @@ class NettyResponseHandler implements RestResponseHandler {
 
   /**
    * Provided a cause, returns an error response with the right status and error message.
-   * @param cause - the cause of the error.
+   * @param cause the cause of the error.
    */
   private FullHttpResponse generateErrorResponse(Throwable cause) {
     HttpResponseStatus status;
@@ -312,8 +312,8 @@ class NettyResponseHandler implements RestResponseHandler {
 
   /**
    * Converts a {@link RestServiceErrorCode} into a {@link HttpResponseStatus}.
-   * @param restServiceErrorCode - {@link RestServiceErrorCode} that needs to be mapped to a {@link HttpResponseStatus}.
-   * @return - the {@link HttpResponseStatus} that maps to the {@link RestServiceErrorCode}.
+   * @param restServiceErrorCode {@link RestServiceErrorCode} that needs to be mapped to a {@link HttpResponseStatus}.
+   * @return the {@link HttpResponseStatus} that maps to the {@link RestServiceErrorCode}.
    */
   private HttpResponseStatus getHttpResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     RestServiceErrorCode errorCodeGroup = RestServiceErrorCode.getErrorCodeGroup(restServiceErrorCode);
@@ -349,8 +349,8 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
   /**
    * Adds the received write future to the list of futures being tracked and requests a callback after the future
    * finishes.
-   * @param writeFuture - the write {@link ChannelFuture} that needs to be tracked.
-   * @return - the write {@link ChannelFuture} that was submitted to be tracked.
+   * @param writeFuture the write {@link ChannelFuture} that needs to be tracked.
+   * @return the write {@link ChannelFuture} that was submitted to be tracked.
    */
   public ChannelFuture trackWrite(ChannelFuture writeFuture) {
     Long writeStartTime = System.currentTimeMillis();
@@ -367,7 +367,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
 
   /**
    * Callback for when the operation represented by the {@link ChannelFuture} is done.
-   * @param future - the {@link ChannelFuture} whose operation finished.
+   * @param future the {@link ChannelFuture} whose operation finished.
    */
   @Override
   public void operationComplete(ChannelFuture future) {

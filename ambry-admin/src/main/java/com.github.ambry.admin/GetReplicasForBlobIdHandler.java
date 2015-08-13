@@ -69,10 +69,10 @@ class GetReplicasForBlobIdHandler {
   /**
    * Extracts the blobid provided by the client and figures out the partition that the blobid would belong to
    * based on the cluster map. Using the partition information, returns the list of replicas as a part of a JSONObject.
-   * @param restRequestMetadata
-   * @param clusterMap
-   * @param adminMetrics
-   * @return - A {@link JSONObject} that wraps the replica list.
+   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @param clusterMap {@link ClusterMap} to use to find the replicas of the blob id.
+   * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
+   * @return A {@link JSONObject} that wraps the replica list.
    * @throws RestServiceException
    */
   private static JSONObject getReplicasForBlobId(RestRequestMetadata restRequestMetadata, ClusterMap clusterMap,
@@ -114,7 +114,7 @@ class GetReplicasForBlobIdHandler {
 
   /**
    * Packages the list of replicas into a {@link JSONObject}.
-   * @param replicaIds
+   * @param replicaIds the list of {@link ReplicaId}s that need to packaged into a {@link JSONObject}.
    * @return A {@link JSONObject} that wraps the replica list.
    * @throws JSONException
    */

@@ -102,8 +102,8 @@ class AdminBlobStorageService implements BlobStorageService {
 
   /**
    * Looks at the URI to determine the type of operation required.
-   * @param restRequestMetadata
-   * @return
+   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @return extracted operation type from the uri.
    */
   private String getOperationFromRequestUri(RestRequestMetadata restRequestMetadata) {
     String path = restRequestMetadata.getPath();

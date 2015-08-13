@@ -22,13 +22,15 @@ public interface RestRequestHandler {
 
   /**
    * Does startup tasks for the RestRequestHandler. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException - if the RestRequestHandler is unable to start.
+   * @throws InstantiationException if the RestRequestHandler is unable to start.
    */
   public void start()
       throws InstantiationException;
 
   /**
    * Does shutdown tasks for the RestRequestHandler. When the function returns, shutdown is FULLY complete.
+   * <p/>
+   * Any requests queued after shutdown is called might be dropped.
    * <p/>
    * The {@link NioServer} is expected to have stopped queueing new requests before this function is called.
    */
@@ -43,8 +45,8 @@ public interface RestRequestHandler {
    * It is possible that the {@link RestRequestInfo} is not immediately handled but en-queued to be handled at a later
    * time. If this is the case, then the implementation will (is expected to) notify listeners that are registered to
    * listen to events on the {@link RestRequestInfo} of handling completion.
-   * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
-   * @throws RestServiceException - if there is any error while processing the {@link RestRequestInfo}.
+   * @param restRequestInfo the {@link RestRequestInfo} that needs to be handled.
+   * @throws RestServiceException if there is any error while processing the {@link RestRequestInfo}.
    */
   public void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -63,7 +65,7 @@ public interface RestRequestHandler {
    * (e.g. connection interruption).
    * <p/>
    * This operation has to be idempotent.
-   * @param restRequestMetadata - the metadata of the request that just completed.
+   * @param restRequestMetadata the metadata of the request that just completed.
    */
   public void onRequestComplete(RestRequestMetadata restRequestMetadata);
 

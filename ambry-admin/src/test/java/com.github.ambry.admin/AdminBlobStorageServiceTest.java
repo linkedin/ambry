@@ -318,9 +318,9 @@ public class AdminBlobStorageServiceTest {
 
   /**
    * Method to easily create RestRequestInfo objects containing a specific request.
-   * @param restMethod - the {@link RestMethod} desired.
-   * @param uri - string representation of the desired URI.
-   * @param headers - any associated headers as a {@link JSONObject}.
+   * @param restMethod the {@link RestMethod} desired.
+   * @param uri string representation of the desired URI.
+   * @param headers any associated headers as a {@link JSONObject}.
    * @return A {@link RestRequestInfo} object that defines the operation required by the input along with a
    * {@link com.github.ambry.rest.RestResponseHandler}.
    * @throws JSONException
@@ -341,7 +341,7 @@ public class AdminBlobStorageServiceTest {
   /**
    * Extracts the response received from the {@link AdminBlobStorageService} and decodes it into a {@link JSONObject}.
    * @param restRequestInfo - the {@link RestRequestInfo} that was sent to {@link AdminBlobStorageService}.
-   * @return - the response decoded into a {@link JSONObject}.
+   * @return the response decoded into a {@link JSONObject}.
    * @throws JSONException
    * @throws RestServiceException
    */
@@ -354,8 +354,8 @@ public class AdminBlobStorageServiceTest {
   /**
    * Concludes a test by putting in the end marker (last {@link RestRequestContent}) and checks that the
    * {@link AdminBlobStorageService} interprets it correctly.
-   * @param adminBlobStorageService
-   * @param restRequestInfo
+   * @param adminBlobStorageService instance of {@link AdminBlobStorageService} to use.
+   * @param restRequestInfo {@link RestRequestInfo} containing all the details about the request.
    * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
@@ -371,9 +371,9 @@ public class AdminBlobStorageServiceTest {
 
   /**
    * Method to easily create {@link RestRequestContent}.
-   * @param content - the actual content that forms the underlying data.
-   * @param isLast - true if this the last part of the content in a request.
-   * @return - A {@link RestRequestContent} object with the specified content and behaviour.
+   * @param content the actual content that forms the underlying data.
+   * @param isLast true if this the last part of the content in a request.
+   * @return A {@link RestRequestContent} object with the specified content and behaviour.
    * @throws InstantiationException
    * @throws JSONException
    */
@@ -391,7 +391,7 @@ public class AdminBlobStorageServiceTest {
   /**
    * Does the {@link AdminOperationType#echo} test by creating a {@link RestRequestInfo} specifying echo, sends it to
    * the {@link AdminBlobStorageService} instance and checks equality of response with input text.
-   * @param adminBlobStorageService
+   * @param adminBlobStorageService instance of {@link AdminBlobStorageService} that should be used for the echo.
    * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException

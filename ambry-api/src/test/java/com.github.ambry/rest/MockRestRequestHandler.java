@@ -31,7 +31,7 @@ public class MockRestRequestHandler implements RestRequestHandler {
   /**
    * Calls the appropriate method in the {@link BlobStorageService}. Non-blocking nature depends on the implementation
    * of the underlying {@link BlobStorageService}.
-   * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
+   * @param restRequestInfo the {@link RestRequestInfo} that needs to be handled.
    * @throws RestServiceException
    */
   @Override

@@ -33,7 +33,7 @@ public class RestRequestInfo {
 
   /**
    * Specifies whether this RestRequestInfo is the the first part of a request.
-   * @return - whether this is the first part of a request.
+   * @return whether this is the first part of a request.
    */
   public boolean isFirstPart() {
     return isFirstPart;
@@ -41,7 +41,7 @@ public class RestRequestInfo {
 
   /**
    * Metadata that is needed to process every piece (like RestMethod, URI etc).
-   * @return - the {@link RestRequestMetadata} representing metadata about the request.
+   * @return the {@link RestRequestMetadata} representing metadata about the request.
    */
   public RestRequestMetadata getRestRequestMetadata() {
     return restRequestMetadata;
@@ -53,7 +53,7 @@ public class RestRequestInfo {
    * For the very first RestRequestInfo object of a request this will be null.
    * <p/>
    * Pieces that belong to a single request are expected to have a reference to the same {@link RestRequestMetadata}.
-   * @return - the {@link RestRequestContent} containing content that might be a piece of a larger request.
+   * @return the {@link RestRequestContent} containing content that might be a piece of a larger request.
    */
   public RestRequestContent getRestRequestContent() {
     return restRequestContent;
@@ -61,7 +61,7 @@ public class RestRequestInfo {
 
   /**
    * Reference to the {@link RestResponseHandler} that can be used to return responses to the client.
-   * @return - a {@link RestResponseHandler} that provides APIs to return responses to the client.
+   * @return a {@link RestResponseHandler} that provides APIs to return responses to the client.
    */
   public RestResponseHandler getRestResponseHandler() {
     return restResponseHandler;
@@ -82,7 +82,7 @@ public class RestRequestInfo {
 
   /**
    * Register to be notified about handling results for this RestRequestInfo.
-   * @param restRequestInfoEventListener - the listener that needs to be notified of handling completion.
+   * @param restRequestInfoEventListener the listener that needs to be notified of handling completion.
    */
   public RestRequestInfo addListener(RestRequestInfoEventListener restRequestInfoEventListener) {
     if (restRequestInfoEventListener != null) {
@@ -106,7 +106,7 @@ public class RestRequestInfo {
   /**
    * Notify listeners of handling completion. If there was an {@link Exception}, e will be non-null (this defines
    * failure).
-   * @param e - the {@link Exception} that caused the handling to fail.
+   * @param e the {@link Exception} that caused the handling to fail.
    */
   public void onComplete(Exception e) {
     if (operationComplete.compareAndSet(false, true)) {
