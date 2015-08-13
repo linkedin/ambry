@@ -39,6 +39,7 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
       throws IOException, InstantiationException {
+    // sslEnabledDatacenters represents comma separaated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
@@ -74,8 +75,7 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
-    props
-        .setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters == null ? "" : sslEnabledDatacenters);
+    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);

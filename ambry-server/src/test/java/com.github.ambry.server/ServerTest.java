@@ -95,7 +95,7 @@ public class ServerTest {
   public void startStopSSLTest()
       throws IOException, InstantiationException {
     // do nothing
-    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC2");
+    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
   }
 
   @Test
@@ -109,7 +109,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC2");
+    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3");
   }
@@ -654,7 +654,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC2");
+    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = cluster.getOneDataNodeFromEachDatacenter(dataCenterList);
@@ -1125,7 +1125,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC2");
+    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = cluster.getOneDataNodeFromEachDatacenter(dataCenterList);
@@ -1749,7 +1749,7 @@ public class ServerTest {
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException {
-    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC2");
+    cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL);
   }
 
