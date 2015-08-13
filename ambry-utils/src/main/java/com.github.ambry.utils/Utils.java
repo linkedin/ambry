@@ -576,4 +576,24 @@ public class Utils {
     toReturn.addAll(Arrays.asList(slices));
     return toReturn;
   }
+
+  /**
+   * Merge/Concatenate the input list of strings using the delimiter and return obtained string
+   * @param data List of strings to be merged/concatenated
+   * @param delimiter using which the list of strings need to be merged/concatenated
+   * @return the obtained string after merging/concatenating
+   */
+  public static String concatenateString(ArrayList<String> data, String delimiter) {
+    if (data == null) {
+      throw new IllegalArgumentException("Passed in List is null ");
+    }
+    StringBuilder sb = new StringBuilder();
+    if (data.size() > 1) {
+      for (int i = 0; i < data.size() - 1; i++) {
+        sb.append(data.get(i)).append(delimiter);
+      }
+      sb.append(data.get(data.size() - 1));
+    }
+    return sb.toString();
+  }
 }

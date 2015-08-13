@@ -131,15 +131,7 @@ public class SocketServer implements NetworkServer {
         processors.get(processorId).wakeup();
       }
     });
-    startAcceptors();
-    for (Acceptor acceptor : acceptors) {
-      acceptor.awaitStartup();
-    }
-    logger.info("Started server");
-  }
 
-  private void startAcceptors()
-      throws IOException {
     // start accepting connections
     logger.info("Starting acceptor threads");
     Acceptor plainTextAcceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize, metrics);
@@ -148,11 +140,14 @@ public class SocketServer implements NetworkServer {
 
     Port sslPort = ports.get(PortType.SSL);
     if (sslPort != null) {
-      SSLAcceptor sslAcceptor =
-          new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
+      SSLAcceptor sslAcceptor = new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
       acceptors.add(sslAcceptor);
       Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
     }
+    for (Acceptor acceptor : acceptors) {
+      acceptor.awaitStartup();
+    }
+    logger.info("Started server");
   }
 
   public void shutdown() {

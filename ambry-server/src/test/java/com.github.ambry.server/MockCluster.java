@@ -7,6 +7,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,20 +33,20 @@ public class MockCluster {
   private NotificationSystem notificationSystem;
 
   public MockCluster(NotificationSystem notificationSystem)
-      throws IOException, InstantiationException{
-    this(notificationSystem, false, new HashMap<String, String>());
+      throws IOException, InstantiationException {
+    this(notificationSystem, false, "");
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL,
-      HashMap<String, String> datacenterToSSLEnabledDatacentersMap)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
+    ArrayList<String> sslEnabledDatacenterList = Utils.splitString(sslEnabledDatacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-        startServer(dataNodeId, datacenterToSSLEnabledDatacentersMap.get(dataNodeId.getDatacenterName()));
+        startServer(dataNodeId, getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), sslEnabledDatacenterList));
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -73,7 +74,8 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
-    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters == null ? "" : sslEnabledDatacenters);
+    props
+        .setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters == null ? "" : sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
@@ -95,13 +97,21 @@ public class MockCluster {
     clusterMap.cleanup();
   }
 
-  public List<DataNodeId> getThreeDataNodesFromDifferentDatacenters() {
+  private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
+    sslEnabledDataCenterList.remove(datacenter);
+    String sslEnabledDatacenters = Utils.concatenateString(sslEnabledDataCenterList, ",");
+    return sslEnabledDatacenters;
+  }
+
+  public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
     HashSet<String> datacenters = new HashSet<String>();
     List<DataNodeId> toReturn = new ArrayList<DataNodeId>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-      if (!datacenters.contains(dataNodeId.getDatacenterName())) {
-        datacenters.add(dataNodeId.getDatacenterName());
-        toReturn.add(dataNodeId);
+      if (datacenterList.contains(dataNodeId.getDatacenterName())) {
+        if (!datacenters.contains(dataNodeId.getDatacenterName())) {
+          datacenters.add(dataNodeId.getDatacenterName());
+          toReturn.add(dataNodeId);
+        }
       }
     }
     return toReturn;
