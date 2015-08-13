@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  *
  */
-class MockCluster {
+public class MockCluster {
   private Map<DataNodeId, MockDataNode> mockDataNodes;
   private ClusterMap clustermap;
 

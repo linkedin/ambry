@@ -1,0 +1,237 @@
+package com.github.ambry.messageformat;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.NonReadableChannelException;
+import java.nio.channels.WritableByteChannel;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+
+/**
+ * Tests functionality of {@link BlobOutput}.
+ */
+public class BlobOutputTest {
+
+  /**
+   * Tests the common case i.e
+   * 1. Create {@link BlobOutput} with some random data and opens it as a channel for reading.
+   * 2. Calls {@link BlobOutput#read(ByteBuffer)} or {@link BlobOutput#writeTo(WritableByteChannel)} and checks that
+   * the data read matches the data used to create the {@link BlobOutput}.
+   * @throws IOException
+   */
+  @Test
+  public void commonCaseTest()
+      throws IOException {
+    readTest();
+    writeToTest();
+  }
+
+  /**
+   * Tests that the right exceptions are thrown if {@link BlobOutput#open()} fails.
+   * @throws IOException
+   */
+  @Test
+  public void openFailureTests()
+      throws IOException {
+    byte[] in = new byte[1024];
+    // try to reopen channel
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
+    try {
+      blobOutput.open();
+      fail("Tried to reopen BlobOutput for reading. Should have failed.");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    } finally {
+      cleanUpBlobOutput(blobOutput);
+    }
+
+    // try to open channel after close
+    blobOutput = new BlobOutput(in.length, new ByteArrayInputStream(in));
+    blobOutput.close();
+    try {
+      blobOutput.open();
+      fail("Tried to open closed BlobOutput. Should have failed");
+    } catch (ClosedChannelException e) {
+      // expected. nothing to do.
+    } finally {
+      cleanUpBlobOutput(blobOutput);
+    }
+
+    // read lesser than stream size data
+    blobOutput = new BlobOutput(in.length + 1, new ByteArrayInputStream(in));
+    try {
+      blobOutput.open();
+      fail("Should have failed because data loaded into buffer was lesser than actual data in stream");
+    } catch (IOException e) {
+      // expected. nothing to do.
+    } finally {
+      cleanUpBlobOutput(blobOutput);
+    }
+
+    // read more than stream size data
+    blobOutput = new BlobOutput(in.length - 1, new ByteArrayInputStream(in));
+    try {
+      blobOutput.open();
+      fail("Should have failed because there was still data remaining after buffer was loaded with blob size bytes");
+    } catch (IOException e) {
+      // expected. nothing to do.
+    } finally {
+      cleanUpBlobOutput(blobOutput);
+    }
+  }
+
+  /**
+   * Tests that the right exceptions are thrown when {@link BlobOutput#read(ByteBuffer)} or
+   * {@link BlobOutput#writeTo(WritableByteChannel)} fail.
+   * @throws IOException
+   */
+  @Test
+  public void readAndWriteToFailureTest()
+      throws IOException {
+    byte[] in = new byte[1];
+    fillRandomBytes(in);
+    ByteChannel channel = new ByteChannel(0);
+    InputStream data = new ByteArrayInputStream(in);
+    BlobOutput blobOutput = new BlobOutput(in.length, data);
+    ByteBuffer buffer = ByteBuffer.allocate(0);
+    try {
+      blobOutput.read(buffer);
+      fail("Tried to read from un-opened BlobOutput. Should have failed");
+    } catch (NonReadableChannelException e) {
+      // expected. nothing to do.
+    }
+
+    try {
+      blobOutput.writeTo(channel);
+      fail("Tried writeTo from un-opened BlobOutput. Should have failed");
+    } catch (NonReadableChannelException e) {
+      // expected. nothing to do.
+    }
+
+    blobOutput.open();
+    blobOutput.close();
+    try {
+      blobOutput.read(buffer);
+      fail("Tried to read from closed BlobOutput. Should have failed");
+    } catch (ClosedChannelException e) {
+      // expected. nothing to do.
+    }
+
+    try {
+      blobOutput.writeTo(channel);
+      fail("Tried writeTo from closed BlobOutput. Should have failed");
+    } catch (ClosedChannelException e) {
+      // expected. nothing to do.
+    }
+  }
+
+  /**
+   * Tests behaviour of {@link BlobOutput#read(ByteBuffer)} and {@link BlobOutput#writeTo(WritableByteChannel)} on some
+   * corner cases.
+   * <p/>
+   * Corner case list:
+   * 1. Blob size is 0.
+   * @throws IOException
+   */
+  @Test
+  public void readAndWriteCornerCasesTest()
+      throws IOException {
+    // 0 sized blob.
+    ByteChannel channel = new ByteChannel(0);
+    BlobOutput blobOutput = getRandomBlobOutput(new byte[0]).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
+    ByteBuffer buffer = ByteBuffer.allocate(0);
+
+    assertEquals("There should have been no bytes to read", -1, blobOutput.read(buffer));
+    assertEquals("There should have been no bytes to write", -1, blobOutput.writeTo(channel));
+  }
+
+  // helpers
+  // general
+  private void fillRandomBytes(byte[] in) {
+    Random random = new Random();
+    random.nextBytes(in);
+  }
+
+  private void cleanUpBlobOutput(BlobOutput blobOutput)
+      throws IOException {
+    blobOutput.close();
+    assertFalse("BlobOutput channel is not closed", blobOutput.isOpen());
+  }
+
+  // commonCaseTest() helpers
+  private void readTest()
+      throws IOException {
+    byte[] in = new byte[1024];
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
+    byte[] out = new byte[in.length];
+    ByteBuffer dst = ByteBuffer.wrap(out);
+    // should be able to load all data in one read
+    int bytesRead = blobOutput.read(dst);
+    assertEquals("Data size read did not match source byte array size", in.length, bytesRead);
+    assertArrayEquals("Source and received byte arrays did not match", in, out);
+    cleanUpBlobOutput(blobOutput);
+  }
+
+  private void writeToTest()
+      throws IOException {
+    byte[] in = new byte[1024];
+    BlobOutput blobOutput = getRandomBlobOutput(in).open();
+    assertTrue("BlobOutput channel is not open for reading", blobOutput.isOpen());
+    ByteChannel channel = new ByteChannel(in.length);
+    // should be able to write all data in one writeTo
+    int bytesWritten = blobOutput.writeTo(channel);
+    assertEquals("Data size written did not match source byte array size", in.length, bytesWritten);
+    byte[] out = channel.getBuf();
+    assertArrayEquals("Source and received byte arrays did not match", in, out);
+    cleanUpBlobOutput(blobOutput);
+  }
+
+  private BlobOutput getRandomBlobOutput(byte[] in)
+      throws IOException {
+    fillRandomBytes(in);
+    InputStream data = new ByteArrayInputStream(in);
+    return new BlobOutput(in.length, data);
+  }
+}
+
+class ByteChannel implements WritableByteChannel {
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final byte[] buf;
+
+  byte[] getBuf() {
+    return buf;
+  }
+
+  public ByteChannel(int capacity) {
+    buf = new byte[capacity];
+  }
+
+  @Override
+  public int write(ByteBuffer src)
+      throws IOException {
+    int prevPosition = src.position();
+    src.get(buf);
+    return src.position() - prevPosition;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    channelOpen.set(false);
+  }
+}
