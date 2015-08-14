@@ -22,47 +22,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-class MessageMetadataAndBlobInfo {
-  short headerVersion;
-  short userMetadataVersion;
-  int userMetadataSize;
-  short blobRecordVersion;
-  long blobStreamSize;
-
-  MessageMetadataAndBlobInfo(short headerVersion, short userMetadataVersion, int userMetadataSize,
-      short blobRecordVersion, long blobStreamSize)
-      throws IOException {
-    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1 ||
-        userMetadataVersion != MessageFormatRecord.UserMetadata_Version_V1 ||
-        blobRecordVersion != MessageFormatRecord.Blob_Version_V1) {
-      throw new IOException(
-          "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
-              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
-    }
-    this.headerVersion = headerVersion;
-    this.userMetadataVersion = userMetadataVersion;
-    this.userMetadataSize = userMetadataSize;
-    this.blobRecordVersion = blobRecordVersion;
-    this.blobStreamSize = blobStreamSize;
-  }
-
-  byte[] toBytes() {
-    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.Blob_Format_V1.Blob_Size_Field_In_Bytes];
-
-    ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
-    bufWrap.putShort(headerVersion);
-    bufWrap.putShort(userMetadataVersion);
-    bufWrap.putInt(userMetadataSize);
-    bufWrap.putShort(blobRecordVersion);
-    bufWrap.putLong(blobStreamSize);
-    return bytes;
-  }
-}
-
 /**
  * This class takes a read set for blobs that are to be hard deleted and provides corresponding
  * replacement messages, that can then be written back by the caller to hard delete those blobs.
@@ -157,32 +116,6 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
             "Unknown header version encountered while reading recovery metadata during hard delete " + headerVersion);
     }
   }
-
-  /*static byte[] getRecoveryInfo(short headerVersion, short userMetadataVersion, int userMetadataSize,
-      short blobRecordVersion, long blobStreamSize)
-      throws IOException {
-    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1 ||
-        userMetadataVersion != MessageFormatRecord.UserMetadata_Version_V1 ||
-        blobRecordVersion != MessageFormatRecord.Blob_Version_V1) {
-      throw new IOException(
-          "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
-              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
-    }
-
-    byte[] recoveryInfo = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.Blob_Format_V1.Blob_Size_Field_In_Bytes];
-
-    ByteBuffer bufWrap = ByteBuffer.wrap(recoveryInfo);
-    bufWrap.putShort(headerVersion);
-    bufWrap.putShort(userMetadataVersion);
-    bufWrap.putInt(userMetadataSize);
-    bufWrap.putShort(blobRecordVersion);
-    bufWrap.putLong(blobStreamSize);
-    return recoveryInfo;
-  }*/
 }
 
 class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
@@ -354,3 +287,45 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     return MessageFormatRecord.getBlobRecordInfo(new ByteBufferInputStream(blobRecord));
   }
 }
+
+class MessageMetadataAndBlobInfo {
+  short headerVersion;
+  short userMetadataVersion;
+  int userMetadataSize;
+  short blobRecordVersion;
+  long blobStreamSize;
+
+  MessageMetadataAndBlobInfo(short headerVersion, short userMetadataVersion, int userMetadataSize,
+      short blobRecordVersion, long blobStreamSize)
+      throws IOException {
+    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1 ||
+        userMetadataVersion != MessageFormatRecord.UserMetadata_Version_V1 ||
+        blobRecordVersion != MessageFormatRecord.Blob_Version_V1) {
+      throw new IOException(
+          "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
+              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
+    }
+    this.headerVersion = headerVersion;
+    this.userMetadataVersion = userMetadataVersion;
+    this.userMetadataSize = userMetadataSize;
+    this.blobRecordVersion = blobRecordVersion;
+    this.blobStreamSize = blobStreamSize;
+  }
+
+  byte[] toBytes() {
+    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
+        MessageFormatRecord.Version_Field_Size_In_Bytes +
+        MessageFormatRecord.UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes +
+        MessageFormatRecord.Version_Field_Size_In_Bytes +
+        MessageFormatRecord.Blob_Format_V1.Blob_Size_Field_In_Bytes];
+
+    ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
+    bufWrap.putShort(headerVersion);
+    bufWrap.putShort(userMetadataVersion);
+    bufWrap.putInt(userMetadataSize);
+    bufWrap.putShort(blobRecordVersion);
+    bufWrap.putLong(blobStreamSize);
+    return bytes;
+  }
+}
+

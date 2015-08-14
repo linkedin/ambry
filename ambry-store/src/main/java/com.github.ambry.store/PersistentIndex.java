@@ -1202,7 +1202,8 @@ public class PersistentIndex {
     /**
      * Reads from the cleanupToken file and adds into hardDeleteRecoveryRange the info for all the messages persisted
      * in the file. If cleanupToken is non-existent or if there is a crc failure, resets the token.
-     * This method calls into MessageStoreHardDelete interface to read the persisted recovery metadata from the stream.
+     * This method calls into MessageStoreHardDelete interface to let it read the persisted recovery metadata from the
+     * stream.
      * @throws StoreException on version mismatch.
      */
     private void readCleanupTokenAndPopulateRecoveryRange()
