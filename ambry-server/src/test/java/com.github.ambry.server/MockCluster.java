@@ -39,7 +39,7 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
       throws IOException, InstantiationException {
-    // sslEnabledDatacenters represents comma separaated list of datacenters to which ssl should be enabled
+    // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
@@ -97,6 +97,12 @@ public class MockCluster {
     clusterMap.cleanup();
   }
 
+  /**
+   * Find the value for sslEnabledDatacenter config for the given datacenter
+   * @param datacenter for which sslEnabledDatacenter config value has to be determinded
+   * @param sslEnabledDataCenterList list of datacenters upon which ssl should be enabled
+   * @return the config value for sslEnabledDatacenters for the given datacenter
+   */
   private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
     sslEnabledDataCenterList.remove(datacenter);
     String sslEnabledDatacenters = Utils.concatenateString(sslEnabledDataCenterList, ",");

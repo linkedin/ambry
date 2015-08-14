@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -87,14 +88,12 @@ public class ServerTest {
   @Test
   public void startStopTest()
       throws IOException, InstantiationException {
-    // do nothing
     cluster = new MockCluster(notificationSystem);
   }
 
   @Test
   public void startStopSSLTest()
       throws IOException, InstantiationException {
-    // do nothing
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
   }
 
@@ -656,7 +655,7 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
-    ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
+    ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = cluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
@@ -1127,7 +1126,7 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
-    ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
+    ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = cluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),

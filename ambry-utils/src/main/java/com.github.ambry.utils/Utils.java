@@ -578,7 +578,7 @@ public class Utils {
   }
 
   /**
-   * Merge/Concatenate the input list of strings using the delimiter and return obtained string
+   * Merge/Concatenate the input list of strings using the delimiter and return the new string
    * @param data List of strings to be merged/concatenated
    * @param delimiter using which the list of strings need to be merged/concatenated
    * @return the obtained string after merging/concatenating
