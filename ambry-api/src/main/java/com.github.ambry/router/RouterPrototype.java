@@ -11,7 +11,7 @@ import java.util.concurrent.Future;
 /**
  * The router interface for Ambry that helps to interact with Ambry server.
  */
-public interface Router extends Closeable {
+public interface RouterPrototype extends Closeable {
   /**
    * Request for the BlobInfo asynchronously and returns a future which will finally contain the BlobInfo on a
    * successful response.

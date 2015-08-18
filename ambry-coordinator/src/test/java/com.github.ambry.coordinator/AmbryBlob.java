@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 /**
  * Blob stored in Ambry. Blob consists of properties, user metadata, and data.
  */
-class AmbryBlob {
+public class AmbryBlob {
   private final BlobProperties blobProperties;
   private final ByteBuffer userMetadata;
   private final BlobOutput blobOutput;
