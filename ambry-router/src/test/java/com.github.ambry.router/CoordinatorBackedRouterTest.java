@@ -8,25 +8,25 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.coordinator.AmbryBlob;
 import com.github.ambry.coordinator.AmbryCoordinator;
-import com.github.ambry.coordinator.Blob;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorError;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.coordinator.MockCluster;
 import com.github.ambry.coordinator.MockConnectionPool;
 import com.github.ambry.coordinator.MockDataNode;
+import com.github.ambry.messageformat.Blob;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.ReadableStreamChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -105,12 +105,12 @@ public class CoordinatorBackedRouterTest {
   /**
    * Tests the functionality of all variants of {@link CoordinatorBackedRouter#getBlob(String)},
    * {@link CoordinatorBackedRouter#getBlobInfo(String)}, {@link CoordinatorBackedRouter#deleteBlob(String)} and
-   * {@link CoordinatorBackedRouter#putBlob(BlobProperties, byte[], ReadableByteChannel)} by performing the following
+   * {@link CoordinatorBackedRouter#putBlob(BlobProperties, byte[], ReadableStreamChannel)} by performing the following
    * operations with a link {@link AmbryCoordinator}:
    * 1. Generate random user metadata and blob data.
    * 2. Put blob and check that it succeeds. Use the obtained blob id for all subsequent operations.
    * 3. Obtain blob info and check that it matches with what was inserted.
-   * 4. Obtain blob and check that it matches with what was inserted.
+   * 4. Obtain blob data and check that it matches with what was inserted.
    * 5. Delete blob and check that it succeeds.
    * 6. Try to get blob info and blob again and check that both throw an exception indicating that the blob is deleted.
    * 7. Delete blob again and check that no exception is thrown.
@@ -197,7 +197,7 @@ public class CoordinatorBackedRouterTest {
   private String putBlob(Router router, BlobProperties blobProperties, byte[] usermetadata, byte[] content,
       RouterOperationCallback<String> putBlobCallback)
       throws Exception {
-    ReadableByteChannel blobDataChannel = Channels.newChannel(new ByteArrayInputStream(content));
+    ReadableStreamChannel blobDataChannel = new BlobStreamChannel(new ByteArrayInputStream(content), content.length);
     Future<String> putBlobFuture;
     if (putBlobCallback == null) {
       putBlobFuture = router.putBlob(blobProperties, usermetadata, blobDataChannel);
@@ -241,9 +241,9 @@ public class CoordinatorBackedRouterTest {
   }
 
   private void getBlobAndCompare(Router router, String blobId, byte[] content,
-      RouterOperationCallback<BlobOutput> getBlobCallback)
+      RouterOperationCallback<Blob> getBlobCallback)
       throws Exception {
-    Future<BlobOutput> getBlobFuture;
+    Future<Blob> getBlobFuture;
     if (getBlobCallback == null) {
       getBlobFuture = router.getBlob(blobId);
     } else {
@@ -255,13 +255,13 @@ public class CoordinatorBackedRouterTest {
         throw getBlobCallback.getException();
       }
       assertTrue("GetBlob: Future is not done but callback has been received", getBlobFuture.isDone());
-      assertEquals("GetBlob: Future BlobOutput and callback BlobOutput do not match", getBlobFuture.get(),
+      assertEquals("GetBlob: Future Blob and callback Blob do not match", getBlobFuture.get(),
           getBlobCallback.getResult());
     }
-    BlobOutput blobOutput = getBlobFuture.get();
-    byte[] blobDataBytes = new byte[(int) blobOutput.getSize()];
-    blobOutput.read(ByteBuffer.wrap(blobDataBytes));
-    assertArrayEquals("GetBlob data does not match what was put", content, blobDataBytes);
+    Blob blob = getBlobFuture.get();
+    ByteArrayChannel byteArrayChannel = new ByteArrayChannel((int) blob.getBlobProperties().getBlobSize());
+    blob.getBlobData().read(byteArrayChannel);
+    assertArrayEquals("GetBlob data does not match what was put", content, byteArrayChannel.getBuf());
   }
 
   private void deleteBlob(Router router, String blobId, RouterOperationCallback<Void> deleteBlobCallback)
@@ -320,12 +320,12 @@ public class CoordinatorBackedRouterTest {
     byte[] putContent = getByteArray(100);
     RouterOperationCallback<String> putBlobCallback = null;
     RouterOperationCallback<BlobInfo> getBlobInfoCallback = null;
-    RouterOperationCallback<BlobOutput> getBlobCallback = null;
+    RouterOperationCallback<Blob> getBlobCallback = null;
     RouterOperationCallback<Void> deleteBlobCallback = null;
     if (RouterUsage.WithCallback.equals(routerUsage)) {
       putBlobCallback = new RouterOperationCallback<String>();
       getBlobInfoCallback = new RouterOperationCallback<BlobInfo>();
-      getBlobCallback = new RouterOperationCallback<BlobOutput>();
+      getBlobCallback = new RouterOperationCallback<Blob>();
       deleteBlobCallback = new RouterOperationCallback<Void>();
     }
 
@@ -378,12 +378,12 @@ public class CoordinatorBackedRouterTest {
     byte[] putContent = getByteArray(100);
     RouterOperationCallback<String> putBlobCallback = null;
     RouterOperationCallback<BlobInfo> getBlobInfoCallback = null;
-    RouterOperationCallback<BlobOutput> getBlobCallback = null;
+    RouterOperationCallback<Blob> getBlobCallback = null;
     RouterOperationCallback<Void> deleteBlobCallback = null;
     if (RouterUsage.WithCallback.equals(routerUsage)) {
       putBlobCallback = new RouterOperationCallback<String>();
       getBlobInfoCallback = new RouterOperationCallback<BlobInfo>();
-      getBlobCallback = new RouterOperationCallback<BlobOutput>();
+      getBlobCallback = new RouterOperationCallback<Blob>();
       deleteBlobCallback = new RouterOperationCallback<Void>();
     }
 
@@ -496,6 +496,7 @@ class RouterOperationCallback<T> implements Callback<T> {
 }
 
 //TODO: should move to com.github.ambry.coordinator in ambry-api?
+
 /**
  * An implementation of {@link Coordinator} for use in tests. Can be configured for custom behaviour to check for
  * various scenarios.
@@ -510,7 +511,7 @@ class MockCoordinator implements Coordinator {
   private final VerifiableProperties verifiableProperties;
 
   /**
-   * Creates an instance of MockCoordinator
+   * Creates an instance of MockCoordinator.
    * @param verifiableProperties properties map that defines the behaviour of this instance.
    * @param clusterMap the cluster map to use.
    */
@@ -541,7 +542,7 @@ class MockCoordinator implements Coordinator {
         DataNodeId dataNodeId = replicaId.getDataNodeId();
         MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
         BlobOutput blobOutput = new BlobOutput(blobProperties.getBlobSize(), materializedBlobStream.duplicate());
-        Blob blob = new Blob(blobProperties, userMetadata, blobOutput);
+        AmbryBlob blob = new AmbryBlob(blobProperties, userMetadata, blobOutput);
         error = dataNode.put(blobId, blob);
         if (!ServerErrorCode.No_Error.equals(error)) {
           break;

@@ -28,10 +28,10 @@ public class MockDataNode {
   private ServerErrorCode getErrorCode;
   private ServerErrorCode putErrorCode;
 
-  public class MaterializedBlob extends Blob {
+  public class MaterializedBlob extends AmbryBlob {
     final ByteBuffer materializedBlobOutput;
 
-    public MaterializedBlob(Blob blob)
+    public MaterializedBlob(AmbryBlob blob)
         throws IOException {
       super(blob.getBlobProperties(), blob.getUserMetadata(), blob.getBlobOutput());
 
@@ -55,7 +55,7 @@ public class MockDataNode {
     deletedBlobs = new HashSet<BlobId>();
   }
 
-  public synchronized ServerErrorCode put(BlobId blobId, Blob blob)
+  public synchronized ServerErrorCode put(BlobId blobId, AmbryBlob blob)
       throws IOException {
     if (putErrorCode != null) {
       return putErrorCode;
@@ -182,7 +182,7 @@ public class MockDataNode {
     sb.append("put blobs").append(System.getProperty("line.separator"));
     for (Map.Entry<BlobId, MaterializedBlob> entry : blobs.entrySet()) {
       sb.append("\t").append(entry.getKey()).append(" : ");
-      Blob blob = entry.getValue();
+      AmbryBlob blob = entry.getValue();
       sb.append(blob.getBlobProperties().getBlobSize()).append(" / ");
       sb.append(blob.getUserMetadata().capacity()).append(" / ");
       sb.append(blob.getBlobOutput().getSize()).append(System.getProperty("line.separator"));

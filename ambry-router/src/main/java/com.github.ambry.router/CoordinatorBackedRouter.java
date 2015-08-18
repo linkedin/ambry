@@ -5,13 +5,17 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
+import com.github.ambry.messageformat.Blob;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.ReadableStreamChannel;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -87,25 +91,25 @@ public class CoordinatorBackedRouter implements Router {
   }
 
   @Override
-  public Future<BlobOutput> getBlob(String blobId) {
+  public Future<Blob> getBlob(String blobId) {
     return getBlob(blobId, null);
   }
 
   @Override
-  public Future<BlobOutput> getBlob(String blobId, Callback<BlobOutput> callback) {
-    FutureRouterResult<BlobOutput> futureRouterResult = new FutureRouterResult<BlobOutput>();
+  public Future<Blob> getBlob(String blobId, Callback<Blob> callback) {
+    FutureRouterResult<Blob> futureRouterResult = new FutureRouterResult<Blob>();
     operationPool.submit(
         new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback, CoordinatorOperationType.GetBlob));
     return futureRouterResult;
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel) {
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
     return putBlob(blobProperties, usermetadata, channel, null);
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel,
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
     FutureRouterResult<String> futureRouterResult = new FutureRouterResult<String>();
     operationPool.submit(
@@ -166,17 +170,17 @@ class CoordinatorOperation implements Runnable {
   private final Callback callback;
   private final CoordinatorOperationType opType;
 
-  // getBlob, getBlobInfo and delete
-  private String blobId = null;
+  // getBlob, getBlobInfo and delete arguments.
+  private String blobId;
 
-  // put
-  private BlobProperties blobProperties = null;
-  private byte[] usermetadata = null;
-  private ReadableByteChannel channel = null;
+  // put arguments. Might be used to store returns in GetBlob and GetBlobInfo too.
+  private BlobProperties blobProperties;
+  private byte[] usermetadata;
+  private ReadableStreamChannel channel;
 
   /**
-   * Constructor used to invoke {@link Coordinator} equivalent operations for {@link Router#getBlob(String)},
-   * {@link Router#getBlobInfo(String)} and {@link Router#deleteBlob(String)} (and their variants).
+   * Constructor used to invoke {@link Coordinator} equivalent operations for {@link RouterPrototype#getBlob(String)},
+   * {@link RouterPrototype#getBlobInfo(String)} and {@link RouterPrototype#deleteBlob(String)} (and their variants).
    * @param coordinator the {@link Coordinator} to use to perform the operation.
    * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
    * @param blobId the blob id that the operation needs to be performed on.
@@ -197,16 +201,16 @@ class CoordinatorOperation implements Runnable {
 
   /**
    * Constructor used to invoke {@link Coordinator} equivalent operations for
-   * {@link Router#putBlob(BlobProperties, byte[], ReadableByteChannel)} and its variant.
+   * {@link RouterPrototype#putBlob(BlobProperties, byte[], ReadableByteChannel)} and its variant.
    * @param coordinator the {@link Coordinator} to use to perform the operation.
    * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
    * @param blobProperties the properties of the blob.
    * @param usermetadata user specified metadata as a byte array.
-   * @param channel the {@link ReadableByteChannel} to read the blob data from.
+   * @param channel the {@link ReadableStreamChannel} to read the blob data from.
    * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
    */
   public CoordinatorOperation(Coordinator coordinator, FutureRouterResult futureRouterResult,
-      BlobProperties blobProperties, byte[] usermetadata, ReadableByteChannel channel, Callback callback) {
+      BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel, Callback callback) {
     this(coordinator, futureRouterResult, callback, CoordinatorOperationType.PutBlob);
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
@@ -228,26 +232,25 @@ class CoordinatorOperation implements Runnable {
     try {
       switch (opType) {
         case GetBlob:
-          operationResult = coordinator.getBlob(blobId).open();
+          blobProperties = coordinator.getBlobProperties(blobId);
+          BlobOutput blobOutput = coordinator.getBlob(blobId);
+          BlobStreamChannel blobStream = new BlobStreamChannel(blobOutput.getStream(), (int) blobOutput.getSize());
+          operationResult = new Blob(blobProperties, blobStream);
           break;
         case GetBlobInfo:
-          BlobProperties rcvdBlobProperties = coordinator.getBlobProperties(blobId);
-          ByteBuffer rcvdUserMetadata = coordinator.getBlobUserMetadata(blobId);
-          byte[] rcvdUserMetadataArray;
-          if (rcvdUserMetadata.hasArray()) {
-            rcvdUserMetadataArray = rcvdUserMetadata.array();
+          blobProperties = coordinator.getBlobProperties(blobId);
+          ByteBuffer usermetadataBuffer = coordinator.getBlobUserMetadata(blobId);
+          if (usermetadataBuffer.hasArray()) {
+            usermetadata = usermetadataBuffer.array();
           } else {
-            rcvdUserMetadataArray = new byte[rcvdUserMetadata.capacity()];
-            rcvdUserMetadata.get(rcvdUserMetadataArray);
+            usermetadata = new byte[usermetadataBuffer.capacity()];
+            usermetadataBuffer.get(usermetadata);
           }
-          operationResult = new BlobInfo(rcvdBlobProperties, rcvdUserMetadataArray);
+          operationResult = new BlobInfo(blobProperties, usermetadata);
           break;
         case PutBlob:
-          // TODO: Might need rethinking. Will probably have to provide custom implementation of InputStream here.
-          // TODO: because it seems like Channels.newInputStream() does not like non-blocking channels. Will do this
-          // TODO: while implementing POST.
-          operationResult =
-              coordinator.putBlob(blobProperties, ByteBuffer.wrap(usermetadata), Channels.newInputStream(channel));
+          operationResult = coordinator
+              .putBlob(blobProperties, ByteBuffer.wrap(usermetadata), new ReadableStreamChannelInputStream(channel));
           break;
         case DeleteBlob:
           coordinator.deleteBlob(blobId);
@@ -267,5 +270,78 @@ class CoordinatorOperation implements Runnable {
         callback.onCompletion(operationResult, exception);
       }
     }
+  }
+}
+
+/**
+ *  Helper class to convert a (possibly non-blocking) {@link ReadableStreamChannel} into a blocking {@link InputStream}.
+ *  <p/>
+ *  This class also implements {@link WritableByteChannel}. So, in the current implementation, {@link #read()} is
+ *  handled by invoking a call to {@link ReadableStreamChannel#read(WritableByteChannel)} that in turn calls the
+ *  {@link #write(ByteBuffer)} method of this class. A single byte is captured in a class variable, and the
+ *  {@link #read()} returns this byte.
+ */
+class ReadableStreamChannelInputStream extends InputStream implements WritableByteChannel {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final ReadableStreamChannel readableStreamChannel;
+  // TODO: should this be atomic reference? Doesn't get updated across multiple threads today.
+  private Byte dataByte;
+
+  public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
+    this.readableStreamChannel = readableStreamChannel;
+  }
+
+  @Override
+  public int read()
+      throws IOException {
+    if (!isOpen()) {
+      throw new ClosedChannelException();
+    }
+    int bytesRead;
+    try {
+      int waitTime = 0;
+      while (true) {
+        if (waitTime > 0) {
+          logger.warn("ReadableStreamChannelInputStream has been waiting for " + waitTime + "ms for data");
+        }
+        // TODO: Should I just define a read(ByteBuffer) API in the ReadableStreamChannel interface - makes it
+        // TODO: equivalent to extending ReadableByteChannel though.
+        bytesRead = readableStreamChannel.read(this);
+        if (bytesRead == 0) {
+          Thread.sleep(500);
+          waitTime += 500;
+        } else if (bytesRead == -1) {
+          return -1;
+        } else {
+          // TODO: should this wait until a signal that says "data is available" is fired?
+          return dataByte & 0xFF;
+        }
+      }
+    } catch (InterruptedException e) {
+      throw new IOException("Wait for data interrupted", e);
+    }
+  }
+
+  /**
+   * Picks up exactly one byte from {@code src}.
+   * @param src the {@link ByteBuffer} containing data that needs to be written to the channel.
+   * @return the number of bytes read. Always 1.
+   */
+  @Override
+  public int write(ByteBuffer src) {
+    dataByte = src.get();
+    return 1;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    channelOpen.set(false);
   }
 }

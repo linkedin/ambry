@@ -1,7 +1,7 @@
 package com.github.ambry.router;
 
 /**
- * Exceptions thrown by a {@link Router}. All exceptions are accompanied by a {@link RouterErrorCode}.
+ * Exceptions thrown by a {@link RouterPrototype}. All exceptions are accompanied by a {@link RouterErrorCode}.
  */
 
 public class RouterException extends Exception {

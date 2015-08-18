@@ -95,7 +95,7 @@ class MockBlockingChannel extends BlockingChannel {
         ByteBuffer userMetadata = putRequest.getUsermetadata();
         BlobOutput blobOutput = new BlobOutput(putRequest.getDataSize(), putRequest.getData());
 
-        ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobOutput));
+        ServerErrorCode error = mockDataNode.put(blobId, new AmbryBlob(blobProperties, userMetadata, blobOutput));
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
         break;
       }
