@@ -36,7 +36,6 @@ public class BlobStreamChannel implements ReadableStreamChannel {
       read += sizeRead;
     }
     if (read != size) {
-      //TODO: IllegalState or IllegalArgument?
       throw new IllegalStateException(
           "Stream reached EOF with " + read + " bytes read out of an expected size of " + size);
     }

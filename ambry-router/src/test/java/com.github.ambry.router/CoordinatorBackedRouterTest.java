@@ -495,8 +495,6 @@ class RouterOperationCallback<T> implements Callback<T> {
   }
 }
 
-//TODO: should move to com.github.ambry.coordinator in ambry-api?
-
 /**
  * An implementation of {@link Coordinator} for use in tests. Can be configured for custom behaviour to check for
  * various scenarios.

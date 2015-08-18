@@ -284,7 +284,6 @@ class ReadableStreamChannelInputStream extends InputStream implements WritableBy
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReadableStreamChannel readableStreamChannel;
-  // TODO: should this be atomic reference? Doesn't get updated across multiple threads today.
   private Byte dataByte;
 
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
@@ -304,8 +303,6 @@ class ReadableStreamChannelInputStream extends InputStream implements WritableBy
         if (waitTime > 0) {
           logger.warn("ReadableStreamChannelInputStream has been waiting for " + waitTime + "ms for data");
         }
-        // TODO: Should I just define a read(ByteBuffer) API in the ReadableStreamChannel interface - makes it
-        // TODO: equivalent to extending ReadableByteChannel though.
         bytesRead = readableStreamChannel.read(this);
         if (bytesRead == 0) {
           Thread.sleep(500);
@@ -313,7 +310,6 @@ class ReadableStreamChannelInputStream extends InputStream implements WritableBy
         } else if (bytesRead == -1) {
           return -1;
         } else {
-          // TODO: should this wait until a signal that says "data is available" is fired?
           return dataByte & 0xFF;
         }
       }
