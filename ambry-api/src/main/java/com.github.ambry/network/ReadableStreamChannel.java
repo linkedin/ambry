@@ -17,14 +17,12 @@ import java.nio.channels.WritableByteChannel;
 public interface ReadableStreamChannel {
 
   /**
-   * Reads a sequence of bytes into the {@link WritableByteChannel} provided. Attempts to read all the bytes currently
-   * available on this ReadableStreamChannel.
+   * Reads a sequence of bytes into the {@link WritableByteChannel} provided.
    * <p/>
-   * This operation might not read any bytes at all.  Whether or not it does so depends upon the nature and state
-   * of this ReadableStreamChannel.  A socket channel in non-blocking mode, for example, cannot read any more bytes than
-   * are immediately available from the socket's input buffer; similarly, a file channel cannot read any more bytes than
-   * remain in the file.  It is guaranteed, however, that if a channel is in blocking mode, then this method will block
-   * until at least one byte is read into the {@link WritableByteChannel}.
+   * This operation might read all the bytes in the channel or might not read any bytes at all. It's behaviour depends
+   * upon the nature and state of this ReadableStreamChannel and the {@link WritableByteChannel}. It is guaranteed,
+   * however, that if a channel is in blocking mode, then this method will block until at least one byte is read into
+   * the {@link WritableByteChannel}.
    * <p/>
    * This method may be invoked at any time.  However, if another thread has already initiated another read operation
    * upon this channel, an invocation of this method will block until the first operation is complete.

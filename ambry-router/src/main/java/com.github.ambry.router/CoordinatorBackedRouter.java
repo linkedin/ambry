@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -179,8 +178,8 @@ class CoordinatorOperation implements Runnable {
   private ReadableStreamChannel channel;
 
   /**
-   * Constructor used to invoke {@link Coordinator} equivalent operations for {@link RouterPrototype#getBlob(String)},
-   * {@link RouterPrototype#getBlobInfo(String)} and {@link RouterPrototype#deleteBlob(String)} (and their variants).
+   * Constructor used to invoke {@link Coordinator} equivalent operations for {@link Router#getBlob(String)},
+   * {@link Router#getBlobInfo(String)} and {@link Router#deleteBlob(String)} (and their variants).
    * @param coordinator the {@link Coordinator} to use to perform the operation.
    * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
    * @param blobId the blob id that the operation needs to be performed on.
@@ -201,7 +200,7 @@ class CoordinatorOperation implements Runnable {
 
   /**
    * Constructor used to invoke {@link Coordinator} equivalent operations for
-   * {@link RouterPrototype#putBlob(BlobProperties, byte[], ReadableByteChannel)} and its variant.
+   * {@link Router#putBlob(BlobProperties, byte[], ReadableStreamChannel)} and its variant.
    * @param coordinator the {@link Coordinator} to use to perform the operation.
    * @param futureRouterResult the {@link FutureRouterResult} where the final result has to be loaded.
    * @param blobProperties the properties of the blob.

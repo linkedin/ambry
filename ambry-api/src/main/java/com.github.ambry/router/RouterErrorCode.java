@@ -29,13 +29,13 @@ public enum RouterErrorCode {
 
   /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
-   * {@link RouterPrototype#getBlobInfo(String)}, {@link RouterPrototype#getBlob(String)}, {@link RouterPrototype#deleteBlob(String)} (and their
+   * {@link Router#getBlobInfo(String)}, {@link Router#getBlob(String)}, {@link Router#deleteBlob(String)} (and their
    * variants) operations.
    */
   InvalidBlobId,
   /**
    * Caller passed in an illegal argument for
-   * {@link RouterPrototype#putBlob(com.github.ambry.messageformat.BlobProperties, byte[], java.nio.channels.ReadableByteChannel)}
+   * {@link Router#putBlob(com.github.ambry.messageformat.BlobProperties, byte[], com.github.ambry.network.ReadableStreamChannel)}
    * operation (and its variant).
    */
   InvalidPutArgument,
