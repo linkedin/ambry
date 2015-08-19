@@ -102,6 +102,7 @@ public class ReplicationConfig {
    * The SSL key store path
    */
   @Config("replication.ssl.keystore.path")
+  @Default("")
   public final String replicationSslKeyStorePath;
 
   /**
@@ -110,6 +111,7 @@ public class ReplicationConfig {
    * This password is to protect the integrity of the entire key store
    */
   @Config("replication.ssl.keystore.password")
+  @Default("")
   public final String replicationSslKeyStorePassword;
 
   /**
@@ -117,6 +119,7 @@ public class ReplicationConfig {
    * The key store protects each private key with its individual password
    */
   @Config("replication.ssl.key.password")
+  @Default("")
   public final String replicationSslKeyPassword;
 
   /**
@@ -130,18 +133,21 @@ public class ReplicationConfig {
    * The SSL trust store path
    */
   @Config("replication.ssl.truststore.path")
+  @Default("")
   public final String replicationSslTrustStorePath;
 
   /**
    * The SSL trust store password
    */
   @Config("replication.ssl.truststore.password")
+  @Default("")
   public final String replicationSslTrustStorePassword;
 
   /**
    * The SSL supported cipher suites
    */
   @Config("replication.ssl.cipher.suites")
+  @Default("")
   public final String replicationSslCipherSuites;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
