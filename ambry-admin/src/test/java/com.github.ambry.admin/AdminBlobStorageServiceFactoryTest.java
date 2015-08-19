@@ -55,21 +55,21 @@ public class AdminBlobStorageServiceFactoryTest {
     // VerifiableProperties null.
     try {
       new AdminBlobStorageServiceFactory(null, metricRegistry, clusterMap);
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // MetricRegistry null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, null, clusterMap);
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // ClusterMap null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, null);
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
   }

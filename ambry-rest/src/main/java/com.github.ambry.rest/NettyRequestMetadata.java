@@ -1,9 +1,5 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.rest.RestMethod;
-import com.github.ambry.rest.RestRequestMetadata;
-import com.github.ambry.rest.RestServiceErrorCode;
-import com.github.ambry.rest.RestServiceException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
@@ -28,7 +24,6 @@ class NettyRequestMetadata implements RestRequestMetadata {
     }
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
-    // convert HttpMethod to RestMethod
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;

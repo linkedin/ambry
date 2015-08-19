@@ -7,9 +7,11 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -30,21 +32,27 @@ public class MockCluster {
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
-      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+  public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException {
+    this(notificationSystem, false, "");
+  }
+
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
+      throws IOException, InstantiationException {
+    // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
+    ArrayList<String> sslEnabledDatacenterList = Utils.splitString(sslEnabledDatacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
-    for (MockDataNodeId dataNodeId : dataNodes) {
-      if (dataNodeId.getDatacenterName() == "DC1") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC1);
-      } else if (dataNodeId.getDatacenterName() == "DC2") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC2);
-      } else if (dataNodeId.getDatacenterName() == "DC3") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC3);
+    try {
+      for (MockDataNodeId dataNodeId : dataNodes) {
+        startServer(dataNodeId, getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), sslEnabledDatacenterList));
       }
+    } catch (InstantiationException e) {
+      // clean up other servers which was started already
+      cleanup();
+      throw e;
     }
   }
 
@@ -70,8 +78,8 @@ public class MockCluster {
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
-    server.startup();
     serverList.add(server);
+    server.startup();
   }
 
   public void cleanup() {
@@ -87,6 +95,32 @@ public class MockCluster {
     }
 
     clusterMap.cleanup();
+  }
+
+  /**
+   * Find the value for sslEnabledDatacenter config for the given datacenter
+   * @param datacenter for which sslEnabledDatacenter config value has to be determinded
+   * @param sslEnabledDataCenterList list of datacenters upon which ssl should be enabled
+   * @return the config value for sslEnabledDatacenters for the given datacenter
+   */
+  private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
+    sslEnabledDataCenterList.remove(datacenter);
+    String sslEnabledDatacenters = Utils.concatenateString(sslEnabledDataCenterList, ",");
+    return sslEnabledDatacenters;
+  }
+
+  public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
+    HashSet<String> datacenters = new HashSet<String>();
+    List<DataNodeId> toReturn = new ArrayList<DataNodeId>();
+    for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
+      if (datacenterList.contains(dataNodeId.getDatacenterName())) {
+        if (!datacenters.contains(dataNodeId.getDatacenterName())) {
+          datacenters.add(dataNodeId.getDatacenterName());
+          toReturn.add(dataNodeId);
+        }
+      }
+    }
+    return toReturn;
   }
 }
 

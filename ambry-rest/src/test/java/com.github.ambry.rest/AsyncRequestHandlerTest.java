@@ -2,19 +2,6 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.MockBlobStorageService;
-import com.github.ambry.rest.MockRestRequestContent;
-import com.github.ambry.rest.MockRestRequestMetadata;
-import com.github.ambry.rest.MockRestResponseHandler;
-import com.github.ambry.rest.RestMethod;
-import com.github.ambry.rest.RestRequestContent;
-import com.github.ambry.rest.RestRequestHandler;
-import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestRequestInfoEventListener;
-import com.github.ambry.rest.RestRequestMetadata;
-import com.github.ambry.rest.RestServiceErrorCode;
-import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;
@@ -205,7 +192,7 @@ public class AsyncRequestHandlerTest {
   private RestRequestInfo createRestRequestInfo(RestMethod method, String uri, JSONObject headers)
       throws JSONException, URISyntaxException {
     RestRequestMetadata restRequestMetadata = createRestRequest(method, uri, headers);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseHandler());
+    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseHandler(), true);
   }
 
   private void finishRequest(RestRequestInfo restRequestInfo, RestRequestInfoEventListener resultListener,
@@ -270,15 +257,15 @@ public class AsyncRequestHandlerTest {
   private void handleRequestInfoWithRestRequestMetadataNull(RestRequestHandler requestHandler)
       throws Exception {
     MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
-    RestRequestInfo restRequestInfo = new RestRequestInfo(null, null, restResponseHandler);
+    RestRequestInfo restRequestInfo = new RestRequestInfo(null, null, restResponseHandler, true);
     doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.RequestMetadataNull, requestHandler);
   }
 
   private void handleRequestInfoWithRestResponseHandlerNull(RestRequestHandler requestHandler)
       throws Exception {
     RestRequestMetadata restRequestMetadata = createRestRequest(RestMethod.GET, "/", new JSONObject());
-    RestRequestInfo restRequestInfo = new RestRequestInfo(restRequestMetadata, null, null);
-    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ReponseHandlerNull, requestHandler);
+    RestRequestInfo restRequestInfo = new RestRequestInfo(restRequestMetadata, null, null, true);
+    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ResponseHandlerNull, requestHandler);
   }
 
   /**
@@ -422,7 +409,7 @@ class RestRequestInfoHandlingBadMonitor implements RestRequestInfoEventListener 
   private final CountDownLatch toBeProcessed = new CountDownLatch(1);
 
   @Override
-  public void onCompleted(RestRequestInfo restRequestInfo, Exception e) {
+  public void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     toBeProcessed.countDown();
     throw new RuntimeException("This is bad handler");
   }
@@ -458,7 +445,7 @@ class RestRequestInfoHandlingSuccessMonitor implements RestRequestInfoEventListe
   }
 
   @Override
-  public void onCompleted(RestRequestInfo restRequestInfo, Exception e) {
+  public void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     try {
       if (e == null) {
         String responseBody = restResponseHandler.getFlushedResponseBody();
@@ -521,7 +508,7 @@ class RestRequestInfoHandlingFailureMonitor implements RestRequestInfoEventListe
   }
 
   @Override
-  public void onCompleted(RestRequestInfo restRequestInfo, Exception e) {
+  public void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     try {
       if (e == null) {
         exception = new Exception("Request handling success when it should have failed");
