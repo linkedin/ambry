@@ -56,8 +56,36 @@ public class SSLBlockingChannelTest {
   @Test
   public void testSendAndReceive()
       throws Exception {
-    long blobSize = 1028;
     BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+    sendAndReceive(channel);
+    channel.disconnect();
+  }
+
+  @Test
+  public void testRenegotiation() throws Exception {
+    BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+    sendAndReceive(channel);
+    sslEchoServer.renegotiate();
+    sendAndReceive(channel);
+    channel.disconnect();
+  }
+
+  @Test
+  public void testWrongPortConnection()
+      throws Exception {
+    BlockingChannel channel =
+        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory);
+    try {
+      // send request
+      channel.connect();
+      fail("should have thrown!");
+    } catch (IOException e) {
+      assertEquals(e.getMessage(), "Connection refused");
+    }
+  }
+
+  private void sendAndReceive(BlockingChannel channel) throws Exception {
+    long blobSize = 1028;
     byte[] bytesToSend = new byte[(int) blobSize];
     new Random().nextBytes(bytesToSend);
     ByteBuffer byteBufferToSend = ByteBuffer.wrap(bytesToSend);
@@ -73,21 +101,6 @@ public class SSLBlockingChannelTest {
     input.readFully(bytesReceived);
     for (int i = 0; i < blobSize - 8; i++) {
       Assert.assertEquals(bytesToSend[8 + i], bytesReceived[i]);
-    }
-    channel.disconnect();
-  }
-
-  @Test
-  public void testWrongPortConnection()
-      throws Exception {
-    BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory);
-    try {
-      // send request
-      channel.connect();
-      fail("should have thrown!");
-    } catch (IOException e) {
-      assertEquals(e.getMessage(), "Connection refused");
     }
   }
 }
