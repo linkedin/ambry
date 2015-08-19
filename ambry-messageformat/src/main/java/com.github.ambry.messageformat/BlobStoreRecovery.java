@@ -68,6 +68,10 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               // for validity. However, we ignore the check if the blob's offset is part of offsets to ignore
               // crc checks.
               if (offsetsToIgnoreCrcCheck != null && offsetsToIgnoreCrcCheck.contains(currentBlobStartOffset)) {
+                // ignore the user metadata and blob contents. The math:
+                // message_size = size_of_blob_properties_field + size_of_usermetadata_field +size_of_blob_content_field
+               //  size_of_blob_properties_field = user_metadata_relative_offset - blob_properties_relative_offset
+                // Therefore, size_of_usermetadata_field + size_of_blob_content_field = message_size - size_of_blob_properties_field
                 stream.skip(
                     headerFormat.getMessageSize() - (headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
                         .getBlobPropertiesRecordRelativeOffset()));

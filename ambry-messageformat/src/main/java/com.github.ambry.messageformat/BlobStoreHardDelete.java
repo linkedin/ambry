@@ -28,11 +28,11 @@ import org.slf4j.LoggerFactory;
  */
 public class BlobStoreHardDelete implements MessageStoreHardDelete {
 
-  Map<StoreKey, MessageMetadataAndBlobInfo> noCrcCheckKeys = new HashMap<StoreKey, MessageMetadataAndBlobInfo>();
+  HashMap<StoreKey, MessageMetadataAndBlobInfo> skipCrcCheckKeysInfo = new HashMap<StoreKey, MessageMetadataAndBlobInfo>();
 
   @Override
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
-    return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory, noCrcCheckKeys);
+    return new BlobStoreHardDeleteIterator(readSet, storeKeyFactory, skipCrcCheckKeysInfo);
   }
 
   @Override
@@ -109,7 +109,7 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
         MessageMetadataAndBlobInfo messageMetadataAndBlobInfo =
             new MessageMetadataAndBlobInfo(headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion,
                 blobStreamSize);
-        noCrcCheckKeys.put(key, messageMetadataAndBlobInfo);
+        skipCrcCheckKeysInfo.put(key, messageMetadataAndBlobInfo);
         return messageMetadataAndBlobInfo.toBytes();
       default:
         throw new IOException(
@@ -123,13 +123,13 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
   private final StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private int readSetIndex = 0;
-  private Map<StoreKey, MessageMetadataAndBlobInfo> noCrcCheckKeys;
+  private Map<StoreKey, MessageMetadataAndBlobInfo> skipCrcCheckKeysInfo;
 
   BlobStoreHardDeleteIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory,
-      Map<StoreKey, MessageMetadataAndBlobInfo> noCrcCheckKeys) {
+      Map<StoreKey, MessageMetadataAndBlobInfo> skipCrcCheckKeysInfo) {
     this.readSet = readSet;
     this.storeKeyFactory = storeKeyFactory;
-    this.noCrcCheckKeys = noCrcCheckKeys;
+    this.skipCrcCheckKeysInfo = skipCrcCheckKeysInfo;
   }
 
   @Override
@@ -199,7 +199,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
                     headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
                         .getBlobPropertiesRecordRelativeOffset());
 
-            MessageMetadataAndBlobInfo messageMetadataAndBlobInfo = noCrcCheckKeys.get(storeKey);
+            MessageMetadataAndBlobInfo messageMetadataAndBlobInfo = skipCrcCheckKeysInfo.get(storeKey);
 
             short userMetadataVersion;
             int userMetadataSize;
@@ -229,6 +229,8 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               blobRecordVersion = messageMetadataAndBlobInfo.blobRecordVersion;
               userMetadataSize = messageMetadataAndBlobInfo.userMetadataSize;
               blobStreamSize = messageMetadataAndBlobInfo.blobStreamSize;
+              // just remove it
+              skipCrcCheckKeysInfo.remove(storeKey);
             }
 
             HardDeleteMessageFormatInputStream hardDeleteStream =

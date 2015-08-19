@@ -1139,7 +1139,7 @@ public class PersistentIndex {
     }
 
     /**
-     * Does the recovery of hard deleted blobs.
+     * Does the recovery of hard deleted blobs (recovery means redoing the hard deletes)
      *
      * This method is called after hardDeleteRecoveryRange is populated with the blob information read from the cleanup
      * token file. First, the readOptionsList is recreated using the blob information in hardDeleteRecoveryRange. Then,
@@ -1229,6 +1229,8 @@ public class PersistentIndex {
               }
               break;
             default:
+              hardDeleteRecoveryRange.clear();
+              metrics.hardDeleteIncompleteRecoveryCount.inc();
               throw new StoreException("Invalid version in cleanup token " + dataDir,
                   StoreErrorCodes.Index_Version_Error);
           }
@@ -1241,6 +1243,8 @@ public class PersistentIndex {
                 StoreErrorCodes.Illegal_Index_State);
           }
         } catch (IOException e) {
+          hardDeleteRecoveryRange.clear();
+          metrics.hardDeleteIncompleteRecoveryCount.inc();
           throw new StoreException("Failed to read cleanup token ", e, StoreErrorCodes.Initialization_Error);
         } finally {
           stream.close();
