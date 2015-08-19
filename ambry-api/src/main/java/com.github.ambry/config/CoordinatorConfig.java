@@ -56,6 +56,7 @@ public class CoordinatorConfig {
    * List of Datacenters to which we need SSL encryption
    */
   @Config("coordinator.ssl.enabled.datacenters")
+  @Default("")
   public final String sslEnabledDatacenters;
 
   /**
@@ -70,24 +71,30 @@ public class CoordinatorConfig {
    */
   @Config("coordinator.ssl.keystore.type")
   @Default("JKS")
-  public final String sslKeyStoreType;
+  public final String sslKeystoreType;
 
   /**
    * The SSL key store path
    */
   @Config("coordinator.ssl.keystore.path")
-  public final String sslKeyStorePath;
+  @Default("")
+  public final String sslKeystorePath;
 
   /**
    * The SSL key store password
+   * There could be multiple keys in one key store
+   * This password is to protect the integrity of the entire key store
    */
   @Config("coordinator.ssl.keystore.password")
-  public final String sslKeyStorePassword;
+  @Default("")
+  public final String sslKeystorePassword;
 
   /**
    * The SSL key password
+   * The key store protects each private key with its individual password
    */
   @Config("coordinator.ssl.key.password")
+  @Default("")
   public final String sslKeyPassword;
 
   /**
@@ -95,24 +102,27 @@ public class CoordinatorConfig {
    */
   @Config("coordinator.ssl.truststore.type")
   @Default("JKS")
-  public final String sslTrustStoreType;
+  public final String sslTruststoreType;
 
   /**
    * The SSL trust store path
    */
   @Config("coordinator.ssl.truststore.path")
-  public final String sslTrustStorePath;
+  @Default("")
+  public final String sslTruststorePath;
 
   /**
    * The SSL trust store password
    */
   @Config("coordinator.ssl.truststore.password")
-  public final String sslTrustStorePassword;
+  @Default("")
+  public final String sslTruststorePassword;
 
   /**
    * The SSL supported cipher suites
    */
   @Config("coordinator.ssl.cipher.suites")
+  @Default("")
   public final String sslCipherSuites;
 
   public CoordinatorConfig(VerifiableProperties verifiableProperties) {
@@ -129,13 +139,13 @@ public class CoordinatorConfig {
     this.crossDCProxyCallEnable = verifiableProperties.getBoolean("coordinator.cross.dc.proxy.call.enable", true);
     this.sslEnabledDatacenters = verifiableProperties.getString("coordinator.ssl.enabled.datacenters", "");
     this.sslProtocol = verifiableProperties.getString("coordinator.ssl.protocol", "TLS");
-    this.sslKeyStoreType = verifiableProperties.getString("coordinator.ssl.keystore.type", "JKS");
-    this.sslKeyStorePath = verifiableProperties.getString("coordinator.ssl.keystore.path", "");
-    this.sslKeyStorePassword = verifiableProperties.getString("coordinator.ssl.keystore.password", "");
+    this.sslKeystoreType = verifiableProperties.getString("coordinator.ssl.keystore.type", "JKS");
+    this.sslKeystorePath = verifiableProperties.getString("coordinator.ssl.keystore.path", "");
+    this.sslKeystorePassword = verifiableProperties.getString("coordinator.ssl.keystore.password", "");
     this.sslKeyPassword = verifiableProperties.getString("coordinator.ssl.key.password", "");
-    this.sslTrustStoreType = verifiableProperties.getString("coordinator.ssl.truststore.type", "JKS");
-    this.sslTrustStorePath = verifiableProperties.getString("coordinator.ssl.truststore.path", "");
-    this.sslTrustStorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "");
+    this.sslTruststoreType = verifiableProperties.getString("coordinator.ssl.truststore.type", "JKS");
+    this.sslTruststorePath = verifiableProperties.getString("coordinator.ssl.truststore.path", "");
+    this.sslTruststorePassword = verifiableProperties.getString("coordinator.ssl.truststore.password", "");
     this.sslCipherSuites = verifiableProperties.getString("coordinator.ssl.cipher.suites", "");
   }
 }

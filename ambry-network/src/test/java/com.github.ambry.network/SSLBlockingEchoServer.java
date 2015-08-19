@@ -35,6 +35,7 @@ public class SSLBlockingEchoServer extends Thread {
   private final ServerSocket serverSocket;
   private final List<Thread> threads;
   private final List<Socket> sockets;
+  private final List<Exception> exceptions;
   private final AtomicBoolean renegotiate = new AtomicBoolean();
 
   public SSLBlockingEchoServer(SSLFactory sslFactory, int sslPort) throws Exception {
@@ -50,6 +51,7 @@ public class SSLBlockingEchoServer extends Thread {
     this.port = this.serverSocket.getLocalPort();
     this.threads = Collections.synchronizedList(new ArrayList<Thread>());
     this.sockets = Collections.synchronizedList(new ArrayList<Socket>());
+    this.exceptions = Collections.synchronizedList(new ArrayList<Exception>());
   }
 
   public void renegotiate() {
@@ -71,8 +73,7 @@ public class SSLBlockingEchoServer extends Thread {
               DataOutputStream output = new DataOutputStream(socket.getOutputStream());
               while (socket.isConnected() && !socket.isClosed()) {
                 long size = input.readLong();
-                if (renegotiate.get()) {
-                  renegotiate.set(false);
+                if (renegotiate.compareAndSet(true, false)) {
                   ((SSLSocket) socket).startHandshake();
                 }
                 byte[] bytes = new byte[(int) size - 8];
@@ -82,12 +83,12 @@ public class SSLBlockingEchoServer extends Thread {
                 output.flush();
               }
             } catch (IOException e) {
-              System.out.println(e.getMessage());
+              // ignore, caused by client closed connection
             } finally {
               try {
                 socket.close();
               } catch (IOException e) {
-                System.out.println(e.getMessage());
+                exceptions.add(e);
               }
             }
           }
@@ -96,11 +97,11 @@ public class SSLBlockingEchoServer extends Thread {
         threads.add(thread);
       }
     } catch (IOException e) {
-      System.out.println(e.getMessage());
+      exceptions.add(e);
     }
   }
 
-  public void closeConnections()
+  private void closeConnections()
       throws IOException {
     for (Socket socket : sockets) {
       socket.close();
@@ -115,5 +116,9 @@ public class SSLBlockingEchoServer extends Thread {
       t.join();
     }
     join();
+  }
+
+  public int getExceptionCount() {
+    return exceptions.size();
   }
 }

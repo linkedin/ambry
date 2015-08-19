@@ -106,12 +106,15 @@ public class ReplicationConfig {
 
   /**
    * The SSL key store password
+   * There could be multiple keys in one key store
+   * This password is to protect the integrity of the entire key store
    */
   @Config("replication.ssl.keystore.password")
   public final String replicationSslKeyStorePassword;
 
   /**
    * The SSL key password
+   * The key store protects each private key with its individual password
    */
   @Config("replication.ssl.key.password")
   public final String replicationSslKeyPassword;

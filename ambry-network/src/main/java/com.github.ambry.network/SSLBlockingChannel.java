@@ -15,21 +15,21 @@ import org.slf4j.LoggerFactory;
 public class SSLBlockingChannel extends BlockingChannel {
   private SSLSocket sslSocket = null;
   private final SSLSocketFactory sslSocketFactory;
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SSLBlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
       int connectTimeoutMs, SSLSocketFactory sslSocketFactory) {
     super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
+    if (sslSocketFactory == null) {
+      throw new IllegalArgumentException("sslSocketFactory is null when creating SSLBlockingChannel");
+    }
     this.sslSocketFactory = sslSocketFactory;
   }
 
+  @Override
   public void connect()
       throws IOException {
     synchronized (lock) {
       if (!connected) {
-        if (sslSocketFactory == null) {
-          throw new SocketException("sslSocketFactory is null when connecting through SSL");
-        }
         sslSocket = (SSLSocket) sslSocketFactory.createSocket(host, port);
         if (readBufferSize > 0) {
           sslSocket.setReceiveBufferSize(readBufferSize);
@@ -55,6 +55,7 @@ public class SSLBlockingChannel extends BlockingChannel {
     }
   }
 
+  @Override
   public void disconnect() {
     synchronized (lock) {
       try {

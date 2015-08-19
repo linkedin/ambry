@@ -16,6 +16,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
@@ -23,12 +24,19 @@ import org.junit.Test;
  * Test for the blocking channel connection pool
  */
 public class BlockingChannelConnectionPoolTest {
-
   private SocketServer server1 = null;
   private SocketServer server2 = null;
   private SocketServer server3 = null;
-  private SSLFactory sslFactory;
-  private SSLSocketFactory sslSocketFactory;
+  private static SSLFactory sslFactory;
+  private static SSLSocketFactory sslSocketFactory;
+
+  @BeforeClass
+  public static void onceExecutedBeforeAll()
+      throws Exception {
+    sslFactory = TestUtils.createSSLFactory();
+    SSLContext sslContext = sslFactory.createSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
+  }
 
   public BlockingChannelConnectionPoolTest()
       throws Exception {
@@ -57,9 +65,6 @@ public class BlockingChannelConnectionPoolTest {
     ports.add(new Port(7669, PortType.SSL));
     server3 = new SocketServer(config, new MetricRegistry(), ports);
     server3.start();
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
   }
 
   @After

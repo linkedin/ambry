@@ -35,10 +35,6 @@ class BlockingChannelInfo {
   private int maxConnectionsPerHostPerPort;
   private final SSLSocketFactory sslSocketFactory;
 
-  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry) {
-    this(config, host, port, registry, null);
-  }
-
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
       SSLSocketFactory sslSocketFactory) {
     this.config = config;
@@ -158,6 +154,11 @@ class BlockingChannelInfo {
       logger.error("IOException when trying to connect to the remote host {} and port {}", host, port.getPort());
       throw new ConnectionPoolTimeoutException(
           "IOException when trying to connect to remote host " + host + " port " + port.getPort(), e);
+    } catch (IllegalArgumentException e) {
+      logger.error("IllegalArgumentException when trying to connect to the remote host {} and port {}", host,
+          port.getPort());
+      throw new ConnectionPoolTimeoutException(
+          "IllegalArgumentException when trying to connect to remote host " + host + " port " + port.getPort(), e);
     } finally {
       rwlock.readLock().unlock();
     }
@@ -343,11 +344,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port.getPort());
-            if (port.getPortType() == PortType.SSL) {
-              blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
-            } else {
-              blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry);
-            }
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort()

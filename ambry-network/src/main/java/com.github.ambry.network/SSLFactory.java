@@ -17,13 +17,10 @@
 
 package com.github.ambry.network;
 
-import com.github.ambry.config.CoordinatorConfig;
-import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.util.ArrayList;
 import java.util.List;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -32,8 +29,10 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManagerFactory;
 
 
+/**
+ * The factory to set SSL related parameters and create SSL related objects
+ */
 public class SSLFactory {
-
   private String protocol;
   private String provider;
   private String kmfAlgorithm;

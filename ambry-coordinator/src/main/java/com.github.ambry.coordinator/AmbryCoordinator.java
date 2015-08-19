@@ -103,10 +103,10 @@ public class AmbryCoordinator implements Coordinator {
         logger.info("Setting up SSL");
         SSLFactory sslFactory = new SSLFactory();
         sslFactory.setProtocol(coordinatorConfig.sslProtocol);
-        sslFactory.setKeyStore(coordinatorConfig.sslKeyStoreType, coordinatorConfig.sslKeyStorePath,
-            coordinatorConfig.sslKeyStorePassword, coordinatorConfig.sslKeyPassword);
-        sslFactory.setTrustStore(coordinatorConfig.sslTrustStoreType, coordinatorConfig.sslTrustStorePath,
-            coordinatorConfig.sslTrustStorePassword);
+        sslFactory.setKeyStore(coordinatorConfig.sslKeystoreType, coordinatorConfig.sslKeystorePath,
+            coordinatorConfig.sslKeystorePassword, coordinatorConfig.sslKeyPassword);
+        sslFactory.setTrustStore(coordinatorConfig.sslTruststoreType, coordinatorConfig.sslTruststorePath,
+            coordinatorConfig.sslTruststorePassword);
         ArrayList<String> supportedCipherSuites = Utils.splitString(coordinatorConfig.sslCipherSuites, ",");
         sslFactory.setCipherSuites(supportedCipherSuites);
         ArrayList<String> supportedProtocols = new ArrayList<String>();
