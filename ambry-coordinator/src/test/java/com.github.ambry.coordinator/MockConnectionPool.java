@@ -5,7 +5,8 @@ import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
-
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import java.io.IOException;
 
 
@@ -37,11 +38,19 @@ public class MockConnectionPool implements ConnectionPool {
   }
 
   @Override
-  public ConnectedChannel checkOutConnection(String host, int port, long timeout)
+  public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
-    BlockingChannel blockingChannel =
-        new MockBlockingChannel(mockCluster.getMockDataNode(host, port), host, port, readBufferSizeBytes,
-            writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
+
+    BlockingChannel blockingChannel = null;
+    if (port.getPortType() == PortType.PLAINTEXT) {
+      blockingChannel =
+          new MockBlockingChannel(mockCluster.getMockDataNode(host, port.getPort()), host, port.getPort(),
+              readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
+    } else {
+      blockingChannel =
+          new MockSSLBlockingChannel(mockCluster.getMockDataNode(host, port.getPort()), host, port.getPort(),
+              readBufferSizeBytes, writeBufferSizeBytes, readTimeoutMs, connectTimeoutMs);
+    }
     blockingChannel.connect();
     return blockingChannel;
   }

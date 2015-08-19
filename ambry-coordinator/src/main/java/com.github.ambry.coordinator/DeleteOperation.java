@@ -120,7 +120,7 @@ final class DeleteOperationRequest extends OperationRequest {
     CoordinatorMetrics.RequestMetrics metric =
         context.getCoordinatorMetrics().getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.deleteBlobRequestRate.mark();
+      metric.incrementDeleteBlobRequestRate(sslEnabled);
     }
   }
 
@@ -129,7 +129,7 @@ final class DeleteOperationRequest extends OperationRequest {
     CoordinatorMetrics.RequestMetrics metric = context.getCoordinatorMetrics().
         getRequestMetrics(replicaId.getDataNodeId());
     if (metric != null) {
-      metric.deleteBlobRequestLatencyInMs.update(durationInMs);
+      metric.updateDeleteBlobRequestLatency(durationInMs, sslEnabled);
     }
   }
 

@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
@@ -71,8 +72,9 @@ public class BlobStoreTest {
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete());
@@ -145,8 +147,9 @@ public class BlobStoreTest {
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete());
@@ -206,8 +209,9 @@ public class BlobStoreTest {
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete());
@@ -287,8 +291,9 @@ public class BlobStoreTest {
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       byte[] bufToWrite = new byte[5000];
       new Random().nextBytes(bufToWrite);
       MockId blobId1 = new MockId("id1");
@@ -427,8 +432,9 @@ public class BlobStoreTest {
       StoreConfig config = new StoreConfig(verifyProperty);
       MetricsRegistryMap registryMap = new MetricsRegistryMap("Test");
       map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", 64422));
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete());
