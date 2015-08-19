@@ -113,7 +113,7 @@ public class SelectorTest {
   @Test(expected = IOException.class)
   public void testNoRouteToHost()
       throws Exception {
-    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
   }
 
   /**
@@ -122,7 +122,7 @@ public class SelectorTest {
   @Test
   public void testConnectionRefused()
       throws Exception {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -142,7 +142,7 @@ public class SelectorTest {
     InetSocketAddress addr = new InetSocketAddress("localhost", server.port);
     ArrayList<String> connectionIds = new ArrayList<String>();
     for (int i = 0; i < conns; i++) {
-      String connectionId = selector.connect(addr, BUFFER_SIZE, BUFFER_SIZE);
+      String connectionId = selector.connect(addr, BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
       connectionIds.add(connectionId);
     }
 
@@ -227,7 +227,8 @@ public class SelectorTest {
   /* connect and wait for the connection to complete */
   private String blockingConnect()
       throws IOException {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE,
+        PortType.PLAINTEXT);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }
