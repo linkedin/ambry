@@ -187,3 +187,20 @@ project(':ambry-admin') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }
+
+subprojects.each { subproject -> evaluationDependsOn(subproject.path)}
+
+task allJar(type: Jar, dependsOn: subprojects.assemble) {
+    manifest {
+        attributes 'Implementation-Title': 'Ambry',
+                   'Main-Class': 'com.github.ambry.server.AmbryMain'
+    }
+    baseName = 'ambry'
+    subprojects.each { subproject ->
+        from  {
+            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtime).collect {
+                zipTree(it)
+            }
+        }
+    }
+}
