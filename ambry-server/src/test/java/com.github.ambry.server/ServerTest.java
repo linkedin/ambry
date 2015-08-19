@@ -45,6 +45,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,19 +97,19 @@ public class ServerTest {
 
   @Test
   public void startStopTest()
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem);
   }
 
   @Test
   public void startStopSSLTest()
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
   }
 
   @Test
   public void endToEndTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
@@ -116,7 +117,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3");
@@ -648,7 +649,7 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
@@ -661,7 +662,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
@@ -1119,7 +1120,7 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
@@ -1132,7 +1133,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
@@ -1749,14 +1750,14 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem);
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT);
   }
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL);
   }
