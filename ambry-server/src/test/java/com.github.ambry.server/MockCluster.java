@@ -76,6 +76,15 @@ public class MockCluster {
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.setProperty("replication.ssl.protocol", "TLS");
+    props.setProperty("replication.ssl.keystore.type", "JKS");
+    props.setProperty("replication.ssl.keystore.path", "./ambry-network/src/test/resources/selfsigned-keystore.jks");
+    props.setProperty("replication.ssl.keystore.password", "unittestonly");
+    props.setProperty("replication.ssl.key.password", "unittestonly");
+    props.setProperty("replication.ssl.truststore.type", "JKS");
+    props.setProperty("replication.ssl.truststore.path", "./ambry-network/src/test/resources/selfsigned-truststore.ts");
+    props.setProperty("replication.ssl.truststore.password", "unittestonly");
+    props.setProperty("replication.ssl.cipher.suites", "TLS_RSA_WITH_AES_128_CBC_SHA256");
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
