@@ -28,21 +28,21 @@ import static org.junit.Assert.fail;
 
 
 /**
- * Tests functionality of {@link NettyResponseHandler}.
+ * Tests functionality of {@link NettyResponseChannel}.
  * <p/>
  * To examine functionality of each URI, refer to {@link MockNettyMessageProcessor#handleRequest(HttpRequest)} and
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
  */
-public class NettyResponseHandlerTest {
+public class NettyResponseChannelTest {
   /**
-   * Tests the common workflow of the {@link NettyResponseHandler} i.e., add some content to response body via
-   * {@link NettyResponseHandler#addToResponseBody(byte[], boolean)} and then
-   * {@link NettyResponseHandler#flush()} (For the actual functionality check {@link MockNettyMessageProcessor}).
+   * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
+   * {@link NettyResponseChannel#addToResponseBody(byte[], boolean)} and then
+   * {@link NettyResponseChannel#flush()} (For the actual functionality check {@link MockNettyMessageProcessor}).
    * @throws IOException
    * @throws JSONException
    */
   @Test
-  public void responseHandlerCommonCaseTest()
+  public void responseChannelCommonCaseTest()
       throws IOException, JSONException {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
@@ -65,12 +65,12 @@ public class NettyResponseHandlerTest {
   }
 
   /**
-   * Checks the case where no body needs to be returned but just a {@link NettyResponseHandler#flush()} is called on the
+   * Checks the case where no body needs to be returned but just a {@link NettyResponseChannel#flush()} is called on the
    * server. This should return just response metadata.
    * @throws JSONException
    */
   @Test
-  public void responseHandlerNoBodyTest()
+  public void responseChannelNoBodyTest()
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
@@ -83,7 +83,7 @@ public class NettyResponseHandlerTest {
   }
 
   /**
-   * Checks {@link RestResponseHandler#onRequestComplete(Throwable, boolean)}
+   * Checks {@link RestResponseChannel#onRequestComplete(Throwable, boolean)}
    * with a valid {@link RestServiceException} and with a null exception.
    * @throws JSONException
    */
@@ -200,17 +200,17 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   protected static String MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI = "modifyResponseMetadataAfterWrite";
 
   private RestRequestMetadata request;
-  private RestResponseHandler restResponseHandler;
+  private RestResponseChannel restResponseChannel;
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
-    restResponseHandler = new NettyResponseHandler(ctx, new NettyMetrics(new MetricRegistry()));
+    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
   }
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
     request = null;
-    restResponseHandler = null;
+    restResponseChannel = null;
   }
 
   @Override
@@ -240,25 +240,25 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       throws RestServiceException {
     if (request == null) {
       request = new NettyRequestMetadata(httpRequest);
-      restResponseHandler.setContentType("text/plain; charset=UTF-8");
+      restResponseChannel.setContentType("text/plain; charset=UTF-8");
       if (IMMEDIATE_FLUSH_AND_CLOSE_URI.equals(request.getUri())) {
-        restResponseHandler.flush();
-        restResponseHandler.onRequestComplete(null, false);
+        restResponseChannel.flush();
+        restResponseChannel.onRequestComplete(null, false);
       } else if (ON_REQUEST_COMPLETE_WITH_REST_EXCEPTION.equals(request.getUri())) {
-        restResponseHandler.onRequestComplete(
+        restResponseChannel.onRequestComplete(
             new RestServiceException(ON_REQUEST_COMPLETE_WITH_REST_EXCEPTION, RestServiceErrorCode.BadRequest), false);
       } else if (ON_REQUEST_COMPLETE_WTH_NULL_EXCEPTION.equals(request.getUri())) {
-        restResponseHandler.onRequestComplete(null, false);
+        restResponseChannel.onRequestComplete(null, false);
       } else if (WRITE_AFTER_CLOSE_URI.equals(request.getUri())) {
-        restResponseHandler.onRequestComplete(null, false);
+        restResponseChannel.onRequestComplete(null, false);
         // write something. It should fail.
-        restResponseHandler.addToResponseBody(WRITE_AFTER_CLOSE_URI.getBytes(), true);
+        restResponseChannel.addToResponseBody(WRITE_AFTER_CLOSE_URI.getBytes(), true);
       } else if (MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI.equals(request.getUri())) {
-        restResponseHandler.flush();
-        restResponseHandler.setContentType("text/plain; charset=UTF-8");
+        restResponseChannel.flush();
+        restResponseChannel.setContentType("text/plain; charset=UTF-8");
       }
     } else {
-      restResponseHandler.onRequestComplete(null, false);
+      restResponseChannel.onRequestComplete(null, false);
     }
   }
 
@@ -271,10 +271,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       throws RestServiceException {
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
-      restResponseHandler.addToResponseBody(httpContent.content().array(), isLast);
+      restResponseChannel.addToResponseBody(httpContent.content().array(), isLast);
       if (isLast) {
-        restResponseHandler.flush();
-        restResponseHandler.onRequestComplete(null, false);
+        restResponseChannel.flush();
+        restResponseChannel.onRequestComplete(null, false);
       }
     } else {
       throw new RestServiceException("Received data without a request", RestServiceErrorCode.NoRequest);

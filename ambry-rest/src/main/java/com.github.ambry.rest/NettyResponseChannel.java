@@ -28,14 +28,14 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 
 /**
- * Netty specific implementation of {@link RestResponseHandler}.
+ * Netty specific implementation of {@link RestResponseChannel}.
  * <p/>
  * Used by implementations of {@link BlobStorageService} to return their response via Netty
  * <p/>
  * The implementation is thread safe but provides no ordering guarantees. This means that data sent in might or might
  * not be written to the channel (in case other threads close the channel).
  */
-class NettyResponseHandler implements RestResponseHandler {
+class NettyResponseChannel implements RestResponseChannel {
 
   private final ChannelHandlerContext ctx;
   private final HttpResponse responseMetadata;
@@ -49,13 +49,13 @@ class NettyResponseHandler implements RestResponseHandler {
   private final ReentrantLock channelWriteLock = new ReentrantLock();
   private ChannelFuture lastWriteFuture;
 
-  public NettyResponseHandler(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
+  public NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
     this.responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
     channelWriteResultListener = new ChannelWriteResultListener(nettyMetrics);
     lastWriteFuture = ctx.newSucceededFuture();
-    logger.trace("Instantiated NettyResponseHandler");
+    logger.trace("Instantiated NettyResponseChannel");
   }
 
   @Override
@@ -109,7 +109,7 @@ class NettyResponseHandler implements RestResponseHandler {
       }
     } catch (Exception e) {
       logger.error("Swallowing exception encountered during onRequestComplete tasks", e);
-      nettyMetrics.responseHandlerRequestCompleteTasksError.inc();
+      nettyMetrics.responseChannelRequestCompleteTasksError.inc();
     }
   }
 

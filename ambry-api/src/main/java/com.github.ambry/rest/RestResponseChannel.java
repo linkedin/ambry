@@ -1,21 +1,21 @@
 package com.github.ambry.rest;
 
 /**
- * The RestResponseHandler is meant to provide a {@link NioServer} implementation independent way to return responses
+ * The RestResponseChannel is meant to provide a {@link NioServer} implementation independent way to return responses
  * to the client. It deals with data in terms of bytes only and is not concerned with different types of data that might
  * need to be returned from the {@link BlobStorageService}.
  * <p/>
  * This functionality is mostly required by implementations of {@link BlobStorageService} since they are agnostic to
  * both the REST protocol being used and the framework used for the implementation of {@link NioServer}.
  * <p/>
- * Typically, the RestResponseHandler wraps the APIs provided by the framework used for an implementation of
+ * Typically, the RestResponseChannel wraps the APIs provided by the framework used for an implementation of
  * {@link NioServer} to return responses to clients.
  * <p/>
  * Implementations are expected to be thread-safe but use with care across different threads since there are neither
  * ordering guarantees nor operation success guarantees (e.g. if an external thread closes the channel while a write
  * attempt is in progress).
  */
-public interface RestResponseHandler {
+public interface RestResponseChannel {
   /**
    * Adds data to the body of the response. Requests a write to the underlying channel before returning.
    * <p/>
@@ -24,7 +24,7 @@ public interface RestResponseHandler {
    * <p/>
    * If the write fails sometime in the future, the channel may be closed.
    * <p/>
-   * Be sure to call {@link RestResponseHandler#flush()} once you want to send all pending data to the actual transport.
+   * Be sure to call {@link RestResponseChannel#flush()} once you want to send all pending data to the actual transport.
    * @param data the bytes of data that need to be written.
    * @param isLast whether this is the last piece of the response.
    * @throws RestServiceException if there is an error adding to response body or with writing to the channel.
@@ -34,7 +34,7 @@ public interface RestResponseHandler {
 
   /**
    * Flushes all pending messages in the channel to transport. A response of OK is returned if no response body was
-   * constructed (i.e if there were no {@link RestResponseHandler#addToResponseBody(byte[], boolean)} calls).
+   * constructed (i.e if there were no {@link RestResponseChannel#addToResponseBody(byte[], boolean)} calls).
    * @throws RestServiceException if there is an error while flushing to channel.
    */
   public void flush()

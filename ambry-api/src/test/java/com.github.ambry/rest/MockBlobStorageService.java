@@ -91,19 +91,19 @@ public class MockBlobStorageService implements BlobStorageService {
    */
   private void echoRestMethod(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    RestResponseHandler restResponseHandler = restRequestInfo.getRestResponseHandler();
+    RestResponseChannel restResponseChannel = restRequestInfo.getRestResponseChannel();
     RestRequestContent content = restRequestInfo.getRestRequestContent();
     if (restRequestInfo.isFirstPart()) {
       RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      restResponseHandler.setContentType("text/plain; charset=UTF-8");
-      restResponseHandler.addToResponseBody(restMethod.toString().getBytes(), true);
+      restResponseChannel.setContentType("text/plain; charset=UTF-8");
+      restResponseChannel.addToResponseBody(restMethod.toString().getBytes(), true);
     } else {
       byte[] contentBytes = new byte[content.getContentSize()];
       content.getBytes(0, contentBytes, 0, content.getContentSize());
-      restResponseHandler.addToResponseBody(contentBytes, content.isLast());
+      restResponseChannel.addToResponseBody(contentBytes, content.isLast());
       if (content.isLast()) {
-        restResponseHandler.flush();
-        restResponseHandler.onRequestComplete(null, false);
+        restResponseChannel.flush();
+        restResponseChannel.onRequestComplete(null, false);
       }
     }
   }

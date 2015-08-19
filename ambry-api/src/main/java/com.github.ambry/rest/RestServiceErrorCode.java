@@ -96,9 +96,9 @@ public enum RestServiceErrorCode {
    */
   ResponseBuildingFailure,
   /**
-   * Indicates that there is no reference of a {@link RestResponseHandler} in the {@link RestRequestInfo}.
+   * Indicates that there is no reference of a {@link RestResponseChannel} in the {@link RestRequestInfo}.
    */
-  ResponseHandlerNull,
+  ResponseChannelNull,
   /**
    * Indicates that there is no reference of a {@link RestRequestMetadata} in the {@link RestRequestInfo}.
    */
@@ -146,7 +146,7 @@ public enum RestServiceErrorCode {
       case RestRequestInfoQueueingFailure:
       case RestRequestInfoNull:
       case ResponseBuildingFailure:
-      case ResponseHandlerNull:
+      case ResponseChannelNull:
       case RequestMetadataNull:
       case InternalObjectCreationError:
       case UnsupportedRestMethod:

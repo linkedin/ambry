@@ -36,9 +36,9 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  * the same {@link RestRequestHandler} since they have to be processed in order and might need state maintenance at the
  * lower layers. Therefore a {@link RestRequestHandler} is obtained at the beginning of the request, used for all parts
  * of the request and discarded only when the request is complete.
- * 3. {@link RestResponseHandler} that needs to be bundled with all request parts so that the underlying layers can
- * reply to the client - Similar to the {@link RestRequestHandler}, a {@link RestResponseHandler} needs to be maintained
- * for the lifetime of a request. This should be a Netty specific implementation ({@link NettyResponseHandler}).
+ * 3. {@link RestResponseChannel} that needs to be bundled with all request parts so that the underlying layers can
+ * reply to the client - Similar to the {@link RestRequestHandler}, a {@link RestResponseChannel} needs to be maintained
+ * for the lifetime of a request. This should be a Netty specific implementation ({@link NettyResponseChannel}).
  * <p/>
  * Every time a new channel is created, Netty creates instances of all handlers in its pipeline. Since this class is one
  * of the handlers, a new instance of it is created for every connection. Therefore there can be multiple instances of
@@ -57,7 +57,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private ChannelHandlerContext ctx = null;
   private RestRequestMetadata request = null;
   private RestRequestHandler requestHandler = null;
-  private RestResponseHandler responseHandler = null;
+  private RestResponseChannel responseChannel = null;
 
   public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig,
       RestRequestHandlerController requestHandlerController) {
@@ -75,10 +75,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * before the request (and the channel lives to serve exactly one request). If there is keepalive, this will be
    * called just once before receiving the first request.
    * <p/>
-   * At this point the required {@link RestRequestHandler} and {@link RestResponseHandler} are obtained and the same
+   * At this point the required {@link RestRequestHandler} and {@link RestResponseChannel} are obtained and the same
    * instances are used throughout the lifetime of the channel.
    * <p/>
-   * While a new instance of {@link NettyResponseHandler} is created, an instance of {@link RestRequestHandler} is
+   * While a new instance of {@link NettyResponseChannel} is created, an instance of {@link RestRequestHandler} is
    * requested from the {@link RestRequestHandlerController}.
    * @param ctx The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
    * @throws RestServiceException if the tasks that need to be performed on channel activation fail.
@@ -88,12 +88,12 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       throws RestServiceException {
     logger.trace("Channel {} active", ctx.channel());
     this.ctx = ctx;
-    // As soon as the channel is active, we create an instance of NettyResponseHandler to use for this request.
+    // As soon as the channel is active, we create an instance of NettyResponseChannel to use for this request.
     // We also get an instance of AsyncRequestHandler from the RequestHandlerController to use for this request. Since
     // the request parts have to be processed in order, we maintain references to the handlers throughout and use the
     // same handlers for the whole request.
     requestHandler = requestHandlerController.getRequestHandler();
-    responseHandler = new NettyResponseHandler(ctx, nettyMetrics);
+    responseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     if (requestHandler == null) {
       nettyMetrics.channelActiveTasksError.inc();
       throw new RestServiceException("RestRequestHandler received during channel bootstrap was null",
@@ -124,7 +124,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Netty calls this function when any exception is caught during the functioning of this handler.
    * <p/>
    * Centralized error handling based on the exception is performed here. Error responses are sent to the client via
-   * the {@link RestResponseHandler} wherever possible.
+   * the {@link RestResponseChannel} wherever possible.
    * <p/>
    * If this function throws an Exception, it is bubbled up to the handler before this one in the Netty pipeline.
    * @param ctx The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
@@ -145,10 +145,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       logger.error("Error on channel {}", ctx.channel(), cause);
     }
     nettyMetrics.processorExceptionCaught.inc();
-    if (responseHandler == null) {
-      logger.warn("No RestResponseHandler available for channel {}. Sending error response to client directly",
+    if (responseChannel == null) {
+      logger.warn("No RestResponseChannel available for channel {}. Sending error response to client directly",
           ctx.channel());
-      nettyMetrics.missingResponseHandlerError.inc();
+      nettyMetrics.missingResponseChannelError.inc();
       sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR);
     }
     onRequestComplete(cause, false);
@@ -171,7 +171,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       logger.info("Channel {} has been idle for {} seconds. Closing it", ctx.channel(),
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionClose.inc();
-      if (responseHandler == null) {
+      if (responseChannel == null) {
         ctx.close();
       }
       onRequestComplete(null, true);
@@ -215,7 +215,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Handles a {@link HttpRequest}.
    * <p/>
    * Does some state maintenance before passing a {@link RestRequestInfo} containing the {@link RestRequestMetadata}
-   * wrapping this {@link HttpRequest} and an instance of {@link RestResponseHandler} to the {@link RestRequestHandler}.
+   * wrapping this {@link HttpRequest} and an instance of {@link RestResponseChannel} to the {@link RestRequestHandler}.
    * @param httpRequest the {@link HttpRequest} that needs to be handled.
    * @throws RestServiceException if there is an error handling the current {@link HttpRequest}.
    */
@@ -227,7 +227,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       nettyMetrics.requestArrivalRate.mark();
       request = new NettyRequestMetadata(httpRequest);
       logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
-      requestHandler.handleRequest(new RestRequestInfo(request, null, responseHandler, true));
+      requestHandler.handleRequest(new RestRequestInfo(request, null, responseChannel, true));
     } else {
       // We have received a duplicate request. This shouldn't happen and there is no good way to deal with it. So
       // just update a metric and log an error.
@@ -242,7 +242,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * <p/>
    * Checks to see that a valid {@link RestRequestMetadata} is available for bundling with this part of the request and
    * passes a {@link RestRequestInfo} containing a {@link RestRequestContent} wrapping this
-   * {@link HttpContent} and an instance of {@link RestResponseHandler} to the {@link RestRequestHandler}.
+   * {@link HttpContent} and an instance of {@link RestResponseChannel} to the {@link RestRequestHandler}.
    * @param httpContent the {@link HttpContent} that needs to be handled.
    * @throws RestServiceException if there is an error handling the current {@link HttpContent}.
    */
@@ -250,7 +250,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       throws RestServiceException {
     if (request != null) {
       logger.trace("Received content for request - {}", request.getUri());
-      requestHandler.handleRequest(new RestRequestInfo(request, new NettyRequestContent(httpContent), responseHandler));
+      requestHandler.handleRequest(new RestRequestInfo(request, new NettyRequestContent(httpContent), responseChannel));
     } else {
       logger.warn("Received content without a request on channel {}", ctx.channel());
       nettyMetrics.noRequestError.inc();
@@ -268,8 +268,8 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     String uri = (request != null) ? request.getUri() : null;
     try {
       logger.trace("Request {} is complete", uri);
-      if (responseHandler != null) {
-        responseHandler.onRequestComplete(cause, forceClose);
+      if (responseChannel != null) {
+        responseChannel.onRequestComplete(cause, forceClose);
       }
       if (requestHandler != null) {
         requestHandler.onRequestComplete(request);
@@ -282,7 +282,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   }
 
   /**
-   * For errors that occur before we have a {@link RestResponseHandler} ({@link NettyResponseHandler}) ready.
+   * For errors that occur before we have a {@link RestResponseChannel} ({@link NettyResponseChannel}) ready.
    * @param status the response status code
    */
   private void sendError(HttpResponseStatus status) {

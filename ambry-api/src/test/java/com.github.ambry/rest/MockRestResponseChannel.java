@@ -7,7 +7,7 @@ import org.json.JSONObject;
 
 
 /**
- * Implementation of {@link RestResponseHandler} that can be used by tests.
+ * Implementation of {@link RestResponseChannel} that can be used by tests.
  * <p/>
  * The responseMetadata is stored in-memory and data is "flushed" by moving it to a different data structure. The
  * responseMetadata and responseBody (flushed or non-flushed) can be obtained through APIs to check correctness.
@@ -21,15 +21,15 @@ import org.json.JSONObject;
  * List of possible responseHeaders: -
  * 1. "contentType" - String - the content type of the data in the response.
  * <p/>
- * When {@link MockRestResponseHandler#addToResponseBody(byte[], boolean)} is called, the input bytes are added to a
+ * When {@link MockRestResponseChannel#addToResponseBody(byte[], boolean)} is called, the input bytes are added to a
  * {@link ByteArrayOutputStream}. This represents the unflushed responseBody. On
- * {@link MockRestResponseHandler#flush()}, the {@link ByteArrayOutputStream} is emptied into a {@link StringBuilder}
+ * {@link MockRestResponseChannel#flush()}, the {@link ByteArrayOutputStream} is emptied into a {@link StringBuilder}
  * and reset. The {@link StringBuilder} represents the flushed responseBody.
  * <p/>
  * All functions are synchronized because this is expected to be thread safe (very coarse grained but this is not
  * expected to be performant, just usable).
  */
-public class MockRestResponseHandler implements RestResponseHandler {
+public class MockRestResponseChannel implements RestResponseChannel {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
   public static String RESPONSE_HEADERS_KEY = "responseHeaders";
   public static String CONTENT_TYPE_HEADER_KEY = "contentType";
@@ -45,7 +45,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
   private final ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
   private final StringBuilder bodyStringBuilder = new StringBuilder();
 
-  public MockRestResponseHandler()
+  public MockRestResponseChannel()
       throws JSONException {
     responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_OK);
   }
@@ -130,7 +130,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
     }
   }
 
-  // MockRestResponseHandler specific functions (for testing)
+  // MockRestResponseChannel specific functions (for testing)
 
   /**
    * Gets the current responseMetadata whether it has been flushed or not (Might not be the final response metadata).

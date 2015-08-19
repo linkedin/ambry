@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
  * caller.
  * <p/>
  * It provides information to associate the piece (represented by {@link RestRequestContent} to the larger request of
- * which it is a part through the {@link RestRequestMetadata} and a reference to a {@link RestResponseHandler} through
+ * which it is a part through the {@link RestRequestMetadata} and a reference to a {@link RestResponseChannel} through
  * which response can be returned to the client.
  * <p/>
  * Typically this is the unit of communication between the {@link NioServer} and the {@link BlobStorageService}.
@@ -24,7 +24,7 @@ public class RestRequestInfo {
   private final boolean isFirstPart;
   private final RestRequestMetadata restRequestMetadata;
   private final RestRequestContent restRequestContent;
-  private final RestResponseHandler restResponseHandler;
+  private final RestResponseChannel restResponseChannel;
   private final AtomicBoolean operationComplete = new AtomicBoolean(false);
   private final List<RestRequestInfoEventListener> listeners =
       Collections.synchronizedList(new ArrayList<RestRequestInfoEventListener>());
@@ -60,23 +60,23 @@ public class RestRequestInfo {
   }
 
   /**
-   * Reference to the {@link RestResponseHandler} that can be used to return responses to the client.
-   * @return a {@link RestResponseHandler} that provides APIs to return responses to the client.
+   * Reference to the {@link RestResponseChannel} that can be used to return responses to the client.
+   * @return a {@link RestResponseChannel} that provides APIs to return responses to the client.
    */
-  public RestResponseHandler getRestResponseHandler() {
-    return restResponseHandler;
+  public RestResponseChannel getRestResponseChannel() {
+    return restResponseChannel;
   }
 
   public RestRequestInfo(RestRequestMetadata restRequestMetadata, RestRequestContent restRequestContent,
-      RestResponseHandler restResponseHandler) {
-    this(restRequestMetadata, restRequestContent, restResponseHandler, false);
+      RestResponseChannel restResponseChannel) {
+    this(restRequestMetadata, restRequestContent, restResponseChannel, false);
   }
 
   public RestRequestInfo(RestRequestMetadata restRequestMetadata, RestRequestContent restRequestContent,
-      RestResponseHandler restResponseHandler, boolean isFirstPart) {
+      RestResponseChannel restResponseChannel, boolean isFirstPart) {
     this.restRequestMetadata = restRequestMetadata;
     this.restRequestContent = restRequestContent;
-    this.restResponseHandler = restResponseHandler;
+    this.restResponseChannel = restResponseChannel;
     this.isFirstPart = isFirstPart;
   }
 
@@ -129,6 +129,6 @@ public class RestRequestInfo {
   @Override
   public String toString() {
     return "Request metadata: " + restRequestMetadata + " Request content: " + restRequestContent
-        + " Response handler: " + restResponseHandler;
+        + " Response handler: " + restResponseChannel;
   }
 }
