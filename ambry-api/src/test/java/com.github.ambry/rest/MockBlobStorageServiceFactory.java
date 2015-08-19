@@ -22,12 +22,10 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
   /**
    *
    * Returns a new instance of {@link MockBlobStorageService}.
-   * @return
-   * @throws InstantiationException
+   * @return a new instance of {@link MockBlobStorageService}.
    */
   @Override
-  public BlobStorageService getBlobStorageService()
-      throws InstantiationException {
+  public BlobStorageService getBlobStorageService() {
     return new MockBlobStorageService(clusterMap);
   }
 }

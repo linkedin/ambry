@@ -2,7 +2,7 @@ package com.github.ambry.rest;
 
 /**
  * Represents a NIO (non blocking I/O) server. Responsible for all network communication i.e. receiving requests
- * and sending responses and supports doing these operations in a non-blocking manner .
+ * and sending responses and supports doing these operations in a non-blocking manner.
  * <p/>
  * A typical implementation of a NioServer will handle incoming connections from clients, decode the REST protocol
  * (usually HTTP), convert them to generic objects that the {@link BlobStorageService} can understand, instantiate a
@@ -14,7 +14,7 @@ public interface NioServer {
 
   /**
    * Do startup tasks for the NioServer. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException
+   * @throws InstantiationException if the NioServer is unable to start.
    */
   public void start()
       throws InstantiationException;

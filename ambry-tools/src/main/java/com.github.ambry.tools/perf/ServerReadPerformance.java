@@ -127,7 +127,7 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry(), null);
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       long maxLatencyForGetBlobs = 0;
