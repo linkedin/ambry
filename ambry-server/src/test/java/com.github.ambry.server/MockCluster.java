@@ -8,12 +8,13 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -31,18 +32,25 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
+  private static String keyStoreFilePath;
+  private static String trustStoreFilePath;
 
   public MockCluster(NotificationSystem notificationSystem)
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException {
     this(notificationSystem, false, "");
   }
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
+    ClassLoader cl = MockCluster.class.getClassLoader();
+    URL keyStoreUrl = cl.getResource("selfsigned-keystore.jks");
+    keyStoreFilePath = new File(keyStoreUrl.toURI()).getAbsolutePath();
+    URL trustStoreUrl = cl.getResource("selfsigned-truststore.ts");
+    trustStoreFilePath = new File(trustStoreUrl.toURI()).getAbsolutePath();
     ArrayList<String> sslEnabledDatacenterList = Utils.splitString(sslEnabledDatacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
@@ -65,7 +73,7 @@ public class MockCluster {
   }
 
   private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters)
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -78,11 +86,11 @@ public class MockCluster {
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     props.setProperty("replication.ssl.protocol", "TLS");
     props.setProperty("replication.ssl.keystore.type", "JKS");
-    props.setProperty("replication.ssl.keystore.path", "./ambry-network/src/test/resources/selfsigned-keystore.jks");
+    props.setProperty("replication.ssl.keystore.path", keyStoreFilePath);
     props.setProperty("replication.ssl.keystore.password", "unittestonly");
     props.setProperty("replication.ssl.key.password", "unittestonly");
     props.setProperty("replication.ssl.truststore.type", "JKS");
-    props.setProperty("replication.ssl.truststore.path", "./ambry-network/src/test/resources/selfsigned-truststore.ts");
+    props.setProperty("replication.ssl.truststore.path", trustStoreFilePath);
     props.setProperty("replication.ssl.truststore.password", "unittestonly");
     props.setProperty("replication.ssl.cipher.suites", "TLS_RSA_WITH_AES_128_CBC_SHA256");
     VerifiableProperties propverify = new VerifiableProperties(props);

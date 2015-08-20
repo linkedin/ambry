@@ -54,6 +54,11 @@ public class SSLBlockingEchoServer extends Thread {
     this.exceptions = Collections.synchronizedList(new ArrayList<Exception>());
   }
 
+  /**
+   * Test client to handle renegotiation from server
+   * It only affects the next connection rather than all connections
+   * After setting renegotiate to true, the next connection to the server will be renegotiated
+   */
   public void renegotiate() {
     renegotiate.set(true);
   }
