@@ -6,7 +6,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.Properties;
-import org.apache.log4j.PropertyConfigurator;
 
 
 /**
@@ -14,18 +13,17 @@ import org.apache.log4j.PropertyConfigurator;
  */
 public class AmbryMain {
   public static void main(String args[]) {
-    if (args.length != 4) {
-      System.out.println("USAGE: java [options] " + AmbryServer.class.getSimpleName()
-          + " log4j.properties server.properties hardwarelayout partitionlayout");
+    if (args.length != 3) {
+      System.out.println("USAGE: java [options] " + AmbryMain.class.getCanonicalName() +
+          " server.properties hardwarelayout partitionlayout");
       System.exit(1);
     }
 
     try {
-      PropertyConfigurator.configure(args[0]);
-      Properties props = Utils.loadProps(args[1]);
+      Properties props = Utils.loadProps(args[0]);
       VerifiableProperties vprops = new VerifiableProperties(props);
 
-      ClusterMap clusterMap = new ClusterMapManager(args[2], args[3], new ClusterMapConfig(vprops));
+      ClusterMap clusterMap = new ClusterMapManager(args[1], args[2], new ClusterMapConfig(vprops));
 
       final AmbryServer server = new AmbryServer(vprops, clusterMap);
 
