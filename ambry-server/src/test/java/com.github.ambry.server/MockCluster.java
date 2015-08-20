@@ -32,6 +32,8 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
+  private static String keyStoreFilePath;
+  private static String trustStoreFilePath;
 
   public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException, URISyntaxException {
@@ -44,6 +46,11 @@ public class MockCluster {
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
+    ClassLoader cl = MockCluster.class.getClassLoader();
+    URL keyStoreUrl = cl.getResource("selfsigned-keystore.jks");
+    keyStoreFilePath = new File(keyStoreUrl.toURI()).getAbsolutePath();
+    URL trustStoreUrl = cl.getResource("selfsigned-truststore.ts");
+    trustStoreFilePath = new File(trustStoreUrl.toURI()).getAbsolutePath();
     ArrayList<String> sslEnabledDatacenterList = Utils.splitString(sslEnabledDatacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
@@ -79,11 +86,6 @@ public class MockCluster {
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     props.setProperty("replication.ssl.protocol", "TLS");
     props.setProperty("replication.ssl.keystore.type", "JKS");
-    ClassLoader cl = MockCluster.class.getClassLoader();
-    URL keyStoreUrl = cl.getResource("selfsigned-keystore.jks");
-    String keyStoreFilePath = new File(keyStoreUrl.toURI()).getAbsolutePath();
-    URL trustStoreUrl = cl.getResource("selfsigned-truststore.ts");
-    String trustStoreFilePath = new File(trustStoreUrl.toURI()).getAbsolutePath();
     props.setProperty("replication.ssl.keystore.path", keyStoreFilePath);
     props.setProperty("replication.ssl.keystore.password", "unittestonly");
     props.setProperty("replication.ssl.key.password", "unittestonly");
