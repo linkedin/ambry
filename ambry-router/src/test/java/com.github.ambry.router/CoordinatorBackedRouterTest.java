@@ -1,38 +1,21 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.coordinator.AmbryBlob;
-import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.coordinator.CoordinatorError;
-import com.github.ambry.coordinator.CoordinatorException;
-import com.github.ambry.coordinator.MockCluster;
-import com.github.ambry.coordinator.MockConnectionPool;
-import com.github.ambry.coordinator.MockDataNode;
 import com.github.ambry.messageformat.Blob;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ReadableStreamChannel;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -106,7 +89,7 @@ public class CoordinatorBackedRouterTest {
    * Tests the functionality of all variants of {@link CoordinatorBackedRouter#getBlob(String)},
    * {@link CoordinatorBackedRouter#getBlobInfo(String)}, {@link CoordinatorBackedRouter#deleteBlob(String)} and
    * {@link CoordinatorBackedRouter#putBlob(BlobProperties, byte[], ReadableStreamChannel)} by performing the following
-   * operations with a link {@link AmbryCoordinator}:
+   * operations with a link {@link MockCoordinator}:
    * 1. Generate random user metadata and blob data.
    * 2. Put blob and check that it succeeds. Use the obtained blob id for all subsequent operations.
    * 3. Obtain blob info and check that it matches with what was inserted.
@@ -121,12 +104,7 @@ public class CoordinatorBackedRouterTest {
       throws Exception {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     ClusterMap clusterMap = new MockClusterMap();
-
-    MockConnectionPool.mockCluster = new MockCluster(clusterMap);
-    Coordinator coordinator = new AmbryCoordinator(verifiableProperties, clusterMap);
-    triggerPutGetDeleteTest(verifiableProperties, clusterMap, coordinator);
-
-    coordinator = new MockCoordinator(verifiableProperties, clusterMap);
+    Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
     triggerPutGetDeleteTest(verifiableProperties, clusterMap, coordinator);
   }
 
@@ -492,222 +470,5 @@ class RouterOperationCallback<T> implements Callback<T> {
     callbackReceived = new CountDownLatch(1);
     result = null;
     exception = null;
-  }
-}
-
-/**
- * An implementation of {@link Coordinator} for use in tests. Can be configured for custom behaviour to check for
- * various scenarios.
- */
-class MockCoordinator implements Coordinator {
-  protected static String CHECKED_EXCEPTION_ON_OPERATION_START = "coordinator.checked.exception.on.operation.start";
-  protected static String RUNTIME_EXCEPTION_ON_OPERATION_START = "coordinator.runtime.exception.on.operation.start";
-
-  private final AtomicBoolean open = new AtomicBoolean(true);
-  private final ClusterMap clusterMap;
-  private final MockCluster cluster;
-  private final VerifiableProperties verifiableProperties;
-
-  /**
-   * Creates an instance of MockCoordinator.
-   * @param verifiableProperties properties map that defines the behaviour of this instance.
-   * @param clusterMap the cluster map to use.
-   */
-  public MockCoordinator(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
-    this.verifiableProperties = verifiableProperties;
-    this.clusterMap = clusterMap;
-    cluster = new MockCluster(clusterMap);
-  }
-
-  @Override
-  public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobInputStream)
-      throws CoordinatorException {
-    if (!open.get()) {
-      throw new IllegalArgumentException("Coordinator has been closed. Operation cannot be performed");
-    } else if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new CoordinatorException(CHECKED_EXCEPTION_ON_OPERATION_START, CoordinatorError.UnexpectedInternalError);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    try {
-      ByteBufferInputStream materializedBlobStream =
-          new ByteBufferInputStream(blobInputStream, (int) blobProperties.getBlobSize());
-      int index = new Random().nextInt(clusterMap.getWritablePartitionIds().size());
-      PartitionId writablePartition = clusterMap.getWritablePartitionIds().get(index);
-      BlobId blobId = new BlobId(writablePartition);
-      ServerErrorCode error = ServerErrorCode.No_Error;
-      for (ReplicaId replicaId : writablePartition.getReplicaIds()) {
-        DataNodeId dataNodeId = replicaId.getDataNodeId();
-        MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
-        BlobOutput blobOutput = new BlobOutput(blobProperties.getBlobSize(), materializedBlobStream.duplicate());
-        AmbryBlob blob = new AmbryBlob(blobProperties, userMetadata, blobOutput);
-        error = dataNode.put(blobId, blob);
-        if (!ServerErrorCode.No_Error.equals(error)) {
-          break;
-        }
-      }
-      switch (error) {
-        case No_Error:
-          break;
-        case Disk_Unavailable:
-          throw new CoordinatorException(error.toString(), CoordinatorError.AmbryUnavailable);
-        default:
-          throw new CoordinatorException(error.toString(), CoordinatorError.UnexpectedInternalError);
-      }
-      return blobId.getID();
-    } catch (IOException e) {
-      throw new CoordinatorException(e, CoordinatorError.UnexpectedInternalError);
-    }
-  }
-
-  @Override
-  public void deleteBlob(String id)
-      throws CoordinatorException {
-    if (!open.get()) {
-      throw new IllegalArgumentException("Coordinator has been closed. Operation cannot be performed");
-    } else if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new CoordinatorException(CHECKED_EXCEPTION_ON_OPERATION_START, CoordinatorError.UnexpectedInternalError);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    try {
-      BlobId blobId = new BlobId(id, clusterMap);
-      ServerErrorCode error = ServerErrorCode.No_Error;
-      for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-        DataNodeId dataNodeId = replicaId.getDataNodeId();
-        MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
-        error = dataNode.delete(blobId);
-        if (!(ServerErrorCode.No_Error.equals(error) || ServerErrorCode.Blob_Deleted.equals(error))) {
-          break;
-        }
-      }
-      switch (error) {
-        case No_Error:
-        case Blob_Deleted:
-          break;
-        case Blob_Not_Found:
-        case Partition_Unknown:
-          throw new CoordinatorException(error.toString(), CoordinatorError.BlobDoesNotExist);
-        case Blob_Expired:
-          throw new CoordinatorException(error.toString(), CoordinatorError.BlobExpired);
-        case Disk_Unavailable:
-          throw new CoordinatorException(error.toString(), CoordinatorError.AmbryUnavailable);
-        case IO_Error:
-        default:
-          throw new CoordinatorException(error.toString(), CoordinatorError.UnexpectedInternalError);
-      }
-    } catch (IOException e) {
-      throw new CoordinatorException(e, CoordinatorError.UnexpectedInternalError);
-    }
-  }
-
-  @Override
-  public BlobProperties getBlobProperties(String id)
-      throws CoordinatorException {
-    if (!open.get()) {
-      throw new IllegalArgumentException("Coordinator has been closed. Operation cannot be performed");
-    } else if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new CoordinatorException(CHECKED_EXCEPTION_ON_OPERATION_START, CoordinatorError.UnexpectedInternalError);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    try {
-      BlobId blobId = new BlobId(id, clusterMap);
-      int index = new Random().nextInt(blobId.getPartition().getReplicaIds().size());
-      ReplicaId replicaToGetFrom = blobId.getPartition().getReplicaIds().get(index);
-      DataNodeId dataNodeId = replicaToGetFrom.getDataNodeId();
-      MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
-      MockDataNode.BlobPropertiesAndError bpae = dataNode.getBlobProperties(blobId);
-      handleGetError(bpae.getError());
-      return bpae.getBlobProperties();
-    } catch (IOException e) {
-      throw new CoordinatorException(e, CoordinatorError.UnexpectedInternalError);
-    }
-  }
-
-  @Override
-  public ByteBuffer getBlobUserMetadata(String id)
-      throws CoordinatorException {
-    if (!open.get()) {
-      throw new IllegalArgumentException("Coordinator has been closed. Operation cannot be performed");
-    } else if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new CoordinatorException(CHECKED_EXCEPTION_ON_OPERATION_START, CoordinatorError.UnexpectedInternalError);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    try {
-      BlobId blobId = new BlobId(id, clusterMap);
-      int index = new Random().nextInt(blobId.getPartition().getReplicaIds().size());
-      ReplicaId replicaToGetFrom = blobId.getPartition().getReplicaIds().get(index);
-      DataNodeId dataNodeId = replicaToGetFrom.getDataNodeId();
-      MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
-      MockDataNode.UserMetadataAndError umae = dataNode.getUserMetadata(blobId);
-      handleGetError(umae.getError());
-      return umae.getUserMetadata();
-    } catch (IOException e) {
-      throw new CoordinatorException(e, CoordinatorError.UnexpectedInternalError);
-    }
-  }
-
-  @Override
-  public BlobOutput getBlob(String id)
-      throws CoordinatorException {
-    if (!open.get()) {
-      throw new IllegalArgumentException("Coordinator has been closed. Operation cannot be performed");
-    } else if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new CoordinatorException(CHECKED_EXCEPTION_ON_OPERATION_START, CoordinatorError.UnexpectedInternalError);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    try {
-      BlobId blobId = new BlobId(id, clusterMap);
-      int index = new Random().nextInt(blobId.getPartition().getReplicaIds().size());
-      ReplicaId replicaToGetFrom = blobId.getPartition().getReplicaIds().get(index);
-      DataNodeId dataNodeId = replicaToGetFrom.getDataNodeId();
-      MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
-      MockDataNode.BlobOutputAndError boae = dataNode.getData(blobId);
-      handleGetError(boae.getError());
-      return boae.getBlobOutput();
-    } catch (IOException e) {
-      throw new CoordinatorException(e, CoordinatorError.UnexpectedInternalError);
-    }
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new IOException(CHECKED_EXCEPTION_ON_OPERATION_START);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
-    }
-    open.set(false);
-  }
-
-  /**
-   * Converts a {@link ServerErrorCode} encountered during {@link #getBlob(String)}, {@link #getBlobProperties(String)}
-   * and {@link #getBlobUserMetadata(String)} to a {@link CoordinatorException} (if required).
-   * @param error the {@link ServerErrorCode} that needs to be converted to a {@link CoordinatorException}.
-   * @throws CoordinatorException the {@link CoordinatorException} that matches the {@code error}.
-   */
-  private void handleGetError(ServerErrorCode error)
-      throws CoordinatorException {
-    switch (error) {
-      case No_Error:
-        break;
-      case Blob_Not_Found:
-      case Partition_Unknown:
-        throw new CoordinatorException(error.toString(), CoordinatorError.BlobDoesNotExist);
-      case Blob_Deleted:
-        throw new CoordinatorException(error.toString(), CoordinatorError.BlobDeleted);
-      case Blob_Expired:
-        throw new CoordinatorException(error.toString(), CoordinatorError.BlobExpired);
-      case Disk_Unavailable:
-        throw new CoordinatorException(error.toString(), CoordinatorError.AmbryUnavailable);
-      case IO_Error:
-      case Data_Corrupt:
-      default:
-        throw new CoordinatorException(error.toString(), CoordinatorError.UnexpectedInternalError);
-    }
   }
 }
