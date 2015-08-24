@@ -1,18 +1,5 @@
 package com.github.ambry.network;
 
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
- * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
- * to You under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
- * License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -30,7 +17,7 @@ import javax.net.ssl.SSLSocket;
 /**
  * A simple server that takes size delimited byte arrays and just echos them back to the sender.
  */
-public class SSLBlockingEchoServer extends Thread {
+public class EchoServer extends Thread {
   public final int port;
   private final ServerSocket serverSocket;
   private final List<Thread> threads;
@@ -38,17 +25,23 @@ public class SSLBlockingEchoServer extends Thread {
   private final List<Exception> exceptions;
   private final AtomicBoolean renegotiate = new AtomicBoolean();
 
-  public SSLBlockingEchoServer(SSLFactory sslFactory, int sslPort) throws Exception {
+  public EchoServer(int port)
+      throws Exception {
+    this(null, port);
+  }
+
+  public EchoServer(SSLFactory sslFactory, int port)
+      throws Exception {
+    this.port = port;
     if (sslFactory == null) {
-      this.serverSocket = new ServerSocket(0);
+      this.serverSocket = new ServerSocket(port);
     } else {
       SSLContext sslContext = sslFactory.createSSLContext();
-      this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(sslPort);
+      this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
       // enable mutual authentication
-      ((SSLServerSocket)this.serverSocket).setNeedClientAuth(true);
+      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(true);
     }
-    this.port = this.serverSocket.getLocalPort();
     this.threads = Collections.synchronizedList(new ArrayList<Thread>());
     this.sockets = Collections.synchronizedList(new ArrayList<Socket>());
     this.exceptions = Collections.synchronizedList(new ArrayList<Exception>());
@@ -66,7 +59,6 @@ public class SSLBlockingEchoServer extends Thread {
   @Override
   public void run() {
     try {
-      System.out.println("Echo server started.");
       while (true) {
         final Socket socket = serverSocket.accept();
         sockets.add(socket);
@@ -106,7 +98,7 @@ public class SSLBlockingEchoServer extends Thread {
     }
   }
 
-  private void closeConnections()
+  public void closeConnections()
       throws IOException {
     for (Socket socket : sockets) {
       socket.close();

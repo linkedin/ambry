@@ -21,7 +21,7 @@ import static org.junit.Assert.fail;
 public class SSLBlockingChannelTest {
   private static SSLFactory sslFactory;
   private static SSLSocketFactory sslSocketFactory;
-  private static SSLBlockingEchoServer sslEchoServer;
+  private static EchoServer sslEchoServer;
   private static String hostName = "localhost";
   private static int sslPort = 18284;
 
@@ -31,7 +31,7 @@ public class SSLBlockingChannelTest {
     sslFactory = TestUtils.createSSLFactory();
     SSLContext sslContext = sslFactory.createSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
-    sslEchoServer = new SSLBlockingEchoServer(sslFactory, sslPort);
+    sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
   }
 

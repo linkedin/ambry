@@ -154,11 +154,6 @@ class BlockingChannelInfo {
       logger.error("IOException when trying to connect to the remote host {} and port {}", host, port.getPort());
       throw new ConnectionPoolTimeoutException(
           "IOException when trying to connect to remote host " + host + " port " + port.getPort(), e);
-    } catch (IllegalArgumentException e) {
-      logger.error("IllegalArgumentException when trying to connect to the remote host {} and port {}", host,
-          port.getPort());
-      throw new ConnectionPoolTimeoutException(
-          "IllegalArgumentException when trying to connect to remote host " + host + " port " + port.getPort(), e);
     } finally {
       rwlock.readLock().unlock();
     }
