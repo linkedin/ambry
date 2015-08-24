@@ -16,6 +16,7 @@ import javax.net.ssl.SSLSocket;
 
 /**
  * A simple server that takes size delimited byte arrays and just echos them back to the sender.
+ * Support both plaintext and SSL connections
  */
 public class EchoServer extends Thread {
   public final int port;
@@ -25,11 +26,17 @@ public class EchoServer extends Thread {
   private final List<Exception> exceptions;
   private final AtomicBoolean renegotiate = new AtomicBoolean();
 
+  /**
+   * Create an EchoServer that supports plaintext connections
+   */
   public EchoServer(int port)
       throws Exception {
     this(null, port);
   }
 
+  /**
+   * Create an EchoServer that supports SSL connections
+   */
   public EchoServer(SSLFactory sslFactory, int port)
       throws Exception {
     this.port = port;
