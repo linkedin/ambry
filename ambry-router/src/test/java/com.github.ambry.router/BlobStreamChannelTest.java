@@ -103,7 +103,9 @@ public class BlobStreamChannelTest {
     byte[] in = new byte[1024];
     BlobStreamChannel blobStreamChannel =
         new BlobStreamChannel(new ByteArrayInputStream(fillRandomBytes(in)), in.length);
-    ByteArrayChannel channel = new ByteArrayChannel(in.length);
+    assertEquals("Size returned by BlobStreamChannel did not match source array size", in.length,
+        blobStreamChannel.getSize());
+    ByteArrayChannel channel = new ByteArrayChannel((int) blobStreamChannel.getSize());
     // should be able to read all the data in one read
     int bytesWritten = blobStreamChannel.read(channel);
     assertEquals("Data size written did not match source byte array size", in.length, bytesWritten);

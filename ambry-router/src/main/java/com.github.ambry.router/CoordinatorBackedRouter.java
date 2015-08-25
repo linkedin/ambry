@@ -5,7 +5,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
-import com.github.ambry.messageformat.Blob;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -90,13 +89,13 @@ public class CoordinatorBackedRouter implements Router {
   }
 
   @Override
-  public Future<Blob> getBlob(String blobId) {
+  public Future<ReadableStreamChannel> getBlob(String blobId) {
     return getBlob(blobId, null);
   }
 
   @Override
-  public Future<Blob> getBlob(String blobId, Callback<Blob> callback) {
-    FutureRouterResult<Blob> futureRouterResult = new FutureRouterResult<Blob>();
+  public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+    FutureRouterResult<ReadableStreamChannel> futureRouterResult = new FutureRouterResult<ReadableStreamChannel>();
     operationPool.submit(
         new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback, CoordinatorOperationType.GetBlob));
     return futureRouterResult;
@@ -231,10 +230,8 @@ class CoordinatorOperation implements Runnable {
     try {
       switch (opType) {
         case GetBlob:
-          blobProperties = coordinator.getBlobProperties(blobId);
           BlobOutput blobOutput = coordinator.getBlob(blobId);
-          BlobStreamChannel blobStream = new BlobStreamChannel(blobOutput.getStream(), (int) blobOutput.getSize());
-          operationResult = new Blob(blobProperties, blobStream);
+          operationResult = new BlobStreamChannel(blobOutput.getStream(), blobOutput.getSize());
           break;
         case GetBlobInfo:
           blobProperties = coordinator.getBlobProperties(blobId);

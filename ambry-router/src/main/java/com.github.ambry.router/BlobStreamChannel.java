@@ -13,7 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * blob and stores the data in a {@link ByteBuffer}.
  */
 public class BlobStreamChannel implements ReadableStreamChannel {
-  private ByteBuffer buffer;
+  private final ByteBuffer buffer;
   private final ReentrantLock bufferReadLock = new ReentrantLock();
 
   /**
@@ -23,12 +23,12 @@ public class BlobStreamChannel implements ReadableStreamChannel {
    * @throws IllegalStateException if the stream reached EOF before {@code size} bytes of data was read from it.
    * @throws IOException if data from the backing {@link InputStream} could not be read.
    */
-  public BlobStreamChannel(InputStream inputStream, int size)
+  public BlobStreamChannel(InputStream inputStream, long size)
       throws IOException {
-    byte[] buf = new byte[size];
+    byte[] buf = new byte[(int) size];
     int read = 0;
     while (read < size) {
-      int sizeToRead = size - read;
+      int sizeToRead = (int) size - read;
       int sizeRead = inputStream.read(buf, read, sizeToRead);
       if (sizeRead == -1) {
         break;
@@ -40,6 +40,11 @@ public class BlobStreamChannel implements ReadableStreamChannel {
           "Stream reached EOF with " + read + " bytes read out of an expected size of " + size);
     }
     buffer = ByteBuffer.wrap(buf);
+  }
+
+  @Override
+  public long getSize() {
+    return buffer.capacity();
   }
 
   @Override

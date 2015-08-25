@@ -4,7 +4,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
-import com.github.ambry.messageformat.Blob;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ReadableStreamChannel;
@@ -105,7 +104,12 @@ public class CoordinatorBackedRouterTest {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     ClusterMap clusterMap = new MockClusterMap();
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    triggerPutGetDeleteTest(verifiableProperties, clusterMap, coordinator);
+    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
+    for (int i = 0; i < 200; i++) {
+      doPutGetDeleteTest(router, RouterUsage.WithCallback);
+      doPutGetDeleteTest(router, RouterUsage.WithoutCallback);
+    }
+    router.close();
   }
 
   /**
@@ -219,9 +223,9 @@ public class CoordinatorBackedRouterTest {
   }
 
   private void getBlobAndCompare(Router router, String blobId, byte[] content,
-      RouterOperationCallback<Blob> getBlobCallback)
+      RouterOperationCallback<ReadableStreamChannel> getBlobCallback)
       throws Exception {
-    Future<Blob> getBlobFuture;
+    Future<ReadableStreamChannel> getBlobFuture;
     if (getBlobCallback == null) {
       getBlobFuture = router.getBlob(blobId);
     } else {
@@ -236,9 +240,9 @@ public class CoordinatorBackedRouterTest {
       assertEquals("GetBlob: Future Blob and callback Blob do not match", getBlobFuture.get(),
           getBlobCallback.getResult());
     }
-    Blob blob = getBlobFuture.get();
-    ByteArrayChannel byteArrayChannel = new ByteArrayChannel((int) blob.getBlobProperties().getBlobSize());
-    blob.getBlobData().read(byteArrayChannel);
+    ReadableStreamChannel blobData = getBlobFuture.get();
+    ByteArrayChannel byteArrayChannel = new ByteArrayChannel((int) blobData.getSize());
+    blobData.read(byteArrayChannel);
     assertArrayEquals("GetBlob data does not match what was put", content, byteArrayChannel.getBuf());
   }
 
@@ -279,17 +283,6 @@ public class CoordinatorBackedRouterTest {
   }
 
   // putGetDeleteTest() helpers
-  private void triggerPutGetDeleteTest(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Coordinator coordinator)
-      throws Exception {
-    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
-    for (int i = 0; i < 200; i++) {
-      doPutGetDeleteTest(router, RouterUsage.WithCallback);
-      doPutGetDeleteTest(router, RouterUsage.WithoutCallback);
-    }
-    router.close();
-  }
-
   private void doPutGetDeleteTest(Router router, RouterUsage routerUsage)
       throws Exception {
     BlobProperties putBlobProperties =
@@ -298,12 +291,12 @@ public class CoordinatorBackedRouterTest {
     byte[] putContent = getByteArray(100);
     RouterOperationCallback<String> putBlobCallback = null;
     RouterOperationCallback<BlobInfo> getBlobInfoCallback = null;
-    RouterOperationCallback<Blob> getBlobCallback = null;
+    RouterOperationCallback<ReadableStreamChannel> getBlobCallback = null;
     RouterOperationCallback<Void> deleteBlobCallback = null;
     if (RouterUsage.WithCallback.equals(routerUsage)) {
       putBlobCallback = new RouterOperationCallback<String>();
       getBlobInfoCallback = new RouterOperationCallback<BlobInfo>();
-      getBlobCallback = new RouterOperationCallback<Blob>();
+      getBlobCallback = new RouterOperationCallback<ReadableStreamChannel>();
       deleteBlobCallback = new RouterOperationCallback<Void>();
     }
 
@@ -356,12 +349,12 @@ public class CoordinatorBackedRouterTest {
     byte[] putContent = getByteArray(100);
     RouterOperationCallback<String> putBlobCallback = null;
     RouterOperationCallback<BlobInfo> getBlobInfoCallback = null;
-    RouterOperationCallback<Blob> getBlobCallback = null;
+    RouterOperationCallback<ReadableStreamChannel> getBlobCallback = null;
     RouterOperationCallback<Void> deleteBlobCallback = null;
     if (RouterUsage.WithCallback.equals(routerUsage)) {
       putBlobCallback = new RouterOperationCallback<String>();
       getBlobInfoCallback = new RouterOperationCallback<BlobInfo>();
-      getBlobCallback = new RouterOperationCallback<Blob>();
+      getBlobCallback = new RouterOperationCallback<ReadableStreamChannel>();
       deleteBlobCallback = new RouterOperationCallback<Void>();
     }
 

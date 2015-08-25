@@ -17,6 +17,12 @@ import java.nio.channels.WritableByteChannel;
 public interface ReadableStreamChannel {
 
   /**
+   * Return the size of stream that is available on this channel. If -1, then size is unknown.
+   * @return the size of the stream available on this channel. -1 if size is unknown.
+   */
+  public long getSize();
+
+  /**
    * Reads a sequence of bytes into the {@link WritableByteChannel} provided.
    * <p/>
    * This operation might read all the bytes in the channel or might not read any bytes at all. It's behaviour depends
