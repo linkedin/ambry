@@ -1,5 +1,6 @@
 package com.github.ambry.router;
 
+import com.github.ambry.utils.ByteBufferChannel;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -87,7 +88,8 @@ public class BlobStreamChannelTest {
       throws IOException {
     // 0 sized blob.
     BlobStreamChannel blobStreamChannel = new BlobStreamChannel(new ByteArrayInputStream(new byte[0]), 0);
-    assertEquals("There should have been no bytes to read", -1, blobStreamChannel.read(new ByteArrayChannel(0)));
+    assertEquals("There should have been no bytes to read", -1,
+        blobStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
   }
 
   // helpers
@@ -105,51 +107,11 @@ public class BlobStreamChannelTest {
         new BlobStreamChannel(new ByteArrayInputStream(fillRandomBytes(in)), in.length);
     assertEquals("Size returned by BlobStreamChannel did not match source array size", in.length,
         blobStreamChannel.getSize());
-    ByteArrayChannel channel = new ByteArrayChannel((int) blobStreamChannel.getSize());
+    ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) blobStreamChannel.getSize()));
     // should be able to read all the data in one read
     int bytesWritten = blobStreamChannel.read(channel);
     assertEquals("Data size written did not match source byte array size", in.length, bytesWritten);
-    assertArrayEquals("Source bytes and bytes in channel did not match", in, channel.getBuf());
-  }
-}
-
-/**
- * A {@link WritableByteChannel} that receives bytes and stores them in a byte array. The byte array can be retrieved
- * later to check/consume bytes written to the channel.
- */
-class ByteArrayChannel implements WritableByteChannel {
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final byte[] buf;
-
-  byte[] getBuf() {
-    return buf;
-  }
-
-  /**
-   * Creates a ByteArrayChannel with a fixed capacity that cannot be exceeded.
-   * @param capacity the capacity of the backing byte array.
-   */
-  public ByteArrayChannel(int capacity) {
-    buf = new byte[capacity];
-  }
-
-  @Override
-  public int write(ByteBuffer src)
-      throws IOException {
-    int prevPosition = src.position();
-    src.get(buf);
-    return src.position() - prevPosition;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return channelOpen.get();
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    channelOpen.set(false);
+    assertArrayEquals("Source bytes and bytes in channel did not match", in, channel.getBuffer().array());
   }
 }
 

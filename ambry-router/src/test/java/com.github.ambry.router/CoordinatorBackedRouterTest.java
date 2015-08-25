@@ -7,9 +7,11 @@ import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ReadableStreamChannel;
+import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -241,9 +243,9 @@ public class CoordinatorBackedRouterTest {
           getBlobCallback.getResult());
     }
     ReadableStreamChannel blobData = getBlobFuture.get();
-    ByteArrayChannel byteArrayChannel = new ByteArrayChannel((int) blobData.getSize());
-    blobData.read(byteArrayChannel);
-    assertArrayEquals("GetBlob data does not match what was put", content, byteArrayChannel.getBuf());
+    ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) blobData.getSize()));
+    blobData.read(channel);
+    assertArrayEquals("GetBlob data does not match what was put", content, channel.getBuffer().array());
   }
 
   private void deleteBlob(Router router, String blobId, RouterOperationCallback<Void> deleteBlobCallback)

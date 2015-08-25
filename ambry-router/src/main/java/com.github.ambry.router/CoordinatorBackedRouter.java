@@ -9,10 +9,10 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ReadableStreamChannel;
+import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -271,17 +271,11 @@ class CoordinatorOperation implements Runnable {
 
 /**
  *  Helper class to convert a (possibly non-blocking) {@link ReadableStreamChannel} into a blocking {@link InputStream}.
- *  <p/>
- *  This class also implements {@link WritableByteChannel}. So, in the current implementation, {@link #read()} is
- *  handled by invoking a call to {@link ReadableStreamChannel#read(WritableByteChannel)} that in turn calls the
- *  {@link #write(ByteBuffer)} method of this class. A single byte is captured in a class variable, and the
- *  {@link #read()} returns this byte.
  */
-class ReadableStreamChannelInputStream extends InputStream implements WritableByteChannel {
+class ReadableStreamChannelInputStream extends InputStream {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final ByteBufferChannel singleByteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate(1));
   private final ReadableStreamChannel readableStreamChannel;
-  private Byte dataByte;
 
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
@@ -290,50 +284,62 @@ class ReadableStreamChannelInputStream extends InputStream implements WritableBy
   @Override
   public int read()
       throws IOException {
-    if (!isOpen()) {
-      throw new ClosedChannelException();
+    ByteBuffer buffer = singleByteBufferChannel.getBuffer();
+    buffer.clear();
+    int bytesRead = read(singleByteBufferChannel);
+    int data = -1;
+    if (bytesRead != -1) {
+      buffer.flip();
+      data = buffer.get() & 0xFF;
     }
-    int bytesRead;
-    try {
-      int waitTime = 0;
-      while (true) {
-        if (waitTime > 0) {
-          logger.warn("ReadableStreamChannelInputStream has been waiting for " + waitTime + "ms for data");
-        }
-        bytesRead = readableStreamChannel.read(this);
-        if (bytesRead == 0) {
-          Thread.sleep(500);
-          waitTime += 500;
-        } else if (bytesRead == -1) {
-          return -1;
-        } else {
-          return dataByte & 0xFF;
-        }
-      }
-    } catch (InterruptedException e) {
-      throw new IOException("Wait for data interrupted", e);
+    return data;
+  }
+
+  @Override
+  public int read(byte b[], int off, int len)
+      throws IOException {
+    if (b == null) {
+      throw new NullPointerException();
+    } else if (off < 0 || len < 0 || len > b.length - off) {
+      throw new IndexOutOfBoundsException();
+    } else if (len == 0) {
+      return 0;
     }
+
+    ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.wrap(b, off, len));
+    return read(byteBufferChannel);
   }
 
   /**
-   * Picks up exactly one byte from {@code src}.
-   * @param src the {@link ByteBuffer} containing data that needs to be written to the channel.
-   * @return the number of bytes read. Always 1.
+   * Uses the provided {@link WritableByteChannel} to read from the {@code readableStreamChannel} and returns the number
+   * of bytes actually read.
+   * <p/>
+   * This method blocks until at least one byte is available, end of stream is reached or if  there is either an
+   * {@link IOException} while reading from the {@code readableStreamChannel} or there is an
+   * {@link InterruptedException} during the sleep awaiting data.
+   * @param channel the {@link WritableByteChannel} to use.
+   * @return the number of bytes read from the {@code readableStreamChannel}.
+   * @throws IOException if there is an exception while reading from the {@code readableStreamChannel} or if there is an
+   *          {@link InterruptedException} during the sleep awaiting data.
    */
-  @Override
-  public int write(ByteBuffer src) {
-    dataByte = src.get();
-    return 1;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return channelOpen.get();
-  }
-
-  @Override
-  public void close()
+  private int read(WritableByteChannel channel)
       throws IOException {
-    channelOpen.set(false);
+    int waitTime = 0;
+    int bytesRead;
+    while (true) {
+      bytesRead = readableStreamChannel.read(channel);
+      if (bytesRead == 0) {
+        try {
+          Thread.sleep(10);
+          waitTime += 10;
+          logger.warn("ReadableStreamChannelInputStream has been waiting for " + waitTime + "ms for data");
+        } catch (InterruptedException e) {
+          throw new IOException("Wait for data interrupted", e);
+        }
+      } else {
+        break;
+      }
+    }
+    return bytesRead;
   }
 }
