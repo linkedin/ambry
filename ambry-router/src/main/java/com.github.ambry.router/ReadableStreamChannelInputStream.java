@@ -27,9 +27,8 @@ class ReadableStreamChannelInputStream extends InputStream {
       throws IOException {
     ByteBuffer buffer = singleByteBufferChannel.getBuffer();
     buffer.clear();
-    int bytesRead = read(singleByteBufferChannel);
     int data = -1;
-    if (bytesRead != -1) {
+    if (read(singleByteBufferChannel) != -1) {
       buffer.flip();
       data = buffer.get() & 0xFF;
     }
