@@ -3,6 +3,7 @@ package com.github.ambry.network;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,8 +34,9 @@ public class BlockingChannelConnectionPoolTest {
   @BeforeClass
   public static void onceExecutedBeforeAll()
       throws Exception {
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }
 

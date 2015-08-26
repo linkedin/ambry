@@ -8,6 +8,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -87,6 +88,7 @@ public class AmbryServer {
       ServerConfig serverConfig = new ServerConfig(properties);
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
+      SSLConfig sslConfig = new SSLConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -108,19 +110,8 @@ public class AmbryServer {
 
       SSLSocketFactory sslSocketFactory = null;
       if (replicationConfig.replicationSslEnabledDatacenters.length() > 0) {
-        SSLFactory sslFactory = new SSLFactory();
-        sslFactory.setProtocol(replicationConfig.replicationSslProtocol);
-        sslFactory
-            .setKeyStore(replicationConfig.replicationSslKeyStoreType, replicationConfig.replicationSslKeyStorePath,
-                replicationConfig.replicationSslKeyStorePassword, replicationConfig.replicationSslKeyPassword);
-        sslFactory.setTrustStore(replicationConfig.replicationSslTrustStoreType, replicationConfig.replicationSslTrustStorePath,
-            replicationConfig.replicationSslTrustStorePassword);
-        ArrayList<String> supportedCipherSuites = Utils.splitString(replicationConfig.replicationSslCipherSuites, ",");
-        sslFactory.setCipherSuites(supportedCipherSuites);
-        ArrayList<String> supportedProtocols = new ArrayList<String>();
-        supportedProtocols.add(replicationConfig.replicationSslProtocol);
-        sslFactory.setEnabledProtocols(supportedProtocols);
-        SSLContext sslContext = sslFactory.createSSLContext();
+        SSLFactory sslFactory = new SSLFactory(sslConfig);
+        SSLContext sslContext = sslFactory.getSSLContext();
         sslSocketFactory = sslContext.getSocketFactory();
       }
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry, sslSocketFactory);

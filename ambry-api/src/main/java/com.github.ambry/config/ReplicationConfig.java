@@ -84,72 +84,6 @@ public class ReplicationConfig {
   @Config("replication.ssl.enabled.datacenters")
   public final String replicationSslEnabledDatacenters;
 
-  /**
-   * The SSL protocol
-   */
-  @Config("replication.ssl.protocol")
-  @Default("TLS")
-  public final String replicationSslProtocol;
-
-  /**
-   * The SSL key store type
-   */
-  @Config("replication.ssl.keystore.type")
-  @Default("JKS")
-  public final String replicationSslKeyStoreType;
-
-  /**
-   * The SSL key store path
-   */
-  @Config("replication.ssl.keystore.path")
-  @Default("")
-  public final String replicationSslKeyStorePath;
-
-  /**
-   * The SSL key store password
-   * There could be multiple keys in one key store
-   * This password is to protect the integrity of the entire key store
-   */
-  @Config("replication.ssl.keystore.password")
-  @Default("")
-  public final String replicationSslKeyStorePassword;
-
-  /**
-   * The SSL key password
-   * The key store protects each private key with its individual password
-   */
-  @Config("replication.ssl.key.password")
-  @Default("")
-  public final String replicationSslKeyPassword;
-
-  /**
-   * The SSL trust store type
-   */
-  @Config("replication.ssl.truststore.type")
-  @Default("JKS")
-  public final String replicationSslTrustStoreType;
-
-  /**
-   * The SSL trust store path
-   */
-  @Config("replication.ssl.truststore.path")
-  @Default("")
-  public final String replicationSslTrustStorePath;
-
-  /**
-   * The SSL trust store password
-   */
-  @Config("replication.ssl.truststore.password")
-  @Default("")
-  public final String replicationSslTrustStorePassword;
-
-  /**
-   * The SSL supported cipher suites
-   */
-  @Config("replication.ssl.cipher.suites")
-  @Default("")
-  public final String replicationSslCipherSuites;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -172,14 +106,5 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
     replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.datacenters", "");
-    replicationSslProtocol = verifiableProperties.getString("replication.ssl.protocol", "TLS");
-    replicationSslKeyStoreType = verifiableProperties.getString("replication.ssl.keystore.type", "JKS");
-    replicationSslKeyStorePath = verifiableProperties.getString("replication.ssl.keystore.path", "");
-    replicationSslKeyStorePassword = verifiableProperties.getString("replication.ssl.keystore.password", "");
-    replicationSslKeyPassword = verifiableProperties.getString("replication.ssl.key.password", "");
-    replicationSslTrustStoreType = verifiableProperties.getString("replication.ssl.truststore.type", "JKS");
-    replicationSslTrustStorePath = verifiableProperties.getString("replication.ssl.truststore.path", "");
-    replicationSslTrustStorePassword = verifiableProperties.getString("replication.ssl.truststore.password", "");
-    replicationSslCipherSuites = verifiableProperties.getString("replication.ssl.cipher.suites", "");
   }
 }

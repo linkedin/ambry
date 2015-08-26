@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,8 +29,9 @@ public class SSLBlockingChannelTest {
   @BeforeClass
   public static void onceExecutedBeforeAll()
       throws Exception {
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
     sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();

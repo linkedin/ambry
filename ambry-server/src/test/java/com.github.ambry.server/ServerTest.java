@@ -8,6 +8,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
@@ -22,7 +23,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
 import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.TestUtils;
+import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOptions;
@@ -33,7 +34,6 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
@@ -65,22 +65,29 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class ServerTest {
-
+  private static SSLFactory sslFactory;
+  private static SSLSocketFactory sslSocketFactory;
   private MockNotificationSystem notificationSystem;
-  private SSLFactory sslFactory;
-  private SSLSocketFactory sslSocketFactory;
   private MockCluster cluster;
+
+  @BeforeClass
+  public static void onceExecutedBeforeAll()
+      throws Exception {
+    // SSL object used by the client side of replication
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
+  }
 
   public ServerTest()
       throws Exception {
     notificationSystem = new MockNotificationSystem(9);
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
   }
 
   @After

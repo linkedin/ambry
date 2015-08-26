@@ -9,6 +9,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.CoordinatorConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -82,6 +83,7 @@ public class AmbryCoordinator implements Coordinator {
       logger.info("Creating configs");
       CoordinatorConfig coordinatorConfig = new CoordinatorConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
+      SSLConfig sslConfig = new SSLConfig(properties);
       properties.verify();
 
       this.connectionPoolCheckoutTimeout = coordinatorConfig.connectionPoolCheckoutTimeoutMs;
@@ -101,18 +103,8 @@ public class AmbryCoordinator implements Coordinator {
       ConnectionPoolFactory connectionPoolFactory;
       if (coordinatorConfig.sslEnabledDatacenters.length() > 0) {
         logger.info("Setting up SSL");
-        SSLFactory sslFactory = new SSLFactory();
-        sslFactory.setProtocol(coordinatorConfig.sslProtocol);
-        sslFactory.setKeyStore(coordinatorConfig.sslKeystoreType, coordinatorConfig.sslKeystorePath,
-            coordinatorConfig.sslKeystorePassword, coordinatorConfig.sslKeyPassword);
-        sslFactory.setTrustStore(coordinatorConfig.sslTruststoreType, coordinatorConfig.sslTruststorePath,
-            coordinatorConfig.sslTruststorePassword);
-        ArrayList<String> supportedCipherSuites = Utils.splitString(coordinatorConfig.sslCipherSuites, ",");
-        sslFactory.setCipherSuites(supportedCipherSuites);
-        ArrayList<String> supportedProtocols = new ArrayList<String>();
-        supportedProtocols.add(coordinatorConfig.sslProtocol);
-        sslFactory.setEnabledProtocols(supportedProtocols);
-        SSLContext sslContext = sslFactory.createSSLContext();
+        SSLFactory sslFactory = new SSLFactory(sslConfig);
+        SSLContext sslContext = sslFactory.getSSLContext();
         SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
         logger.info("Getting connection pool");
         connectionPoolFactory =

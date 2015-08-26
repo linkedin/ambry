@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -25,24 +26,43 @@ public class SSLFactoryTest {
   @Test
   public void testSSLFactory()
       throws Exception {
-    SSLFactory sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    SSLSocketFactory socketFactory = sslContext.getSocketFactory();
-    SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
-    SSLEngine engine = sslFactory.createSSLEngine(sslContext, "localhost", 9095, true);
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    SSLFactory sslFactory = new SSLFactory(sslConfig);
 
+    // SSLContext test
+    SSLContext sslContext = sslFactory.getSSLContext();
+    SSLSocketFactory socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+
+    // client side SSLEngine test
+    SSLEngine clientSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
     Assert.assertEquals(sslContext.getProtocol(), "TLS");
-    String[] enabledCipherSuites = engine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], "TLS_RSA_WITH_AES_128_CBC_SHA256");
-    String[] enabledProtocols = engine.getEnabledProtocols();
+    Assert.assertEquals(sslContext.getProvider().getName(), "SunJSSE");
+    String[] enabledProtocols = clientSSLEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
     Assert.assertEquals(enabledProtocols[0], "TLSv1.2");
-    Assert.assertEquals(engine.getNeedClientAuth(), false);
-    Assert.assertEquals(engine.getUseClientMode(), true);
-    Assert.assertEquals(engine.getWantClientAuth(), false);
-    System.out.println(socketFactory.toString());
-    System.out.println(serverSocketFactory.toString());
-    System.out.println(engine.toString());
+    Assert.assertEquals(clientSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(), "HTTPS");
+    Assert.assertEquals(clientSSLEngine.getNeedClientAuth(), false);
+    Assert.assertEquals(clientSSLEngine.getUseClientMode(), true);
+    Assert.assertEquals(clientSSLEngine.getWantClientAuth(), false);
+    String[] enabledCipherSuites = clientSSLEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuites.length, 1);
+    Assert.assertEquals(enabledCipherSuites[0], "TLS_RSA_WITH_AES_128_CBC_SHA256");
+
+    // server side SSLEngine test
+    SSLEngine serverSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
+    enabledProtocols = serverSSLEngine.getEnabledProtocols();
+    Assert.assertEquals(enabledProtocols.length, 1);
+    Assert.assertEquals(enabledProtocols[0], "TLSv1.2");
+    // endpoint indentification algorithm only effect in client side SSLEngine
+    Assert.assertEquals(serverSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(), null);
+    Assert.assertEquals(serverSSLEngine.getNeedClientAuth(), true);
+    Assert.assertEquals(serverSSLEngine.getUseClientMode(), false);
+    Assert.assertEquals(serverSSLEngine.getWantClientAuth(), false);
+    enabledCipherSuites = serverSSLEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuites.length, 1);
+    Assert.assertEquals(enabledCipherSuites[0], "TLS_RSA_WITH_AES_128_CBC_SHA256");
   }
 }

@@ -43,7 +43,7 @@ public class EchoServer extends Thread {
     if (sslFactory == null) {
       this.serverSocket = new ServerSocket(port);
     } else {
-      SSLContext sslContext = sslFactory.createSSLContext();
+      SSLContext sslContext = sslFactory.getSSLContext();
       this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
       // enable mutual authentication
