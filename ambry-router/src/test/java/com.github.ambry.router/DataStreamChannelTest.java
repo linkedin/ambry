@@ -16,15 +16,15 @@ import static org.junit.Assert.fail;
 
 
 /**
- * Tests functionality of {@link BlobStreamChannel}.
+ * Tests functionality of {@link DataStreamChannel}.
  */
-public class BlobStreamChannelTest {
+public class DataStreamChannelTest {
 
   /**
    * Tests the common case read operations i.e
-   * 1. Create {@link BlobStreamChannel} with random bytes.
-   * 2. Calls the different read operations of {@link BlobStreamChannel} and checks that the data read matches the data
-   * used to create the {@link BlobStreamChannel}.
+   * 1. Create {@link DataStreamChannel} with random bytes.
+   * 2. Calls the different read operations of {@link DataStreamChannel} and checks that the data read matches the data
+   * used to create the {@link DataStreamChannel}.
    * @throws IOException
    */
   @Test
@@ -34,7 +34,7 @@ public class BlobStreamChannelTest {
   }
 
   /**
-   * Tests that the right exceptions are thrown when instantiation of {@link BlobStreamChannel} fails.
+   * Tests that the right exceptions are thrown when instantiation of {@link DataStreamChannel} fails.
    * @throws IOException
    */
   @Test
@@ -42,7 +42,7 @@ public class BlobStreamChannelTest {
       throws IOException {
     byte[] in = new byte[1024];
     try {
-      new BlobStreamChannel(new ByteArrayInputStream(in), in.length + 1);
+      new DataStreamChannel(new ByteArrayInputStream(in), in.length + 1);
       fail("Should have failed because size input provided is greater than actual stream length");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
@@ -50,7 +50,7 @@ public class BlobStreamChannelTest {
 
     String errMsg = "@@ExpectedExceptionMessage@@";
     try {
-      new BlobStreamChannel(new BadInputStream(new IOException(errMsg)), 1);
+      new DataStreamChannel(new BadInputStream(new IOException(errMsg)), 1);
       fail("Should have failed because BadInputStream would have thrown exception");
     } catch (IOException e) {
       assertEquals("Exception message does not match expected", errMsg, e.getMessage());
@@ -66,10 +66,10 @@ public class BlobStreamChannelTest {
       throws IOException {
     String errMsg = "@@ExpectedExceptionMessage@@";
     byte[] in = fillRandomBytes(new byte[1]);
-    BlobStreamChannel blobStreamChannel = new BlobStreamChannel(new ByteArrayInputStream(in), in.length);
+    DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(in), in.length);
 
     try {
-      blobStreamChannel.read(new BadWritableChannel(new IOException(errMsg)));
+      dataStreamChannel.read(new BadWritableChannel(new IOException(errMsg)));
       fail("Should have failed because BadWritableChannel would have thrown exception");
     } catch (IOException e) {
       assertEquals("Exception message does not match expected", errMsg, e.getMessage());
@@ -87,9 +87,9 @@ public class BlobStreamChannelTest {
   public void readAndWriteCornerCasesTest()
       throws IOException {
     // 0 sized blob.
-    BlobStreamChannel blobStreamChannel = new BlobStreamChannel(new ByteArrayInputStream(new byte[0]), 0);
+    DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(new byte[0]), 0);
     assertEquals("There should have been no bytes to read", -1,
-        blobStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
+        dataStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
   }
 
   // helpers
@@ -103,13 +103,13 @@ public class BlobStreamChannelTest {
   private void readToChannelTest()
       throws IOException {
     byte[] in = new byte[1024];
-    BlobStreamChannel blobStreamChannel =
-        new BlobStreamChannel(new ByteArrayInputStream(fillRandomBytes(in)), in.length);
-    assertEquals("Size returned by BlobStreamChannel did not match source array size", in.length,
-        blobStreamChannel.getSize());
-    ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) blobStreamChannel.getSize()));
+    DataStreamChannel dataStreamChannel =
+        new DataStreamChannel(new ByteArrayInputStream(fillRandomBytes(in)), in.length);
+    assertEquals("Size returned by DataStreamChannel did not match source array size", in.length,
+        dataStreamChannel.getSize());
+    ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) dataStreamChannel.getSize()));
     // should be able to read all the data in one read
-    int bytesWritten = blobStreamChannel.read(channel);
+    int bytesWritten = dataStreamChannel.read(channel);
     assertEquals("Data size written did not match source byte array size", in.length, bytesWritten);
     assertArrayEquals("Source bytes and bytes in channel did not match", in, channel.getBuffer().array());
   }

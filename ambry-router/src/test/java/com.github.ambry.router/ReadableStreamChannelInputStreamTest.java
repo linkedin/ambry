@@ -33,7 +33,7 @@ public class ReadableStreamChannelInputStreamTest {
     byte[] in = new byte[1024];
     new Random().nextBytes(in);
     InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new BlobStreamChannel(srcInputStream, in.length);
+    ReadableStreamChannel channel = new DataStreamChannel(srcInputStream, in.length);
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     try {
       dstInputStream.read(null, 0, in.length);
@@ -67,7 +67,7 @@ public class ReadableStreamChannelInputStreamTest {
   private void readByteByByteTest(byte[] in)
       throws IOException {
     InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new BlobStreamChannel(srcInputStream, in.length);
+    ReadableStreamChannel channel = new DataStreamChannel(srcInputStream, in.length);
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     for (int i = 0; i < in.length; i++) {
       assertEquals("Byte [" + i + "] does not match expected", in[i], (byte) dstInputStream.read());
@@ -78,7 +78,7 @@ public class ReadableStreamChannelInputStreamTest {
   private void readPartByPartTest(byte[] in)
       throws IOException {
     InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new BlobStreamChannel(srcInputStream, in.length);
+    ReadableStreamChannel channel = new DataStreamChannel(srcInputStream, in.length);
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     byte[] out = new byte[in.length];
     for (int start = 0; start < in.length; ) {
@@ -95,7 +95,7 @@ public class ReadableStreamChannelInputStreamTest {
   private void readAllAtOnceTest(byte[] in)
       throws IOException {
     InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new BlobStreamChannel(srcInputStream, in.length);
+    ReadableStreamChannel channel = new DataStreamChannel(srcInputStream, in.length);
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     byte[] out = new byte[in.length];
     assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));

@@ -228,7 +228,7 @@ class CoordinatorOperation implements Runnable {
       switch (opType) {
         case GetBlob:
           BlobOutput blobOutput = coordinator.getBlob(blobId);
-          operationResult = new BlobStreamChannel(blobOutput.getStream(), blobOutput.getSize());
+          operationResult = new DataStreamChannel(blobOutput.getStream(), blobOutput.getSize());
           break;
         case GetBlobInfo:
           blobProperties = coordinator.getBlobProperties(blobId);

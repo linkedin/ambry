@@ -181,7 +181,7 @@ public class CoordinatorBackedRouterTest {
   private String putBlob(Router router, BlobProperties blobProperties, byte[] usermetadata, byte[] content,
       RouterOperationCallback<String> putBlobCallback)
       throws Exception {
-    ReadableStreamChannel blobDataChannel = new BlobStreamChannel(new ByteArrayInputStream(content), content.length);
+    ReadableStreamChannel blobDataChannel = new DataStreamChannel(new ByteArrayInputStream(content), content.length);
     Future<String> putBlobFuture;
     if (putBlobCallback == null) {
       putBlobFuture = router.putBlob(blobProperties, usermetadata, blobDataChannel);

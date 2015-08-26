@@ -12,18 +12,18 @@ import java.util.concurrent.locks.ReentrantLock;
  * Represents blob data as a {@link ReadableStreamChannel}. Consumes an {@link InputStream} containing the bytes in the
  * blob and stores the data in a {@link ByteBuffer}.
  */
-class BlobStreamChannel implements ReadableStreamChannel {
+class DataStreamChannel implements ReadableStreamChannel {
   private final ByteBuffer buffer;
   private final ReentrantLock bufferReadLock = new ReentrantLock();
 
   /**
-   * Constructs a BlobStreamChannel by consuming {@code size} bytes of data from the given {@link InputStream}.
+   * Constructs a DataStreamChannel by consuming {@code size} bytes of data from the given {@link InputStream}.
    * @param inputStream the {@link InputStream} to consume bytes from.
    * @param size the number of bytes to consume.
    * @throws IllegalStateException if the stream reached EOF before {@code size} bytes of data was read from it.
    * @throws IOException if data from the backing {@link InputStream} could not be read.
    */
-  public BlobStreamChannel(InputStream inputStream, long size)
+  public DataStreamChannel(InputStream inputStream, long size)
       throws IOException {
     byte[] buf = new byte[(int) size];
     int read = 0;
