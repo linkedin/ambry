@@ -76,7 +76,7 @@ public class ServerTest {
   private MockCluster cluster;
 
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
     // SSL object used by the client side of replication
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
