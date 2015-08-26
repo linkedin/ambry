@@ -26,8 +26,11 @@ public class SocketServerTest {
   private static SSLSocketFactory sslSocketFactory;
   private SocketServer server = null;
 
+  /**
+   * Run only once for all tests
+   */
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
     sslFactory = new SSLFactory(sslConfig);

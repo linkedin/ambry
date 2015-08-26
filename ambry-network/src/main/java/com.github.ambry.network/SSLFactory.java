@@ -6,6 +6,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -15,21 +16,24 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
 
 
+/**
+ * Factory to create SSLContext and SSLEngine
+ */
 public class SSLFactory {
   public enum Mode {CLIENT, SERVER}
-  private String protocol = null;
-  private String provider = null;
-  private String kmfAlgorithm = null;
-  private String tmfAlgorithm = null;
-  private SecurityStore keystore = null;
-  private String keyPassword = null;
-  private SecurityStore truststore = null;
-  private String[] cipherSuites = null;
-  private String[] enabledProtocols = null;
-  private String endpointIdentification = null;
-  private SSLContext sslContext = null;
-  private boolean needClientAuth = false;
-  private boolean wantClientAuth = false;
+  private String protocol;
+  private String provider;
+  private String kmfAlgorithm;
+  private String tmfAlgorithm;
+  private SecurityStore keystore;
+  private String keyPassword;
+  private SecurityStore truststore;
+  private String[] cipherSuites;
+  private String[] enabledProtocols;
+  private String endpointIdentification;
+  private SSLContext sslContext;
+  private boolean needClientAuth;
+  private boolean wantClientAuth;
 
   public SSLFactory(SSLConfig sslConfig)
       throws Exception {
@@ -43,7 +47,7 @@ public class SSLFactory {
       this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
     }
 
-    ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocol, ",");
+    ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
     if (protocolsList != null && protocolsList.size() > 0) {
       this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
     }
@@ -66,13 +70,20 @@ public class SSLFactory {
       this.tmfAlgorithm = sslConfig.sslTrustmanagerAlgorithm;
     }
 
-    createKeyStore(sslConfig.sslKeyStoreType, sslConfig.sslKeyStorePath, sslConfig.sslKeyStorePassword,
+    createKeyStore(sslConfig.sslKeystoreType, sslConfig.sslKeystorePath, sslConfig.sslKeystorePassword,
         sslConfig.sslKeyPassword);
-    createTrustStore(sslConfig.sslTrustStoreType, sslConfig.sslTrustStorePath, sslConfig.sslTrustStorePassword);
+    createTrustStore(sslConfig.sslTruststoreType, sslConfig.sslTruststorePath, sslConfig.sslTruststorePassword);
 
     this.sslContext = createSSLContext();
   }
 
+  /**
+   * Create SSLContext by loading keystore and trustsotre
+   * One factory only has one SSLContext
+   * @return SSLContext
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
   private SSLContext createSSLContext()
       throws GeneralSecurityException, IOException {
     SSLContext sslContext;
@@ -97,10 +108,17 @@ public class SSLFactory {
     KeyStore ts = truststore == null ? null : truststore.load();
     tmf.init(ts);
 
-    sslContext.init(keyManagers, tmf.getTrustManagers(), null);
+    sslContext.init(keyManagers, tmf.getTrustManagers(), new SecureRandom());
     return sslContext;
   }
 
+  /**
+   * Create SSLEngine for given host name and port number
+   * @param peerHost The remote host name
+   * @param peerPort The remote port number
+   * @param mode The local SSL mode, Client or Server
+   * @return SSLEngine
+   */
   public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
     SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
     if (cipherSuites != null) {

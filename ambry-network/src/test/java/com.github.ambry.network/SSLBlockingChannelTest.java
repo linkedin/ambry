@@ -26,8 +26,11 @@ public class SSLBlockingChannelTest {
   private static String hostName = "localhost";
   private static int sslPort = 18284;
 
+  /**
+   * Run only once for all tests
+   */
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
     sslFactory = new SSLFactory(sslConfig);
@@ -37,8 +40,11 @@ public class SSLBlockingChannelTest {
     sslEchoServer.start();
   }
 
+  /**
+   * Run only once for all tests
+   */
   @AfterClass
-  public static void onceExecutedAfterAll()
+  public static void finalizeTests()
       throws Exception {
     int serverExceptionCount = sslEchoServer.getExceptionCount();
     assertEquals(serverExceptionCount, 0);

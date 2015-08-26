@@ -19,11 +19,11 @@ public class SSLConfig {
   public final String sslContextProvider;
 
   /**
-   * The enabled protocols for SSLEngine
+   * The enabled protocols for SSLEngine, a comma separated list of values
    */
-  @Config("ssl.enabled.protocol")
+  @Config("ssl.enabled.protocols")
   @Default("TLSv1.2")
-  public final String sslEnabledProtocol;
+  public final String sslEnabledProtocols;
 
   /**
    * The SSL endpoint identification algorithm
@@ -58,14 +58,14 @@ public class SSLConfig {
    */
   @Config("ssl.keystore.type")
   @Default("JKS")
-  public final String sslKeyStoreType;
+  public final String sslKeystoreType;
 
   /**
    * The SSL key store path
    */
   @Config("ssl.keystore.path")
   @Default("")
-  public final String sslKeyStorePath;
+  public final String sslKeystorePath;
 
   /**
    * The SSL key store password
@@ -74,7 +74,7 @@ public class SSLConfig {
    */
   @Config("ssl.keystore.password")
   @Default("")
-  public final String sslKeyStorePassword;
+  public final String sslKeystorePassword;
 
   /**
    * The SSL key password
@@ -89,24 +89,24 @@ public class SSLConfig {
    */
   @Config("ssl.truststore.type")
   @Default("JKS")
-  public final String sslTrustStoreType;
+  public final String sslTruststoreType;
 
   /**
    * The SSL trust store path
    */
   @Config("ssl.truststore.path")
   @Default("")
-  public final String sslTrustStorePath;
+  public final String sslTruststorePath;
 
   /**
    * The SSL trust store password
    */
   @Config("ssl.truststore.password")
   @Default("")
-  public final String sslTrustStorePassword;
+  public final String sslTruststorePassword;
 
   /**
-   * The SSL supported cipher suites
+   * The SSL supported cipher suites, a comma separated list of values
    */
   @Config("ssl.cipher.suites")
   @Default("")
@@ -115,19 +115,19 @@ public class SSLConfig {
   public SSLConfig(VerifiableProperties verifiableProperties) {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
-    sslEnabledProtocol = verifiableProperties.getString("ssl.enabled.protocol", "TLSv1.2");
+    sslEnabledProtocols = verifiableProperties.getString("ssl.enabled.protocols", "TLSv1.2");
     sslEndpointIdentificationAlgorithm =
         verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
     sslClientAuthentication = verifiableProperties.getString("ssl.client.authentication", "required");
     sslKeymanagerAlgorithm = verifiableProperties.getString("ssl.keymanager.algorithm", "");
     sslTrustmanagerAlgorithm = verifiableProperties.getString("ssl.trustmanager.algorithm", "");
-    sslKeyStoreType = verifiableProperties.getString("ssl.keystore.type", "JKS");
-    sslKeyStorePath = verifiableProperties.getString("ssl.keystore.path", "");
-    sslKeyStorePassword = verifiableProperties.getString("ssl.keystore.password", "");
+    sslKeystoreType = verifiableProperties.getString("ssl.keystore.type", "JKS");
+    sslKeystorePath = verifiableProperties.getString("ssl.keystore.path", "");
+    sslKeystorePassword = verifiableProperties.getString("ssl.keystore.password", "");
     sslKeyPassword = verifiableProperties.getString("ssl.key.password", "");
-    sslTrustStoreType = verifiableProperties.getString("ssl.truststore.type", "JKS");
-    sslTrustStorePath = verifiableProperties.getString("ssl.truststore.path", "");
-    sslTrustStorePassword = verifiableProperties.getString("ssl.truststore.password", "");
+    sslTruststoreType = verifiableProperties.getString("ssl.truststore.type", "JKS");
+    sslTruststorePath = verifiableProperties.getString("ssl.truststore.path", "");
+    sslTruststorePassword = verifiableProperties.getString("ssl.truststore.password", "");
     sslCipherSuites = verifiableProperties.getString("ssl.cipher.suites", "");
   }
 }

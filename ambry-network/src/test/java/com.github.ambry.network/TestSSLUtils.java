@@ -23,6 +23,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
@@ -36,9 +38,16 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.DefaultDigestAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.bc.BcRSAContentSignerBuilder;
+import org.junit.Assert;
 
 
 public class TestSSLUtils {
+  private final static String sslContextProtocol = "TLS";
+  private final static String sslContextProvider = "SunJSSE";
+  private final static String sslEnabledProtocol = "TLSv1.2";
+  private final static String endpointIdentificationAlgorithm = "HTTPS";
+  private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
+
   /**
    * Create a self-signed X.509 Certificate.
    * From http://bfo.com/blog/2011/03/08/odds_and_ends_creating_a_new_x_509_certificate.html.
@@ -149,10 +158,10 @@ public class TestSSLUtils {
     createTrustStore(trustStoreFile.getPath(), trustStorePassword, certs);
 
     Properties props = new Properties();
-    props.put("ssl.context.protocol", "TLS");
-    props.put("ssl.context.provider", "SunJSSE");
-    props.put("ssl.enabled.protocol", "TLSv1.2");
-    props.put("ssl.endpoint.identification.algorithm", "HTTPS");
+    props.put("ssl.context.protocol", sslContextProtocol);
+    props.put("ssl.context.provider", sslContextProvider);
+    props.put("ssl.enabled.protocols", sslEnabledProtocol);
+    props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
     props.put("ssl.client.authentication", "required");
     props.put("ssl.keymanager.algorithm", "PKIX");
     props.put("ssl.trustmanager.algorithm", "PKIX");
@@ -163,7 +172,7 @@ public class TestSSLUtils {
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", "unittestonly");
-    props.put("ssl.cipher.suites", "TLS_RSA_WITH_AES_128_CBC_SHA256");
+    props.put("ssl.cipher.suites", sslCipherSuits);
     return props;
   }
 
@@ -172,5 +181,36 @@ public class TestSSLUtils {
     Properties props = createSSLProperties();
     SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
     return sslConfig;
+  }
+
+  public static void verifySSLConfig(SSLContext sslContext, SSLEngine clientSSLEngine, SSLEngine serverSSLEngine) {
+    // SSLContext verify
+    Assert.assertEquals(sslContext.getProtocol(), sslContextProtocol);
+    Assert.assertEquals(sslContext.getProvider().getName(), sslContextProvider);
+
+    // client side SSLEngine verify
+    String[] enabledProtocols = clientSSLEngine.getEnabledProtocols();
+    Assert.assertEquals(enabledProtocols.length, 1);
+    Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
+    Assert.assertEquals(clientSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),
+        endpointIdentificationAlgorithm);
+    Assert.assertEquals(clientSSLEngine.getNeedClientAuth(), false);
+    Assert.assertEquals(clientSSLEngine.getUseClientMode(), true);
+    Assert.assertEquals(clientSSLEngine.getWantClientAuth(), false);
+    String[] enabledCipherSuites = clientSSLEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuites.length, 1);
+    Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
+
+    // server side SSLEngine verify
+    enabledProtocols = serverSSLEngine.getEnabledProtocols();
+    Assert.assertEquals(enabledProtocols.length, 1);
+    Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
+    Assert.assertEquals(serverSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(), null);
+    Assert.assertEquals(serverSSLEngine.getNeedClientAuth(), true);
+    Assert.assertEquals(serverSSLEngine.getUseClientMode(), false);
+    Assert.assertEquals(serverSSLEngine.getWantClientAuth(), false);
+    enabledCipherSuites = serverSSLEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuites.length, 1);
+    Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
   }
 }

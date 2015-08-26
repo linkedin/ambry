@@ -16,7 +16,7 @@ import javax.net.ssl.SSLSocket;
 
 /**
  * A simple server that takes size delimited byte arrays and just echos them back to the sender.
- * Support both plaintext and SSL connections
+ * Supports both plaintext and SSL connections
  */
 public class EchoServer extends Thread {
   public final int port;
@@ -47,7 +47,7 @@ public class EchoServer extends Thread {
       this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
       // enable mutual authentication
-      ((SSLServerSocket) this.serverSocket).setNeedClientAuth(true);
+      ((SSLServerSocket)this.serverSocket).setNeedClientAuth(true);
     }
     this.threads = Collections.synchronizedList(new ArrayList<Thread>());
     this.sockets = Collections.synchronizedList(new ArrayList<Socket>());

@@ -31,8 +31,11 @@ public class BlockingChannelConnectionPoolTest {
   private static SSLFactory sslFactory;
   private static SSLSocketFactory sslSocketFactory;
 
+  /**
+   * Run only once for all tests
+   */
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
     sslFactory = new SSLFactory(sslConfig);
