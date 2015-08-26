@@ -8,7 +8,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.channels.CancelledKeyException;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
@@ -64,11 +63,12 @@ public class Selector implements Selectable {
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
   private AtomicLong activeConnections;
+  private final SSLFactory sslFactory;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time)
+  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory)
       throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
@@ -81,6 +81,7 @@ public class Selector implements Selectable {
     this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
     this.metrics.initializeSelectorMetricsIfRequired(activeConnections);
+    this.sslFactory = sslFactory;
   }
 
   /**
@@ -136,7 +137,9 @@ public class Selector implements Selectable {
     }
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
-    key.attach(ChannelWrapperFactory.getChannelWrapper(connectionId, channel, key, time, metrics, logger, portType));
+    Transmission transmission = TransmissionFactory.getChannelWrapper(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics, logger,
+        portType, sslFactory);
+    key.attach(new AmbryChannel(connectionId, transmission, time));
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
     return connectionId;
@@ -148,11 +151,14 @@ public class Selector implements Selectable {
    * Note that we are not checking if the connection id is valid - since the connection already exists
    */
   public String register(SocketChannel channel, PortType portType)
-      throws ClosedChannelException {
+      throws IOException{
     Socket socket = channel.socket();
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
-    key.attach(ChannelWrapperFactory.getChannelWrapper(connectionId, channel, key, time, metrics, logger, portType));
+    Transmission transmission = TransmissionFactory
+        .getChannelWrapper(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
+            metrics, logger, portType, sslFactory);
+    key.attach(new AmbryChannel(connectionId, transmission, time));
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
     return connectionId;
@@ -203,9 +209,9 @@ public class Selector implements Selectable {
     if (key == null) {
       throw new IllegalStateException("Attempt to send data to a null key");
     }
-    ChannelWrapper channelWrapper = getChannelWrapper(key);
+    AmbryChannel ambryChannel = getKafkaChannel(key);
     try {
-      channelWrapper.setNetworkSend(networkSend);
+      ambryChannel.setNetworkSend(networkSend);
     } catch (CancelledKeyException e) {
       logger.debug("Ignoring response for closed socket.");
       close(key);
@@ -276,14 +282,14 @@ public class Selector implements Selectable {
         SelectionKey key = iter.next();
         iter.remove();
 
-        ChannelWrapper channelWrapper = getChannelWrapper(key);
+        AmbryChannel ambryChannel = getKafkaChannel(key);
         try {
           if (key.isConnectable()) {
-            handleConnect(key, channelWrapper);
+            handleConnect(key, ambryChannel);
           } else if (key.isReadable()) {
-            read(key, channelWrapper);
+            read(key, ambryChannel);
           } else if (key.isWritable()) {
-            write(key, channelWrapper);
+            write(key, ambryChannel);
           } else if (!key.isValid()) {
             close(key);
           } else {
@@ -395,13 +401,13 @@ public class Selector implements Selectable {
    * Begin closing this connection by given key
    */
   private void close(SelectionKey key) {
-    ChannelWrapper channelWrapper = getChannelWrapper(key);
-    if (channelWrapper != null) {
-      logger.debug("Closing connection from {}", channelWrapper.getConnectionId());
-      this.disconnected.add(channelWrapper.getConnectionId());
-      this.keyMap.remove(channelWrapper.getConnectionId());
+    AmbryChannel ambryChannel = getKafkaChannel(key);
+    if (ambryChannel != null) {
+      logger.debug("Closing connection from {}", ambryChannel.getConnectionId());
+      this.disconnected.add(ambryChannel.getConnectionId());
+      this.keyMap.remove(ambryChannel.getConnectionId());
       activeConnections.set(this.keyMap.size());
-      channelWrapper.close();
+      ambryChannel.close();
     } else {
       // is it possible to reach here? if so, how
       key.attach(null);
@@ -430,21 +436,21 @@ public class Selector implements Selectable {
   /**
    * Process connections that have finished their handshake
    */
-  private void handleConnect(SelectionKey key, ChannelWrapper channelWrapper)
+  private void handleConnect(SelectionKey key, AmbryChannel ambryChannel)
       throws IOException {
-    channelWrapper.finishConnect();
-    this.connected.add(channelWrapper.getConnectionId());
+    ambryChannel.finishConnect();
+    this.connected.add(ambryChannel.getConnectionId());
     this.metrics.selectorConnectionCreated.inc();
   }
 
   /**
    * Process reads from ready sockets
    */
-  private void read(SelectionKey key, ChannelWrapper channelWrapper)
+  private void read(SelectionKey key, AmbryChannel ambryChannel)
       throws IOException {
     long startTimeToReadInMs = time.milliseconds();
     try {
-      long bytesRead = channelWrapper.read();
+      long bytesRead = ambryChannel.read();
       if (bytesRead == -1) {
         close(key);
         return;
@@ -452,44 +458,44 @@ public class Selector implements Selectable {
       metrics.selectorBytesReceived.update(bytesRead);
       metrics.selectorBytesReceivedCount.inc(bytesRead);
 
-      if (channelWrapper.getNetworkReceive().getReceivedBytes().isReadComplete()) {
-        this.completedReceives.add(channelWrapper.getNetworkReceive());
-        channelWrapper.clearReceive();
+      if (ambryChannel.getNetworkReceive().getReceivedBytes().isReadComplete()) {
+        this.completedReceives.add(ambryChannel.getNetworkReceive());
+        ambryChannel.clearReceive();
       }
     } finally {
       long readTime = time.milliseconds() - startTimeToReadInMs;
-      logger.trace("SocketServer time spent on read per key {} = {}", channelWrapper.getConnectionId(), readTime);
+      logger.trace("SocketServer time spent on read per key {} = {}", ambryChannel.getConnectionId(), readTime);
     }
   }
 
   /**
    * Process writes to ready sockets
    */
-  private void write(SelectionKey key, ChannelWrapper channelWrapper)
+  private void write(SelectionKey key, AmbryChannel ambryChannel)
       throws IOException {
     long startTimeToWriteInMs = time.milliseconds();
     try {
-      boolean sendComplete = channelWrapper.write();
+      boolean sendComplete = ambryChannel.write();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}",
-            channelWrapper.getSocketChannel().socket().getRemoteSocketAddress());
-        channelWrapper.getNetworkSend().onSendComplete();
-        this.completedSends.add(channelWrapper.getNetworkSend());
+            ambryChannel.getSocketChannel().socket().getRemoteSocketAddress());
+        ambryChannel.getNetworkSend().onSendComplete();
+        this.completedSends.add(ambryChannel.getNetworkSend());
         metrics.sendInFlight.dec();
-        channelWrapper.clearSend();
+        ambryChannel.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
       }
     } finally {
       long writeTime = time.milliseconds() - startTimeToWriteInMs;
-      logger.trace("SocketServer time spent on write per key {} = {}", channelWrapper.getConnectionId(), writeTime);
+      logger.trace("SocketServer time spent on write per key {} = {}", ambryChannel.getConnectionId(), writeTime);
     }
   }
 
   /**
-   * Get the ChannelWrapper for the given connection
+   * Get the AmbryChannel for the given connection
    */
-  private ChannelWrapper getChannelWrapper(SelectionKey key) {
-    return (ChannelWrapper) key.attachment();
+  private AmbryChannel getKafkaChannel(SelectionKey key) {
+    return (AmbryChannel) key.attachment();
   }
 
   /**

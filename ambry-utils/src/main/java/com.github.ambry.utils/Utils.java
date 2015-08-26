@@ -596,4 +596,20 @@ public class Utils {
     }
     return sb.toString();
   }
+
+  /**
+   * Check if the given ByteBuffer capacity
+   * @param existingBuffer ByteBuffer capacity to check
+   * @param newLength new length for the ByteBuffer.
+   * returns ByteBuffer
+   */
+  public static ByteBuffer ensureCapacity(ByteBuffer existingBuffer, int newLength) {
+    if (newLength > existingBuffer.capacity()) {
+      ByteBuffer newBuffer = ByteBuffer.allocate(newLength);
+      existingBuffer.flip();
+      newBuffer.put(existingBuffer);
+      return newBuffer;
+    }
+    return existingBuffer;
+  }
 }

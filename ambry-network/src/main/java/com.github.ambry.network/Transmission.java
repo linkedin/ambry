@@ -2,25 +2,25 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.Time;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
 
 
-/**
- * ChannelWrapper to interact with a given socketChannel in plain text
- */
-public class ChannelWrapper {
+public abstract class Transmission{
+
   private String connectionId;
-  private NetworkSend networkSend = null;
-  private NetworkReceive networkReceive = null;
+  protected NetworkSend networkSend = null;
+  protected NetworkReceive networkReceive = null;
   protected SocketChannel socketChannel = null;
   protected SelectionKey key = null;
   protected final Time time;
   protected final NetworkMetrics metrics;
-  private Logger logger;
+  protected Logger logger;
 
-  public ChannelWrapper(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
+  public Transmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
       NetworkMetrics metrics, Logger logger) {
     this.connectionId = connectionId;
     this.socketChannel = socketChannel;
@@ -36,6 +36,10 @@ public class ChannelWrapper {
     key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
   }
 
+  public boolean isOpen(){
+    return socketChannel.isOpen();
+  }
+
   void setNetworkSend(NetworkSend networkSend) {
     if (hasSend()) {
       throw new IllegalStateException(
@@ -46,82 +50,62 @@ public class ChannelWrapper {
     key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
   }
 
+  abstract void prepare()throws IOException;
+
+  abstract  boolean ready();
+
   /**
    * Reads data from the socketChannel
    * @return total bytes read from the socket channel
    */
-  long read()
-      throws IOException {
-    if (!hasReceive()) {
-      networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
-    }
-
-    long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
-    return bytesRead;
-  }
+  abstract long read() throws IOException ;
 
   /**
    * Writes the payload to the socket channel
    * @return true if send is complete, false otherwise
    */
-  boolean write()
-      throws IOException {
-    Send send = networkSend.getPayload();
-    if (send == null) {
-      throw new IllegalStateException("Registered for write interest but no response attached to key.");
-    }
-    send.writeTo(socketChannel);
-    logger
-        .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), connectionId);
-    return send.isSendComplete();
-  }
+  abstract boolean write() throws IOException;
 
   /**
    * Close the connection for the socket channel
    */
-  void close() {
-    clearReceive();
-    clearSend();
-    key.attach(null);
-    key.cancel();
-    try {
-      socketChannel.socket().close();
-      socketChannel.close();
-    } catch (IOException e) {
-      metrics.selectorCloseSocketErrorCount.inc();
-      logger.error("Exception closing connection to node {}:", connectionId, e);
-    }
-  }
+  public abstract void close() throws IOException;
 
   String getConnectionId() {
     return connectionId;
   }
 
+  protected SocketChannel getSocketChannel() {
+    return this.socketChannel;
+  }
+
+
   boolean hasSend() {
     return networkSend != null;
   }
 
-  void clearSend() {
+
+  protected void clearSend() {
     networkSend = null;
   }
 
-  boolean hasReceive() {
+  protected boolean hasReceive() {
     return networkReceive != null;
   }
 
-  void clearReceive() {
+  protected void clearReceive() {
     networkReceive = null;
   }
 
-  SocketChannel getSocketChannel() {
-    return this.socketChannel;
-  }
-
-  NetworkReceive getNetworkReceive() {
+  protected NetworkReceive getNetworkReceive() {
     return this.networkReceive;
   }
 
-  NetworkSend getNetworkSend() {
+  protected NetworkSend getNetworkSend() {
     return this.networkSend;
+  }
+
+  public boolean isConnected() {
+    return socketChannel.isConnected();
   }
 }
