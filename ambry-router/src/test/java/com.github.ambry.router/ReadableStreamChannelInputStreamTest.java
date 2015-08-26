@@ -4,8 +4,11 @@ import com.github.ambry.network.ReadableStreamChannel;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -63,6 +66,20 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Bytes read should have been 0 because passed len was 0", 0, dstInputStream.read(out, 0, 0));
   }
 
+  @Test
+  public void nonBlockingToBlockingTest()
+      throws IOException {
+    byte[] in = new byte[1024];
+    new Random().nextBytes(in);
+    ReadableStreamChannel channel = new HaltingReadableStreamChannel(ByteBuffer.wrap(in), 5);
+    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
+    byte[] out = new byte[in.length];
+    // The HaltingReadableStreamChannel returns 0 bytes read 5 times but that should not change anything for us.
+    assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
+    assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
+    assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
+  }
+
   // commonCaseTest() helpers
   private void readByteByByteTest(byte[] in)
       throws IOException {
@@ -101,5 +118,34 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
     assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
     assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
+  }
+}
+
+/**
+ * Class that returns 0 bytes on read a fixed number of times.
+ */
+class HaltingReadableStreamChannel implements ReadableStreamChannel {
+  private final AtomicInteger haltTimes;
+  private final ByteBuffer data;
+
+  public HaltingReadableStreamChannel(ByteBuffer data, int haltTimes) {
+    this.data = data;
+    this.haltTimes = new AtomicInteger(haltTimes);
+  }
+
+  @Override
+  public long getSize() {
+    return data.limit();
+  }
+
+  @Override
+  public int read(WritableByteChannel channel)
+      throws IOException {
+    if (haltTimes.getAndDecrement() > 0) {
+      return 0;
+    } else if (!data.hasRemaining()) {
+      return -1;
+    }
+    return channel.write(data);
   }
 }
