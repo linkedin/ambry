@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Represents blob data as a {@link ReadableStreamChannel}. Consumes an {@link InputStream} containing the bytes in the
  * blob and stores the data in a {@link ByteBuffer}.
  */
-public class BlobStreamChannel implements ReadableStreamChannel {
+class BlobStreamChannel implements ReadableStreamChannel {
   private final ByteBuffer buffer;
   private final ReentrantLock bufferReadLock = new ReentrantLock();
 
