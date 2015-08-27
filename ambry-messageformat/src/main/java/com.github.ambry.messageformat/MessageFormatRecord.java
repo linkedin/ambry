@@ -29,6 +29,15 @@ public class MessageFormatRecord {
   public static final short Blob_Version_V1 = 1;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
+  static boolean isValidHeaderVersion(short headerVersion) {
+    switch (headerVersion) {
+      case Message_Header_Version_V1:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   // Deserialization methods for individual records
   public static DeserializedBlobProperties deserializeBlobProperties(InputStream stream)
       throws IOException, MessageFormatException {

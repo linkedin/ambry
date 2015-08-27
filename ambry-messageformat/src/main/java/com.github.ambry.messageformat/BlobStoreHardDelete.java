@@ -278,9 +278,9 @@ class MessageMetadataAndBlobInfo {
   MessageMetadataAndBlobInfo(short headerVersion, short userMetadataVersion, int userMetadataSize,
       short blobRecordVersion, long blobStreamSize, StoreKey storeKey)
       throws IOException {
-    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1 ||
-        userMetadataVersion != MessageFormatRecord.UserMetadata_Version_V1 ||
-        blobRecordVersion != MessageFormatRecord.Blob_Version_V1) {
+    if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
+        !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
+        !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
       throw new IOException(
           "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
               + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
@@ -301,7 +301,6 @@ class MessageMetadataAndBlobInfo {
     switch (headerVersion) {
       case MessageFormatRecord.Message_Header_Version_V1:
         userMetadataVersion = stream.readShort();
-        // check isValidUserMetadataVersion @todo
         if (!MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion)) {
           throw new IOException(
               "Unknown user metadata version encountered while reading recovery metadata during hard delete "
@@ -335,8 +334,10 @@ class MessageMetadataAndBlobInfo {
   byte[] toBytes() {
     byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
+        //@todo
         MessageFormatRecord.UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
+        //@todo
         MessageFormatRecord.Blob_Format_V1.Blob_Size_Field_In_Bytes + storeKey.sizeInBytes()];
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
