@@ -315,12 +315,18 @@ public class ServerTest {
            startTokenForRecovery
            endTokenForRecovery
            numBlobsInRange
+           --
            blob1_blobReadOptions {version, offset, sz, ttl, key}
-           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
            blob2_blobReadOptions
-           blob2_messageStoreRecoveryInfo
            ....
            blobN_blobReadOptions
+           --
+           length_of_blob1_messageStoreRecoveryInfo
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           length_of_blob2_messageStoreRecoveryInfo
+           blob2_messageStoreRecoveryInfo
+           ....
+           length_of_blobN_messageStoreRecoveryInfo
            blobN_messageStoreRecoveryInfo
            crc
            ---

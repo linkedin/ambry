@@ -167,7 +167,7 @@ public class PersistentIndex {
 
       // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
       // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
-      // never work on the flushed part of the log that is not yet flushed (by ensuring that the message retention
+      // never work on the part of the log that is not yet flushed (by ensuring that the message retention
       // period is longer than the log flush time).
       logger.info("Index : " + datadir + " Starting hard delete recovery");
       hardDeleter.performRecovery();
@@ -1211,9 +1211,7 @@ public class PersistentIndex {
         throws StoreException {
       try {
         readCleanupTokenAndPopulateRecoveryRange();
-
-        int numBlobsToRecover = hardDeleteRecoveryRange.getSize();
-        if (numBlobsToRecover == 0) {
+        if (hardDeleteRecoveryRange.getSize() == 0) {
           return;
         }
 

@@ -1,16 +1,16 @@
 package com.github.ambry.messageformat;
 
 public class DeserializedBlobProperties {
-  private short blobPropertiesVersion;
+  private short version;
   private BlobProperties blobProperties;
 
-  public DeserializedBlobProperties (short blobPropertiesVersion, BlobProperties blobProperties) {
-    this.blobPropertiesVersion = blobPropertiesVersion;
+  public DeserializedBlobProperties(short version, BlobProperties blobProperties) {
+    this.version = version;
     this.blobProperties = blobProperties;
   }
 
-  public short getBlobPropertiesVersion() {
-    return blobPropertiesVersion;
+  public short getVersion() {
+    return version;
   }
 
   public BlobProperties getBlobProperties() {

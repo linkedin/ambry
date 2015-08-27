@@ -46,7 +46,8 @@ public class MessageFormatRecord {
     short version = inputStream.readShort();
     switch (version) {
       case BlobProperties_Version_V1:
-        return new DeserializedBlobProperties(BlobProperties_Version_V1, BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream));
+        return new DeserializedBlobProperties(BlobProperties_Version_V1,
+            BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream));
       default:
         throw new MessageFormatException("blob property version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
@@ -109,6 +110,17 @@ public class MessageFormatRecord {
     }
   }
 
+  static int getUserMetadataSizeFieldInBytes(short userMetadataVersion)
+      throws MessageFormatException {
+    switch (userMetadataVersion) {
+      case UserMetadata_Version_V1:
+        return UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes;
+      default:
+        throw new MessageFormatException("metadata version not supported",
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+  }
+
   public static DeserializedBlob deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
@@ -128,6 +140,17 @@ public class MessageFormatRecord {
         return true;
       default:
         return false;
+    }
+  }
+
+  static int getBlobSizeFieldInBytes(short blobRecordVersion)
+      throws MessageFormatException {
+    switch (blobRecordVersion) {
+      case Blob_Version_V1:
+        return Blob_Format_V1.Blob_Size_Field_In_Bytes;
+      default:
+        throw new MessageFormatException("metadata version not supported",
+            MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 

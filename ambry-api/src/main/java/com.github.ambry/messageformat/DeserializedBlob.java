@@ -4,8 +4,8 @@ public class DeserializedBlob {
   private short version;
   private BlobOutput blobOutput;
 
-  public DeserializedBlob(short blobVersion, BlobOutput blobOutput) {
-    this.version = blobVersion;
+  public DeserializedBlob(short version, BlobOutput blobOutput) {
+    this.version = version;
     this.blobOutput = blobOutput;
   }
 

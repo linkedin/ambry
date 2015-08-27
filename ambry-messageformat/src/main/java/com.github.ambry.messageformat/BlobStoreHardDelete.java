@@ -331,14 +331,14 @@ class MessageMetadataAndBlobInfo {
     return storeKey;
   }
 
-  byte[] toBytes() {
+  byte[] toBytes()
+      throws MessageFormatException {
     byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
-        //@todo
-        MessageFormatRecord.UserMetadata_Format_V1.UserMetadata_Size_Field_In_Bytes +
+        MessageFormatRecord.getUserMetadataSizeFieldInBytes(userMetadataVersion) +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
-        //@todo
-        MessageFormatRecord.Blob_Format_V1.Blob_Size_Field_In_Bytes + storeKey.sizeInBytes()];
+        MessageFormatRecord.getBlobSizeFieldInBytes(blobRecordVersion) +
+        storeKey.sizeInBytes()];
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
     bufWrap.putShort(headerVersion);

@@ -1,6 +1,5 @@
 package com.github.ambry.store;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -18,7 +17,8 @@ public interface MessageStoreHardDelete {
    * @return iterator over the HardDeleteInfo for the messages in the readSet.
    */
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-      List<byte[]> recoveryInfoList) throws IOException;
+      List<byte[]> recoveryInfoList)
+      throws IOException;
 
   /**
    * Returns the message info of message at the given offset from the given Read interface.
