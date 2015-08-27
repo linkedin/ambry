@@ -47,8 +47,8 @@ public class TestSSLUtils {
   private final static String sslEnabledProtocol = "TLSv1.2";
   private final static String endpointIdentificationAlgorithm = "HTTPS";
   private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
-  private final static String password = "unittestonly";
-  private final static String trustStorePassword = "unittestonly";
+  private final static String keyStorePassword = "UnitTestKeyStorePassword";
+  private final static String trustStorePassword = "UnitTestTrustStorePassword";
 
   /**
    * Create a self-signed X.509 Certificate.
@@ -151,7 +151,7 @@ public class TestSSLUtils {
     File keyStoreFile = File.createTempFile("selfsigned-keystore", ".jks");
     KeyPair sKP = generateKeyPair("RSA");
     X509Certificate sCert = generateCertificate("CN=localhost, O=ambry_test", sKP, 30, "SHA1withRSA");
-    createKeyStore(keyStoreFile.getPath(), password, password, "test_key", sKP.getPrivate(), sCert);
+    createKeyStore(keyStoreFile.getPath(), keyStorePassword, keyStorePassword, "test_key", sKP.getPrivate(), sCert);
 
     File trustStoreFile = File.createTempFile("selfsigned-truststore", ".jks");
     certs.put("test_cert", sCert);
@@ -167,11 +167,11 @@ public class TestSSLUtils {
     props.put("ssl.trustmanager.algorithm", "PKIX");
     props.put("ssl.keystore.type", "JKS");
     props.put("ssl.keystore.path", keyStoreFile.getPath());
-    props.put("ssl.keystore.password", "unittestonly");
-    props.put("ssl.key.password", "unittestonly");
+    props.put("ssl.keystore.password", keyStorePassword);
+    props.put("ssl.key.password", keyStorePassword);
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
-    props.put("ssl.truststore.password", "unittestonly");
+    props.put("ssl.truststore.password", trustStorePassword);
     props.put("ssl.cipher.suites", sslCipherSuits);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
