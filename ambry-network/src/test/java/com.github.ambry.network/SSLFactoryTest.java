@@ -26,7 +26,7 @@ public class SSLFactoryTest {
   @Test
   public void testSSLFactory()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     SSLFactory sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     SSLSocketFactory socketFactory = sslContext.getSocketFactory();
@@ -36,6 +36,7 @@ public class SSLFactoryTest {
     SSLEngine clientSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
     SSLEngine serverSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
 
-    TestSSLUtils.verifySSLConfig(sslContext, clientSSLEngine, serverSSLEngine);
+    TestSSLUtils.verifySSLConfig(sslContext, clientSSLEngine, true);
+    TestSSLUtils.verifySSLConfig(sslContext, serverSSLEngine, false);
   }
 }

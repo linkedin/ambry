@@ -29,6 +29,7 @@ public class BlockingChannelConnectionPoolTest {
   private SocketServer server2 = null;
   private SocketServer server3 = null;
   private static SSLFactory sslFactory;
+  private static SSLConfig sslConfig;
   private static SSLSocketFactory sslSocketFactory;
 
   /**
@@ -37,7 +38,7 @@ public class BlockingChannelConnectionPoolTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
@@ -282,8 +283,8 @@ public class BlockingChannelConnectionPoolTest {
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
-        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)),
-            new MetricRegistry(), sslSocketFactory);
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
+            new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -327,8 +328,8 @@ public class BlockingChannelConnectionPoolTest {
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
-        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)),
-            new MetricRegistry(), sslSocketFactory);
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
+            new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);

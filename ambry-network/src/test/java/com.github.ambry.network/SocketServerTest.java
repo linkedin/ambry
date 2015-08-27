@@ -10,7 +10,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +31,7 @@ public class SocketServerTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();

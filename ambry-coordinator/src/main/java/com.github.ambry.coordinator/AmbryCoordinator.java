@@ -13,15 +13,12 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,25 +92,14 @@ public class AmbryCoordinator implements Coordinator {
         throw new IllegalStateException("Datacenter with name " + datacenterName + " is not part of cluster map. " +
             "Coordinator cannot start.");
       }
-      sslEnabledDatacenters = Utils.splitString(coordinatorConfig.sslEnabledDatacenters, ",");
+      sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
       this.operationTimeoutMs = coordinatorConfig.operationTimeoutMs;
       logger.info("Creating requester pool");
       this.requesterPool = Executors.newFixedThreadPool(coordinatorConfig.requesterPoolSize);
 
-      ConnectionPoolFactory connectionPoolFactory;
-      if (coordinatorConfig.sslEnabledDatacenters.length() > 0) {
-        logger.info("Setting up SSL");
-        SSLFactory sslFactory = new SSLFactory(sslConfig);
-        SSLContext sslContext = sslFactory.getSSLContext();
-        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-        logger.info("Getting connection pool");
-        connectionPoolFactory =
-            Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry, sslSocketFactory);
-      } else {
-        logger.info("Getting connection pool");
-        connectionPoolFactory = Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, registry);
-      }
-
+      logger.info("Getting connection pool");
+      ConnectionPoolFactory connectionPoolFactory =
+          Utils.getObj(coordinatorConfig.connectionPoolFactory, connectionPoolConfig, sslConfig, registry);
       this.connectionPool = connectionPoolFactory.getConnectionPool();
       connectionPool.start();
 

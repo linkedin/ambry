@@ -9,6 +9,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.CoordinatorException;
@@ -51,9 +52,11 @@ public class ServerTool {
   private ConnectionPool connectionPool;
   private PartitionId partitionId;
 
-  public ServerTool() {
+  public ServerTool()
+      throws Exception {
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry(), null);
+    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
     connectionPool.start();
   }
 

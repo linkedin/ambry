@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -79,7 +80,7 @@ public class ServerTest {
   public static void initializeTests()
       throws Exception {
     // SSL object used by the client side of replication
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
@@ -104,19 +105,19 @@ public class ServerTest {
 
   @Test
   public void startStopTest()
-      throws IOException, InstantiationException, URISyntaxException {
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem);
   }
 
   @Test
   public void startStopSSLTest()
-      throws IOException, InstantiationException, URISyntaxException {
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
   }
 
   @Test
   public void endToEndTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
@@ -124,7 +125,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3");
@@ -276,8 +277,10 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator =
-            new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters), clusterMap);
+        Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter);
+        coordinatorProperties.putAll(sslProperties);
+        Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
         BlobOutput output = coordinator.getBlob(blobId1.getID());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
@@ -656,7 +659,7 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
@@ -669,7 +672,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNodeId = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
@@ -827,8 +830,10 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Coordinator coordinator =
-            new AmbryCoordinator(getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters), clusterMap);
+        Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter);
+        coordinatorProperties.putAll(sslProperties);
+        Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
         checkBlobId(coordinator, blobId1, data);
         checkBlobId(coordinator, blobId2, data);
         checkBlobId(coordinator, blobId3, data);
@@ -1127,7 +1132,7 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem);
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
@@ -1140,7 +1145,7 @@ public class ServerTest {
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
     DataNodeId dataNode = cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
@@ -1757,23 +1762,26 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem);
-    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT);
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT);
   }
 
   //@Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException {
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
-    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL);
+    endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC2,DC3", PortType.SSL);
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter, PortType portType)
-      throws InterruptedException, IOException, InstantiationException {
+  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
+      String sslEnabledDatacenters, PortType portType)
+      throws InterruptedException, IOException, InstantiationException, GeneralSecurityException {
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);
+    Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+    props.putAll(sslProperties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
     Thread[] senderThreads = new Thread[3];
@@ -1842,12 +1850,11 @@ public class ServerTest {
     Assert.assertArrayEquals(blobout, dataToCheck);
   }
 
-  private VerifiableProperties getCoordinatorProperties(String coordinatorDatacenter, String sslEnabledDatacenters) {
+  private Properties getCoordinatorProperties(String coordinatorDatacenter) {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", coordinatorDatacenter);
-    properties.setProperty("coordinator.ssl.enabled.datacenters", sslEnabledDatacenters);
-    return new VerifiableProperties(properties);
+    return properties;
   }
 
   public static void deleteFolderContent(File folder, boolean deleteParentFolder) {

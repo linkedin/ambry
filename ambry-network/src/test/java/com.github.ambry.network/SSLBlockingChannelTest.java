@@ -32,7 +32,7 @@ public class SSLBlockingChannelTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();

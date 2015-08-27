@@ -47,6 +47,8 @@ public class TestSSLUtils {
   private final static String sslEnabledProtocol = "TLSv1.2";
   private final static String endpointIdentificationAlgorithm = "HTTPS";
   private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
+  private final static String password = "unittestonly";
+  private final static String trustStorePassword = "unittestonly";
 
   /**
    * Create a self-signed X.509 Certificate.
@@ -143,11 +145,9 @@ public class TestSSLUtils {
     saveKeyStore(ks, filename, password);
   }
 
-  public static Properties createSSLProperties()
+  public static Properties createSSLProperties(String sslEnabledDatacenters)
       throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
-    String password = "unittestonly";
-    String trustStorePassword = "unittestonly";
     File keyStoreFile = File.createTempFile("selfsigned-keystore", ".jks");
     KeyPair sKP = generateKeyPair("RSA");
     X509Certificate sCert = generateCertificate("CN=localhost, O=ambry_test", sKP, 30, "SHA1withRSA");
@@ -173,44 +173,39 @@ public class TestSSLUtils {
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", "unittestonly");
     props.put("ssl.cipher.suites", sslCipherSuits);
+    props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
 
-  public static SSLConfig createSSLConfig()
+  public static SSLConfig createSSLConfig(String sslEnabledDatacenters)
       throws IOException, GeneralSecurityException {
-    Properties props = createSSLProperties();
+    Properties props = createSSLProperties(sslEnabledDatacenters);
     SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
     return sslConfig;
   }
 
-  public static void verifySSLConfig(SSLContext sslContext, SSLEngine clientSSLEngine, SSLEngine serverSSLEngine) {
+  public static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {
     // SSLContext verify
     Assert.assertEquals(sslContext.getProtocol(), sslContextProtocol);
     Assert.assertEquals(sslContext.getProvider().getName(), sslContextProvider);
 
-    // client side SSLEngine verify
-    String[] enabledProtocols = clientSSLEngine.getEnabledProtocols();
+    // SSLEngine verify
+    String[] enabledProtocols = sslEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
     Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
-    Assert.assertEquals(clientSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),
-        endpointIdentificationAlgorithm);
-    Assert.assertEquals(clientSSLEngine.getNeedClientAuth(), false);
-    Assert.assertEquals(clientSSLEngine.getUseClientMode(), true);
-    Assert.assertEquals(clientSSLEngine.getWantClientAuth(), false);
-    String[] enabledCipherSuites = clientSSLEngine.getEnabledCipherSuites();
+    String[] enabledCipherSuites = sslEngine.getEnabledCipherSuites();
     Assert.assertEquals(enabledCipherSuites.length, 1);
     Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
-
-    // server side SSLEngine verify
-    enabledProtocols = serverSSLEngine.getEnabledProtocols();
-    Assert.assertEquals(enabledProtocols.length, 1);
-    Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
-    Assert.assertEquals(serverSSLEngine.getSSLParameters().getEndpointIdentificationAlgorithm(), null);
-    Assert.assertEquals(serverSSLEngine.getNeedClientAuth(), true);
-    Assert.assertEquals(serverSSLEngine.getUseClientMode(), false);
-    Assert.assertEquals(serverSSLEngine.getWantClientAuth(), false);
-    enabledCipherSuites = serverSSLEngine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
+    Assert.assertEquals(sslEngine.getWantClientAuth(), false);
+    if (isClient) {
+      Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),
+          endpointIdentificationAlgorithm);
+      Assert.assertEquals(sslEngine.getNeedClientAuth(), false);
+      Assert.assertEquals(sslEngine.getUseClientMode(), true);
+    } else {
+      Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(), null);
+      Assert.assertEquals(sslEngine.getNeedClientAuth(), true);
+      Assert.assertEquals(sslEngine.getUseClientMode(), false);
+    }
   }
 }
