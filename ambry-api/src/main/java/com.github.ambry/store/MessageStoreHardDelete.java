@@ -3,6 +3,7 @@ package com.github.ambry.store;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -13,9 +14,11 @@ public interface MessageStoreHardDelete {
    * Returns an iterator over the HardDeleteInfo of the messages in the readSet.
    * @param readSet The set of messages to be replaced.
    * @param factory the store key factory.
+   * @param recoveryInfoList An optional list of recoveryInfo messages.
    * @return iterator over the HardDeleteInfo for the messages in the readSet.
    */
-  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory);
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+      List<byte[]> recoveryInfoList) throws IOException;
 
   /**
    * Returns the message info of message at the given offset from the given Read interface.
@@ -25,14 +28,5 @@ public interface MessageStoreHardDelete {
    * @return a MessageInfo object for the message at the offset.
    */
   public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory)
-      throws IOException;
-
-  /**
-   * Processes the metadata for a message in the stream that will be used during recovery. Processing involves
-   * reading from the stream and maintaining the state of the blobs that need recovery.
-   * @param stream the input stream representing the persisted information
-   * @param key the StoreKey of the given message.
-   */
-  public byte[] processAndReturnRecoveryInfo(DataInputStream stream, StoreKey key)
       throws IOException;
 }

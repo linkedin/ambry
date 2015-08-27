@@ -340,7 +340,8 @@ public class ServerTest {
           parsedTokenValue = bytebufferToken.getLong();
 
           int num = stream.readInt();
-          while (num-- > 0) {
+          List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
+          for (int i = 0; i < num; i++) {
             // Read BlobReadOptions
             short blobReadOptionsVersion = stream.readShort();
             switch (blobReadOptionsVersion) {
@@ -349,16 +350,24 @@ public class ServerTest {
                 long sz = stream.readLong();
                 long ttl = stream.readLong();
                 StoreKey key = storeKeyFactory.getStoreKey(stream);
+                storeKeyList.add(key);
                 break;
               default:
                 Assert.assertFalse(true);
             }
+          }
+
+          for (int i = 0; i < num; i++) {
+            int length = stream.readInt();
             short headerVersion = stream.readShort();
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
             long blobStreamSize = stream.readLong();
+            StoreKey key = storeKeyFactory.getStoreKey(stream);
+            Assert.assertTrue(storeKeyList.get(i).equals(key));
           }
+
           long crc = crcStream.getValue();
           Assert.assertEquals(crc, stream.readLong());
           Thread.sleep(1000);

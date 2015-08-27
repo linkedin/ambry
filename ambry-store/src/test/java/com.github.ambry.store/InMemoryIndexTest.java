@@ -185,8 +185,7 @@ public class InMemoryIndexTest {
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
             @Override
-            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-                Set<Long> noCrcList)
+            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
                 throws IOException {
               List<MessageInfo> infos = new ArrayList<MessageInfo>();
               infos.add(new MessageInfo(blobId4, 1000));
@@ -206,8 +205,7 @@ public class InMemoryIndexTest {
       indexNew = new MockIndex(logFile, scheduler, log, factory, new StoreConfig(new VerifiableProperties(props)),
           new MessageStoreRecovery() {
             @Override
-            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-                Set<Long> noCrcList)
+            public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
                 throws IOException {
               List<MessageInfo> infos = new ArrayList<MessageInfo>();
               infos.add(new MessageInfo(blobId4, 1000, true));

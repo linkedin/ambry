@@ -3,6 +3,7 @@ package com.github.ambry.store;
 import java.io.DataInputStream;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 
 
 public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
@@ -16,7 +17,8 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   }
 
   @Override
-  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory) {
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+      List<byte[]> recoveryInfoList) {
     return new Iterator<HardDeleteInfo>() {
       @Override
       public boolean hasNext() {
@@ -38,11 +40,6 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   @Override
   public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
     return dummyMap.get(offset);
-  }
-
-  @Override
-  public byte[] processAndReturnRecoveryInfo(DataInputStream stream, StoreKey key) {
-    return null;
   }
 }
 

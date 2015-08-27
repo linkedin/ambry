@@ -343,8 +343,7 @@ public class PersistentIndexTest {
       log.appendFrom(buffer);
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-            Set<Long> crcsToIngore)
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId6, 1000));
@@ -366,8 +365,7 @@ public class PersistentIndexTest {
       log.appendFrom(buffer);
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-            Set<Long> noCrcList)
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId6, 100, true));
@@ -429,8 +427,7 @@ public class PersistentIndexTest {
 
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-            Set<Long> noCrcList)
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId1, 1000));
@@ -450,8 +447,7 @@ public class PersistentIndexTest {
 
       indexNew = new MockIndex(logFile, scheduler, log, config, factory, new MessageStoreRecovery() {
         @Override
-        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-            Set<Long> noCrcList)
+        public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
             throws IOException {
           List<MessageInfo> infos = new ArrayList<MessageInfo>();
           infos.add(new MessageInfo(blobId4, 100, true));

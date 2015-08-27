@@ -6,7 +6,6 @@ import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +25,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory,
-      Set<Long> offsetsToIgnoreCrcCheck)
+  public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
       throws IOException {
     ArrayList<MessageInfo> messageRecovered = new ArrayList<MessageInfo>();
     try {
@@ -37,7 +35,6 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         if (startOffset + MessageFormatRecord.Version_Field_Size_In_Bytes > endOffset) {
           throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
         }
-        long currentBlobStartOffset = startOffset;
         read.readInto(headerVersion, startOffset);
         startOffset += headerVersion.capacity();
         headerVersion.flip();
@@ -65,20 +62,9 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
               BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
               // we do not use the user metadata or blob during recovery but we still deserialize them to check
-              // for validity. However, we ignore the check if the blob's offset is part of offsets to ignore
-              // crc checks.
-              if (offsetsToIgnoreCrcCheck != null && offsetsToIgnoreCrcCheck.contains(currentBlobStartOffset)) {
-                // ignore the user metadata and blob contents. The math:
-                // message_size = size_of_blob_properties_field + size_of_usermetadata_field +size_of_blob_content_field
-               //  size_of_blob_properties_field = user_metadata_relative_offset - blob_properties_relative_offset
-                // Therefore, size_of_usermetadata_field + size_of_blob_content_field = message_size - size_of_blob_properties_field
-                stream.skip(
-                    headerFormat.getMessageSize() - (headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                        .getBlobPropertiesRecordRelativeOffset()));
-              } else {
-                MessageFormatRecord.deserializeUserMetadata(stream);
-                MessageFormatRecord.deserializeBlob(stream);
-              }
+              // for validity
+              MessageFormatRecord.deserializeUserMetadata(stream);
+              MessageFormatRecord.deserializeBlob(stream);
               MessageInfo info =
                   new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), Utils
                       .addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));

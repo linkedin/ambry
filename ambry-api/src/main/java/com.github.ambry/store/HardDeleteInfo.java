@@ -7,29 +7,30 @@ import java.nio.channels.ReadableByteChannel;
  * A class that contains information about hard delete messages.
  */
 public class HardDeleteInfo {
-  private ReadableByteChannel channel;
-  private long streamSize;
-  private long hardDeleteRelativeOffsetInMessage;
+  // @todo add comments
+  private ReadableByteChannel hardDeleteChannel;
+  private long hardDeletedMessageSize;
+  private long startOffsetInMessage;
   private byte[] recoveryInfo;
 
-  public HardDeleteInfo(ReadableByteChannel channel, long streamSize, long hardDeleteRelativeOffsetInMessage,
+  public HardDeleteInfo(ReadableByteChannel hardDeletedMessage, long hardDeletedMessageSize, long startOffsetInMessage,
       byte[] recoveryInfo) {
-    this.channel = channel;
-    this.streamSize = streamSize;
-    this.hardDeleteRelativeOffsetInMessage = hardDeleteRelativeOffsetInMessage;
+    this.hardDeleteChannel = hardDeletedMessage;
+    this.hardDeletedMessageSize = hardDeletedMessageSize;
+    this.startOffsetInMessage = startOffsetInMessage;
     this.recoveryInfo = recoveryInfo;
   }
 
-  public ReadableByteChannel getChannel() {
-    return channel;
+  public ReadableByteChannel getHardDeleteChannel() {
+    return hardDeleteChannel;
   }
 
-  public long getSize() {
-    return streamSize;
+  public long getHardDeletedMessageSize() {
+    return hardDeletedMessageSize;
   }
 
-  public long getHardDeleteRelativeOffsetInMessage() {
-    return hardDeleteRelativeOffsetInMessage;
+  public long getStartOffsetInMessage() {
+    return startOffsetInMessage;
   }
 
   public byte[] getRecoveryInfo() {

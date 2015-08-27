@@ -8,6 +8,7 @@ import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -149,11 +150,29 @@ public class PersistentIndex {
       }
       this.dataDir = datadir;
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getLogEndOffset());
-
-      // Recover the last messages in the log into the index, if any.
+      // perform recovery if required
       final Timer.Context context = metrics.recoveryTime.time();
-      recover(log.sizeInBytes(), recovery);
+      // Recover the last messages in the log into the index, if any.
+      if (indexes.size() > 0) {
+        IndexSegment lastSegment = indexes.lastEntry().getValue();
+        // recover last segment
+        recover(lastSegment, log.sizeInBytes(), recovery);
+      } else {
+        recover(null, log.sizeInBytes(), recovery);
+      }
       context.stop();
+      // set the log end offset to the recovered offset from the index after initializing it
+      log.setLogEndOffset(getCurrentEndOffset());
+      logEndOffsetOnStartup = log.getLogEndOffset();
+
+      // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
+      // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
+      // never work on the flushed part of the log that is not yet flushed (by ensuring that the message retention
+      // period is longer than the log flush time).
+      logger.info("Index : " + datadir + " Starting hard delete recovery");
+      hardDeleter.performRecovery();
+      logger.info("Index : " + datadir + " Finished performing hard delete recovery");
+
       this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
       this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
       this.sessionId = UUID.randomUUID();
@@ -187,44 +206,24 @@ public class PersistentIndex {
   }
 
   /**
-   * Recovers the entries in the log that were not persisted in the index, given the end offset in the log and
-   * a recovery handler. Also calls into hardDelete class to perform hard delete related recovery.
+   * Recovers a segment given the end offset in the log and a recovery handler
+   * @param segmentToRecover The segment to recover. If this is null, it creates a new segment
    * @param endOffset The end offset till which recovery needs to happen in the log
    * @param recovery The recovery handler that is used to perform the recovery
    * @throws StoreException
    * @throws IOException
    */
-  private void recover(long endOffset, MessageStoreRecovery recovery)
+  private void recover(IndexSegment segmentToRecover, long endOffset, MessageStoreRecovery recovery)
       throws StoreException, IOException {
     // fix the start offset in the log for recovery.
     long startOffsetForRecovery = 0;
-    IndexSegment lastSegment = null;
-    if (indexes.size() > 0) {
-      lastSegment = indexes.lastEntry().getValue();
+    if (segmentToRecover != null) {
       startOffsetForRecovery =
-          lastSegment.getEndOffset() == -1 ? lastSegment.getStartOffset() : lastSegment.getEndOffset();
+          segmentToRecover.getEndOffset() == -1 ? segmentToRecover.getStartOffset() : segmentToRecover.getEndOffset();
     }
-
     logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
         startOffsetForRecovery, endOffset);
-
-    /* First, read the cleanup token file and populate the offsets for which MessageStoreRecovery should ignore crc
-       checks */
-    boolean doHardDeleteRecovery = false;
-    try {
-      hardDeleter.readCleanupTokenAndPopulateRecoveryRange();
-      doHardDeleteRecovery = true;
-    } catch (StoreException e) {
-      logger.error("Received store exception while reading cleanup token file, continuing with regular recovery", e);
-    }
-    Set<Long> offsetsToIgnoreCrcChecks = new HashSet<Long>();
-    for (HardDeletePersistInfo hardDeletePersistInfo : hardDeleter.getHardDeleteRecoveryRange()) {
-      offsetsToIgnoreCrcChecks.add(hardDeletePersistInfo.getBlobReadOptions().getOffset());
-    }
-
-    List<MessageInfo> messagesRecovered =
-        recovery.recover(log, startOffsetForRecovery, endOffset, factory, offsetsToIgnoreCrcChecks);
-
+    List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
     if (messagesRecovered.size() > 0) {
       metrics.nonzeroMessageRecovery.inc(1);
     }
@@ -233,11 +232,11 @@ public class PersistentIndex {
     for (MessageInfo info : messagesRecovered) {
       logger.trace("Index : {} recovering key {} offset {} size {}", dataDir, info.getStoreKey(), runningOffset,
           info.getSize());
-      if (indexes.size() == 0) {
-        // if there is no segment, create a new one
-        lastSegment = new IndexSegment(dataDir, startOffsetForRecovery, factory, info.getStoreKey().sizeInBytes(),
+      if (segmentToRecover == null) {
+        // if there was no segment passed in, create a new one
+        segmentToRecover = new IndexSegment(dataDir, startOffsetForRecovery, factory, info.getStoreKey().sizeInBytes(),
             IndexValue.Index_Value_Size_In_Bytes, config, metrics);
-        indexes.put(startOffsetForRecovery, lastSegment);
+        indexes.put(startOffsetForRecovery, segmentToRecover);
       }
       IndexValue value = findKey(info.getStoreKey());
       if (value != null) {
@@ -257,9 +256,9 @@ public class PersistentIndex {
           throw new StoreException("Illegal message state during recovery. ", StoreErrorCodes.Initialization_Error);
         }
         validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
-        lastSegment.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
+        segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
-        if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= lastSegment
+        if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
             .getStartOffset()) {
           journal.addEntry(value.getOriginalMessageOffset(), info.getStoreKey());
         }
@@ -269,27 +268,12 @@ public class PersistentIndex {
         // create a new entry in the index
         IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
         validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
-        lastSegment.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
+        segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), newValue), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
         logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
             info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
       }
       runningOffset += info.getSize();
-    }
-
-    // set the log end offset to the recovered offset from the index after initializing it
-    log.setLogEndOffset(getCurrentEndOffset());
-    logEndOffsetOnStartup = log.getLogEndOffset();
-
-    // Now do the hard delete related recovery if required.
-    if (doHardDeleteRecovery) {
-      logger.info("Index : " + dataDir + " Starting hard delete recovery");
-      try {
-        hardDeleter.recoverHardDeletes();
-      } catch (StoreException e) {
-        logger.warn("Could not complete hard delete recovery", e);
-      }
-      logger.info("Index : " + dataDir + " Finished performing hard delete recovery");
     }
   }
 
@@ -1054,27 +1038,102 @@ public class PersistentIndex {
    * associated blob. This is the information that is persisted from time to time.
    */
   private class HardDeletePersistInfo {
-    BlobReadOptions blobReadOptions;
-    byte[] messageStoreRecoveryInfo;
+    List<BlobReadOptions> blobReadOptionsList;
+    List<byte[]> messageStoreRecoveryInfoList;
 
-    HardDeletePersistInfo(BlobReadOptions blobReadOptions, byte[] recoveryInfo) {
-      this.blobReadOptions = blobReadOptions;
-      this.messageStoreRecoveryInfo = recoveryInfo;
+    HardDeletePersistInfo() {
+      this.blobReadOptionsList = new ArrayList<BlobReadOptions>();
+      this.messageStoreRecoveryInfoList = new ArrayList<byte[]>();
+    }
+
+    void addMessageInfo(BlobReadOptions blobReadOptions, byte[] messageStoreRecoveryInfo) {
+      this.blobReadOptionsList.add(blobReadOptions);
+      this.messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
+    }
+
+    private List<BlobReadOptions> getBlobReadOptionsList() {
+      return blobReadOptionsList;
+    }
+
+    private List<byte[]> getMessageStoreRecoveryInfoList() {
+      return messageStoreRecoveryInfoList;
+    }
+
+    void clear() {
+      blobReadOptionsList.clear();
+      messageStoreRecoveryInfoList.clear();
+    }
+
+    int getSize() {
+      return blobReadOptionsList.size();
     }
 
     /**
-     * @return the blobReadOptions associated with the blob that has among other things the absolute offset of the
-     * record in the Log.
+     * @return A serialized byte array containing the information required for hard delete recovery.
      */
-    BlobReadOptions getBlobReadOptions() {
-      return blobReadOptions;
+    byte[] toBytes()
+        throws IOException {
+      ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+
+      /* Write the number of entries */
+      byte[] numElementsArr = new byte[4];
+      ByteBuffer numElementsBuf = ByteBuffer.wrap(numElementsArr);
+      numElementsBuf.putInt(blobReadOptionsList.size());
+      outStream.write(numElementsArr);
+
+      /* Write the blobReadOptions */
+      for (BlobReadOptions blobReadOptions : blobReadOptionsList) {
+        outStream.write(blobReadOptions.toBytes());
+      }
+
+      /* Write the messageStoreRecoveryInfos */
+      for (byte[] recoveryInfo : messageStoreRecoveryInfoList) {
+        /* First write the size of the recoveryInfo */
+        byte[] lengthArr = new byte[4];
+        ByteBuffer lengthBuf = ByteBuffer.wrap(lengthArr);
+        lengthBuf.putInt(recoveryInfo.length);
+        outStream.write(lengthArr);
+
+        /* Now, write the recoveryInfo */
+        outStream.write(recoveryInfo);
+      }
+
+      return outStream.toByteArray();
     }
 
-    /**
-     * @return An opaque byte array that is created and interpreted by the messageStoreHardDelete component.
-     */
-    byte[] getMessageStoreRecoveryInfo() {
-      return messageStoreRecoveryInfo;
+    void fromBytes(DataInputStream stream, StoreKeyFactory storeKeyFactory)
+        throws IOException {
+      int numBlobsToRecover = stream.readInt();
+      for (int i = 0; i < numBlobsToRecover; i++) {
+        blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory));
+      }
+
+      for (int i = 0; i < numBlobsToRecover; i++) {
+        int lengthOfRecoveryInfo = stream.readInt();
+        byte[] messageStoreRecoveryInfo = new byte[lengthOfRecoveryInfo];
+        if (stream.read(messageStoreRecoveryInfo) != lengthOfRecoveryInfo) {
+          throw new IOException("Token file could not be read correctly");
+        }
+        messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
+      }
+    }
+
+    void pruneTill(StoreKey storeKey) {
+      Iterator<BlobReadOptions> blobReadOptionsListIterator = blobReadOptionsList.iterator();
+      Iterator<byte[]> messageStoreRecoveryListIterator = messageStoreRecoveryInfoList.iterator();
+      while (blobReadOptionsListIterator.hasNext()) {
+      /* Note: In the off chance that there are multiple presence of the same key in this range due to prior software
+         bugs, note that this method prunes only till the first occurrence of the key. If it so happens that a
+         later occurrence is the one really associated with this token, it does not affect the safety.
+         Persisting more than what is required is okay as hard deleting a blob is an idempotent operation. */
+        messageStoreRecoveryListIterator.next();
+        if (blobReadOptionsListIterator.next().getStoreKey().equals(storeKey)) {
+          break;
+        } else {
+          blobReadOptionsListIterator.remove();
+          messageStoreRecoveryListIterator.remove();
+        }
+      }
     }
   }
 
@@ -1105,7 +1164,7 @@ public class PersistentIndex {
     StoreFindToken rangePrunedTillToken;
     StoreFindToken recoveryStartToken;
     StoreFindToken recoveryEndToken;
-    List<HardDeletePersistInfo> hardDeleteRecoveryRange = new ArrayList<HardDeletePersistInfo>();
+    HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     private final int messageRetentionSeconds =
         config.storeDeletedMessageRetentionDays * SystemTime.getInstance().SecsPerDay;
@@ -1139,41 +1198,35 @@ public class PersistentIndex {
     }
 
     /**
-     * Does the recovery of hard deleted blobs (recovery means redoing the hard deletes)
+     * Does the recovery of hard deleted blobs (means redoing the hard deletes)
      *
-     * This method is called after hardDeleteRecoveryRange is populated with the blob information read from the cleanup
-     * token file. First, the readOptionsList is recreated using the blob information in hardDeleteRecoveryRange. Then,
-     * the MessageStoreHardDelete iterator is used to write the replacement stream into the Log for the messages in
-     * hardDeleteRecoveryRange, similar to hard deletes when the store is open.
+     * This method first populates hardDeleteRecoveryRange with the blob information read from the cleanup
+     * token file. It then passes the messageStoreRecoveryInfo to the MessageStoreHardDelete component so that the latter
+     * can use it for recovering the information that may be required to hard delete the messages that are being hard
+     * deleted as part of recovery.
      *
      * @throws StoreException on version mismatch.
      */
-    private void recoverHardDeletes()
+    private void performRecovery()
         throws StoreException {
       try {
-        int numBlobsToRecover = hardDeleteRecoveryRange.size();
+        readCleanupTokenAndPopulateRecoveryRange();
+
+        int numBlobsToRecover = hardDeleteRecoveryRange.getSize();
         if (numBlobsToRecover == 0) {
           return;
         }
 
         /* First create the readOptionsList */
-        List<BlobReadOptions> readOptionsList = new ArrayList<BlobReadOptions>(numBlobsToRecover);
-        Iterator<HardDeletePersistInfo> hardDeleteRecoveryRangeIterator = hardDeleteRecoveryRange.iterator();
-        while (hardDeleteRecoveryRangeIterator.hasNext()) {
-          HardDeletePersistInfo hardDeletePersistInfo = hardDeleteRecoveryRangeIterator.next();
-          if (!running.get()) {
-            throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.Store_Shutting_Down);
-          }
-          BlobReadOptions readOptions = hardDeletePersistInfo.getBlobReadOptions();
-          readOptionsList.add(readOptions);
-        }
+        List<BlobReadOptions> readOptionsList = hardDeleteRecoveryRange.getBlobReadOptionsList();
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */
         StoreMessageReadSet readSet = log.getView(readOptionsList);
-        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
-        Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
+        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete
+            .getHardDeleteMessages(readSet, factory, hardDeleteRecoveryRange.getMessageStoreRecoveryInfoList());
 
+        Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
         while (hardDeleteIterator.hasNext()) {
           if (!running.get()) {
             throw new StoreException("Aborting hard deletes as store is shutting down",
@@ -1184,9 +1237,9 @@ public class PersistentIndex {
           if (hardDeleteInfo == null) {
             metrics.hardDeleteFailedCount.inc(1);
           } else {
-            log.writeFrom(hardDeleteInfo.getChannel(),
-                readOptions.getOffset() + hardDeleteInfo.getHardDeleteRelativeOffsetInMessage(),
-                hardDeleteInfo.getSize());
+            log.writeFrom(hardDeleteInfo.getHardDeleteChannel(),
+                readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
+                hardDeleteInfo.getHardDeletedMessageSize());
             metrics.hardDeleteDoneCount.inc(1);
           }
         }
@@ -1220,13 +1273,7 @@ public class PersistentIndex {
             case 0:
               recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
               recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
-              int numBlobsToRecover = stream.readInt();
-              for (int i = 0; i < numBlobsToRecover; i++) {
-                BlobReadOptions blobReadOptions = BlobReadOptions.fromBytes(stream, factory);
-                byte[] messageStoreRecoveryInfo =
-                    hardDelete.processAndReturnRecoveryInfo(stream, blobReadOptions.getStoreKey());
-                hardDeleteRecoveryRange.add(new HardDeletePersistInfo(blobReadOptions, messageStoreRecoveryInfo));
-              }
+              hardDeleteRecoveryRange.fromBytes(stream, factory);
               break;
             default:
               hardDeleteRecoveryRange.clear();
@@ -1239,7 +1286,7 @@ public class PersistentIndex {
             hardDeleteRecoveryRange.clear();
             metrics.hardDeleteIncompleteRecoveryCount.inc();
             throw new StoreException(
-                "Crc check does not match for cleanup token file for dataDir " + dataDir + " creating a clean one ",
+                "Crc check does not match for cleanup token file for dataDir " + dataDir + " aborting. ",
                 StoreErrorCodes.Illegal_Index_State);
           }
         } catch (IOException e) {
@@ -1254,10 +1301,6 @@ public class PersistentIndex {
          deletes are done, it can start at least at the recoveryStartToken.
        */
       startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = recoveryStartToken;
-    }
-
-    List<HardDeletePersistInfo> getHardDeleteRecoveryRange() {
-      return hardDeleteRecoveryRange;
     }
 
     /**
@@ -1294,11 +1337,7 @@ public class PersistentIndex {
         writer.writeShort(version);
         writer.write(startTokenSafeToPersist.toBytes());
         writer.write(endToken.toBytes());
-        writer.writeInt(hardDeleteRecoveryRange.size());
-        for (HardDeletePersistInfo hardDeletePersistInfo : hardDeleteRecoveryRange) {
-          writer.write(hardDeletePersistInfo.getBlobReadOptions().toBytes());
-          writer.write(hardDeletePersistInfo.getMessageStoreRecoveryInfo());
-        }
+        writer.write(hardDeleteRecoveryRange.toBytes());
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
 
@@ -1334,19 +1373,7 @@ public class PersistentIndex {
              will soon become equal to endtoken, in which case we will prune everything (in the "if case" above). */
         } else if (!logFlushedTillToken.equals(rangePrunedTillToken)) {
           /* We can safely prune off entries that have already been flushed in the log, no matter what. */
-          Iterator<HardDeletePersistInfo> hardDeleteRecoveryRangeIterator = hardDeleteRecoveryRange.iterator();
-          while (hardDeleteRecoveryRangeIterator.hasNext()) {
-            StoreKey key = hardDeleteRecoveryRangeIterator.next().getBlobReadOptions().getStoreKey();
-            if (logFlushedTillToken.getStoreKey().equals(key)) {
-              /* In the off chance that there are multiple presence of the same key in this range due to prior software
-                 bugs, note that this method prunes only till the first occurrence of the key. If it so happens that a
-                 later occurrence is the one really associated with this token, it does not affect the safety.
-                 Persisting more than what is required is okay as hard deleting a blob is an idempotent operation. */
-              break;
-            } else {
-              hardDeleteRecoveryRangeIterator.remove();
-            }
-          }
+          hardDeleteRecoveryRange.pruneTill(logFlushedTillToken.getStoreKey());
           rangePrunedTillToken = logFlushedTillToken;
         }
       }
@@ -1379,12 +1406,12 @@ public class PersistentIndex {
           }
         }
 
-        /* Next get the information to persist hard delete recovery info. Get all the information and save it as only
+        /* Next get the information to persist hard delete recovery info. Get all the information and save it, as only
          * after the whole range is persisted can we start with the actual log write */
         List<LogWriteInfo> logWriteInfoList = new ArrayList<LogWriteInfo>();
 
         StoreMessageReadSet readSet = log.getView(readOptionsList);
-        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory);
+        Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
         Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 
         while (hardDeleteIterator.hasNext()) {
@@ -1397,11 +1424,16 @@ public class PersistentIndex {
           if (hardDeleteInfo == null) {
             metrics.hardDeleteFailedCount.inc(1);
           } else {
-            hardDeleteRecoveryRange.add(new HardDeletePersistInfo(readOptions, hardDeleteInfo.getRecoveryInfo()));
-            logWriteInfoList.add(new LogWriteInfo(hardDeleteInfo.getChannel(),
-                readOptions.getOffset() + hardDeleteInfo.getHardDeleteRelativeOffsetInMessage(),
-                hardDeleteInfo.getSize()));
+            hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo());
+            logWriteInfoList.add(new LogWriteInfo(hardDeleteInfo.getHardDeleteChannel(),
+                readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
+                hardDeleteInfo.getHardDeletedMessageSize()));
           }
+        }
+
+        if (readOptionsIterator.hasNext()) {
+          metrics.hardDeleteExceptionsCount.inc(1);
+          throw new IllegalStateException("More number of blobReadOptions than hardDeleteMessages");
         }
 
         persistCleanupToken();

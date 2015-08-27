@@ -96,7 +96,11 @@ public class StoreConfig {
         verifiableProperties.getString("store.journal.factory", "com.github.ambry.store.InMemoryJournalFactory");
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
-    storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
+    /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed. We
+       do this by making sure that the retention period for deleted messages (which determines the end point for hard deletes)
+       is always greater than the log flush period */
+    storeDeletedMessageRetentionDays = verifiableProperties.getIntInRange("store.deleted.message.retention.days", 7,
+        (int) (storeDataFlushIntervalSeconds / (24 * 3600)) + 1, 365);
     storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
   }
