@@ -44,8 +44,10 @@ import static org.junit.Assert.fail;
 public class NettyResponseChannelTest {
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
-   * {@link NettyResponseChannel#write(ByteBuffer)} and then call {@link NettyResponseChannel#flush()} (For the actual
-   * functionality check {@link MockNettyMessageProcessor}).
+   * {@link NettyResponseChannel#write(ByteBuffer)} and then call {@link NettyResponseChannel#flush()}
+   * <p/>
+   * For a description of what different URIs do, check {@link TestingUri}. For the actual functionality, check
+   * {@link MockNettyMessageProcessor}).
    * @throws IOException
    * @throws JSONException
    */
@@ -82,7 +84,7 @@ public class NettyResponseChannelTest {
     try {
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
       EmbeddedChannel channel = new EmbeddedChannel(processor);
-      channel.writeInbound(createRequest(HttpMethod.GET, MockNettyMessageProcessor.WRITE_WITH_DIRECT_BUFFER_URI));
+      channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.WriteWithDirectBuffer.toString()));
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -99,7 +101,7 @@ public class NettyResponseChannelTest {
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
-    channel.writeInbound(createRequest(HttpMethod.GET, MockNettyMessageProcessor.IMMEDIATE_REQUEST_COMPLETE_URI));
+    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ImmediateRequestComplete.toString()));
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -116,19 +118,18 @@ public class NettyResponseChannelTest {
   public void onRequestCompleteWithExceptionTest()
       throws JSONException {
     // Throws RestServiceException. There should be a response which is BAD_REQUEST. This is the expected response.
-    doOnRequestCompleteWithExceptionTest(MockNettyMessageProcessor.ON_REQUEST_COMPLETE_WITH_RSE_URI,
-        HttpResponseStatus.BAD_REQUEST);
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseBr, HttpResponseStatus.BAD_REQUEST);
 
     // INTERNAL_SERVER_ERROR
-    doOnRequestCompleteWithExceptionTest(MockNettyMessageProcessor.ON_REQUEST_COMPLETE_WITH_RSE_ISE_URI,
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseIse,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
     // Unknown RestServiceException.
-    doOnRequestCompleteWithExceptionTest(MockNettyMessageProcessor.ON_REQUEST_COMPLETE_WITH_UNKNOWN_RSE_URI,
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseUnknown,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
     // Runtime exception.
-    doOnRequestCompleteWithExceptionTest(MockNettyMessageProcessor.ON_REQUEST_COMPLETE_WTH_RUNTIME_EXCEPTION_URI,
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRuntimeException,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
   }
 
@@ -140,11 +141,11 @@ public class NettyResponseChannelTest {
   public void badStateTransitionsTest()
       throws Exception {
     // write after close.
-    doBadStateTransitionTest(MockNettyMessageProcessor.WRITE_AFTER_CLOSE_URI, ClosedChannelException.class, null);
+    doBadStateTransitionTest(TestingUri.WriteAfterClose, ClosedChannelException.class, null);
 
     // modify response data after it has been written to the channel
-    doBadStateTransitionTest(MockNettyMessageProcessor.MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI,
-        RestServiceException.class, RestServiceErrorCode.IllegalResponseMetadataStateTransition);
+    doBadStateTransitionTest(TestingUri.ModifyResponseMetadataAfterWrite, RestServiceException.class,
+        RestServiceErrorCode.IllegalResponseMetadataStateTransition);
   }
 
   /**
@@ -155,8 +156,8 @@ public class NettyResponseChannelTest {
   @Test
   public void idempotentOperationsTest()
       throws JSONException {
-    doIdempotentOperationsTest(MockNettyMessageProcessor.MULTIPLE_CLOSE_URI);
-    doIdempotentOperationsTest(MockNettyMessageProcessor.MULTIPLE_ON_REQUEST_COMPLETE_URI);
+    doIdempotentOperationsTest(TestingUri.MultipleClose);
+    doIdempotentOperationsTest(TestingUri.MultipleOnRequestComplete);
   }
 
   /**
@@ -166,8 +167,8 @@ public class NettyResponseChannelTest {
   @Test
   public void behaviourUnderWriteFailuresTest()
       throws Exception {
-    onRequestCompleteUnderWriteFailureTest(MockNettyMessageProcessor.IMMEDIATE_REQUEST_COMPLETE_URI);
-    onRequestCompleteUnderWriteFailureTest(MockNettyMessageProcessor.ON_REQUEST_COMPLETE_WITH_RSE_URI);
+    onRequestCompleteUnderWriteFailureTest(TestingUri.ImmediateRequestComplete);
+    onRequestCompleteUnderWriteFailureTest(TestingUri.OnRequestCompleteWithRseBr);
 
     try {
       String content = "@@randomContent@@@";
@@ -245,11 +246,11 @@ public class NettyResponseChannelTest {
    * @param expectedResponseStatus the response status that is expected
    * @throws JSONException
    */
-  private void doOnRequestCompleteWithExceptionTest(String uri, HttpResponseStatus expectedResponseStatus)
+  private void doOnRequestCompleteWithExceptionTest(TestingUri uri, HttpResponseStatus expectedResponseStatus)
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
-    channel.writeInbound(createRequest(HttpMethod.GET, uri));
+    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", expectedResponseStatus, response.getStatus());
@@ -269,12 +270,12 @@ public class NettyResponseChannelTest {
    *                      {@link RestServiceErrorCode}.
    * @throws JSONException
    */
-  private void doBadStateTransitionTest(String uri, Class exceptionClass, RestServiceErrorCode expectedCode)
+  private void doBadStateTransitionTest(TestingUri uri, Class exceptionClass, RestServiceErrorCode expectedCode)
       throws Exception {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     try {
-      channel.writeInbound(createRequest(HttpMethod.GET, uri));
+      channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
       fail("This test was expecting the handler in the channel to throw a RestServiceException with error code "
           + expectedCode);
     } catch (Exception e) {
@@ -296,12 +297,12 @@ public class NettyResponseChannelTest {
    * @param uri the uri to be hit.
    * @throws JSONException
    */
-  private void doIdempotentOperationsTest(String uri)
+  private void doIdempotentOperationsTest(TestingUri uri)
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     // no exceptions.
-    channel.writeInbound(createRequest(HttpMethod.GET, uri));
+    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
   }
@@ -312,13 +313,84 @@ public class NettyResponseChannelTest {
    * @param uri the uri to hit.
    * @throws JSONException
    */
-  private void onRequestCompleteUnderWriteFailureTest(String uri)
+  private void onRequestCompleteUnderWriteFailureTest(TestingUri uri)
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     BadOutboundHandler badOutboundHandler = new BadOutboundHandler();
     EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
     // no exception because onRequestComplete() swallows it.
-    channel.writeInbound(createRequest(HttpMethod.GET, uri));
+    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+  }
+}
+
+enum TestingUri {
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with null {@code cause} when this request is received.
+   */
+  ImmediateRequestComplete,
+  /**
+   * When this request is received, some data is initially written to the channel via
+   * {@link RestResponseChannel#write(ByteBuffer)}. An attempt to modify response headers (metadata) is made after this.
+   */
+  ModifyResponseMetadataAfterWrite,
+  /**
+   * When this request is received, {@link RestResponseChannel#close()} is called multiple times.
+   */
+  MultipleClose,
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called multiple
+   * times.
+   */
+  MultipleOnRequestComplete,
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
+   * error code is {@link RestServiceErrorCode#BadRequest}.
+   */
+  OnRequestCompleteWithRseBr,
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
+   * error code is {@link RestServiceErrorCode#InternalServerError}.
+   */
+  OnRequestCompleteWithRseIse,
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
+   * error code is {@link RestServiceErrorCode#UnknownErrorCode}.
+   */
+  OnRequestCompleteWithRseUnknown,
+  /**
+   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
+   */
+  OnRequestCompleteWithRuntimeException,
+  /**
+   * When this request is received, the {@link RestResponseChannel} is closed and then a write operation is attempted.
+   */
+  WriteAfterClose,
+  /**
+   * When this request is received, a direct {@link ByteBuffer} is used as {@code src} for
+   * {@link RestResponseChannel#write(ByteBuffer)}.
+   */
+  WriteWithDirectBuffer,
+  /**
+   * Catch all TestingUri.
+   */
+  Unknown;
+
+  /**
+   * Converts the uri specified by the input string into an {@link TestingUri}.
+   * @param uri the TestingUri as a string.
+   * @return the uri requested as a valid {@link TestingUri} if uri is known, otherwise returns {@link #Unknown}
+   */
+  public static TestingUri getTestingURI(String uri) {
+    try {
+      return TestingUri.valueOf(uri);
+    } catch (IllegalArgumentException e) {
+      return TestingUri.Unknown;
+    }
   }
 }
 
@@ -328,17 +400,6 @@ public class NettyResponseChannelTest {
  * Exposes some URI strings through which a predefined flow can be executed and verified.
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
-  protected static String IMMEDIATE_REQUEST_COMPLETE_URI = "immediateRequestComplete";
-  protected static String ON_REQUEST_COMPLETE_WITH_RSE_URI = "onRequestCompleteWithRestServiceException";
-  protected static String ON_REQUEST_COMPLETE_WITH_RSE_ISE_URI = "onRequestCompleteWithRSEInternalServerError";
-  protected static String ON_REQUEST_COMPLETE_WITH_UNKNOWN_RSE_URI = "onRequestCompleteWithUnknownRestServiceException";
-  protected static String ON_REQUEST_COMPLETE_WTH_RUNTIME_EXCEPTION_URI = "onRequestCompleteWithRuntimeException";
-  protected static String WRITE_AFTER_CLOSE_URI = "writeAfterClose";
-  protected static String MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI = "modifyResponseMetadataAfterWrite";
-  protected static String MULTIPLE_CLOSE_URI = "multipleClose";
-  protected static String MULTIPLE_ON_REQUEST_COMPLETE_URI = "multipleOnRequestComplete";
-  protected static String WRITE_WITH_DIRECT_BUFFER_URI = "writeWithDirectBuffer";
-
   private RestRequestMetadata request;
   private RestResponseChannel restResponseChannel;
 
@@ -381,54 +442,65 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     if (request == null) {
       request = new NettyRequestMetadata(httpRequest);
       restResponseChannel.setContentType("text/plain; charset=UTF-8");
-      if (IMMEDIATE_REQUEST_COMPLETE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(null, false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (ON_REQUEST_COMPLETE_WITH_RSE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(
-            new RestServiceException(ON_REQUEST_COMPLETE_WITH_RSE_URI, RestServiceErrorCode.BadRequest), false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (ON_REQUEST_COMPLETE_WITH_RSE_ISE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(
-            new RestServiceException(ON_REQUEST_COMPLETE_WITH_RSE_URI, RestServiceErrorCode.InternalServerError),
-            false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (ON_REQUEST_COMPLETE_WITH_UNKNOWN_RSE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(
-            new RestServiceException(ON_REQUEST_COMPLETE_WITH_UNKNOWN_RSE_URI, RestServiceErrorCode.UnknownErrorCode),
-            false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (ON_REQUEST_COMPLETE_WTH_RUNTIME_EXCEPTION_URI.equals(request.getUri())) {
-        restResponseChannel
-            .onRequestComplete(new RuntimeException(ON_REQUEST_COMPLETE_WTH_RUNTIME_EXCEPTION_URI), false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (WRITE_AFTER_CLOSE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(null, true);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-        // write something. It should fail.
-        restResponseChannel.write(ByteBuffer.wrap(WRITE_AFTER_CLOSE_URI.getBytes()));
-      } else if (MODIFY_RESPONSE_METADATA_AFTER_WRITE_URI.equals(request.getUri())) {
-        restResponseChannel.write(ByteBuffer.wrap(new byte[0]));
-        restResponseChannel.setContentType("text/plain; charset=UTF-8");
-      } else if (MULTIPLE_CLOSE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(null, false);
-        restResponseChannel.close();
-        restResponseChannel.close();
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (MULTIPLE_ON_REQUEST_COMPLETE_URI.equals(request.getUri())) {
-        restResponseChannel.onRequestComplete(null, false);
-        restResponseChannel.onRequestComplete(null, false);
-        assertTrue("Request not marked complete even after a call to onRequestComplete()",
-            restResponseChannel.isRequestComplete());
-      } else if (WRITE_WITH_DIRECT_BUFFER_URI.equals(request.getUri())) {
-        restResponseChannel.write(ByteBuffer.allocateDirect(1));
+      TestingUri uri = TestingUri.getTestingURI(request.getUri());
+      switch (uri) {
+        case ImmediateRequestComplete:
+          restResponseChannel.onRequestComplete(null, false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case ModifyResponseMetadataAfterWrite:
+          restResponseChannel.write(ByteBuffer.wrap(new byte[0]));
+          restResponseChannel.setContentType("text/plain; charset=UTF-8");
+          break;
+        case MultipleClose:
+          restResponseChannel.onRequestComplete(null, false);
+          restResponseChannel.close();
+          restResponseChannel.close();
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case MultipleOnRequestComplete:
+          restResponseChannel.onRequestComplete(null, false);
+          restResponseChannel.onRequestComplete(null, false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case OnRequestCompleteWithRseBr:
+          restResponseChannel.onRequestComplete(
+              new RestServiceException(TestingUri.OnRequestCompleteWithRseBr.toString(),
+                  RestServiceErrorCode.BadRequest), false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case OnRequestCompleteWithRseIse:
+          restResponseChannel.onRequestComplete(
+              new RestServiceException(TestingUri.OnRequestCompleteWithRseIse.toString(),
+                  RestServiceErrorCode.InternalServerError), false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case OnRequestCompleteWithRseUnknown:
+          restResponseChannel.onRequestComplete(
+              new RestServiceException(TestingUri.OnRequestCompleteWithRseUnknown.toString(),
+                  RestServiceErrorCode.UnknownErrorCode), false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case OnRequestCompleteWithRuntimeException:
+          restResponseChannel
+              .onRequestComplete(new RuntimeException(TestingUri.OnRequestCompleteWithRuntimeException.toString()),
+                  false);
+          assertTrue("Request not marked complete even after a call to onRequestComplete()",
+              restResponseChannel.isRequestComplete());
+          break;
+        case WriteAfterClose:
+          restResponseChannel.close();
+          restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()));
+          break;
+        case WriteWithDirectBuffer:
+          restResponseChannel.write(ByteBuffer.allocateDirect(1));
+          break;
       }
     } else {
       restResponseChannel.onRequestComplete(null, false);
