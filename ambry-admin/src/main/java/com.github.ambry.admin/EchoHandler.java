@@ -26,7 +26,7 @@ class EchoHandler {
    * Handles {@link AdminOperationType#echo} operations.
    * <p/>
    * Extracts the parameters from the {@link RestRequestMetadata}, performs an echo if possible and writes the response
-   * to the client via a {@link com.github.ambry.rest.RestResponseChannel}.
+   * to the client via a {@link RestResponseChannel}.
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} in the request). Any other content is ignored.

@@ -31,7 +31,7 @@ class GetReplicasForBlobIdHandler {
    * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
    * <p/>
    * Extracts the parameters from the {@link RestRequestMetadata}, infers replicas of the blobId if possible and writes
-   * the response to the client via a {@link com.github.ambry.rest.RestResponseChannel}.
+   * the response to the client via a {@link RestResponseChannel}.
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} of the request). Any other content is ignored.
