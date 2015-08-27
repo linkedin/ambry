@@ -154,7 +154,7 @@ public class ServerReadPerformance {
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
-            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) output.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
@@ -192,7 +192,7 @@ public class ServerReadPerformance {
             InputStream receivePropertyStream = channel.receive().getInputStream();
             GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
             BlobProperties blobProperties =
-                MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
+                MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream()).getBlobProperties();
             long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
 
             partitionRequestInfoList.clear();
@@ -208,7 +208,7 @@ public class ServerReadPerformance {
             GetResponse getResponseUserMetadata =
                 GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
             ByteBuffer userMetadata =
-                MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
+                MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream()).getUserMetadata();
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
             // delete the blob
             DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);

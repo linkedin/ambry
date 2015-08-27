@@ -1,21 +1,20 @@
 package com.github.ambry.coordinator;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -90,7 +89,8 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobUserMetadataOperation.setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream));
+    getBlobUserMetadataOperation
+        .setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream).getUserMetadata());
   }
 }
 

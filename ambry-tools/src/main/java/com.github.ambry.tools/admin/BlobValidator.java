@@ -2,7 +2,6 @@ package com.github.ambry.tools.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
-import com.github.ambry.clustermap.Replica;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
@@ -27,7 +26,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -393,7 +391,8 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
+        BlobProperties properties =
+            MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream()).getBlobProperties();
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
                 +
@@ -432,7 +431,8 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream());
+        ByteBuffer userMetadata =
+            MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream()).getUserMetadata();
         System.out.println("Usermetadata deserialized. Size " + userMetadata.capacity());
       }
 
@@ -466,7 +466,7 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
         byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
         int blobSizeToRead = (int) blobOutput.getSize();
         int blobSizeRead = 0;

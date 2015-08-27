@@ -90,7 +90,7 @@ final class GetBlobOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobOperation.setBlobOutput(MessageFormatRecord.deserializeBlob(inputStream));
+    getBlobOperation.setBlobOutput(MessageFormatRecord.deserializeBlob(inputStream).getBlobOutput());
   }
 }
 

@@ -564,12 +564,12 @@ public class DumpData {
           boolean isDeleted = false;
           if (header.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog).getBlobProperties();
             blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
                 " serviceId " + props.getServiceId();
-            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog).getUserMetadata();
             usermetadata = " Metadata - size " + metadata.capacity();
-            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
+            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
             blobOutput = "Blob - size " + output.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
@@ -735,12 +735,12 @@ public class DumpData {
         boolean isDeleted = false;
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog).getBlobProperties();
           blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
               " serviceId " + props.getServiceId();
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog).getUserMetadata();
           usermetadata = " Metadata - size " + metadata.capacity();
-          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
+          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
           blobOutput = "Blob - size " + output.getSize();
         } else {
           boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);

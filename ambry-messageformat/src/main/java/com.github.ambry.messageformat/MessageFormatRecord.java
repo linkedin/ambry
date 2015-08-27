@@ -30,14 +30,14 @@ public class MessageFormatRecord {
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
   // Deserialization methods for individual records
-  public static BlobProperties deserializeBlobProperties(InputStream stream)
+  public static DeserializedBlobProperties deserializeBlobProperties(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case BlobProperties_Version_V1:
-        return BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream);
+        return new DeserializedBlobProperties(BlobProperties_Version_V1, BlobProperties_Format_V1.deserializeBlobPropertiesRecord(crcStream));
       default:
         throw new MessageFormatException("blob property version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
@@ -76,19 +76,14 @@ public class MessageFormatRecord {
     }
   }
 
-  public static ByteBuffer deserializeUserMetadata(InputStream stream)
-      throws IOException, MessageFormatException {
-    return getUserMetadataInfo(stream).getUserMetadata();
-  }
-
-  static UserMetadataInfo getUserMetadataInfo(InputStream stream)
+  public static DeserializedUserMetadata deserializeUserMetadata(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case UserMetadata_Version_V1:
-        return new UserMetadataInfo(UserMetadata_Version_V1,
+        return new DeserializedUserMetadata(UserMetadata_Version_V1,
             UserMetadata_Format_V1.deserializeUserMetadataRecord(crcStream));
       default:
         throw new MessageFormatException("metadata version not supported",
@@ -105,19 +100,14 @@ public class MessageFormatRecord {
     }
   }
 
-  public static BlobOutput deserializeBlob(InputStream stream)
-      throws IOException, MessageFormatException {
-    return getBlobRecordInfo(stream).getBlobOutput();
-  }
-
-  static BlobRecordInfo getBlobRecordInfo(InputStream stream)
+  public static DeserializedBlob deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case Blob_Version_V1:
-        return new BlobRecordInfo(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
+        return new DeserializedBlob(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
       default:
         throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
@@ -511,44 +501,4 @@ public class MessageFormatRecord {
   }
 }
 
-/**
- * A class to hold the deserialized usermetadata of a blob and the version of the user metadata.
- */
-class UserMetadataInfo {
-  private final short version;
-  private final ByteBuffer userMetadata;
 
-  UserMetadataInfo(short version, ByteBuffer userMetadata) {
-    this.version = version;
-    this.userMetadata = userMetadata;
-  }
-
-  short getVersion() {
-    return version;
-  }
-
-  ByteBuffer getUserMetadata() {
-    return userMetadata;
-  }
-}
-
-/**
- * A class to hold the deserialized blob output of a blob and the version of the blob record in the blob output.
- */
-class BlobRecordInfo {
-  private final short version;
-  private final BlobOutput blobOutput;
-
-  BlobRecordInfo(short version, BlobOutput blobOutput) {
-    this.version = version;
-    this.blobOutput = blobOutput;
-  }
-
-  short getVersion() {
-    return version;
-  }
-
-  BlobOutput getBlobOutput() {
-    return blobOutput;
-  }
-}
