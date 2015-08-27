@@ -1,5 +1,10 @@
 package com.github.ambry.rest;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
+
+
 /**
  * The RestResponseChannel is meant to provide a {@link NioServer} implementation independent way to return responses
  * to the client. It deals with data in terms of bytes only and is not concerned with different types of data that might
@@ -15,26 +20,36 @@ package com.github.ambry.rest;
  * ordering guarantees nor operation success guarantees (e.g. if an external thread closes the channel while a write
  * attempt is in progress).
  */
-public interface RestResponseChannel {
+public interface RestResponseChannel extends WritableByteChannel {
   /**
-   * Adds data to the body of the response. Requests a write to the underlying channel before returning.
+   * Adds a sequence of bytes to the body of the response. Requests a write to the underlying channel before returning.
    * <p/>
-   * This method might not have sent data to the wire upon return. The byte array provided as argument might still be in
-   * use.
+   * An attempt is made to add up to {@code src.remaining()} bytes to the response but the number requested to be
+   * written to the underlying channel might be lesser depending on the free space in the channel's write buffer.
+   * <p/>
+   * This method might not have sent data to the wire upon return. The bytes in the {@code src} might still be in use.
+   * <p/>
+   * {@link #flush()} need not be called after every invocation of this function (and for performance reasons, not
+   * advisable either) but be sure to call it if you want to reuse {@code src} or if you want to send all pending data
+   * to actual transport.
    * <p/>
    * If the write fails sometime in the future, the channel may be closed.
    * <p/>
-   * Be sure to call {@link RestResponseChannel#flush()} once you want to send all pending data to the actual transport.
-   * @param data the bytes of data that need to be written.
-   * @param isLast whether this is the last piece of the response.
-   * @throws RestServiceException if there is an error adding to response body or with writing to the channel.
+   * This method may be invoked at any time. However, if another thread has already initiated a write operation upon
+   * this channel, then an invocation of this method will block until the first operation is complete.
+   * @see WritableByteChannel#write(ByteBuffer) for details on how {@code src.position()},  {@code src.remaining()} and
+   * {@code src.limit()} are used.
+   * @param src the buffer from which bytes are to be retrieved.
+   * @return the number of bytes that were requested to be written to the channel, possibly zero.
+   * @throws java.nio.channels.ClosedChannelException if this channel is closed.
+   * @throws IOException if some other I/O error occurs.
    */
-  public void addToResponseBody(byte[] data, boolean isLast)
-      throws RestServiceException;
+  @Override
+  public int write(ByteBuffer src)
+      throws IOException;
 
   /**
-   * Flushes all pending messages in the channel to transport. A response of OK is returned if no response body was
-   * constructed (i.e if there were no {@link RestResponseChannel#addToResponseBody(byte[], boolean)} calls).
+   * Flushes all pending messages in the channel to transport.
    * @throws RestServiceException if there is an error while flushing to channel.
    */
   public void flush()
@@ -55,10 +70,13 @@ public interface RestResponseChannel {
    * expected at the {@link NioServer} (they might still be in the other layers) or if there was an error while
    * handling the request or if the client timed out.
    * <p/>
+   * A response of OK is returned if cause is null and no response body was constructed (i.e if there were no
+   * {@link #write(ByteBuffer)} calls).
+   * <p/>
    * This is (has to be) called regardless of the request being concluded successfully or unsuccessfully
    * (e.g. connection interruption).
    * <p/>
-   * This operation has to be idempotent.
+   * This operation is idempotent.
    * @param cause if an error occurred, the cause of the error. Otherwise null.
    * @param forceClose whether the connection needs to be forcibly closed.
    */

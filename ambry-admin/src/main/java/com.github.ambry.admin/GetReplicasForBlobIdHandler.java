@@ -10,6 +10,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
@@ -50,10 +51,12 @@ class GetReplicasForBlobIdHandler {
         String replicaStr =
             getReplicasForBlobId(restRequestInfo.getRestRequestMetadata(), clusterMap, adminMetrics).toString();
         responseChannel.setContentType("application/json");
-        responseChannel.addToResponseBody(replicaStr.getBytes(), true);
+        responseChannel.write(ByteBuffer.wrap(replicaStr.getBytes()));
         responseChannel.flush();
         logger.trace("Sent getReplicasForBlobId response for request {}",
             restRequestInfo.getRestRequestMetadata().getUri());
+      } catch (IOException e) {
+        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
       } finally {
         long processingTime = System.currentTimeMillis() - startTime;
         logger.trace("Processing getReplicasForBlobId response for request {} took {} ms",

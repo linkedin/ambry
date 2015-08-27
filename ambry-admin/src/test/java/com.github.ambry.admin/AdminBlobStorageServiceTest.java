@@ -365,8 +365,7 @@ public class AdminBlobStorageServiceTest {
     RestRequestContent restRequestContent = createRestContent(null, true);
     adminBlobStorageService.handleGet(new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), restRequestContent,
         restRequestInfo.getRestResponseChannel()));
-    assertFalse("Channel is not closed",
-        ((MockRestResponseChannel) restRequestInfo.getRestResponseChannel()).getChannelActive());
+    assertFalse("Channel is not closed", ((MockRestResponseChannel) restRequestInfo.getRestResponseChannel()).isOpen());
   }
 
   /**

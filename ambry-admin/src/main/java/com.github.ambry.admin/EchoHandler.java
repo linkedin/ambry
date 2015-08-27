@@ -5,6 +5,8 @@ import com.github.ambry.rest.RestRequestMetadata;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
@@ -42,9 +44,11 @@ class EchoHandler {
       try {
         String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
         responseChannel.setContentType("application/json");
-        responseChannel.addToResponseBody(echoStr.getBytes(), true);
+        responseChannel.write(ByteBuffer.wrap(echoStr.getBytes()));
         responseChannel.flush();
         logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
+      } catch (IOException e) {
+        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
       } finally {
         long processingTime = System.currentTimeMillis() - startTime;
         logger.trace("Processing echo response for request {} took {} ms",

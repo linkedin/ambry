@@ -1,6 +1,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterMap;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -93,18 +95,22 @@ public class MockBlobStorageService implements BlobStorageService {
       throws RestServiceException {
     RestResponseChannel restResponseChannel = restRequestInfo.getRestResponseChannel();
     RestRequestContent content = restRequestInfo.getRestRequestContent();
-    if (restRequestInfo.isFirstPart()) {
-      RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      restResponseChannel.setContentType("text/plain; charset=UTF-8");
-      restResponseChannel.addToResponseBody(restMethod.toString().getBytes(), true);
-    } else {
-      byte[] contentBytes = new byte[content.getContentSize()];
-      content.getBytes(0, contentBytes, 0, content.getContentSize());
-      restResponseChannel.addToResponseBody(contentBytes, content.isLast());
-      if (content.isLast()) {
-        restResponseChannel.flush();
-        restResponseChannel.onRequestComplete(null, false);
+    try {
+      if (restRequestInfo.isFirstPart()) {
+        RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+        restResponseChannel.setContentType("text/plain; charset=UTF-8");
+        restResponseChannel.write(ByteBuffer.wrap(restMethod.toString().getBytes()));
+      } else {
+        byte[] contentBytes = new byte[content.getContentSize()];
+        content.getBytes(0, contentBytes, 0, content.getContentSize());
+        restResponseChannel.write(ByteBuffer.wrap(contentBytes));
+        if (content.isLast()) {
+          restResponseChannel.flush();
+          restResponseChannel.onRequestComplete(null, false);
+        }
       }
+    } catch (IOException e) {
+      throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
     }
   }
 }
