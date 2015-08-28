@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -11,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class ByteBufferChannel implements WritableByteChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final ReentrantLock bufferLock = new ReentrantLock();
   private final ByteBuffer buffer;
 
   /**
@@ -45,11 +47,17 @@ public class ByteBufferChannel implements WritableByteChannel {
     if (!isOpen()) {
       throw new ClosedChannelException();
     }
-    int bytesToWrite = Math.min(src.remaining(), buffer.remaining());
-    for (int i = 0; i < bytesToWrite; i++) {
-      buffer.put(src.get());
+    int bytesWritten = 0;
+    try {
+      bufferLock.lock();
+      int bytesToWrite = Math.min(src.remaining(), buffer.remaining());
+      for (; bytesWritten < bytesToWrite; bytesWritten++) {
+        buffer.put(src.get());
+      }
+    } finally {
+      bufferLock.unlock();
     }
-    return bytesToWrite;
+    return bytesWritten;
   }
 
   @Override
