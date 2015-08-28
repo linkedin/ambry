@@ -5,6 +5,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -74,6 +75,14 @@ public class DataStreamChannelTest {
     } catch (IOException e) {
       assertEquals("Exception message does not match expected", errMsg, e.getMessage());
     }
+
+    dataStreamChannel.close();
+    try {
+      dataStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(1)));
+      fail("Should have failed because DataStreamChannel should have thrown ClosedChannelException");
+    } catch (ClosedChannelException e) {
+      // expected. nothing to do.
+    }
   }
 
   /**
@@ -90,6 +99,21 @@ public class DataStreamChannelTest {
     DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(new byte[0]), 0);
     assertEquals("There should have been no bytes to read", -1,
         dataStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
+  }
+
+  /**
+   * Tests that no exceptions are thrown on repeating idempotent operations. Does <b><i>not</i></b> currently test that
+   * state changes are idempotent.
+   * @throws IOException
+   */
+  @Test
+  public void idempotentOperationsTest()
+      throws IOException {
+    byte[] in = fillRandomBytes(new byte[1]);
+    DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(in), in.length);
+    dataStreamChannel.close();
+    // should not throw exception.
+    dataStreamChannel.close();
   }
 
   // helpers

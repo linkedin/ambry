@@ -4,7 +4,9 @@ import com.github.ambry.network.ReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 
@@ -13,8 +15,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * blob and stores the data in a {@link ByteBuffer}.
  */
 class DataStreamChannel implements ReadableStreamChannel {
-  private final ByteBuffer buffer;
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReentrantLock bufferReadLock = new ReentrantLock();
+  private final ByteBuffer buffer;
 
   /**
    * Constructs a DataStreamChannel by consuming {@code size} bytes of data from the given {@link InputStream}.
@@ -50,16 +53,25 @@ class DataStreamChannel implements ReadableStreamChannel {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    if (!buffer.hasRemaining()) {
-      return -1;
-    }
     int bytesWritten = 0;
-    try {
-      bufferReadLock.lock();
-      bytesWritten = channel.write(buffer);
-    } finally {
-      bufferReadLock.unlock();
+    if (!channelOpen.get()) {
+      throw new ClosedChannelException();
+    } else if (!buffer.hasRemaining()) {
+      bytesWritten = -1;
+    } else {
+      try {
+        bufferReadLock.lock();
+        bytesWritten = channel.write(buffer);
+      } finally {
+        bufferReadLock.unlock();
+      }
     }
     return bytesWritten;
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    channelOpen.set(false);
   }
 }

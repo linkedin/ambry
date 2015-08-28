@@ -5,9 +5,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
@@ -125,6 +127,7 @@ public class ReadableStreamChannelInputStreamTest {
  * Class that returns 0 bytes on read a fixed number of times.
  */
 class HaltingReadableStreamChannel implements ReadableStreamChannel {
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicInteger haltTimes;
   private final ByteBuffer data;
 
@@ -141,11 +144,22 @@ class HaltingReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    if (haltTimes.getAndDecrement() > 0) {
-      return 0;
+    int bytesWritten;
+    if (!channelOpen.get()) {
+      throw new ClosedChannelException();
+    } else if (haltTimes.getAndDecrement() > 0) {
+      bytesWritten = 0;
     } else if (!data.hasRemaining()) {
-      return -1;
+      bytesWritten = -1;
+    } else {
+      bytesWritten = channel.write(data);
     }
-    return channel.write(data);
+    return bytesWritten;
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    channelOpen.set(false);
   }
 }

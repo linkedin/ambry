@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
@@ -14,7 +15,7 @@ import java.nio.channels.WritableByteChannel;
  * the first operation is complete.  Whether or not other kinds of I/O operations may proceed concurrently with a read
  * operation depends upon the type of the channel.
  */
-public interface ReadableStreamChannel {
+public interface ReadableStreamChannel extends Closeable {
 
   /**
    * Return the size of stream that is available on this channel. If -1, then size is unknown.
