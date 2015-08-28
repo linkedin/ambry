@@ -85,6 +85,7 @@ public class NettyResponseChannelTest {
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
       EmbeddedChannel channel = new EmbeddedChannel(processor);
       channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.WriteWithDirectBuffer.toString()));
+      fail("Test should have failed as NettyResponseChannel#write() was supplied with a non-array backed ByteBuffer");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -178,7 +179,9 @@ public class NettyResponseChannelTest {
       channel.writeInbound(createRequest(HttpMethod.GET, "/"));
       // channel gets closed because of write failure
       channel.writeInbound(createContent(content, true));
+      fail("Channel should have been closed due to write failure but no ClosedChannelException was thrown");
     } catch (Exception e) {
+      // if the IDE tells you ClosedChannelException will not be thrown, don't believe it.
       if (!(e instanceof ClosedChannelException)) {
         throw e;
       }
