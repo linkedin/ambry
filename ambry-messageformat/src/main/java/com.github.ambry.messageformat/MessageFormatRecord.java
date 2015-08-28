@@ -533,4 +533,3 @@ public class MessageFormatRecord {
   }
 }
 
-

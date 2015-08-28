@@ -1,5 +1,8 @@
 package com.github.ambry.config;
 
+import com.github.ambry.utils.Time;
+
+
 /**
  * The configs for the store
  */
@@ -100,7 +103,7 @@ public class StoreConfig {
        do this by making sure that the retention period for deleted messages (which determines the end point for hard deletes)
        is always greater than the log flush period */
     storeDeletedMessageRetentionDays = verifiableProperties.getIntInRange("store.deleted.message.retention.days", 7,
-        (int) (storeDataFlushIntervalSeconds / (24 * 3600)) + 1, 365);
+        (int) (storeDataFlushIntervalSeconds / Time.SecsPerDay) + 1, 365);
     storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
   }

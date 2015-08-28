@@ -1,7 +1,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.HardDeleteInfo;
-import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.Read;
@@ -26,7 +25,8 @@ public class BlobStoreHardDeleteTest {
     MockReadSet readSet = new MockReadSet();
     List<byte[]> recoveryInfoList = new ArrayList<byte[]>();
     ByteBuffer buffer;
-    public StoreKey[] keys = {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5")};
+    public StoreKey[] keys =
+        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5")};
     long expectedExpirationTimeMs = 0;
 
     public void initialize()
@@ -82,11 +82,10 @@ public class BlobStoreHardDeleteTest {
       // msg2: A good message that will be part of hard delete, with recoveryInfo.
       readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
-      MessageMetadataAndBlobInfo messageMetadataAndBlobInfo =
-          new MessageMetadataAndBlobInfo(MessageFormatRecord.Message_Header_Version_V1,
-              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
-              BLOB_SIZE, keys[2]);
-      recoveryInfoList.add(messageMetadataAndBlobInfo.toBytes());
+      MessageMetadata messageMetadata = new MessageMetadata(MessageFormatRecord.Message_Header_Version_V1,
+          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
+          BLOB_SIZE, keys[2]);
+      recoveryInfoList.add(messageMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
       writeToBuffer(msg3d, (int) msg3d.getSize());
@@ -95,11 +94,10 @@ public class BlobStoreHardDeleteTest {
       // This should succeed.
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
-      messageMetadataAndBlobInfo =
-          new MessageMetadataAndBlobInfo(MessageFormatRecord.Message_Header_Version_V1,
-              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
-              BLOB_SIZE, keys[3]);
-      recoveryInfoList.add(messageMetadataAndBlobInfo.toBytes());
+      messageMetadata = new MessageMetadata(MessageFormatRecord.Message_Header_Version_V1,
+          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
+          BLOB_SIZE, keys[3]);
+      recoveryInfoList.add(messageMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.
       // This should fail.
@@ -203,12 +201,11 @@ public class BlobStoreHardDeleteTest {
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
     // create log and write to it
-    ReadImp readrecovery = new ReadImp();
-    readrecovery.initialize();
+    ReadImp readImp = new ReadImp();
+    readImp.initialize();
 
     Iterator<HardDeleteInfo> iter = hardDelete
-        .getHardDeleteMessages(readrecovery.getMessageReadSet(), new MockIdFactory(),
-            readrecovery.getRecoveryInfoList());
+        .getHardDeleteMessages(readImp.getMessageReadSet(), new MockIdFactory(), readImp.getRecoveryInfoList());
 
     List<HardDeleteInfo> hardDeletedList = new ArrayList<HardDeleteInfo>();
 
@@ -216,8 +213,6 @@ public class BlobStoreHardDeleteTest {
       hardDeletedList.add(iter.next());
     }
 
-    //List<MessageInfo> recoveredMessages =
-    //    recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
     Assert.assertNotNull(hardDeletedList.get(0)); // msg1
     Assert.assertNotNull(hardDeletedList.get(1)); // msg2
     Assert.assertNotNull(hardDeletedList.get(2)); // msg4

@@ -4,7 +4,7 @@ import java.nio.channels.ReadableByteChannel;
 
 
 /**
- * A class that contains information about hard delete messages.
+ * A class that contains information about a hard delete message.
  */
 public class HardDeleteInfo {
   /* The channel containing the bytes for replacing original record */

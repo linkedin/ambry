@@ -1151,7 +1151,7 @@ public class PersistentIndex {
      * Since the index persistor runs asynchronously to the hard delete thread, a few other tokens are used to help safely
      * persist tokens:
      *
-     * rangePrunedTillToken:       The entries in hardDeleteRecoveryRange up to this token has been pruned.
+     * rangePrunedTillToken:     The entries in hardDeleteRecoveryRange up to this token has been pruned.
      * startTokenSafeToPersist:  This will always be a value up to which the log has been flushed. The 'current' start token
      *                           can be greater than this value.
      * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
