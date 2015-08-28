@@ -35,7 +35,7 @@ public class SelectorTest {
   @Before
   public void setup()
       throws Exception {
-    this.server = new EchoServer();
+    this.server = new EchoServer(18283);
     this.server.start();
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
     List<Processor> processorThreads = new ArrayList<Processor>();
@@ -262,77 +262,5 @@ public class SelectorTest {
       b.append(LETTERS_AND_DIGITS.charAt(random.nextInt(LETTERS_AND_DIGITS.length())));
     }
     return b.toString();
-  }
-
-  /**
-   * A simple server that takes size delimited byte arrays and just echos them back to the sender.
-   */
-  static class EchoServer extends Thread {
-    public final int port;
-    private final ServerSocket serverSocket;
-    private final List<Thread> threads;
-    private final List<Socket> sockets;
-
-    public EchoServer()
-        throws Exception {
-      this.port = 18283;
-      this.serverSocket = new ServerSocket(port);
-      this.threads = Collections.synchronizedList(new ArrayList<Thread>());
-      this.sockets = Collections.synchronizedList(new ArrayList<Socket>());
-    }
-
-    public void run() {
-      try {
-        while (true) {
-          final Socket socket = serverSocket.accept();
-          sockets.add(socket);
-          Thread thread = new Thread() {
-            public void run() {
-              try {
-                DataInputStream input = new DataInputStream(socket.getInputStream());
-                DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-                while (socket.isConnected() && !socket.isClosed()) {
-                  long size = input.readLong();
-                  byte[] bytes = new byte[(int) size - 8];
-                  input.readFully(bytes);
-                  output.writeLong(size);
-                  output.write(bytes);
-                  output.flush();
-                }
-              } catch (IOException e) {
-                // ignore
-              } finally {
-                try {
-                  socket.close();
-                } catch (IOException e) {
-                  // ignore
-                }
-              }
-            }
-          };
-          thread.start();
-          threads.add(thread);
-        }
-      } catch (IOException e) {
-        // ignore
-      }
-    }
-
-    public void closeConnections()
-        throws IOException {
-      for (Socket socket : sockets) {
-        socket.close();
-      }
-    }
-
-    public void close()
-        throws IOException, InterruptedException {
-      this.serverSocket.close();
-      closeConnections();
-      for (Thread t : threads) {
-        t.join();
-      }
-      join();
-    }
   }
 }

@@ -2,13 +2,14 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,9 +21,21 @@ import java.util.Random;
 
 
 public class SocketServerTest {
-  private SSLFactory sslFactory;
-  private SSLSocketFactory sslSocketFactory;
+  private static SSLFactory sslFactory;
+  private static SSLSocketFactory sslSocketFactory;
   private SocketServer server = null;
+
+  /**
+   * Run only once for all tests
+   */
+  @BeforeClass
+  public static void initializeTests()
+      throws Exception {
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
+  }
 
   public SocketServerTest()
       throws Exception {
@@ -34,9 +47,6 @@ public class SocketServerTest {
     ports.add(new Port(config.port + 1000, PortType.SSL));
     server = new SocketServer(config, new MetricRegistry(), ports);
     server.start();
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
   }
 
   @After

@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -25,24 +26,17 @@ public class SSLFactoryTest {
   @Test
   public void testSSLFactory()
       throws Exception {
-    SSLFactory sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    SSLFactory sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
     SSLSocketFactory socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
     SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
-    SSLEngine engine = sslFactory.createSSLEngine(sslContext, "localhost", 9095, true);
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine clientSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
+    SSLEngine serverSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
 
-    Assert.assertEquals(sslContext.getProtocol(), "TLS");
-    String[] enabledCipherSuites = engine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], "TLS_RSA_WITH_AES_128_CBC_SHA256");
-    String[] enabledProtocols = engine.getEnabledProtocols();
-    Assert.assertEquals(enabledProtocols.length, 1);
-    Assert.assertEquals(enabledProtocols[0], "TLSv1.2");
-    Assert.assertEquals(engine.getNeedClientAuth(), false);
-    Assert.assertEquals(engine.getUseClientMode(), true);
-    Assert.assertEquals(engine.getWantClientAuth(), false);
-    System.out.println(socketFactory.toString());
-    System.out.println(serverSocketFactory.toString());
-    System.out.println(engine.toString());
+    TestSSLUtils.verifySSLConfig(sslContext, clientSSLEngine, true);
+    TestSSLUtils.verifySSLConfig(sslContext, serverSSLEngine, false);
   }
 }

@@ -1,12 +1,11 @@
 package com.github.ambry.network;
 
 import java.io.IOException;
-import java.net.SocketException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.channels.Channels;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -30,16 +29,18 @@ public class SSLBlockingChannel extends BlockingChannel {
       throws IOException {
     synchronized (lock) {
       if (!connected) {
-        sslSocket = (SSLSocket) sslSocketFactory.createSocket(host, port);
+        Socket socket = new Socket();
+        socket.setSoTimeout(readTimeoutMs);
+        socket.setKeepAlive(true);
+        socket.setTcpNoDelay(true);
         if (readBufferSize > 0) {
-          sslSocket.setReceiveBufferSize(readBufferSize);
+          socket.setReceiveBufferSize(readBufferSize);
         }
         if (writeBufferSize > 0) {
-          sslSocket.setSendBufferSize(writeBufferSize);
+          socket.setSendBufferSize(writeBufferSize);
         }
-        sslSocket.setSoTimeout(readTimeoutMs);
-        sslSocket.setKeepAlive(true);
-        sslSocket.setTcpNoDelay(true);
+        socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+        sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
 
         // handshake in a blocking way
         sslSocket.startHandshake();

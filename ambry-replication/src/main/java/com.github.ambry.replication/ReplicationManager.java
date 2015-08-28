@@ -1,6 +1,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
@@ -244,9 +245,10 @@ public final class ReplicationManager {
   private static final short Crc_Size = 8;
   private static final short Replication_Delay_Multiplier = 5;
 
-  public ReplicationManager(ReplicationConfig replicationConfig, StoreConfig storeConfig, StoreManager storeManager,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler, DataNodeId dataNode,
-      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification)
+  public ReplicationManager(ReplicationConfig replicationConfig, SSLConfig sslConfig, StoreConfig storeConfig,
+      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler,
+      DataNodeId dataNode, ConnectionPool connectionPool, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification)
       throws ReplicationException {
 
     try {
@@ -273,7 +275,7 @@ public final class ReplicationManager {
       this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      this.sslEnabledDatacenters = Utils.splitString(replicationConfig.replicationSslEnabledDatacenters, ",");
+      this.sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {

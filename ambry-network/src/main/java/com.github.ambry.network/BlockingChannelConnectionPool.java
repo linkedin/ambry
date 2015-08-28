@@ -4,6 +4,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.net.SocketException;
 import java.security.GeneralSecurityException;
@@ -14,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -154,11 +157,6 @@ class BlockingChannelInfo {
       logger.error("IOException when trying to connect to the remote host {} and port {}", host, port.getPort());
       throw new ConnectionPoolTimeoutException(
           "IOException when trying to connect to remote host " + host + " port " + port.getPort(), e);
-    } catch (IllegalArgumentException e) {
-      logger.error("IllegalArgumentException when trying to connect to the remote host {} and port {}", host,
-          port.getPort());
-      throw new ConnectionPoolTimeoutException(
-          "IllegalArgumentException when trying to connect to remote host " + host + " port " + port.getPort(), e);
     } finally {
       rwlock.readLock().unlock();
     }
@@ -268,12 +266,19 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   // Represents the number of requests waiting to checkout a connection
   public Gauge<Integer> requestsWaitingToCheckoutConnection;
 
-  public BlockingChannelConnectionPool(ConnectionPoolConfig config, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory) {
+  public BlockingChannelConnectionPool(ConnectionPoolConfig config, SSLConfig sslConfig, MetricRegistry registry)
+      throws Exception {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
     this.config = config;
     this.registry = registry;
-    this.sslSocketFactory = sslSocketFactory;
+    if (sslConfig.sslEnabledDatacenters.length() > 0) {
+      SSLFactory sslFactory = new SSLFactory(sslConfig);
+      SSLContext sslContext = sslFactory.getSSLContext();
+      this.sslSocketFactory = sslContext.getSocketFactory();
+    } else {
+      this.sslSocketFactory = null;
+    }
+
     connectionCheckOutTime =
         registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckOutTime"));
     connectionCheckInTime =

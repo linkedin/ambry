@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,22 +22,29 @@ import static org.junit.Assert.fail;
 public class SSLBlockingChannelTest {
   private static SSLFactory sslFactory;
   private static SSLSocketFactory sslSocketFactory;
-  private static SSLBlockingEchoServer sslEchoServer;
+  private static EchoServer sslEchoServer;
   private static String hostName = "localhost";
   private static int sslPort = 18284;
 
+  /**
+   * Run only once for all tests
+   */
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
-    sslEchoServer = new SSLBlockingEchoServer(sslFactory, sslPort);
+    sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
   }
 
+  /**
+   * Run only once for all tests
+   */
   @AfterClass
-  public static void onceExecutedAfterAll()
+  public static void finalizeTests()
       throws Exception {
     int serverExceptionCount = sslEchoServer.getExceptionCount();
     assertEquals(serverExceptionCount, 0);

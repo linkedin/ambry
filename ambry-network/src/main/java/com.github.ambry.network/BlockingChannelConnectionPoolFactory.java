@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import javax.net.ssl.SSLSocketFactory;
 
 
@@ -9,23 +10,20 @@ import javax.net.ssl.SSLSocketFactory;
  * A connection pool factory that creates a blocking channel pool
  */
 public final class BlockingChannelConnectionPoolFactory implements ConnectionPoolFactory {
-  private final ConnectionPoolConfig config;
+  private final ConnectionPoolConfig connectionPoolConfig;
+  private final SSLConfig sslConfig;
   private final MetricRegistry registry;
-  private final SSLSocketFactory sslSocketFactory;
 
-  public BlockingChannelConnectionPoolFactory(ConnectionPoolConfig config, MetricRegistry registry) {
-    this(config, registry, null);
-  }
-
-  public BlockingChannelConnectionPoolFactory(ConnectionPoolConfig config, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory) {
-    this.config = config;
+  public BlockingChannelConnectionPoolFactory(ConnectionPoolConfig connectionPoolConfig, SSLConfig sslConfig,
+      MetricRegistry registry) {
+    this.connectionPoolConfig = connectionPoolConfig;
+    this.sslConfig = sslConfig;
     this.registry = registry;
-    this.sslSocketFactory = sslSocketFactory;
   }
 
   @Override
-  public ConnectionPool getConnectionPool() {
-    return new BlockingChannelConnectionPool(config, registry, sslSocketFactory);
+  public ConnectionPool getConnectionPool()
+      throws Exception {
+    return new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, registry);
   }
 }
