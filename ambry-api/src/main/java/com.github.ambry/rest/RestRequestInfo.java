@@ -129,6 +129,6 @@ public class RestRequestInfo {
   @Override
   public String toString() {
     return "Request metadata: " + restRequestMetadata + " Request content: " + restRequestContent
-        + " Response handler: " + restResponseChannel;
+        + " Response channel: " + restResponseChannel;
   }
 }
