@@ -208,6 +208,43 @@ public class NettyResponseChannelTest {
     assertFalse("Channel is still open after failed write", channel.isOpen());
   }
 
+  /**
+   * Tests handling of content that is larger than write buffer size. In this test case, the write buffer low and high
+   * watermarks are requested to be set to 1 and 2 respectively so the content will be written byte by byte into the
+   * {@link NettyResponseChannel}. This does <b><i>not</i></b> test for the same situation in a async scenario since
+   * {@link EmbeddedChannel} only provides blocking semantics.
+   * @throws JSONException
+   * @throws IOException
+   */
+  @Test
+  public void fillWriteBufferTest()
+      throws JSONException, IOException {
+    String content = "@@randomContent@@@";
+    String lastContent = "@@randomLastContent@@@";
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString()));
+    channel.writeInbound(createContent(content, false));
+    channel.writeInbound(createContent(lastContent, true));
+
+    // first outbound has to be response.
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    // content echoed back.
+    StringBuilder returnedContent = new StringBuilder();
+    while (returnedContent.length() < content.length()) {
+      returnedContent.append(getContentString((HttpContent) channel.readOutbound()));
+    }
+    assertEquals("Content does not match with expected content", content, returnedContent.toString());
+    // last content echoed back.
+    StringBuilder returnedLastContent = new StringBuilder();
+    while (returnedLastContent.length() < lastContent.length()) {
+      returnedLastContent.append(getContentString((HttpContent) channel.readOutbound()));
+    }
+    assertEquals("Content does not match with expected content", lastContent, returnedLastContent.toString());
+    assertFalse("Channel not closed on the server", channel.isActive());
+  }
+
   // helpers
   // general
   private HttpRequest createRequest(HttpMethod httpMethod, String uri)
@@ -276,8 +313,7 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = new EmbeddedChannel(processor);
     try {
       channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
-      fail("This test was expecting the handler in the channel to throw a RestServiceException with error code "
-          + expectedCode);
+      fail("This test was expecting the handler in the channel to throw an exception");
     } catch (Exception e) {
       if (exceptionClass.isInstance(e)) {
         if (exceptionClass.equals(RestServiceException.class)) {
@@ -323,12 +359,21 @@ public class NettyResponseChannelTest {
   }
 }
 
+/**
+ * List of all the testing URIs.
+ */
 enum TestingUri {
   /**
    * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
    * immediately with null {@code cause} when this request is received.
    */
   ImmediateRequestComplete,
+  /**
+   * Reduces the write buffer low and high watermarks to 1 and 2 bytes respectively in
+   * {@link io.netty.channel.ChannelConfig} so that data is written to the channel byte by byte. This simulates filling
+   * up of write buffer (but does not test async writing and flushing since {@link EmbeddedChannel} is blocking).
+   */
+  FillWriteBuffer,
   /**
    * When this request is received, some data is initially written to the channel via
    * {@link RestResponseChannel#write(ByteBuffer)}. An attempt to modify response headers (metadata) is made after this.
@@ -381,7 +426,7 @@ enum TestingUri {
   Unknown;
 
   /**
-   * Converts the uri specified by the input string into an {@link TestingUri}.
+   * Converts the uri specified by the input string into a {@link TestingUri}.
    * @param uri the TestingUri as a string.
    * @return the uri requested as a valid {@link TestingUri} if uri is known, otherwise returns {@link #Unknown}
    */
@@ -400,11 +445,13 @@ enum TestingUri {
  * Exposes some URI strings through which a predefined flow can be executed and verified.
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
+  private ChannelHandlerContext ctx;
   private RestRequestMetadata request;
   private RestResponseChannel restResponseChannel;
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
+    this.ctx = ctx;
     restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
   }
 
@@ -448,6 +495,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           restResponseChannel.onRequestComplete(null, false);
           assertTrue("Request not marked complete even after a call to onRequestComplete()",
               restResponseChannel.isRequestComplete());
+          break;
+        case FillWriteBuffer:
+          ctx.channel().config().setWriteBufferLowWaterMark(1);
+          ctx.channel().config().setWriteBufferHighWaterMark(2);
           break;
         case ModifyResponseMetadataAfterWrite:
           restResponseChannel.write(ByteBuffer.wrap(new byte[0]));
@@ -518,7 +569,12 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       throws RestServiceException, IOException {
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
-      restResponseChannel.write(ByteBuffer.wrap(httpContent.content().array()));
+      ByteBuffer content = ByteBuffer.wrap(httpContent.content().array());
+      int bytesWritten = 0;
+      while (content.hasRemaining()) {
+        bytesWritten += restResponseChannel.write(content);
+      }
+      assertEquals("Bytes written not equal to content size", httpContent.content().array().length, bytesWritten);
       if (isLast) {
         restResponseChannel.flush();
         restResponseChannel.onRequestComplete(null, false);

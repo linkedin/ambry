@@ -17,6 +17,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.CharsetUtil;
 import io.netty.util.concurrent.GenericFutureListener;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,9 +56,24 @@ class NettyResponseChannel implements RestResponseChannel {
   private final AtomicBoolean requestComplete = new AtomicBoolean(false);
   private final AtomicBoolean responseMetadataWritten = new AtomicBoolean(false);
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final AtomicBoolean emptyingFlushRequired = new AtomicBoolean(true);
   private final ReentrantLock responseMetadataChangeLock = new ReentrantLock();
   private final ReentrantLock channelWriteLock = new ReentrantLock();
   private ChannelFuture lastWriteFuture;
+
+  enum ChannelWriteType {
+    /**
+     * Checks if the underlying Netty channel is writable before writing data. Use this when writing data more than a
+     * few bytes (to avoid OOM).
+     */
+    Safe,
+    /**
+     * Does not check if the underlying Netty channel is writable before writing data. Use this only if you are writing
+     * very few bytes of data (content end markers) or if you know the channel's write buffer cannot be full (response
+     * metadata).
+     */
+    Unsafe
+  }
 
   public NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
     this.ctx = ctx;
@@ -138,7 +154,7 @@ class NettyResponseChannel implements RestResponseChannel {
           if (!responseMetadataWritten.get()) {
             maybeWriteResponseMetadata(responseMetadata);
           }
-          writeToChannel(new DefaultLastHttpContent());
+          writeToChannel(new DefaultLastHttpContent(), ChannelWriteType.Unsafe);
         } else {
           nettyMetrics.requestHandlingError.inc();
           logger.trace("Sending error response to client on channel {}", ctx.channel());
@@ -188,14 +204,22 @@ class NettyResponseChannel implements RestResponseChannel {
     if (!responseMetadataWritten.get()) {
       maybeWriteResponseMetadata(responseMetadata);
     }
-    //TODO: check write buffer size.
-    logger.trace("Adding {} bytes of data to response on channel {}", src.remaining(), ctx.channel());
-    int bytesWritten = src.remaining();
-    // TODO: If netty changes how it uses the buffer we send it, then this will have to be looked at again.
-    // TODO: So think about whether the underlying array should be wrapped instead.
-    ByteBuf buf = Unpooled.wrappedBuffer(src);
-    writeToChannel(new DefaultHttpContent(buf));
-    src.position(src.limit());
+    verifyChannelActive();
+    int bytesWritten = 0;
+    if (ctx.channel().isWritable()) {
+      emptyingFlushRequired.set(true);
+      int bytesToWrite = Math.min(src.remaining(), ctx.channel().config().getWriteBufferLowWaterMark());
+      logger.trace("Adding {} bytes of data to response on channel {}", bytesToWrite, ctx.channel());
+      ByteBuf buf =
+          Unpooled.wrappedBuffer(src.array(), src.arrayOffset() + src.position(), bytesToWrite).order(src.order());
+      ChannelFuture writeFuture = writeToChannel(new DefaultHttpContent(buf), ChannelWriteType.Safe);
+      if (!writeFuture.isDone() || writeFuture.isSuccess()) {
+        bytesWritten = bytesToWrite;
+        src.position(src.position() + bytesToWrite);
+      }
+    } else if (emptyingFlushRequired.compareAndSet(true, false)) {
+      flush();
+    }
     return bytesWritten;
   }
 
@@ -217,7 +241,7 @@ class NettyResponseChannel implements RestResponseChannel {
       logger
           .trace("Sending response metadata with status {} on channel {}", responseMetadata.getStatus(), ctx.channel());
       responseMetadataWritten.set(true);
-      return writeToChannel(responseMetadata);
+      return writeToChannel(responseMetadata, ChannelWriteType.Unsafe);
     } catch (Exception e) {
       // specifically don't want this to throw Exceptions because the semantic "maybe" hints that it is possible that
       // the caller does not care whether this happens or not. If he does care, he will check the future returned.
@@ -235,13 +259,14 @@ class NettyResponseChannel implements RestResponseChannel {
    * @return A {@link ChannelFuture} that tracks the write operation.
    * @throws ClosedChannelException if the channel is not active.
    */
-  private ChannelFuture writeToChannel(HttpObject httpObject)
+  private ChannelFuture writeToChannel(HttpObject httpObject, ChannelWriteType channelWriteType)
       throws ClosedChannelException {
     try {
       channelWriteLock.lock();
-      if (!isOpen() || !(ctx.channel().isActive())) {
-        nettyMetrics.channelWriteAfterCloseError.inc();
-        throw new ClosedChannelException();
+      verifyChannelActive();
+      if (ChannelWriteType.Safe.equals(channelWriteType) && !ctx.channel().isWritable()) {
+        emptyingFlushRequired.set(true);
+        return ctx.newFailedFuture(new BufferOverflowException());
       }
       // CAVEAT: This write may or may not succeed depending on whether the channel is open at actual write time.
       // While this class makes sure that close happens only after all writes of this class are complete, any external
@@ -291,6 +316,18 @@ class NettyResponseChannel implements RestResponseChannel {
     if (responseMetadataWritten.get()) {
       throw new RestServiceException("Response metadata has already been written to channel. No more changes possible",
           RestServiceErrorCode.IllegalResponseMetadataStateTransition);
+    }
+  }
+
+  /**
+   * Verify that the channel is not closed and is active. There are no atomicity guarantees. If the caller requires
+   * atomicity, it is their responsibility to ensure it.
+   * @throws ClosedChannelException if the channel is not active.
+   */
+  private void verifyChannelActive()
+      throws ClosedChannelException {
+    if (!isOpen() || !(ctx.channel().isActive())) {
+      throw new ClosedChannelException();
     }
   }
 
