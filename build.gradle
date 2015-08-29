@@ -195,6 +195,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
         attributes 'Implementation-Title': 'Ambry',
                    'Main-Class': 'com.github.ambry.server.AmbryMain'
     }
+    destinationDir = file('target')
     baseName = 'ambry'
     subprojects.each { subproject ->
         from  {
