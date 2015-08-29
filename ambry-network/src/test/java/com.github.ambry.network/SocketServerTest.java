@@ -23,6 +23,7 @@ import java.util.Random;
 public class SocketServerTest {
   private static SSLFactory sslFactory;
   private static SSLSocketFactory sslSocketFactory;
+  private static SSLConfig sslConfig;
   private SocketServer server = null;
 
   /**
@@ -31,7 +32,7 @@ public class SocketServerTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
@@ -45,7 +46,7 @@ public class SocketServerTest {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(config.port, PortType.PLAINTEXT));
     ports.add(new Port(config.port + 1000, PortType.SSL));
-    server = new SocketServer(config, new MetricRegistry(), ports);
+    server = new SocketServer(config, sslConfig, new MetricRegistry(), ports);
     server.start();
   }
 

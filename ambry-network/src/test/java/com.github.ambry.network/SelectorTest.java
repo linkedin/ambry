@@ -41,7 +41,7 @@ public class SelectorTest {
     List<Processor> processorThreads = new ArrayList<Processor>();
     this.selector =
         new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
-            SystemTime.getInstance());
+            SystemTime.getInstance(), null);
   }
 
   @After
@@ -122,7 +122,8 @@ public class SelectorTest {
   @Test
   public void testConnectionRefused()
       throws Exception {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -227,8 +228,8 @@ public class SelectorTest {
   /* connect and wait for the connection to complete */
   private String blockingConnect()
       throws IOException {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE,
-        PortType.PLAINTEXT);
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }

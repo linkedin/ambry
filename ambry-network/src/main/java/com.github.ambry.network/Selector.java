@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,12 +64,12 @@ public class Selector implements Selectable {
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
   private AtomicLong activeConnections;
-  private final SSLTempFactory sslFactory;
+  private final SSLFactory sslFactory;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time, SSLTempFactory sslFactory)
+  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory)
       throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
@@ -408,7 +409,12 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
-      transmission.close();
+      try {
+        transmission.close();
+      } catch (IOException e) {
+        logger.error("IOException thrown during closing of transmission with connectionId {} :",
+            transmission.getConnectionId(), e);
+      }
     } else {
       // is it possible to reach here? if so, how
       key.attach(null);

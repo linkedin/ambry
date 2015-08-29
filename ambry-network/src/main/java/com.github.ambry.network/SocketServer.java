@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -9,6 +10,8 @@ import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -47,8 +50,9 @@ public class SocketServer implements NetworkServer {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final NetworkMetrics metrics;
   private final HashMap<PortType, Port> ports;
+  private SSLFactory sslFactory;
 
-  public SocketServer(NetworkConfig config, MetricRegistry registry, ArrayList<Port> portList) {
+  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -62,6 +66,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
+    initializeSSLFactory(sslConfig);
   }
 
   public String getHost() {
@@ -70,6 +75,18 @@ public class SocketServer implements NetworkServer {
 
   public int getPort() {
     return port;
+  }
+
+  private void initializeSSLFactory(SSLConfig sslConfig) {
+    try {
+      if (sslConfig.sslEnabledDatacenters.length() > 0) {
+        this.sslFactory = new SSLFactory(sslConfig);
+      } else {
+        this.sslFactory = null;
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Exception thrown during initialization of SSLFactory ");
+    }
   }
 
   public int getSSLPort() {
@@ -121,7 +138,7 @@ public class SocketServer implements NetworkServer {
       throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for (int i = 0; i < numProcessorThreads; i++) {
-      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics));
+      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
@@ -384,13 +401,13 @@ class Processor extends AbstractServerThread {
   private final NetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
 
-  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics)
+  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics, SSLFactory sslFactory)
       throws IOException {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
     this.time = SystemTime.getInstance();
-    selector = new Selector(metrics, time);
+    selector = new Selector(metrics, time, sslFactory);
     this.metrics = metrics;
   }
 
@@ -468,7 +485,7 @@ class Processor extends AbstractServerThread {
    * Register any new connections that have been queued up
    */
   private void configureNewConnections()
-      throws ClosedChannelException {
+      throws ClosedChannelException, IOException {
     while (newConnections.size() > 0) {
       SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id,

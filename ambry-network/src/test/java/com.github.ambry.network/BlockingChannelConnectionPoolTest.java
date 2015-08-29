@@ -53,7 +53,8 @@ public class BlockingChannelConnectionPoolTest {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(6667, PortType.PLAINTEXT));
     ports.add(new Port(7667, PortType.SSL));
-    server1 = new SocketServer(config, new MetricRegistry(), ports);
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC2,DC3");
+    server1 = new SocketServer(config, sslConfig, new MetricRegistry(), ports);
     server1.start();
     props.setProperty("port", "6668");
     propverify = new VerifiableProperties(props);
@@ -61,7 +62,8 @@ public class BlockingChannelConnectionPoolTest {
     ports = new ArrayList<Port>();
     ports.add(new Port(6668, PortType.PLAINTEXT));
     ports.add(new Port(7668, PortType.SSL));
-    server2 = new SocketServer(config, new MetricRegistry(), ports);
+    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC3");
+    server2 = new SocketServer(config, sslConfig, new MetricRegistry(), ports);
     server2.start();
     props.setProperty("port", "6669");
     propverify = new VerifiableProperties(props);
@@ -69,7 +71,8 @@ public class BlockingChannelConnectionPoolTest {
     ports = new ArrayList<Port>();
     ports.add(new Port(6669, PortType.PLAINTEXT));
     ports.add(new Port(7669, PortType.SSL));
-    server3 = new SocketServer(config, new MetricRegistry(), ports);
+    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2");
+    server3 = new SocketServer(config, sslConfig, new MetricRegistry(), ports);
     server3.start();
   }
 

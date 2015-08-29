@@ -16,6 +16,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * PlainTextTransmission to interact with a given socketChannel using ssl encryption
  */
-public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel{
+public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel {
 
   private static final Logger log = LoggerFactory.getLogger(SSLTransmission.class);
   protected final SSLEngine sslEngine;
@@ -37,14 +38,12 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
   private NetworkReceive networkReceive;
   private NetworkSend networkSend;
-  private final SSLContext sslContext;
 
-  public SSLTransmission(SSLTempFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
+  public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger)
       throws GeneralSecurityException, IOException {
     super(connectionId, socketChannel, key, time, metrics, logger);
-    this.sslContext = sslFactory.createSSLContext();
-    this.sslEngine = sslFactory.createSSLEngine(sslContext, remoteHost, remotePort, true);
+    this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, SSLFactory.Mode.SERVER);
     this.netReadBuffer = ByteBuffer.allocate(packetBufferSize());
     this.netWriteBuffer = ByteBuffer.allocate(packetBufferSize());
     this.appReadBuffer = ByteBuffer.allocate(applicationBufferSize());
