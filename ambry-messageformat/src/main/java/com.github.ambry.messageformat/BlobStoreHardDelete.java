@@ -296,32 +296,16 @@ class MessageMetadata {
       throws IOException {
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(messageMetadataBytes));
     headerVersion = stream.readShort();
-
-    switch (headerVersion) {
-      case MessageFormatRecord.Message_Header_Version_V1:
-        userMetadataVersion = stream.readShort();
-        if (!MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion)) {
-          throw new IOException(
-              "Unknown user metadata version encountered while reading recovery metadata during hard delete "
-                  + userMetadataVersion);
-        }
-        if (userMetadataVersion == MessageFormatRecord.UserMetadata_Version_V1) {
-          userMetadataSize = stream.readInt();
-        }
-
-        blobRecordVersion = stream.readShort();
-        if (!MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
-          throw new IOException(
-              "Unknown blob record version encountered while reading recovery metadata during hard delete "
-                  + blobRecordVersion);
-        }
-        if (blobRecordVersion == MessageFormatRecord.Blob_Version_V1) {
-          blobStreamSize = stream.readLong();
-        }
-        break;
-      default:
-        throw new IOException(
-            "Unknown header version encountered while reading recovery metadata during hard delete " + headerVersion);
+    userMetadataVersion = stream.readShort();
+    userMetadataSize = stream.readInt();
+    blobRecordVersion = stream.readShort();
+    blobStreamSize = stream.readLong();
+    if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
+        !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
+        !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
+      throw new IOException(
+          "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
+              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
     }
     storeKey = factory.getStoreKey(stream);
   }
@@ -332,12 +316,12 @@ class MessageMetadata {
 
   byte[] toBytes()
       throws MessageFormatException {
-    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.getUserMetadataSizeFieldInBytes(userMetadataVersion) +
-        MessageFormatRecord.Version_Field_Size_In_Bytes +
-        MessageFormatRecord.getBlobSizeFieldInBytes(blobRecordVersion) +
-        storeKey.sizeInBytes()];
+    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes + // headerVersion
+        MessageFormatRecord.Version_Field_Size_In_Bytes +                     // userMetadataVersion
+        Integer.SIZE/8 +                                                      // userMetadataSize
+        MessageFormatRecord.Version_Field_Size_In_Bytes +                     // blobRecordVersion
+        Long.SIZE/8 +                                                         // blobRecordSize
+        storeKey.sizeInBytes()];                                              // storeKey
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
     bufWrap.putShort(headerVersion);

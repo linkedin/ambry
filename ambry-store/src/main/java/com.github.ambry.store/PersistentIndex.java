@@ -1076,7 +1076,7 @@ public class PersistentIndex {
       ByteArrayOutputStream outStream = new ByteArrayOutputStream();
 
       /* Write the number of entries */
-      byte[] numElementsArr = new byte[4];
+      byte[] numElementsArr = new byte[Integer.SIZE/8];
       ByteBuffer numElementsBuf = ByteBuffer.wrap(numElementsArr);
       numElementsBuf.putInt(blobReadOptionsList.size());
       outStream.write(numElementsArr);
@@ -1089,7 +1089,7 @@ public class PersistentIndex {
       /* Write the messageStoreRecoveryInfos */
       for (byte[] recoveryInfo : messageStoreRecoveryInfoList) {
         /* First write the size of the recoveryInfo */
-        byte[] lengthArr = new byte[4];
+        byte[] lengthArr = new byte[Integer.SIZE/8];
         ByteBuffer lengthBuf = ByteBuffer.wrap(lengthArr);
         lengthBuf.putInt(recoveryInfo.length);
         outStream.write(lengthArr);
