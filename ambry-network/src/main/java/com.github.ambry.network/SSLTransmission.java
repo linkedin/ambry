@@ -7,6 +7,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
@@ -22,7 +23,7 @@ import org.slf4j.LoggerFactory;
 /**
  * PlainTextTransmission to interact with a given socketChannel using ssl encryption
  */
-public class SSLTransmission extends Transmission {
+public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel{
 
   private static final Logger log = LoggerFactory.getLogger(SSLTransmission.class);
   protected final SSLEngine sslEngine;
@@ -38,7 +39,7 @@ public class SSLTransmission extends Transmission {
   private NetworkSend networkSend;
   private final SSLContext sslContext;
 
-  public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
+  public SSLTransmission(SSLTempFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger)
       throws GeneralSecurityException, IOException {
     super(connectionId, socketChannel, key, time, metrics, logger);
@@ -372,7 +373,7 @@ public class SSLTransmission extends Transmission {
     if (!hasReceive()) {
       networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
-    return read(networkReceive.getReceivedBytes().getPayload());
+    return networkReceive.getReceivedBytes().readFrom(this);
   }
 
   /**
@@ -461,8 +462,7 @@ public class SSLTransmission extends Transmission {
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     }
-
-    write(getByteBufferFromChannel(send));
+    send.writeTo(this);
     logger
         .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), getConnectionId());
     return send.isSendComplete();

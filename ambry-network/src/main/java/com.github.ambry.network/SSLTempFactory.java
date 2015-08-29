@@ -11,7 +11,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManagerFactory;
 
-public class SSLFactory {
+public class SSLTempFactory {
 
   private String protocol;
   private String provider;

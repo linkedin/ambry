@@ -63,12 +63,12 @@ public class Selector implements Selectable {
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
   private AtomicLong activeConnections;
-  private final SSLFactory sslFactory;
+  private final SSLTempFactory sslFactory;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory)
+  public Selector(NetworkMetrics metrics, Time time, SSLTempFactory sslFactory)
       throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
