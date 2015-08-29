@@ -78,12 +78,6 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean replicationValidateMessageStream;
 
-  /**
-   * List of Datacenters to which we need SSL encryption during replication
-   */
-  @Config("replication.ssl.enabled.datacenters")
-  public final String replicationSslEnabledDatacenters;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -105,6 +99,5 @@ public class ReplicationConfig {
     replicationMaxLagForWaitTimeInBytes =
         verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
-    replicationSslEnabledDatacenters = verifiableProperties.getString("replication.ssl.enabled.datacenters", "");
   }
 }

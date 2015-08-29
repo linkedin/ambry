@@ -3,12 +3,20 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,23 +41,34 @@ public class MockCluster {
   private NotificationSystem notificationSystem;
 
   public MockCluster(NotificationSystem notificationSystem)
-      throws IOException, InstantiationException {
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     this(notificationSystem, false, "");
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacenters)
-      throws IOException, InstantiationException {
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters)
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
-    ArrayList<String> sslEnabledDatacenterList = Utils.splitString(sslEnabledDatacenters, ",");
+    ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-        startServer(dataNodeId, getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), sslEnabledDatacenterList));
+        Properties sslProperties;
+        if (enableSSL) {
+          String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
+          sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        } else {
+          sslProperties = new Properties();
+        }
+        startServer(dataNodeId, sslProperties);
       }
     } catch (InstantiationException e) {
+      // clean up other servers which was started already
+      cleanup();
+      throw e;
+    } catch (GeneralSecurityException e) {
       // clean up other servers which was started already
       cleanup();
       throw e;
@@ -64,8 +83,8 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters)
-      throws IOException, InstantiationException {
+  private void startServer(DataNodeId dataNodeId, Properties sslProperties)
+      throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -75,7 +94,7 @@ public class MockCluster {
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
-    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
