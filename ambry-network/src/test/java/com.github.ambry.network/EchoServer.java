@@ -47,7 +47,7 @@ public class EchoServer extends Thread {
       this.serverSocket = sslContext.getServerSocketFactory().createServerSocket(port);
 
       // enable mutual authentication
-      ((SSLServerSocket)this.serverSocket).setNeedClientAuth(true);
+     // ((SSLServerSocket)this.serverSocket).setNeedClientAuth(true);
     }
     this.threads = Collections.synchronizedList(new ArrayList<Thread>());
     this.sockets = Collections.synchronizedList(new ArrayList<Socket>());

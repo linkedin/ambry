@@ -33,7 +33,7 @@ public abstract class Transmission{
   public void finishConnect()
       throws IOException {
     socketChannel.finishConnect();
-    key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
+      key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
   }
 
   public boolean isOpen(){

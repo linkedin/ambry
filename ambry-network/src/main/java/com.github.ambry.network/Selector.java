@@ -288,14 +288,19 @@ public class Selector implements Selectable {
         try {
           if (key.isConnectable()) {
             handleConnect(key, transmission);
-          } else if (key.isReadable()) {
-            read(key, transmission);
-          } else if (key.isWritable()) {
+          }
+
+          /* if channel is not ready finish prepare */
+          if (transmission.isConnected() && !transmission.ready()) {
+            transmission.prepare();
+          }
+
+          if (key.isReadable() && transmission.ready()) {
+              read(key, transmission);
+          } else if (key.isWritable() && transmission.ready()) {
             write(key, transmission);
           } else if (!key.isValid()) {
             close(key);
-          } else {
-            throw new IllegalStateException("Unrecognized key state for processor thread.");
           }
         } catch (IOException e) {
           String socketDescription = socketDescription(channel(key));
@@ -331,6 +336,11 @@ public class Selector implements Selectable {
     } else {
       return socket.getLocalAddress().toString();
     }
+  }
+
+  public boolean isChannelReady(String id) {
+    Transmission transmission = getTransmission(keyForId(id));
+    return transmission.ready();
   }
 
   @Override
