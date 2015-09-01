@@ -82,10 +82,10 @@ public class BlobStoreHardDeleteTest {
       // msg2: A good message that will be part of hard delete, with recoveryInfo.
       readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
-      MessageMetadata messageMetadata = new MessageMetadata(MessageFormatRecord.Message_Header_Version_V1,
+      HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
           BLOB_SIZE, keys[2]);
-      recoveryInfoList.add(messageMetadata.toBytes());
+      recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
       writeToBuffer(msg3d, (int) msg3d.getSize());
@@ -94,10 +94,10 @@ public class BlobStoreHardDeleteTest {
       // This should succeed.
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
-      messageMetadata = new MessageMetadata(MessageFormatRecord.Message_Header_Version_V1,
+      hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
           BLOB_SIZE, keys[3]);
-      recoveryInfoList.add(messageMetadata.toBytes());
+      recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.
       // This should fail.
