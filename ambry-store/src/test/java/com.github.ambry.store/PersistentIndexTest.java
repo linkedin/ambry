@@ -45,14 +45,14 @@ public class PersistentIndexTest {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()));
+          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, recovery, cleanup,
-          new StoreMetrics(datadir, new MetricRegistry()));
+          new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
     }
 
     IndexValue getValue(StoreKey key)

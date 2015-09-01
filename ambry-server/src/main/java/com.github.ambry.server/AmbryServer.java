@@ -2,9 +2,9 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -13,19 +13,20 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.PortType;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,17 +55,20 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
+  private Time time;
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time)
       throws IOException {
-    this(properties, clusterMap, new LoggingNotificationSystem());
+    this(properties, clusterMap, new LoggingNotificationSystem(), time);
   }
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem)
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem,
+      Time time)
       throws IOException {
     this.properties = properties;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
+    this.time = time;
   }
 
   public void startup()
@@ -100,7 +104,7 @@ public class AmbryServer {
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storeManager =
           new StoreManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
-              new BlobStoreRecovery(), new BlobStoreHardDelete());
+              new BlobStoreRecovery(), new BlobStoreHardDelete(), time);
       storeManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
@@ -113,7 +117,7 @@ public class AmbryServer {
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
-      if(nodeId.hasSSLPort()) {
+      if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, registry, ports);

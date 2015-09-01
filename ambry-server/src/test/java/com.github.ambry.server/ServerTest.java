@@ -36,7 +36,9 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -87,7 +89,7 @@ public class ServerTest {
   public void startStopTest()
       throws IOException, InstantiationException {
     // do nothing
-    cluster = new MockCluster(notificationSystem, false, "", "", "");
+    cluster = new MockCluster(notificationSystem, false, "", "", "", SystemTime.getInstance());
   }
 
   @Test
@@ -107,7 +109,7 @@ public class ServerTest {
       throws InterruptedException, IOException, InstantiationException {
     cluster =
         new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
-            sslEnabledDatacentersForDC3);
+            sslEnabledDatacentersForDC3, SystemTime.getInstance());
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -349,6 +351,9 @@ public class ServerTest {
           bytebufferToken.position(bytebufferToken.position() + size);
           parsedTokenValue = bytebufferToken.getLong();
 
+          File a = new File("/tmp/hello-there");
+          a.createNewFile();
+
           int num = stream.readInt();
           List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
           for (int i = 0; i < num; i++) {
@@ -392,7 +397,8 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    cluster = new MockCluster(notificationSystem, true, "", "", "");
+    MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
+    cluster = new MockCluster(notificationSystem, true, "", "", "", time);
     MockClusterMap clusterMap = cluster.getClusterMap();
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -514,6 +520,7 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
+    time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
@@ -644,6 +651,7 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
+    time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
@@ -719,7 +727,7 @@ public class ServerTest {
     // sourceNode is used to locate the datanode and hence has to be PlainText port
     cluster =
         new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
-            sslEnabledDatacentersForDC3);
+            sslEnabledDatacentersForDC3, SystemTime.getInstance());
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -1201,7 +1209,7 @@ public class ServerTest {
     // sourceNode is used to locate the datanode and hence has to be PlainTextPort
     cluster =
         new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacentersForDC1, sslEnabledDatacentersForDC2,
-            sslEnabledDatacentersForDC3);
+            sslEnabledDatacentersForDC3, SystemTime.getInstance());
 
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -1843,7 +1851,7 @@ public class ServerTest {
       boolean enableSSLPorts, String sslEnabledDatacenter1, String sslEnabledDatacenter2, String sslEnabledDatacenter3)
       throws InterruptedException, IOException, InstantiationException {
     cluster = new MockCluster(notificationSystem, enableSSLPorts, sslEnabledDatacenter1, sslEnabledDatacenter2,
-        sslEnabledDatacenter3);
+        sslEnabledDatacenter3, SystemTime.getInstance());
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);

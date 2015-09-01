@@ -4,6 +4,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.Properties;
 
@@ -25,7 +26,7 @@ public class AmbryMain {
 
       ClusterMap clusterMap = new ClusterMapManager(args[1], args[2], new ClusterMapConfig(vprops));
 
-      final AmbryServer server = new AmbryServer(vprops, clusterMap);
+      final AmbryServer server = new AmbryServer(vprops, clusterMap, SystemTime.getInstance());
 
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {

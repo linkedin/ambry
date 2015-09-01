@@ -7,11 +7,10 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -31,7 +30,7 @@ public class MockCluster {
   private NotificationSystem notificationSystem;
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
-      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3)
+      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3, Time time)
       throws IOException, InstantiationException {
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
@@ -39,11 +38,11 @@ public class MockCluster {
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (MockDataNodeId dataNodeId : dataNodes) {
       if (dataNodeId.getDatacenterName() == "DC1") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC1);
+        startServer(dataNodeId, sslEnabledDatacentersForDC1, time);
       } else if (dataNodeId.getDatacenterName() == "DC2") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC2);
+        startServer(dataNodeId, sslEnabledDatacentersForDC2, time);
       } else if (dataNodeId.getDatacenterName() == "DC3") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC3);
+        startServer(dataNodeId, sslEnabledDatacentersForDC3, time);
       }
     }
   }
@@ -56,20 +55,20 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters)
+  private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters, Time time)
       throws IOException, InstantiationException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
-    props.setProperty("store.deleted.message.retention.days", "0");
+    props.setProperty("store.deleted.message.retention.days", "1");
     props.setProperty("store.enable.hard.delete", "true");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
     VerifiableProperties propverify = new MockVerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
+    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem, time);
     server.startup();
     serverList.add(server);
   }

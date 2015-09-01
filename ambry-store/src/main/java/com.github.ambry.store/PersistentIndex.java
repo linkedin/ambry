@@ -5,8 +5,8 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -73,6 +73,7 @@ public class PersistentIndex {
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
   private final StoreMetrics metrics;
+  private Time time;
 
   private class IndexFilter implements FilenameFilter {
     @Override
@@ -92,9 +93,10 @@ public class PersistentIndex {
    * @throws StoreException
    */
   public PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics)
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Time time)
       throws StoreException {
     try {
+      this.time = time;
       this.scheduler = scheduler;
       this.metrics = metrics;
       this.log = log;
@@ -186,7 +188,7 @@ public class PersistentIndex {
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
       this.scheduler.schedule("index persistor", persistor,
-          config.storeDataFlushDelaySeconds + new Random().nextInt(SystemTime.SecsPerMin),
+          config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
       if (config.storeEnableHardDelete) {
@@ -506,7 +508,7 @@ public class PersistentIndex {
    */
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
       throws StoreException {
-    long startTimeInMs = SystemTime.getInstance().milliseconds();
+    long startTimeInMs = time.milliseconds();
     try {
       boolean tokenWasReset = false;
       long logEndOffsetBeforeFind = log.getLogEndOffset();
@@ -533,11 +535,11 @@ public class PersistentIndex {
               "Invalid token. Provided offset is outside the log range after clean shutdown");
         }
       }
-      logger.trace("Time used to validate token: {}", (SystemTime.getInstance().milliseconds() - startTimeInMs));
+      logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (storeToken.getStoreKey() == null) {
-        startTimeInMs = SystemTime.getInstance().milliseconds();
+        startTimeInMs = time.milliseconds();
         boolean inclusive = false;
         long offsetToStart = storeToken.getOffset();
         if (offsetToStart == StoreFindToken.Uninitialized_Offset) {
@@ -550,11 +552,10 @@ public class PersistentIndex {
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
-        logger.trace("Journal based token, Time used to get entries: {}",
-            (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
 
         if (entries != null) {
-          startTimeInMs = SystemTime.getInstance().milliseconds();
+          startTimeInMs = time.milliseconds();
           logger.trace("Index : " + dataDir + " retrieving from journal from offset " +
               offsetToStart + " total entries " + entries.size());
           long offsetEnd = offsetToStart;
@@ -573,13 +574,13 @@ public class PersistentIndex {
             }
           }
           logger.trace("Journal based token, Time used to generate message entries: {}",
-              (SystemTime.getInstance().milliseconds() - startTimeInMs));
+              (time.milliseconds() - startTimeInMs));
 
-          startTimeInMs = SystemTime.getInstance().milliseconds();
+          startTimeInMs = time.milliseconds();
           logger.trace("Index : " + dataDir + " new offset from find info " + offsetEnd);
           eliminateDuplicates(messageEntries);
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
-              (SystemTime.getInstance().milliseconds() - startTimeInMs));
+              (time.milliseconds() - startTimeInMs));
 
           StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId);
           if (messageEntries.size() == 0) {
@@ -596,24 +597,24 @@ public class PersistentIndex {
           Map.Entry<Long, IndexSegment> entry = indexes.floorEntry(offsetToStart);
           StoreFindToken newToken = null;
           if (entry != null && entry.getKey() != indexes.lastKey()) {
-            startTimeInMs = SystemTime.getInstance().milliseconds();
+            startTimeInMs = time.milliseconds();
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
                 new FindEntriesCondition(maxTotalSizeOfEntries));
             logger.trace("Journal based to segment based token, Time used to find entries: {}",
-                (SystemTime.getInstance().milliseconds() - startTimeInMs));
+                (time.milliseconds() - startTimeInMs));
 
-            startTimeInMs = SystemTime.getInstance().milliseconds();
+            startTimeInMs = time.milliseconds();
             updateDeleteStateForMessages(messageEntries);
             logger.trace("Journal based to segment based token, Time used to update delete state: {}",
-                (SystemTime.getInstance().milliseconds() - startTimeInMs));
+                (time.milliseconds() - startTimeInMs));
           } else {
             newToken = storeToken;
           }
 
-          startTimeInMs = SystemTime.getInstance().milliseconds();
+          startTimeInMs = time.milliseconds();
           eliminateDuplicates(messageEntries);
           logger.trace("Journal based to segment based token, Time used to eliminate duplicates: {}",
-              (SystemTime.getInstance().milliseconds() - startTimeInMs));
+              (time.milliseconds() - startTimeInMs));
 
           logger.trace("Index : " + dataDir +
               " new offset from find info" +
@@ -626,22 +627,21 @@ public class PersistentIndex {
       } else {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
-        startTimeInMs = SystemTime.getInstance().milliseconds();
+        startTimeInMs = time.milliseconds();
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getIndexStartOffset(), storeToken.getStoreKey(),
                 messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries));
-        logger.trace("Segment based token, Time used to find entries: {}",
-            (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
-        startTimeInMs = SystemTime.getInstance().milliseconds();
+        startTimeInMs = time.milliseconds();
         updateDeleteStateForMessages(messageEntries);
-        logger.trace("Segment based token, Time used to update delete state: {}",
-            (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger
+            .trace("Segment based token, Time used to update delete state: {}", (time.milliseconds() - startTimeInMs));
 
-        startTimeInMs = SystemTime.getInstance().milliseconds();
+        startTimeInMs = time.milliseconds();
         eliminateDuplicates(messageEntries);
-        logger.trace("Segment based token, Time used to eliminate duplicates: {}",
-            (SystemTime.getInstance().milliseconds() - startTimeInMs));
+        logger
+            .trace("Segment based token, Time used to eliminate duplicates: {}", (time.milliseconds() - startTimeInMs));
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
         newToken.setBytesRead(totalBytesRead);
@@ -1076,7 +1076,7 @@ public class PersistentIndex {
       ByteArrayOutputStream outStream = new ByteArrayOutputStream();
 
       /* Write the number of entries */
-      byte[] numElementsArr = new byte[Integer.SIZE/8];
+      byte[] numElementsArr = new byte[Integer.SIZE / 8];
       ByteBuffer numElementsBuf = ByteBuffer.wrap(numElementsArr);
       numElementsBuf.putInt(blobReadOptionsList.size());
       outStream.write(numElementsArr);
@@ -1089,7 +1089,7 @@ public class PersistentIndex {
       /* Write the messageStoreRecoveryInfos */
       for (byte[] recoveryInfo : messageStoreRecoveryInfoList) {
         /* First write the size of the recoveryInfo */
-        byte[] lengthArr = new byte[Integer.SIZE/8];
+        byte[] lengthArr = new byte[Integer.SIZE / 8];
         ByteBuffer lengthBuf = ByteBuffer.wrap(lengthArr);
         lengthBuf.putInt(recoveryInfo.length);
         outStream.write(lengthArr);
@@ -1166,20 +1166,18 @@ public class PersistentIndex {
     StoreFindToken recoveryEndToken;
     HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
-    private final int messageRetentionSeconds =
-        config.storeDeletedMessageRetentionDays * SystemTime.getInstance().SecsPerDay;
+    private final int messageRetentionSeconds = config.storeDeletedMessageRetentionDays * time.SecsPerDay;
     Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     AtomicBoolean running = new AtomicBoolean(true);
     boolean isCaughtUp = false;
 
     //how long to sleep if token does not advance.
-    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
+    private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * time.MsPerSec;
     private final long throttlerCheckIntervalMs = 10;
 
     HardDeleteThread() {
-      this.throttler =
-          new Throttler(config.storeHardDeleteBytesPerSec, throttlerCheckIntervalMs, true, SystemTime.getInstance());
+      this.throttler = new Throttler(config.storeHardDeleteBytesPerSec, throttlerCheckIntervalMs, true, time);
     }
 
     /**
@@ -1490,8 +1488,8 @@ public class PersistentIndex {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();
         try {
-          FindInfo info = findDeletedEntriesSince(startToken, scanSizeInBytes,
-              SystemTime.getInstance().seconds() - messageRetentionSeconds);
+          FindInfo info =
+              findDeletedEntriesSince(startToken, scanSizeInBytes, time.seconds() - messageRetentionSeconds);
           endToken = info.getFindToken();
           pruneHardDeleteRecoveryRange();
           if (!endToken.equals(startToken)) {
@@ -1548,7 +1546,7 @@ public class PersistentIndex {
                 if (!running.get()) {
                   break;
                 }
-                hardDeleteThread.wait(hardDeleterSleepTimeWhenCaughtUpMs);
+                time.wait(hardDeleteThread, hardDeleterSleepTimeWhenCaughtUpMs);
               }
             } else if (isCaughtUp) {
               isCaughtUp = false;

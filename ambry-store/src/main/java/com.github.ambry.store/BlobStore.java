@@ -1,22 +1,21 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Scheduler;
-import com.github.ambry.utils.SystemTime;
-import java.util.EnumSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.codahale.metrics.MetricRegistry;
-
+import com.github.ambry.utils.Time;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -40,9 +39,11 @@ public class BlobStore implements Store {
   private MessageStoreRecovery recovery;
   private MessageStoreHardDelete hardDelete;
   private StoreMetrics metrics;
+  private Time time;
 
   public BlobStore(StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
-      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete) {
+      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      Time time) {
     this.metrics = new StoreMetrics(dataDir, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
@@ -51,6 +52,7 @@ public class BlobStore implements Store {
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
+    this.time = time;
   }
 
   @Override
@@ -84,7 +86,7 @@ public class BlobStore implements Store {
               ". Another process or thread is using this directory.", StoreErrorCodes.Initialization_Error);
         }
         log = new Log(dataDir, capacityInBytes, metrics);
-        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics);
+        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics, time);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);
