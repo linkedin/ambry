@@ -89,8 +89,7 @@ final class GetBlobPropertiesOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobPropertiesOperation
-        .setBlobProperties(MessageFormatRecord.deserializeBlobProperties(inputStream).getBlobProperties());
+    getBlobPropertiesOperation.setBlobProperties(MessageFormatRecord.deserializeBlobProperties(inputStream));
   }
 }
 

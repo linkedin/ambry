@@ -173,8 +173,7 @@ public class AdminTool {
           return null;
         }
       } else {
-        BlobProperties properties =
-            MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream()).getBlobProperties();
+        BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
                 +
@@ -254,7 +253,7 @@ public class AdminTool {
           return null;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
         return blobOutput;
       }
     } catch (MessageFormatException mfe) {
@@ -332,8 +331,7 @@ public class AdminTool {
           return null;
         }
       } else {
-        ByteBuffer userMetadata =
-            MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream());
         System.out.println("Usermetadata deserialized. Size " + userMetadata.capacity());
         return userMetadata;
       }

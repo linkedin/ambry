@@ -60,7 +60,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
             // read the appropriate type of message based on the relative offset that is set
             if (headerFormat.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream).getBlobProperties();
+              BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
               // we do not use the user metadata or blob during recovery but we still deserialize them to check
               // for validity
               MessageFormatRecord.deserializeUserMetadata(stream);

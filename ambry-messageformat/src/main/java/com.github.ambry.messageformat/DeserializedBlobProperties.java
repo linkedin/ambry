@@ -1,6 +1,6 @@
 package com.github.ambry.messageformat;
 
-public class DeserializedBlobProperties {
+class DeserializedBlobProperties {
   private short version;
   private BlobProperties blobProperties;
 

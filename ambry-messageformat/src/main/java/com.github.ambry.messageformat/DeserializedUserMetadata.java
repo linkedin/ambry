@@ -3,7 +3,7 @@ package com.github.ambry.messageformat;
 import java.nio.ByteBuffer;
 
 
-public class DeserializedUserMetadata {
+class DeserializedUserMetadata {
   private final short version;
   private final ByteBuffer userMetadata;
 

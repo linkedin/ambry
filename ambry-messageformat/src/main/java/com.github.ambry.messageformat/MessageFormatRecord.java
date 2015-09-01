@@ -39,7 +39,12 @@ public class MessageFormatRecord {
   }
 
   // Deserialization methods for individual records
-  public static DeserializedBlobProperties deserializeBlobProperties(InputStream stream)
+  public static BlobProperties deserializeBlobProperties(InputStream stream)
+      throws IOException, MessageFormatException {
+    return deserializeAndGetBlobPropertiesWithVersion(stream).getBlobProperties();
+  }
+
+  static DeserializedBlobProperties deserializeAndGetBlobPropertiesWithVersion(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -86,7 +91,12 @@ public class MessageFormatRecord {
     }
   }
 
-  public static DeserializedUserMetadata deserializeUserMetadata(InputStream stream)
+  public static ByteBuffer deserializeUserMetadata(InputStream stream)
+      throws IOException, MessageFormatException {
+    return deserializeAndGetUserMetadataWithVersion(stream).getUserMetadata();
+  }
+
+  static DeserializedUserMetadata deserializeAndGetUserMetadataWithVersion(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -110,7 +120,12 @@ public class MessageFormatRecord {
     }
   }
 
-  public static DeserializedBlob deserializeBlob(InputStream stream)
+  public static BlobOutput deserializeBlob(InputStream stream)
+      throws IOException, MessageFormatException {
+    return deserializeAndGetBlobWithVersion(stream).getBlobOutput();
+  }
+
+  static DeserializedBlob deserializeAndGetBlobWithVersion(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);

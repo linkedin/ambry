@@ -1,9 +1,9 @@
 package com.github.ambry.tools.admin;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
@@ -16,13 +16,18 @@ import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -33,12 +38,6 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
-import java.io.DataInputStream;
-import java.io.FileInputStream;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.io.File;
 
 
 /**
@@ -564,12 +563,12 @@ public class DumpData {
           boolean isDeleted = false;
           if (header.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog).getBlobProperties();
+            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
             blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
                 " serviceId " + props.getServiceId();
-            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog).getUserMetadata();
+            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
             usermetadata = " Metadata - size " + metadata.capacity();
-            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
+            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
             blobOutput = "Blob - size " + output.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
@@ -735,12 +734,12 @@ public class DumpData {
         boolean isDeleted = false;
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog).getBlobProperties();
+          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
           blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
               " serviceId " + props.getServiceId();
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog).getUserMetadata();
+          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
           usermetadata = " Metadata - size " + metadata.capacity();
-          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
+          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
           blobOutput = "Blob - size " + output.getSize();
         } else {
           boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);

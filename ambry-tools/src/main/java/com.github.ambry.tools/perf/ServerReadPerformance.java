@@ -1,10 +1,10 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -27,21 +27,20 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
-import java.rmi.UnexpectedException;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.FileReader;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.rmi.UnexpectedException;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -154,7 +153,7 @@ public class ServerReadPerformance {
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
-            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
+            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) output.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
@@ -192,7 +191,7 @@ public class ServerReadPerformance {
             InputStream receivePropertyStream = channel.receive().getInputStream();
             GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
             BlobProperties blobProperties =
-                MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream()).getBlobProperties();
+                MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
             long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
 
             partitionRequestInfoList.clear();
@@ -208,7 +207,7 @@ public class ServerReadPerformance {
             GetResponse getResponseUserMetadata =
                 GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
             ByteBuffer userMetadata =
-                MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream()).getUserMetadata();
+                MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
             // delete the blob
             DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);

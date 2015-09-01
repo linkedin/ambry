@@ -176,8 +176,7 @@ public class ServerTest {
       InputStream stream = channel.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       } catch (MessageFormatException e) {
@@ -197,8 +196,7 @@ public class ServerTest {
       stream = channel.receive().getInputStream();
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       } catch (MessageFormatException e) {
@@ -236,8 +234,7 @@ public class ServerTest {
       streamExpired = channel.receive().getInputStream();
       respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
       try {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(respExpired.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(respExpired.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
         Assert.assertEquals(propertyOutput.getOwnerId(), "ownerid");
@@ -253,8 +250,7 @@ public class ServerTest {
       stream = channel.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
-        ByteBuffer userMetadataOutput =
-            MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
@@ -545,8 +541,7 @@ public class ServerTest {
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 6; i++) {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), properties.get(i).getBlobSize());
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
@@ -558,8 +553,7 @@ public class ServerTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 6; i++) {
-        ByteBuffer userMetadataOutput =
-            MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata.get(i));
       }
 
@@ -570,7 +564,7 @@ public class ServerTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 6; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
         Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
         byte[] dataOutput = new byte[(int) blobOutput.getSize()];
         blobOutput.getStream().read(dataOutput);
@@ -669,8 +663,7 @@ public class ServerTest {
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 9; i++) {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), properties.get(i).getBlobSize());
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       }
@@ -682,8 +675,7 @@ public class ServerTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 9; i++) {
-        ByteBuffer userMetadataOutput =
-            MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata.get(i));
       }
 
@@ -694,7 +686,7 @@ public class ServerTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 9; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
         Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
         byte[] dataOutput = new byte[(int) blobOutput.getSize()];
         blobOutput.getStream().read(dataOutput);
@@ -841,8 +833,7 @@ public class ServerTest {
       Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp1.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
       try {
-        BlobProperties propertyOutput =
-            MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream()).getBlobProperties();
+        BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         Assert.assertEquals(propertyOutput.getBlobSize(), 1000);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       } catch (MessageFormatException e) {
@@ -860,8 +851,7 @@ public class ServerTest {
       Assert.assertEquals(resp2.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp2.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
       try {
-        ByteBuffer userMetadataOutput =
-            MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
@@ -877,7 +867,7 @@ public class ServerTest {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream()).getBlobOutput();
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
         byte[] blobout = new byte[(int) blobOutput.getSize()];
         int readsize = 0;
         while (readsize < blobOutput.getSize()) {
@@ -1302,8 +1292,7 @@ public class ServerTest {
           InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
-            BlobProperties propertyOutput =
-                MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+            BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             Assert.assertEquals(propertyOutput.getBlobSize(), 100);
             Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
           } catch (MessageFormatException e) {
@@ -1322,8 +1311,7 @@ public class ServerTest {
           stream = channel.receive().getInputStream();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
-            ByteBuffer userMetadataOutput =
-                MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+            ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
             Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
           } catch (MessageFormatException e) {
             e.printStackTrace();
@@ -1343,7 +1331,7 @@ public class ServerTest {
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           //System.out.println("response from get " + resp.getError());
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -1461,8 +1449,7 @@ public class ServerTest {
           Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
         } else {
           try {
-            BlobProperties propertyOutput =
-                MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+            BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             Assert.assertEquals(propertyOutput.getBlobSize(), 100);
             Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
           } catch (MessageFormatException e) {
@@ -1486,8 +1473,7 @@ public class ServerTest {
           Assert.assertTrue(blobsDeleted.contains(blobIds.get(j)));
         } else {
           try {
-            ByteBuffer userMetadataOutput =
-                MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+            ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
             Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
           } catch (MessageFormatException e) {
             Assert.assertEquals(false, true);
@@ -1512,7 +1498,7 @@ public class ServerTest {
           blobsChecked.add(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -1573,8 +1559,7 @@ public class ServerTest {
           Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
         } else {
           try {
-            BlobProperties propertyOutput =
-                MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+            BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             Assert.assertEquals(propertyOutput.getBlobSize(), 100);
             Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
           } catch (MessageFormatException e) {
@@ -1598,8 +1583,7 @@ public class ServerTest {
           Assert.assertTrue(blobsChecked.contains(blobIds.get(j)));
         } else {
           try {
-            ByteBuffer userMetadataOutput =
-                MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+            ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
             Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
           } catch (MessageFormatException e) {
             Assert.assertEquals(false, true);
@@ -1623,7 +1607,7 @@ public class ServerTest {
           blobsChecked.remove(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -1743,8 +1727,7 @@ public class ServerTest {
                 throw new IllegalStateException();
               } else {
                 try {
-                  BlobProperties propertyOutput =
-                      MessageFormatRecord.deserializeBlobProperties(resp.getInputStream()).getBlobProperties();
+                  BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
                   if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
                     System.out.println("blob size not matching " + " expected " +
                         payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
@@ -1777,8 +1760,7 @@ public class ServerTest {
                 throw new IllegalStateException();
               } else {
                 try {
-                  ByteBuffer userMetadataOutput =
-                      MessageFormatRecord.deserializeUserMetadata(resp.getInputStream()).getUserMetadata();
+                  ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
                   if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0) {
                     throw new IllegalStateException();
                   }
@@ -1805,7 +1787,7 @@ public class ServerTest {
                 throw new IllegalStateException();
               } else {
                 try {
-                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
                   byte[] blobout = new byte[(int) blobOutput.getSize()];
                   int readsize = 0;
                   while (readsize < blobOutput.getSize()) {
@@ -1914,7 +1896,7 @@ public class ServerTest {
     InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), cluster.getClusterMap());
     Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
-    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
+    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
     byte[] blobout = new byte[(int) blobOutput.getSize()];
     int readsize = 0;
     while (readsize < blobOutput.getSize()) {

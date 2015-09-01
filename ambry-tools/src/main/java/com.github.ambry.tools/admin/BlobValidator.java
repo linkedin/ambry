@@ -391,8 +391,7 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobProperties properties =
-            MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream()).getBlobProperties();
+        BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
                 +
@@ -431,8 +430,7 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        ByteBuffer userMetadata =
-            MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream()).getUserMetadata();
+        ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream());
         System.out.println("Usermetadata deserialized. Size " + userMetadata.capacity());
       }
 
@@ -466,7 +464,7 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
         byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
         int blobSizeToRead = (int) blobOutput.getSize();
         int blobSizeRead = 0;

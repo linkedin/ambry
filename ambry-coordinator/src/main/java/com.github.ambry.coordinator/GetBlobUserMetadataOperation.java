@@ -89,8 +89,7 @@ final class GetBlobUserMetadataOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobUserMetadataOperation
-        .setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream).getUserMetadata());
+    getBlobUserMetadataOperation.setUserMetadata(MessageFormatRecord.deserializeUserMetadata(inputStream));
   }
 }
 

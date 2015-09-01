@@ -67,7 +67,7 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
           // read the appropriate type of message based on the relative offset that is set
           if (headerFormat.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream).getBlobProperties();
+            BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
             return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
                 Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
           } else {
@@ -238,7 +238,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
         blobPropertiesSize);
     blobProperties.flip();
 
-    return MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(blobProperties)).getBlobProperties();
+    return MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
   }
 
   private DeserializedUserMetadata getUserMetadataInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
@@ -250,7 +250,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(userMetaData)), relativeOffset,
         userMetadataSize);
     userMetaData.flip();
-    return MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(userMetaData));
+    return MessageFormatRecord.deserializeAndGetUserMetadataWithVersion(new ByteBufferInputStream(userMetaData));
   }
 
   private DeserializedBlob getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
@@ -262,7 +262,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobRecord)), relativeOffset,
         blobRecordSize);
     blobRecord.flip();
-    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blobRecord));
+    return MessageFormatRecord.deserializeAndGetBlobWithVersion(new ByteBufferInputStream(blobRecord));
   }
 }
 
@@ -318,9 +318,9 @@ class MessageMetadata {
       throws MessageFormatException {
     byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes + // headerVersion
         MessageFormatRecord.Version_Field_Size_In_Bytes +                     // userMetadataVersion
-        Integer.SIZE/8 +                                                      // userMetadataSize
+        Integer.SIZE / 8 +                                                      // userMetadataSize
         MessageFormatRecord.Version_Field_Size_In_Bytes +                     // blobRecordVersion
-        Long.SIZE/8 +                                                         // blobRecordSize
+        Long.SIZE / 8 +                                                         // blobRecordSize
         storeKey.sizeInBytes()];                                              // storeKey
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);

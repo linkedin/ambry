@@ -1,6 +1,6 @@
 package com.github.ambry.messageformat;
 
-public class DeserializedBlob {
+class DeserializedBlob {
   private short version;
   private BlobOutput blobOutput;
 
