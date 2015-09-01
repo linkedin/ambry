@@ -417,8 +417,8 @@ class Processor extends AbstractServerThread {
       while (isRunning()) {
         // setup any new connections that have been queued up
         configureNewConnections();
-        // register any new responses for writing
         selector.poll(pollTimeoutMs);
+        // register any new responses for writing
         processNewResponses();
 
         // handle completed receives

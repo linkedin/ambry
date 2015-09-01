@@ -140,7 +140,7 @@ public class Selector implements Selectable {
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
     Transmission transmission = TransmissionFactory
         .getChannelWrapper(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics, logger,
-            portType, sslFactory);
+            portType, sslFactory, SSLFactory.Mode.CLIENT);
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
@@ -159,7 +159,7 @@ public class Selector implements Selectable {
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
     Transmission transmission = TransmissionFactory
         .getChannelWrapper(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
-            metrics, logger, portType, sslFactory);
+            metrics, logger, portType, sslFactory, SSLFactory.Mode.SERVER);
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());

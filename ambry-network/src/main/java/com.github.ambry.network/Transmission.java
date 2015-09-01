@@ -50,7 +50,7 @@ public abstract class Transmission{
     key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
   }
 
-  abstract void prepare()throws IOException;
+  abstract void prepare() throws IOException;
 
   abstract  boolean ready();
 

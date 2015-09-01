@@ -44,7 +44,9 @@ public class SSLFactory {
 
     ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
     if (cipherSuitesList != null && cipherSuitesList.size() > 0) {
-      this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+      if( !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+        this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+      }
     }
 
     ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
@@ -52,7 +54,7 @@ public class SSLFactory {
       this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
     }
 
-    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0) {
+    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0 & !sslConfig.sslEndpointIdentificationAlgorithm.equals("")) {
       this.endpointIdentification = sslConfig.sslEndpointIdentificationAlgorithm;
     }
 

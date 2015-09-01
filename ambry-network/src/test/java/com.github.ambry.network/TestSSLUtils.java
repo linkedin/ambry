@@ -161,8 +161,8 @@ public class TestSSLUtils {
     props.put("ssl.context.protocol", sslContextProtocol);
     props.put("ssl.context.provider", sslContextProvider);
     props.put("ssl.enabled.protocols", sslEnabledProtocol);
-    props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
-    props.put("ssl.client.authentication", "required");
+   // props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
+    //props.put("ssl.client.authentication", "required");
     props.put("ssl.keymanager.algorithm", "PKIX");
     props.put("ssl.trustmanager.algorithm", "PKIX");
     props.put("ssl.keystore.type", "JKS");
@@ -172,7 +172,7 @@ public class TestSSLUtils {
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", trustStorePassword);
-    props.put("ssl.cipher.suites", sslCipherSuits);
+    //props.put("ssl.cipher.suites", sslCipherSuits);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }

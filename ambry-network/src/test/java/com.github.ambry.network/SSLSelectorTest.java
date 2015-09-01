@@ -221,8 +221,9 @@ public class SSLSelectorTest {
       selector.poll(10000L);
     }
     //finish the handshake as well
-    while (!selector.isChannelReady(connectionId))
+    while (!selector.isChannelReady(connectionId)) {
       selector.poll(10000L);
+    }
     return connectionId;
   }
 }

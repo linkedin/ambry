@@ -12,14 +12,14 @@ import org.slf4j.Logger;
 public class TransmissionFactory {
   public static Transmission getChannelWrapper(String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger, PortType portType,
-      SSLFactory sslFactory)
+      SSLFactory sslFactory, SSLFactory.Mode mode)
       throws IOException {
     try {
       if (portType == PortType.PLAINTEXT) {
         return new PlainTextTransmission(connectionId, socketChannel, key, time, metrics, logger);
       } else if (portType == PortType.SSL) {
         return new SSLTransmission(sslFactory, connectionId, socketChannel, key, remoteHost, remotePort, time, metrics,
-            logger);
+            logger, mode);
       } else {
         throw new IllegalArgumentException("UnSupported portType " + portType + " passed in");
       }

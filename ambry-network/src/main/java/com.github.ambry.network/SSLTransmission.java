@@ -40,10 +40,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private NetworkSend networkSend;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
-      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger)
+      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger, SSLFactory.Mode mode)
       throws GeneralSecurityException, IOException {
     super(connectionId, socketChannel, key, time, metrics, logger);
-    this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, SSLFactory.Mode.SERVER);
+    this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
     this.netReadBuffer = ByteBuffer.allocate(packetBufferSize());
     this.netWriteBuffer = ByteBuffer.allocate(packetBufferSize());
     this.appReadBuffer = ByteBuffer.allocate(applicationBufferSize());
@@ -577,8 +577,4 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     }
   }
 
-  /*@Override
-  public boolean isMute() {
-    return  key.isValid() && (key.interestOps() & SelectionKey.OP_READ) == 0;
-  } */
 }
