@@ -67,7 +67,7 @@ public class MockCluster {
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
-    VerifiableProperties propverify = new MockVerifiableProperties(props);
+    VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem, time);
     server.startup();
     serverList.add(server);
@@ -86,21 +86,6 @@ public class MockCluster {
     }
 
     clusterMap.cleanup();
-  }
-}
-
-class MockVerifiableProperties extends VerifiableProperties {
-  public MockVerifiableProperties(Properties props) {
-    super(props);
-  }
-
-  @Override
-  public int getIntInRange(String name, int defaultVal, int start, int end) {
-    if (name.equals("store.deleted.message.retention.days")) {
-      return super.getIntInRange(name, defaultVal, 0, end);
-    } else {
-      return super.getIntInRange(name, defaultVal, start, end);
-    }
   }
 }
 

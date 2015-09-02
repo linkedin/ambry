@@ -526,3 +526,56 @@ public class MessageFormatRecord {
   }
 }
 
+class DeserializedBlobProperties {
+  private short version;
+  private BlobProperties blobProperties;
+
+  public DeserializedBlobProperties(short version, BlobProperties blobProperties) {
+    this.version = version;
+    this.blobProperties = blobProperties;
+  }
+
+  public short getVersion() {
+    return version;
+  }
+
+  public BlobProperties getBlobProperties() {
+    return blobProperties;
+  }
+}
+
+class DeserializedUserMetadata {
+  private final short version;
+  private final ByteBuffer userMetadata;
+
+  public DeserializedUserMetadata(short version, ByteBuffer userMetadata) {
+    this.version = version;
+    this.userMetadata = userMetadata;
+  }
+
+  public short getVersion() {
+    return version;
+  }
+
+  public ByteBuffer getUserMetadata() {
+    return userMetadata;
+  }
+}
+
+class DeserializedBlob {
+  private short version;
+  private BlobOutput blobOutput;
+
+  public DeserializedBlob(short version, BlobOutput blobOutput) {
+    this.version = version;
+    this.blobOutput = blobOutput;
+  }
+
+  public short getVersion() {
+    return version;
+  }
+
+  public BlobOutput getBlobOutput() {
+    return blobOutput;
+  }
+}

@@ -1038,8 +1038,8 @@ public class PersistentIndex {
    * associated blob. This is the information that is persisted from time to time.
    */
   private class HardDeletePersistInfo {
-    List<BlobReadOptions> blobReadOptionsList;
-    List<byte[]> messageStoreRecoveryInfoList;
+    private List<BlobReadOptions> blobReadOptionsList;
+    private List<byte[]> messageStoreRecoveryInfoList;
 
     HardDeletePersistInfo() {
       this.blobReadOptionsList = new ArrayList<BlobReadOptions>();
@@ -1074,28 +1074,23 @@ public class PersistentIndex {
     byte[] toBytes()
         throws IOException {
       ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+      DataOutputStream dataOutputStream = new DataOutputStream(outStream);
 
       /* Write the number of entries */
-      byte[] numElementsArr = new byte[Integer.SIZE / 8];
-      ByteBuffer numElementsBuf = ByteBuffer.wrap(numElementsArr);
-      numElementsBuf.putInt(blobReadOptionsList.size());
-      outStream.write(numElementsArr);
+      dataOutputStream.writeInt(blobReadOptionsList.size());
 
-      /* Write the blobReadOptions */
+      /* Write all the blobReadOptions */
       for (BlobReadOptions blobReadOptions : blobReadOptionsList) {
-        outStream.write(blobReadOptions.toBytes());
+        dataOutputStream.write(blobReadOptions.toBytes());
       }
 
-      /* Write the messageStoreRecoveryInfos */
+      /* Write all the messageStoreRecoveryInfos */
       for (byte[] recoveryInfo : messageStoreRecoveryInfoList) {
         /* First write the size of the recoveryInfo */
-        byte[] lengthArr = new byte[Integer.SIZE / 8];
-        ByteBuffer lengthBuf = ByteBuffer.wrap(lengthArr);
-        lengthBuf.putInt(recoveryInfo.length);
-        outStream.write(lengthArr);
+        dataOutputStream.writeInt(recoveryInfo.length);
 
         /* Now, write the recoveryInfo */
-        outStream.write(recoveryInfo);
+        dataOutputStream.write(recoveryInfo);
       }
 
       return outStream.toByteArray();

@@ -347,9 +347,6 @@ public class ServerTest {
           bytebufferToken.position(bytebufferToken.position() + size);
           parsedTokenValue = bytebufferToken.getLong();
 
-          File a = new File("/tmp/hello-there");
-          a.createNewFile();
-
           int num = stream.readInt();
           List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
           for (int i = 0; i < num; i++) {

@@ -311,7 +311,8 @@ public class ReplicationTest {
 
     public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
         StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-        Map<PartitionId, MockStore> stores) {
+        Map<PartitionId, MockStore> stores)
+        throws StoreException {
       super(config, scheduler, registry, replicas, factory, recovery, hardDelete, SystemTime.getInstance());
       this.stores = stores;
     }

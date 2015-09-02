@@ -78,8 +78,6 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
 
-    hardDeleteStreamRelativeOffset = userMetadataRelativeOffset;
-
     buffer = ByteBuffer
         .allocate(userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
 

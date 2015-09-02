@@ -103,7 +103,8 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     this.recoveryInfoMap = new HashMap<StoreKey, HardDeleteRecoveryMetadata>();
     if (recoveryInfoList != null) {
       for (byte[] recoveryInfo : recoveryInfoList) {
-        HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(recoveryInfo, storeKeyFactory);
+        HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
+            new HardDeleteRecoveryMetadata(recoveryInfo, storeKeyFactory);
         recoveryInfoMap.put(hardDeleteRecoveryMetadata.getStoreKey(), hardDeleteRecoveryMetadata);
       }
     }
@@ -198,14 +199,15 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
                       .getBlobPropertiesRecordRelativeOffset()));
               blobStreamSize = blobRecordInfo.getBlobOutput().getSize();
               blobRecordVersion = blobRecordInfo.getVersion();
-              hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
-                  blobRecordVersion, blobStreamSize, storeKey);
+              hardDeleteRecoveryMetadata =
+                  new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
+                      blobRecordVersion, blobStreamSize, storeKey);
             } else {
               logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
-              userMetadataVersion = hardDeleteRecoveryMetadata.userMetadataVersion;
-              blobRecordVersion = hardDeleteRecoveryMetadata.blobRecordVersion;
-              userMetadataSize = hardDeleteRecoveryMetadata.userMetadataSize;
-              blobStreamSize = hardDeleteRecoveryMetadata.blobStreamSize;
+              userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
+              blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
+              userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
+              blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();
             }
 
             HardDeleteMessageFormatInputStream hardDeleteStream =
@@ -266,12 +268,12 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
 }
 
 class HardDeleteRecoveryMetadata {
-  short headerVersion;
-  short userMetadataVersion;
-  int userMetadataSize;
-  short blobRecordVersion;
-  long blobStreamSize;
-  StoreKey storeKey;
+  private short headerVersion;
+  private short userMetadataVersion;
+  private int userMetadataSize;
+  private short blobRecordVersion;
+  private long blobStreamSize;
+  private StoreKey storeKey;
 
   HardDeleteRecoveryMetadata(short headerVersion, short userMetadataVersion, int userMetadataSize,
       short blobRecordVersion, long blobStreamSize, StoreKey storeKey)
@@ -313,8 +315,27 @@ class HardDeleteRecoveryMetadata {
     return storeKey;
   }
 
-  byte[] toBytes()
-      throws MessageFormatException {
+  short getHeaderVersion() {
+    return headerVersion;
+  }
+
+  short getUserMetadataVersion() {
+    return userMetadataVersion;
+  }
+
+  int getUserMetadataSize() {
+    return userMetadataSize;
+  }
+
+  short getBlobRecordVersion() {
+    return blobRecordVersion;
+  }
+
+  long getBlobStreamSize() {
+    return blobStreamSize;
+  }
+
+  byte[] toBytes() {
     byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes + // headerVersion
         MessageFormatRecord.Version_Field_Size_In_Bytes +                     // userMetadataVersion
         Integer.SIZE / 8 +                                                      // userMetadataSize

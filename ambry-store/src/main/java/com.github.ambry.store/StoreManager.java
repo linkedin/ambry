@@ -32,7 +32,8 @@ public class StoreManager {
   private Time time;
 
   public StoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time)
+      throws StoreException {
     this.config = config;
     this.scheduler = scheduler;
     this.registry = registry;
@@ -42,6 +43,7 @@ public class StoreManager {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.time = time;
+    verifyConfigs();
   }
 
   private void verifyConfigs()
@@ -57,7 +59,6 @@ public class StoreManager {
 
   public void start()
       throws StoreException {
-    verifyConfigs();
     logger.info("Starting store manager");
     // iterate through the replicas for this node and create the stores
     for (ReplicaId replica : replicas) {
