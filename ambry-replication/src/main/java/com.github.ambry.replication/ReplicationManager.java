@@ -480,10 +480,17 @@ public final class ReplicationManager {
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
+    if (numberOfReplicaThreads == 0) {
+      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads");
+      return;
+    }
+
     if (replicasToReplicate.size() == 0) {
       logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
       return;
-    } else if (replicasToReplicate.size() < numberOfReplicaThreads) {
+    }
+
+    if (replicasToReplicate.size() < numberOfReplicaThreads) {
       logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
           numberOfReplicaThreads, replicasToReplicate.size());
       numberOfReplicaThreads = replicasToReplicate.size();
