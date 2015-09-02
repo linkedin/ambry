@@ -488,7 +488,9 @@ public final class ReplicationManager {
     if (replicasToReplicate.size() == 0) {
       logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
       return;
-    } else if (replicasToReplicate.size() < numberOfReplicaThreads) {
+    }
+
+    if (replicasToReplicate.size() < numberOfReplicaThreads) {
       logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
           numberOfReplicaThreads, replicasToReplicate.size());
       numberOfReplicaThreads = replicasToReplicate.size();
