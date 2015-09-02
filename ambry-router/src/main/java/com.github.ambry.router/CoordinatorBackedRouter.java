@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  * A {@link Router} that uses a {@link Coordinator} in the background to perform its operations.
  * <p/>
  * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerOperationPoolSize} on
- * instantiation. This thread pool is used to provide non-blocking behaviour by executing the blocking operations of the
+ * instantiation. This thread pool is used to provide non-blocking behavior by executing the blocking operations of the
  * {@link Coordinator} in the background.
  * <p/>
  * If the thread pool is exhausted, the CoordinatorBackedRouter remains non-blocking but latency of operations will
@@ -127,20 +127,20 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public void close() {
-    if (!shuttingDown.getAndSet(true)) {
-      logger.info("CoordinatorBackedRouter closing");
-      if (!operationPool.isShutdown()) {
-        try {
-          operationPool.shutdown();
-          operationPool.awaitTermination(1, TimeUnit.MINUTES);
-          coordinator.close();
-          logger.info("CoordinatorBackedRouter closed");
-        } catch (IOException e) {
-          logger.error("Error closing Coordinator in CoordinatorBackedRouter", e);
-        } catch (Exception e) {
-          logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
-        }
+    try {
+      if (shuttingDown.compareAndSet(false, true)) {
+        logger.info("CoordinatorBackedRouter closing");
+        operationPool.shutdown();
+        operationPool.awaitTermination(1, TimeUnit.MINUTES);
+        coordinator.close();
+        logger.info("CoordinatorBackedRouter closed");
+      } else {
+        operationPool.awaitTermination(1, TimeUnit.MINUTES);
       }
+    } catch (IOException e) {
+      logger.error("Error closing Coordinator in CoordinatorBackedRouter", e);
+    } catch (InterruptedException e) {
+      logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
     }
   }
 }
@@ -248,6 +248,8 @@ class CoordinatorOperation implements Runnable {
         case DeleteBlob:
           coordinator.deleteBlob(blobId);
           break;
+        default:
+          throw new IllegalStateException("Unsupported CoordinatorOperationType - " + opType);
       }
     } catch (CoordinatorException e) {
       exception = new RouterException(e, RouterErrorCode.convertCoordinatorErrorToRouterErrorCode(e.getErrorCode()));

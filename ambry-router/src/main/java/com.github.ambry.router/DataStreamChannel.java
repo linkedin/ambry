@@ -1,6 +1,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.network.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -29,19 +30,7 @@ class DataStreamChannel implements ReadableStreamChannel {
   public DataStreamChannel(InputStream inputStream, long size)
       throws IOException {
     byte[] buf = new byte[(int) size];
-    int read = 0;
-    while (read < size) {
-      int sizeToRead = (int) size - read;
-      int sizeRead = inputStream.read(buf, read, sizeToRead);
-      if (sizeRead == -1) {
-        break;
-      }
-      read += sizeRead;
-    }
-    if (read != size) {
-      throw new IllegalStateException(
-          "Stream reached EOF with " + read + " bytes read out of an expected size of " + size);
-    }
+    Utils.readBytesFromStream(inputStream, buf, 0, (int) size);
     buffer = ByteBuffer.wrap(buf);
   }
 
@@ -53,20 +42,26 @@ class DataStreamChannel implements ReadableStreamChannel {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten = 0;
+    int bytesWritten;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
-    } else if (!buffer.hasRemaining()) {
-      bytesWritten = -1;
     } else {
       try {
         bufferReadLock.lock();
-        bytesWritten = channel.write(buffer);
+        bytesWritten = -1;
+        if (buffer.hasRemaining()) {
+          bytesWritten = channel.write(buffer);
+        }
       } finally {
         bufferReadLock.unlock();
       }
     }
     return bytesWritten;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
   }
 
   @Override

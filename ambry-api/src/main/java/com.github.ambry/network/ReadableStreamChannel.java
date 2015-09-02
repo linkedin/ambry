@@ -1,7 +1,7 @@
 package com.github.ambry.network;
 
-import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.Channel;
 import java.nio.channels.WritableByteChannel;
 
 
@@ -15,7 +15,7 @@ import java.nio.channels.WritableByteChannel;
  * the first operation is complete.  Whether or not other kinds of I/O operations may proceed concurrently with a read
  * operation depends upon the type of the channel.
  */
-public interface ReadableStreamChannel extends Closeable {
+public interface ReadableStreamChannel extends Channel {
 
   /**
    * Return the size of stream that is available on this channel. If -1, then size is unknown.
@@ -26,9 +26,9 @@ public interface ReadableStreamChannel extends Closeable {
   /**
    * Reads a sequence of bytes into the {@link WritableByteChannel} provided.
    * <p/>
-   * This operation might read all the bytes in the channel or might not read any bytes at all. It's behaviour depends
+   * This operation might read all the bytes in the channel or might not read any bytes at all. Its behavior depends
    * upon the nature and state of this ReadableStreamChannel and the {@link WritableByteChannel}. It is guaranteed,
-   * however, that if a channel is in blocking mode, then this method will block until at least one byte is read into
+   * however, that if this channel is in blocking mode, then this method will block until at least one byte is read into
    * the {@link WritableByteChannel}.
    * <p/>
    * This method may be invoked at any time.  However, if another thread has already initiated another read operation

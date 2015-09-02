@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,11 +16,17 @@ import org.slf4j.LoggerFactory;
  */
 class ReadableStreamChannelInputStream extends InputStream {
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final AtomicInteger totalBytesRead = new AtomicInteger(0);
   private final ByteBufferChannel singleByteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate(1));
   private final ReadableStreamChannel readableStreamChannel;
 
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
+  }
+
+  @Override
+  public int available() {
+    return (int) readableStreamChannel.getSize() - totalBytesRead.get();
   }
 
   @Override
@@ -31,6 +38,7 @@ class ReadableStreamChannelInputStream extends InputStream {
     if (read(singleByteBufferChannel) != -1) {
       buffer.flip();
       data = buffer.get() & 0xFF;
+      totalBytesRead.incrementAndGet();
     }
     return data;
   }
@@ -47,7 +55,11 @@ class ReadableStreamChannelInputStream extends InputStream {
     }
 
     ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.wrap(b, off, len));
-    return read(byteBufferChannel);
+    int bytesRead = read(byteBufferChannel);
+    if (bytesRead > 0) {
+      totalBytesRead.addAndGet(bytesRead);
+    }
+    return bytesRead;
   }
 
   /**
@@ -64,15 +76,19 @@ class ReadableStreamChannelInputStream extends InputStream {
    */
   private int read(WritableByteChannel channel)
       throws IOException {
-    int waitTime = 0;
+    int SINGLE_WAIT_TIME = 10;
+    int WARN_INTERVAL = 50;
+    int totalWaitTime = 0;
     int bytesRead;
     while (true) {
       bytesRead = readableStreamChannel.read(channel);
       if (bytesRead == 0) {
         try {
-          Thread.sleep(10);
-          waitTime += 10;
-          logger.warn("ReadableStreamChannelInputStream has been waiting for " + waitTime + "ms for data");
+          Thread.sleep(SINGLE_WAIT_TIME);
+          totalWaitTime += SINGLE_WAIT_TIME;
+          if (totalWaitTime % WARN_INTERVAL == 0) {
+            logger.warn("ReadableStreamChannelInputStream has been waiting for " + totalWaitTime + "ms for data");
+          }
         } catch (InterruptedException e) {
           throw new IOException("Wait for data interrupted", e);
         }

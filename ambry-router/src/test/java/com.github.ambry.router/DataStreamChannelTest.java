@@ -11,9 +11,7 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -35,17 +33,22 @@ public class DataStreamChannelTest {
   }
 
   /**
-   * Tests that the right exceptions are thrown when instantiation of {@link DataStreamChannel} fails.
+   * Tests instantiation of {@link DataStreamChannel} and that the right exceptions are thrown if a failure occurs.
    * @throws IOException
    */
   @Test
-  public void instantiationFailureTests()
+  public void instantiationTests()
       throws IOException {
     byte[] in = new byte[1024];
+
+    InputStream stream = new ByteArrayInputStream(in);
+    new DataStreamChannel(stream, 1023);
+    assertEquals("Available differs from expected", 1, stream.available());
+
     try {
       new DataStreamChannel(new ByteArrayInputStream(in), in.length + 1);
       fail("Should have failed because size input provided is greater than actual stream length");
-    } catch (IllegalStateException e) {
+    } catch (IOException e) {
       // expected. nothing to do.
     }
 
@@ -86,7 +89,7 @@ public class DataStreamChannelTest {
   }
 
   /**
-   * Tests behaviour of read operations on some corner cases.
+   * Tests behavior of read operations on some corner cases.
    * <p/>
    * Corner case list:
    * 1. Blob size is 0.
@@ -97,6 +100,7 @@ public class DataStreamChannelTest {
       throws IOException {
     // 0 sized blob.
     DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(new byte[0]), 0);
+    assertTrue("DataStreamChannel is not open", dataStreamChannel.isOpen());
     assertEquals("There should have been no bytes to read", -1,
         dataStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
   }
@@ -111,9 +115,12 @@ public class DataStreamChannelTest {
       throws IOException {
     byte[] in = fillRandomBytes(new byte[1]);
     DataStreamChannel dataStreamChannel = new DataStreamChannel(new ByteArrayInputStream(in), in.length);
+    assertTrue("DataStreamChannel is not open", dataStreamChannel.isOpen());
     dataStreamChannel.close();
+    assertFalse("DataStreamChannel is not closed", dataStreamChannel.isOpen());
     // should not throw exception.
     dataStreamChannel.close();
+    assertFalse("DataStreamChannel is not closed", dataStreamChannel.isOpen());
   }
 
   // helpers
@@ -129,6 +136,7 @@ public class DataStreamChannelTest {
     byte[] in = new byte[1024];
     DataStreamChannel dataStreamChannel =
         new DataStreamChannel(new ByteArrayInputStream(fillRandomBytes(in)), in.length);
+    assertTrue("DataStreamChannel is not open", dataStreamChannel.isOpen());
     assertEquals("Size returned by DataStreamChannel did not match source array size", in.length,
         dataStreamChannel.getSize());
     ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) dataStreamChannel.getSize()));

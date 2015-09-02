@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
- * An implementation of {@link com.github.ambry.coordinator.Coordinator} for use in tests. Can be configured for custom behaviour to check for
- * various scenarios.
+ * An implementation of {@link com.github.ambry.coordinator.Coordinator} for use in tests. Can be configured for custom
+ * behavior to check for various scenarios.
  */
 class MockCoordinator implements Coordinator {
   protected static String CHECKED_EXCEPTION_ON_OPERATION_START = "coordinator.checked.exception.on.operation.start";
@@ -41,7 +41,7 @@ class MockCoordinator implements Coordinator {
 
   /**
    * Creates an instance of MockCoordinator.
-   * @param verifiableProperties properties map that defines the behaviour of this instance.
+   * @param verifiableProperties properties map that defines the behavior of this instance.
    * @param clusterMap the cluster map to use.
    */
   public MockCoordinator(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
@@ -209,8 +209,6 @@ class MockCoordinator implements Coordinator {
       throws IOException {
     if (verifiableProperties.getBoolean(CHECKED_EXCEPTION_ON_OPERATION_START, false)) {
       throw new IOException(CHECKED_EXCEPTION_ON_OPERATION_START);
-    } else if (verifiableProperties.getBoolean(RUNTIME_EXCEPTION_ON_OPERATION_START, false)) {
-      throw new RuntimeException(RUNTIME_EXCEPTION_ON_OPERATION_START);
     }
     open.set(false);
   }

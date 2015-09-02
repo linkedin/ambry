@@ -82,6 +82,27 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
   }
 
+  @Test
+  public void availableTest()
+      throws IOException {
+    byte[] in = new byte[1024];
+    new Random().nextBytes(in);
+    ReadableStreamChannel channel = new DataStreamChannel(new ByteArrayInputStream(in), in.length);
+    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
+
+    byte[] out = new byte[in.length / 5];
+    int totalBytesRead = 0;
+    for (int i = 0; totalBytesRead < in.length; i++) {
+      int sourceStart = out.length * i;
+      assertEquals("Available differs from expected", in.length - sourceStart, dstInputStream.available());
+      int bytesRead = dstInputStream.read(out);
+      assertArrayEquals("Byte array obtained from InputStream did not match source",
+          Arrays.copyOfRange(in, sourceStart, sourceStart + bytesRead), Arrays.copyOfRange(out, 0, bytesRead));
+      totalBytesRead += bytesRead;
+    }
+    assertEquals("Available should be 0", 0, dstInputStream.available());
+  }
+
   // commonCaseTest() helpers
   private void readByteByByteTest(byte[] in)
       throws IOException {
@@ -155,6 +176,11 @@ class HaltingReadableStreamChannel implements ReadableStreamChannel {
       bytesWritten = channel.write(data);
     }
     return bytesWritten;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
   }
 
   @Override
