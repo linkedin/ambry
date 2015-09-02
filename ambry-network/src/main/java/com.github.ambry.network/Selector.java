@@ -293,10 +293,11 @@ public class Selector implements Selectable {
           /* if channel is not ready finish prepare */
           if (transmission.isConnected() && !transmission.ready()) {
             transmission.prepare();
+            break;
           }
 
           if (key.isReadable() && transmission.ready()) {
-              read(key, transmission);
+            read(key, transmission);
           } else if (key.isWritable() && transmission.ready()) {
             write(key, transmission);
           } else if (!key.isValid()) {

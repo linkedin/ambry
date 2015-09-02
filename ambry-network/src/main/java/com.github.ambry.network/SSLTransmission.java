@@ -12,17 +12,15 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * PlainTextTransmission to interact with a given socketChannel using ssl encryption
+ * SSLTransmission to interact with a given socketChannel using ssl encryption
  */
 public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel {
 
@@ -36,8 +34,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private ByteBuffer netWriteBuffer;
   private ByteBuffer appReadBuffer;
   private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
-  private NetworkReceive networkReceive;
-  private NetworkSend networkSend;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger, SSLFactory.Mode mode)
@@ -370,9 +366,11 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   long read()
       throws IOException {
     if (!hasReceive()) {
-      networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
+      this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
-    return networkReceive.getReceivedBytes().readFrom(this);
+
+    long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
+    return bytesRead;
   }
 
   /**
@@ -382,6 +380,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
    * @throws IOException if some other I/O error occurs
    */
+  @Override
   public int read(ByteBuffer dst)
       throws IOException {
     if (closing) {
@@ -392,7 +391,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       return read;
     }
 
-    //if we have unread decrypted data in appReadBuffer read that into dst buffer.
+    //if we have unread decrypted data in appReadBuffer read that into dst buffer
     if (appReadBuffer.position() > 0) {
       read = readFromAppBuffer(dst);
     }
@@ -431,7 +430,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           }
 
           // appReadBuffer will extended upto currentApplicationBufferSize
-          // we need to read the existing content into dst before we can do unwrap again.  If there are no space in dst
+          // we need to read the existing content into dst buffer before we can do unwrap again.  If there are no space in dst
           // we can break here.
           if (dst.hasRemaining()) {
             read += readFromAppBuffer(dst);
@@ -576,5 +575,4 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       log.debug("SSLEngine.closeInBound() raised an exception.", e);
     }
   }
-
 }

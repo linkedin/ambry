@@ -75,37 +75,35 @@ public abstract class Transmission{
     return connectionId;
   }
 
-  protected SocketChannel getSocketChannel() {
+  SocketChannel getSocketChannel() {
     return this.socketChannel;
   }
-
 
   boolean hasSend() {
     return networkSend != null;
   }
 
-
-  protected void clearSend() {
+  void clearSend() {
     networkSend = null;
   }
 
-  protected boolean hasReceive() {
+  boolean hasReceive() {
     return networkReceive != null;
   }
 
-  protected void clearReceive() {
+  void clearReceive() {
     networkReceive = null;
   }
 
-  protected NetworkReceive getNetworkReceive() {
+  NetworkReceive getNetworkReceive() {
     return this.networkReceive;
   }
 
-  protected NetworkSend getNetworkSend() {
+  NetworkSend getNetworkSend() {
     return this.networkSend;
   }
 
-  public boolean isConnected() {
+  boolean isConnected() {
     return socketChannel.isConnected();
   }
 }
