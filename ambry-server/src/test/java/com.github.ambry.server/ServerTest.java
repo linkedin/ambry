@@ -87,17 +87,20 @@ public class ServerTest {
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig clientSSLConfig1 =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
+        TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
     SSLConfig clientSSLConfig2 =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
+        TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
     SSLConfig clientSSLConfig3 =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
+        TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
+    Properties serverSSLProps = TestSSLUtils
+        .createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile,
+            "server");
     coordinatorProps =
         TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
 
     notificationSystem = new MockNotificationSystem(9);
-    cluster = new MockCluster(notificationSystem);
-    sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", trustStoreFile);
+   // cluster = new MockCluster(notificationSystem);
+    sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps);
 
     //client
     sslFactory = new SSLFactory(clientSSLConfig1);
@@ -150,11 +153,11 @@ public class ServerTest {
     endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", cluster);
   }
 
-  //@Test
+  @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
     endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster);
   }
 
@@ -699,15 +702,15 @@ public class ServerTest {
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), cluster);
   }
 
-  //@Test
+  @Test
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(1);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "DC2,DC3", dataNodeId.getPort(),
-        new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
+        new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster);
   }
 
@@ -740,8 +743,8 @@ public class ServerTest {
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
       BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1);
-      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory2);
-      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory3);
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory1);
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory1);
 
       channel1.connect();
       channel2.connect();

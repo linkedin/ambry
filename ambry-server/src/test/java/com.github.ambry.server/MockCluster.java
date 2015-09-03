@@ -38,10 +38,10 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "", null);
+    this(notificationSystem, false, "", new Properties());
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, File trustStoreFile)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
@@ -50,28 +50,22 @@ public class MockCluster {
     ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
-      int counter = 0;
       for (MockDataNodeId dataNodeId : dataNodes) {
-        Properties sslProperties;
         if (enableSSL) {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
-          sslProperties = TestSSLUtils
-              .createSSLProperties(sslEnabledDatacenters, SSLFactory.Mode.SERVER, trustStoreFile,
-                  "server" + (counter++));
-        } else {
-          sslProperties = new Properties();
+          sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
         }
-        initializeServer(dataNodeId, sslProperties);
+        initializeServer(dataNodeId, sslProps);
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
       cleanup();
       throw e;
-    } catch (GeneralSecurityException e) {
+    } /*catch (GeneralSecurityException e) {
       // clean up other servers which was started already
       cleanup();
       throw e;
-    }
+    }   */
   }
 
   public List<AmbryServer> getServers() {
@@ -130,8 +124,9 @@ public class MockCluster {
    * @return the config value for sslEnabledDatacenters for the given datacenter
    */
   private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
-    sslEnabledDataCenterList.remove(datacenter);
-    String sslEnabledDatacenters = Utils.concatenateString(sslEnabledDataCenterList, ",");
+    ArrayList<String> localCopy = (ArrayList<String>)sslEnabledDataCenterList.clone();
+    localCopy.remove(datacenter);
+    String sslEnabledDatacenters = Utils.concatenateString(localCopy, ",");
     return sslEnabledDatacenters;
   }
 
