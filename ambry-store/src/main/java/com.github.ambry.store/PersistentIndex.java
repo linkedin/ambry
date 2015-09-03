@@ -1096,7 +1096,7 @@ public class PersistentIndex {
       return outStream.toByteArray();
     }
 
-    void fromBytes(DataInputStream stream, StoreKeyFactory storeKeyFactory)
+    void populate(DataInputStream stream, StoreKeyFactory storeKeyFactory)
         throws IOException {
       int numBlobsToRecover = stream.readInt();
       for (int i = 0; i < numBlobsToRecover; i++) {
@@ -1113,6 +1113,9 @@ public class PersistentIndex {
       }
     }
 
+    /**
+     * Prunes entries in the range from the start up to, but excluding, the entry with the passed in key.
+     */
     void pruneTill(StoreKey storeKey) {
       Iterator<BlobReadOptions> blobReadOptionsListIterator = blobReadOptionsList.iterator();
       Iterator<byte[]> messageStoreRecoveryListIterator = messageStoreRecoveryInfoList.iterator();
@@ -1137,18 +1140,18 @@ public class PersistentIndex {
      * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing
      * hard deletes when we do a crash recovery.
      * Following tokens are maintained:
-     * lastPersistedStartToken <= startTokenSafeToPersist <= startTokenBeforeLogFlush <= startToken <= endToken
+     * startTokenSafeToPersist <= startTokenBeforeLogFlush <= startToken <= endToken
      *
      * Ongoing hard deletes are for entries within startToken and endToken. These keep getting incremented as and when
      * hard deletes happen. The cleanup token that is persisted periodically is used during recovery to figure out the
      * range on which recovery is to be done. The end token to persist is the endToken that we maintain. However, the
-     * start token that is persisted has to be a token up to which the hard deletes that were performed have been flushed.
-     * Since the index persistor runs asynchronously to the hard delete thread, a few other tokens are used to help safely
-     * persist tokens:
+     * start token that is persisted has to be a token up to which the hard deletes that were performed have been
+     * flushed. Since the index persistor runs asynchronously to the hard delete thread, a few other tokens are used to
+     * help safely persist tokens:
      *
-     * rangePrunedTillToken:     The entries in hardDeleteRecoveryRange up to this token has been pruned.
-     * startTokenSafeToPersist:  This will always be a value up to which the log has been flushed. The 'current' start token
-     *                           can be greater than this value.
+     * startTokenSafeToPersist:  This will always be a value up to which the log has been flushed, and is a token safe
+     *                           to be persisted in the cleanupToken file. The 'current' start token can be greater than
+     *                           this value.
      * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
      *                           flushed, this is used to set startTokenSafeToPersist.
      */
@@ -1156,7 +1159,6 @@ public class PersistentIndex {
     FindToken startTokenBeforeLogFlush;
     FindToken startTokenSafeToPersist;
     FindToken endToken;
-    StoreFindToken rangePrunedTillToken;
     StoreFindToken recoveryStartToken;
     StoreFindToken recoveryEndToken;
     HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
@@ -1264,7 +1266,7 @@ public class PersistentIndex {
             case 0:
               recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
               recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
-              hardDeleteRecoveryRange.fromBytes(stream, factory);
+              hardDeleteRecoveryRange.populate(stream, factory);
               break;
             default:
               hardDeleteRecoveryRange.clear();
@@ -1318,11 +1320,9 @@ public class PersistentIndex {
       final Timer.Context context = metrics.cleanupTokenFlushTime.time();
       File tempFile = new File(dataDir, Cleanup_Token_Filename + ".tmp");
       File actual = new File(dataDir, Cleanup_Token_Filename);
-
       FileOutputStream fileStream = new FileOutputStream(tempFile);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
       DataOutputStream writer = new DataOutputStream(crc);
-
       try {
         // write the current version
         writer.writeShort(version);
@@ -1350,22 +1350,23 @@ public class PersistentIndex {
      * All the entries from startTokenSafeToPersist to endToken must be maintained in hardDeleteRecoveryRange.
      * hardDeleteRecoveryRange may still have information of keys that have been persisted in certain cases, but this
      * does not affect the safety.
+     * Note that we don't need any synchronization for this method as the hardDeleteRecoveryRange and all other
+     * variables except startTokenSafeToPersist are only modified by the hardDeleteThread. Since startTokenSafeToPersist
+     * gets modified by the IndexPersistorThread while this operation is in progress, we save it off first and use the
+     * saved off value subsequently.
      */
     private void pruneHardDeleteRecoveryRange() {
       StoreFindToken logFlushedTillToken = (StoreFindToken) startTokenSafeToPersist;
       if (logFlushedTillToken != null && !logFlushedTillToken.isUninitialized()) {
         if (logFlushedTillToken.equals(endToken)) {
           hardDeleteRecoveryRange.clear();
-          rangePrunedTillToken = logFlushedTillToken;
-        } else if (logFlushedTillToken.getStoreKey() == null) {
+        } else if (logFlushedTillToken.getStoreKey() != null) {
           /* Avoid pruning if the token is journal based as it is complicated and unnecessary. This is because, in the
              recovery range, keys are stored not offsets. It should be okay to not prune though, as there is no
              correctness issue. Additionally, since this token is journal based, it is highly likely that this token
-             will soon become equal to endtoken, in which case we will prune everything (in the "if case" above). */
-        } else if (!logFlushedTillToken.equals(rangePrunedTillToken)) {
-          /* We can safely prune off entries that have already been flushed in the log, no matter what. */
+             will soon become equal to endtoken, in which case we will prune everything (in the "if case" above).
+             If the token is index based, safely prune off entries that have already been flushed in the log */
           hardDeleteRecoveryRange.pruneTill(logFlushedTillToken.getStoreKey());
-          rangePrunedTillToken = logFlushedTillToken;
         }
       }
     }
@@ -1397,14 +1398,14 @@ public class PersistentIndex {
           }
         }
 
-        /* Next get the information to persist hard delete recovery info. Get all the information and save it, as only
-         * after the whole range is persisted can we start with the actual log write */
         List<LogWriteInfo> logWriteInfoList = new ArrayList<LogWriteInfo>();
 
         StoreMessageReadSet readSet = log.getView(readOptionsList);
         Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
         Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 
+        /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
+         * after the whole range is persisted can we start with the actual log write */
         while (hardDeleteIterator.hasNext()) {
           if (!running.get()) {
             throw new StoreException("Aborting hard deletes as store is shutting down",
@@ -1473,8 +1474,8 @@ public class PersistentIndex {
      *
      * The guarantee provided is that for any persisted token pair (Sp, E):
      *    - all the hard deletes till point Sp have been flushed in the log; and
-     *    - all ongoing hard deletes and unflushed hard deletes are between Sp and E, so during recovery this is the
-     *      range to be recovered.
+     *    - all ongoing hard deletes and unflushed hard deletes are somewhere between Sp and E, so during recovery this
+     *    is the range to be recovered.
      *
      * @return true if the token moved forward, false otherwise.
      */
