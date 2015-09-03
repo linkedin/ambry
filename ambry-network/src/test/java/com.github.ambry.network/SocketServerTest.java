@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.File;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
@@ -21,9 +22,11 @@ import java.util.Random;
 
 
 public class SocketServerTest {
-  private static SSLFactory sslFactory;
+  private static SSLFactory serverSSLFactory;
+  private static SSLFactory clientSSLFactory;
   private static SSLSocketFactory sslSocketFactory;
-  private static SSLConfig sslConfig;
+  private static SSLConfig clientSSLConfig;
+  private static SSLConfig serverSSLConfig;
   private SocketServer server = null;
 
   /**
@@ -32,9 +35,15 @@ public class SocketServerTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
-    sslFactory = new SSLFactory(sslConfig);
-    SSLContext sslContext = sslFactory.getSSLContext();
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    //sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    serverSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    serverSSLFactory = new SSLFactory(serverSSLConfig);
+    clientSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    clientSSLFactory = new SSLFactory(clientSSLConfig);
+    SSLContext sslContext = clientSSLFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }
 
@@ -46,7 +55,7 @@ public class SocketServerTest {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(config.port, PortType.PLAINTEXT));
     ports.add(new Port(config.port + 1000, PortType.SSL));
-    server = new SocketServer(config, sslConfig, new MetricRegistry(), ports);
+    server = new SocketServer(config, serverSSLConfig, new MetricRegistry(), ports);
     server.start();
   }
 
@@ -61,7 +70,7 @@ public class SocketServerTest {
     simpleRequest(new Port(server.getPort(), PortType.PLAINTEXT));
   }
 
-  //@Test
+  @Test
   public void simpleSSLRequest()
       throws IOException, InterruptedException {
     simpleRequest(new Port(server.getSSLPort(), PortType.SSL));

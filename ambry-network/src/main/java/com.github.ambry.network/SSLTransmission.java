@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * SSLTransmission to interact with a given socketChannel using ssl encryption
+ * SSLTransmission to interact with a given socketChannel through ssl encryption
  */
 public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel {
 
@@ -110,14 +110,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     key.attach(null);
     key.cancel();
   }
-
-  /**
-   * returns true if there are any pending contents in netWriteBuffer
-   */
-  /*@Override
-  public boolean hasPendingWrites() {
-    return netWriteBuffer.hasRemaining();
-  } */
 
   /**
    * Flushes the buffer to the network, non blocking
@@ -514,24 +506,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       throw new EOFException();
     }
     return written;
-  }
-
-  public ByteBuffer getByteBufferFromChannel(Send response)
-      throws IOException {
-    ByteBuffer buffer;
-    // Avoid possibility of overflow for 2GB-4 byte buffer
-    if (response.sizeInBytes() > Integer.MAX_VALUE - 4) {
-      throw new IllegalStateException(
-          "Maximum allowable size for a bounded buffer is " + (Integer.MAX_VALUE - 4) + ".");
-    }
-
-    int size = (int) response.sizeInBytes();
-    buffer = ByteBuffer.allocate(size + 4);
-    buffer.putInt(size);
-    WritableByteChannel channel = Channels.newChannel(new ByteBufferOutputStream(buffer));
-    response.writeTo(channel);
-    buffer.rewind();
-    return buffer;
   }
 
   /**

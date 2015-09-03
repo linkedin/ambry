@@ -66,7 +66,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
-    initializeSSLFactory(sslConfig);
+    this.initializeSSLFactory(sslConfig);
   }
 
   public String getHost() {

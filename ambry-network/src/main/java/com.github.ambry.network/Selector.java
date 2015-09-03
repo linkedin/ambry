@@ -339,8 +339,13 @@ public class Selector implements Selectable {
     }
   }
 
-  public boolean isChannelReady(String id) {
-    Transmission transmission = getTransmission(keyForId(id));
+  /**
+   * Returns true if channel is ready after completing handshake to accept reads/writes
+   * @param connectionId upon which readiness is checked for
+   * @return true if channel is ready to accept reads/writes, false otherwise
+   */
+  public boolean isChannelReady(String connectionId) {
+    Transmission transmission = getTransmission(keyForId(connectionId));
     return transmission.ready();
   }
 

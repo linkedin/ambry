@@ -36,7 +36,7 @@ public class SSLConfig {
    * The SSL client authentication config
    */
   @Config("ssl.client.authentication")
-  @Default("")
+  @Default("required")
   public final String sslClientAuthentication;
 
   /**
@@ -123,9 +123,8 @@ public class SSLConfig {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
     sslEnabledProtocols = verifiableProperties.getString("ssl.enabled.protocols", "TLSv1.2");
-    sslEndpointIdentificationAlgorithm =
-        verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
-    sslClientAuthentication = verifiableProperties.getString("ssl.client.authentication", "");
+    sslEndpointIdentificationAlgorithm = verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
+    sslClientAuthentication = verifiableProperties.getString("ssl.client.authentication", "required");
     sslKeymanagerAlgorithm = verifiableProperties.getString("ssl.keymanager.algorithm", "");
     sslTrustmanagerAlgorithm = verifiableProperties.getString("ssl.trustmanager.algorithm", "");
     sslKeystoreType = verifiableProperties.getString("ssl.keystore.type", "JKS");
@@ -135,7 +134,7 @@ public class SSLConfig {
     sslTruststoreType = verifiableProperties.getString("ssl.truststore.type", "JKS");
     sslTruststorePath = verifiableProperties.getString("ssl.truststore.path", "");
     sslTruststorePassword = verifiableProperties.getString("ssl.truststore.password", "");
-    sslCipherSuites = verifiableProperties.getString("ssl.cipher.suites",",");
+    sslCipherSuites = verifiableProperties.getString("ssl.cipher.suites", "");
     sslEnabledDatacenters = verifiableProperties.getString("ssl.enabled.datacenters", "");
   }
 }

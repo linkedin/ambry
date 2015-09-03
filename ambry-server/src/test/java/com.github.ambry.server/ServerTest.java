@@ -73,17 +73,26 @@ import org.junit.Test;
 public class ServerTest {
   private static SSLFactory sslFactory;
   private static SSLSocketFactory sslSocketFactory;
+  private static SSLSocketFactory clientSSLSocketFactory;
+  private static File trustStoreFile;
   private MockNotificationSystem notificationSystem;
   private MockCluster cluster;
 
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    // SSL object used by the client side of replication
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    trustStoreFile = File.createTempFile("truststore", ".jks");
+    // SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    SSLConfig sslConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
+    sslConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    sslFactory = new SSLFactory(sslConfig);
+    sslContext = sslFactory.getSSLContext();
+    clientSSLSocketFactory = sslContext.getSocketFactory();
   }
 
   public ServerTest()
@@ -123,7 +132,7 @@ public class ServerTest {
     endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "");
   }
 
-  //@Test
+  @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     cluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3");
@@ -277,7 +286,9 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        //Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        Properties sslProperties = TestSSLUtils
+            .createSSLProperties(sslEnabledDatacenters, false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
         Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter);
         coordinatorProperties.putAll(sslProperties);
         Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
@@ -830,7 +841,9 @@ public class ServerTest {
       try {
         // get blob data
         // Use coordinator to get the blob
-        Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        //Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+        Properties sslProperties = TestSSLUtils
+            .createSSLProperties(sslEnabledDatacenters, false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
         Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter);
         coordinatorProperties.putAll(sslProperties);
         Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
@@ -1780,7 +1793,9 @@ public class ServerTest {
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);
-    Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+    //Properties sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
+    Properties sslProperties = TestSSLUtils
+        .createSSLProperties(sslEnabledDatacenters, false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     props.putAll(sslProperties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
@@ -1885,7 +1900,8 @@ public class ServerTest {
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     } else if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
+      channel =
+          new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000, clientSSLSocketFactory);
     }
     return channel;
   }

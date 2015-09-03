@@ -9,7 +9,10 @@ import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
 
 
-public abstract class Transmission{
+/**
+ * Based class for transmission (plaintext/ssl) to interact with any given socketChannel
+ */
+public abstract class Transmission {
 
   private String connectionId;
   protected NetworkSend networkSend = null;
@@ -33,10 +36,10 @@ public abstract class Transmission{
   public void finishConnect()
       throws IOException {
     socketChannel.finishConnect();
-      key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
+    key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
   }
 
-  public boolean isOpen(){
+  public boolean isOpen() {
     return socketChannel.isOpen();
   }
 
@@ -50,26 +53,30 @@ public abstract class Transmission{
     key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
   }
 
-  abstract void prepare() throws IOException;
+  abstract void prepare()
+      throws IOException;
 
-  abstract  boolean ready();
+  abstract boolean ready();
 
   /**
    * Reads data from the socketChannel
    * @return total bytes read from the socket channel
    */
-  abstract long read() throws IOException ;
+  abstract long read()
+      throws IOException;
 
   /**
    * Writes the payload to the socket channel
    * @return true if send is complete, false otherwise
    */
-  abstract boolean write() throws IOException;
+  abstract boolean write()
+      throws IOException;
 
   /**
    * Close the connection for the socket channel
    */
-  public abstract void close() throws IOException;
+  public abstract void close()
+      throws IOException;
 
   String getConnectionId() {
     return connectionId;

@@ -44,7 +44,6 @@ public class SSLBlockingChannel extends BlockingChannel {
 
         // handshake in a blocking way
         sslSocket.startHandshake();
-
         writeChannel = Channels.newChannel(sslSocket.getOutputStream());
         readChannel = sslSocket.getInputStream();
         connected = true;

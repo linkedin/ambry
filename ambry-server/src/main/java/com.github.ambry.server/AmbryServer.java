@@ -16,6 +16,7 @@ import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
@@ -118,6 +119,7 @@ public class AmbryServer {
       if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
+
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,

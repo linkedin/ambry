@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -32,12 +33,21 @@ public class SSLBlockingChannelTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    //SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    SSLConfig sslConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
     sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
+
+    sslConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    sslFactory = new SSLFactory(sslConfig);
+    sslContext = sslFactory.getSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
   }
 
   /**
@@ -70,7 +80,8 @@ public class SSLBlockingChannelTest {
   }
 
   @Test
-  public void testRenegotiation() throws Exception {
+  public void testRenegotiation()
+      throws Exception {
     BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
     sendAndReceive(channel);
     sslEchoServer.renegotiate();
@@ -92,7 +103,8 @@ public class SSLBlockingChannelTest {
     }
   }
 
-  private void sendAndReceive(BlockingChannel channel) throws Exception {
+  private void sendAndReceive(BlockingChannel channel)
+      throws Exception {
     long blobSize = 1028;
     byte[] bytesToSend = new byte[(int) blobSize];
     new Random().nextBytes(bytesToSend);

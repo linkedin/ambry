@@ -27,9 +27,8 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Reads a sequence of bytes from this channel into the given buffer.
+   * Reads a sequence of bytes from the channel into the networkReceive
    *
-   * @param dst The buffer into which bytes are to be transferred
    * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
    * @throws IOException if some other I/O error occurs
    */
@@ -44,10 +43,9 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Writes a sequence of bytes to this channel from the given buffer.
+   * Writes a sequence of bytes to the channel from the payload in networkSend
    *
-   * @param src The buffer from which bytes are to be retrieved
-   * @returns The number of bytes read, possibly zero, or -1 if the channel has reached end-of-stream
+   * @returns The number of bytes written, possibly zero, or -1 if the channel has reached end-of-stream
    * @throws IOException If some other I/O error occurs
    */
   @Override
