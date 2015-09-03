@@ -30,20 +30,18 @@ public class SSLSelectorTest {
   public void setup()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    // SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
-    SSLConfig sslConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    SSLFactory sslFactory = new SSLFactory(sslConfig);
-    this.server = new EchoServer(sslFactory, 18383);
-    this.server.start();
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
     List<Processor> processorThreads = new ArrayList<Processor>();
-    sslConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-    sslFactory = new SSLFactory(sslConfig);
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig clientSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    SSLFactory serverSSLFactory = new SSLFactory(sslConfig);
+    SSLFactory clientSSLFactory = new SSLFactory(clientSSLConfig);
+    this.server = new EchoServer(serverSSLFactory, 18383);
+    this.server.start();
     this.selector =
         new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
-            SystemTime.getInstance(), sslFactory);
+            SystemTime.getInstance(), clientSSLFactory);
   }
 
   @After

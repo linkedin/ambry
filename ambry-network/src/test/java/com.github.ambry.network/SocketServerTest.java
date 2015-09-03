@@ -22,9 +22,8 @@ import java.util.Random;
 
 
 public class SocketServerTest {
-  private static SSLFactory serverSSLFactory;
   private static SSLFactory clientSSLFactory;
-  private static SSLSocketFactory sslSocketFactory;
+  private static SSLSocketFactory clientSSLSocketFactory;
   private static SSLConfig clientSSLConfig;
   private static SSLConfig serverSSLConfig;
   private SocketServer server = null;
@@ -36,15 +35,11 @@ public class SocketServerTest {
   public static void initializeTests()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
-    //sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
-    serverSSLConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    serverSSLFactory = new SSLFactory(serverSSLConfig);
-    clientSSLConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     clientSSLFactory = new SSLFactory(clientSSLConfig);
     SSLContext sslContext = clientSSLFactory.getSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
+    clientSSLSocketFactory = sslContext.getSocketFactory();
   }
 
   public SocketServerTest()
@@ -85,7 +80,8 @@ public class SocketServerTest {
     BoundedByteBufferSend bufferToSend = new BoundedByteBufferSend(byteBufferToSend);
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, sslSocketFactory);
+      channel =
+          new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, clientSSLSocketFactory);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }

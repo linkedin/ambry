@@ -28,9 +28,10 @@ public class SSLFactoryTest {
   public void testSSLFactory()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
-    //SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
-    SSLConfig sslConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, true, SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig clientSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+
     SSLFactory sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     SSLSocketFactory socketFactory = sslContext.getSocketFactory();
@@ -40,10 +41,8 @@ public class SSLFactoryTest {
     SSLEngine serverSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
     TestSSLUtils.verifySSLConfig(sslContext, serverSideSSLEngine, false);
 
-    //sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
-    sslConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", false, false, SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-    sslFactory = new SSLFactory(sslConfig);
+    //client
+    sslFactory = new SSLFactory(clientSSLConfig);
     sslContext = sslFactory.getSSLContext();
     socketFactory = sslContext.getSocketFactory();
     Assert.assertNotNull(socketFactory);

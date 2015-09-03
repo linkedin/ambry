@@ -10,6 +10,7 @@ import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
@@ -33,13 +34,14 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
+  private boolean serverInitialized = false;
 
   public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "");
+    this(notificationSystem, false, "", null);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, File trustStoreFile)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
@@ -48,16 +50,18 @@ public class MockCluster {
     ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
+      int counter = 0;
       for (MockDataNodeId dataNodeId : dataNodes) {
         Properties sslProperties;
         if (enableSSL) {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
-          sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters, false, true, SSLFactory.Mode.SERVER,
-              null, "server");
+          sslProperties = TestSSLUtils
+              .createSSLProperties(sslEnabledDatacenters, false, SSLFactory.Mode.SERVER, trustStoreFile,
+                  "server" + (counter++));
         } else {
           sslProperties = new Properties();
         }
-        startServer(dataNodeId, sslProperties);
+        initializeServer(dataNodeId, sslProperties);
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -78,7 +82,7 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId, Properties sslProperties)
+  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties)
       throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
@@ -93,22 +97,30 @@ public class MockCluster {
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
-    server.startup();
+    //server.startup();
+  }
+
+  public void startServers()
+      throws InstantiationException {
+    serverInitialized = true;
+    for (AmbryServer server : serverList) {
+      server.startup();
+    }
   }
 
   public void cleanup() {
-    CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
-    for (AmbryServer server : serverList) {
-
-      new Thread(new ServerShutdown(shutdownLatch, server)).start();
+    if (serverInitialized) {
+      CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
+      for (AmbryServer server : serverList) {
+        new Thread(new ServerShutdown(shutdownLatch, server)).start();
+      }
+      try {
+        shutdownLatch.await();
+      } catch (Exception e) {
+        assertTrue(false);
+      }
+      clusterMap.cleanup();
     }
-    try {
-      shutdownLatch.await();
-    } catch (Exception e) {
-      assertTrue(false);
-    }
-
-    clusterMap.cleanup();
   }
 
   /**

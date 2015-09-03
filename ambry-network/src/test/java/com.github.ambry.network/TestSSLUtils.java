@@ -144,26 +144,22 @@ public class TestSSLUtils {
     saveKeyStore(ks, filename, password);
   }
 
-  public static Properties createSSLProperties(String sslEnabledDatacenters, boolean useClientCert, boolean trustStore,
-      SSLFactory.Mode mode, File trustStoreFile, String certAlias)
+  public static Properties createSSLProperties(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
+      String certAlias)
       throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
     File keyStoreFile;
     String password;
 
-    if (mode == SSLFactory.Mode.SERVER) {
-      password = "UnitTestServerKeyStorePassword";
-    } else {
+    if (mode == SSLFactory.Mode.CLIENT) {
       password = "UnitTestClientKeyStorePassword";
-    }
-
-    if (useClientCert) {
       keyStoreFile = File.createTempFile("selfsigned-keystore-client", ".jks");
       KeyPair cKP = generateKeyPair("RSA");
       X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA");
       createKeyStore(keyStoreFile.getPath(), password, password, certAlias, cKP.getPrivate(), cCert);
       certs.put(certAlias, cCert);
     } else {
+      password = "UnitTestServerKeyStorePassword";
       keyStoreFile = File.createTempFile("selfsigned-keystore-server", ".jks");
       KeyPair sKP = generateKeyPair("RSA");
       X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA1withRSA");
@@ -171,9 +167,7 @@ public class TestSSLUtils {
       certs.put(certAlias, sCert);
     }
 
-    if (trustStore) {
-      createTrustStore(trustStoreFile.getPath(), trustStorePassword, certs);
-    }
+    createTrustStore(trustStoreFile.getPath(), trustStorePassword, certs);
 
     Properties props = new Properties();
     props.put("ssl.context.protocol", sslContextProtocol);
@@ -181,13 +175,11 @@ public class TestSSLUtils {
     props.put("ssl.enabled.protocols", sslEnabledProtocol);
     props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
     props.put("ssl.client.authentication", "required");
-    if (mode == SSLFactory.Mode.SERVER || (mode == SSLFactory.Mode.CLIENT && keyStoreFile != null)) {
-      props.put("ssl.keymanager.algorithm", "PKIX");
-      props.put("ssl.keystore.type", "JKS");
-      props.put("ssl.keystore.path", keyStoreFile.getPath());
-      props.put("ssl.keystore.password", password);
-      props.put("ssl.key.password", password);
-    }
+    props.put("ssl.keymanager.algorithm", "PKIX");
+    props.put("ssl.keystore.type", "JKS");
+    props.put("ssl.keystore.path", keyStoreFile.getPath());
+    props.put("ssl.keystore.password", password);
+    props.put("ssl.key.password", password);
     props.put("ssl.trustmanager.algorithm", "PKIX");
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
@@ -201,8 +193,6 @@ public class TestSSLUtils {
    * Creates SSLConfig based on the values passed and few other pre-populated values
    * @param sslEnabledDatacenters Comma separated list of datacenters against which ssl connections should be
    *                              established
-   * @param useClientCert true if caller is a client, false otherwise
-   * @param trustStore true if truststore has to be created, false otherwise
    * @param mode Represents if the caller is a client or server
    * @param trustStoreFile File path of the truststore file
    * @param certAlias alais used for the certificate
@@ -210,11 +200,10 @@ public class TestSSLUtils {
    * @throws IOException
    * @throws GeneralSecurityException
    */
-  public static SSLConfig createSSLConfig(String sslEnabledDatacenters, boolean useClientCert, boolean trustStore,
-      SSLFactory.Mode mode, File trustStoreFile, String certAlias)
+  public static SSLConfig createSSLConfig(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
+      String certAlias)
       throws IOException, GeneralSecurityException {
-    Properties props =
-        createSSLProperties(sslEnabledDatacenters, useClientCert, trustStore, mode, trustStoreFile, certAlias);
+    Properties props = createSSLProperties(sslEnabledDatacenters, mode, trustStoreFile, certAlias);
     SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
     return sslConfig;
   }
