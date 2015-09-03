@@ -44,7 +44,7 @@ import org.junit.Assert;
 public class TestSSLUtils {
   private final static String sslContextProtocol = "TLS";
   private final static String sslContextProvider = "SunJSSE";
-  private final static String sslEnabledProtocol = "TLSv1.2";
+  private final static String sslEnabledProtocol = "TLSv1";
   private final static String endpointIdentificationAlgorithm = "HTTPS";
   private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
   private final static String trustStorePassword = "UnitTestTrustStorePassword";
@@ -184,7 +184,6 @@ public class TestSSLUtils {
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", trustStorePassword);
-    props.put("ssl.cipher.suites", sslCipherSuits);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
@@ -217,9 +216,6 @@ public class TestSSLUtils {
     String[] enabledProtocols = sslEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
     Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
-    String[] enabledCipherSuites = sslEngine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
     Assert.assertEquals(sslEngine.getWantClientAuth(), false);
     if (isClient) {
       Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),

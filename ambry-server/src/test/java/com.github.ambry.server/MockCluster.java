@@ -56,7 +56,7 @@ public class MockCluster {
         if (enableSSL) {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
           sslProperties = TestSSLUtils
-              .createSSLProperties(sslEnabledDatacenters, false, SSLFactory.Mode.SERVER, trustStoreFile,
+              .createSSLProperties(sslEnabledDatacenters, SSLFactory.Mode.SERVER, trustStoreFile,
                   "server" + (counter++));
         } else {
           sslProperties = new Properties();
