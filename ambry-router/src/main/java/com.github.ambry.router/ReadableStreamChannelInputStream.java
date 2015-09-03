@@ -26,7 +26,8 @@ class ReadableStreamChannelInputStream extends InputStream {
 
   @Override
   public int available() {
-    return (int) readableStreamChannel.getSize() - totalBytesRead.get();
+    return readableStreamChannel.getSize() - totalBytesRead.get() < Integer.MAX_VALUE ?
+        (int) readableStreamChannel.getSize() - totalBytesRead.get() : Integer.MAX_VALUE;
   }
 
   @Override
