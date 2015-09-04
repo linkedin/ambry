@@ -38,10 +38,11 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "", new Properties());
+    this(notificationSystem, false, "", new Properties(), true);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
+      boolean enableHardDeletes)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
@@ -55,7 +56,7 @@ public class MockCluster {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
           sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
         }
-        initializeServer(dataNodeId, sslProps);
+        initializeServer(dataNodeId, sslProps, enableHardDeletes);
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -72,14 +73,14 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties)
+  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes)
       throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.deleted.message.retention.days", "0");
-    props.setProperty("store.enable.hard.delete", "true");
+    props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
