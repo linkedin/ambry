@@ -51,7 +51,8 @@ public class PersistentIndex {
   public static final String Bloom_File_Name_Suffix = "bloom";
   private static final String Clean_Shutdown_Filename = "cleanshutdown";
   private static final String Cleanup_Token_Filename = "cleanuptoken";
-  public static final Short version = 0;
+  public static final short version = 0;
+  public static final short Cleanup_Token_Version_V1 = 0;
 
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegment> indexes = new ConcurrentSkipListMap<Long, IndexSegment>();
@@ -1046,6 +1047,24 @@ public class PersistentIndex {
       this.messageStoreRecoveryInfoList = new ArrayList<byte[]>();
     }
 
+    HardDeletePersistInfo(DataInputStream stream, StoreKeyFactory storeKeyFactory)
+        throws IOException {
+      this();
+      int numBlobsToRecover = stream.readInt();
+      for (int i = 0; i < numBlobsToRecover; i++) {
+        blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory));
+      }
+
+      for (int i = 0; i < numBlobsToRecover; i++) {
+        int lengthOfRecoveryInfo = stream.readInt();
+        byte[] messageStoreRecoveryInfo = new byte[lengthOfRecoveryInfo];
+        if (stream.read(messageStoreRecoveryInfo) != lengthOfRecoveryInfo) {
+          throw new IOException("Token file could not be read correctly");
+        }
+        messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
+      }
+    }
+
     void addMessageInfo(BlobReadOptions blobReadOptions, byte[] messageStoreRecoveryInfo) {
       this.blobReadOptionsList.add(blobReadOptions);
       this.messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
@@ -1094,23 +1113,6 @@ public class PersistentIndex {
       }
 
       return outStream.toByteArray();
-    }
-
-    void populate(DataInputStream stream, StoreKeyFactory storeKeyFactory)
-        throws IOException {
-      int numBlobsToRecover = stream.readInt();
-      for (int i = 0; i < numBlobsToRecover; i++) {
-        blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory));
-      }
-
-      for (int i = 0; i < numBlobsToRecover; i++) {
-        int lengthOfRecoveryInfo = stream.readInt();
-        byte[] messageStoreRecoveryInfo = new byte[lengthOfRecoveryInfo];
-        if (stream.read(messageStoreRecoveryInfo) != lengthOfRecoveryInfo) {
-          throw new IOException("Token file could not be read correctly");
-        }
-        messageStoreRecoveryInfoList.add(messageStoreRecoveryInfo);
-      }
     }
 
     /**
@@ -1263,10 +1265,10 @@ public class PersistentIndex {
         try {
           short version = stream.readShort();
           switch (version) {
-            case 0:
+            case Cleanup_Token_Version_V1:
               recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
               recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
-              hardDeleteRecoveryRange.populate(stream, factory);
+              hardDeleteRecoveryRange = new HardDeletePersistInfo(stream, factory);
               break;
             default:
               hardDeleteRecoveryRange.clear();
@@ -1325,7 +1327,7 @@ public class PersistentIndex {
       DataOutputStream writer = new DataOutputStream(crc);
       try {
         // write the current version
-        writer.writeShort(version);
+        writer.writeShort(Cleanup_Token_Version_V1);
         writer.write(startTokenSafeToPersist.toBytes());
         writer.write(endToken.toBytes());
         writer.write(hardDeleteRecoveryRange.toBytes());

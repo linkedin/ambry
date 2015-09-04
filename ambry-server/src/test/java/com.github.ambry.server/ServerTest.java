@@ -31,6 +31,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -334,7 +335,7 @@ public class ServerTest {
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();
-          Assert.assertEquals(version, 0);
+          Assert.assertEquals(version, PersistentIndex.Cleanup_Token_Version_V1);
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
