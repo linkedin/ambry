@@ -92,14 +92,13 @@ public class ServerTest {
         TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
     SSLConfig clientSSLConfig3 =
         TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
-    Properties serverSSLProps = TestSSLUtils
-        .createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile,
-            "server");
+    Properties serverSSLProps =
+        TestSSLUtils.createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     coordinatorProps =
         TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
 
     notificationSystem = new MockNotificationSystem(9);
-   // cluster = new MockCluster(notificationSystem);
+    cluster = new MockCluster(notificationSystem);
     sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps);
 
     //client
@@ -154,7 +153,7 @@ public class ServerTest {
   }
 
   @Test
-  public void endToEndSSLTest()
+    public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
@@ -706,11 +705,11 @@ public class ServerTest {
   public void endToEndSSLReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(1);
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "DC2,DC3", dataNodeId.getPort(),
-        new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
+        new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster);
   }
 
@@ -1175,7 +1174,7 @@ public class ServerTest {
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), cluster);
   }
 
-  //@Test
+  @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
@@ -1661,9 +1660,11 @@ public class ServerTest {
     MockClusterMap clusterMap;
     AtomicBoolean cancelTest;
     PortType portType;
+    ArrayList<SSLSocketFactory> sslSocketFactories;
 
     public Verifier(BlockingQueue<Payload> blockingQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
-        AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType) {
+        AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
+        ArrayList<SSLSocketFactory> sslSocketFactories) {
       this.blockingQueue = blockingQueue;
       this.completedLatch = completedLatch;
       this.totalRequests = totalRequests;
@@ -1671,6 +1672,7 @@ public class ServerTest {
       this.clusterMap = clusterMap;
       this.cancelTest = cancelTest;
       this.portType = portType;
+      this.sslSocketFactories = sslSocketFactories;
     }
 
     @Override
@@ -1681,11 +1683,13 @@ public class ServerTest {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
             notificationSystem.awaitBlobCreations(payload.blobId);
+            int counter = 0;
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
               Port port =
                   new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
+              SSLSocketFactory sslSocketFactory = sslSocketFactories.get((counter++)%(sslSocketFactories.size()));
               BlockingChannel channel1 =
-                  getBlockingChannelBasedOnPortType(port, dataNodeId.getHostname(), clientSSLSocketFactory1);
+                  getBlockingChannelBasedOnPortType(port, dataNodeId.getHostname(), sslSocketFactory);
               channel1.connect();
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
               ids.add(new BlobId(payload.blobId, clusterMap));
@@ -1820,9 +1824,9 @@ public class ServerTest {
     Thread[] senderThreads = new Thread[3];
     LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
-    int numberOfVerifierThreads = 3;
+    int numberOfVerifierThreads = 1;
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
-    int numberOfRequestsToSendPerThread = 3;
+    int numberOfRequestsToSendPerThread = 1;
     for (int i = 0; i < numberOfSenderThreads; i++) {
       senderThreads[i] =
           new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
@@ -1835,6 +1839,10 @@ public class ServerTest {
       throw new IllegalStateException();
     }
 
+    ArrayList<SSLSocketFactory> sslSocketFactories = new ArrayList<SSLSocketFactory>();
+    sslSocketFactories.add(clientSSLSocketFactory1);
+    sslSocketFactories.add(clientSSLSocketFactory2);
+    sslSocketFactories.add(clientSSLSocketFactory3);
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
@@ -1842,7 +1850,7 @@ public class ServerTest {
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
           new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
-              cancelTest, portType));
+              cancelTest, portType, sslSocketFactories));
       thread.start();
     }
     verifierLatch.await();
@@ -1919,7 +1927,7 @@ public class ServerTest {
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     } else if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000, sslSocketFactory);
+      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 4000, sslSocketFactory);
     }
     return channel;
   }

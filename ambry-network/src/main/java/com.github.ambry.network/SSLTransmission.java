@@ -393,7 +393,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       if (netReadBuffer.remaining() > 0) {
         int netread = socketChannel.read(netReadBuffer);
         if (netread == 0) {
-          return netread;
+          return read;
         } else if (netread < 0) {
           throw new EOFException("EOF during read");
         }
@@ -455,7 +455,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     send.writeTo(this);
     logger
         .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), getConnectionId());
-    return send.isSendComplete();
+    return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }
 
   /**

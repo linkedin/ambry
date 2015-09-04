@@ -61,11 +61,7 @@ public class MockCluster {
       // clean up other servers which was started already
       cleanup();
       throw e;
-    } /*catch (GeneralSecurityException e) {
-      // clean up other servers which was started already
-      cleanup();
-      throw e;
-    }   */
+    }
   }
 
   public List<AmbryServer> getServers() {
@@ -91,7 +87,6 @@ public class MockCluster {
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
-    //server.startup();
   }
 
   public void startServers()
