@@ -23,8 +23,8 @@ public class ByteBufferReadableStreamChannelTest {
   /**
    * Tests the common case read operations i.e
    * 1. Create {@link ByteBufferReadableStreamChannel} with random bytes.
-   * 2. Calls the different read operations of {@link ByteBufferReadableStreamChannel} and checks that the data read matches the data
-   * used to create the {@link ByteBufferReadableStreamChannel}.
+   * 2. Calls the different read operations of {@link ByteBufferReadableStreamChannel} and checks that the data read
+   * matches the data used to create the {@link ByteBufferReadableStreamChannel}.
    * @throws IOException
    */
   @Test

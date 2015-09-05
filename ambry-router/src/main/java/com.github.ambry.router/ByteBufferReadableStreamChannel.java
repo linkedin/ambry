@@ -1,7 +1,6 @@
 package com.github.ambry.router;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
@@ -10,8 +9,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * Represents blob data as a {@link ReadableStreamChannel}. Consumes an {@link InputStream} containing the bytes in the
- * blob and stores the data in a {@link ByteBuffer}.
+ * Represents a {@link ByteBuffer} as a {@link ReadableStreamChannel}.
  */
 class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
