@@ -64,7 +64,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * {@inheritdoc}
    * Returns the handshake status
    * @return
    */
@@ -74,7 +73,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * {@inheritDoc}
    * Prepares the channel to accept read or write. We do handshake if not yet complete
    * @throws IOException
    */
@@ -94,7 +92,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   /**
    * Sends a SSL close message and closes socketChannel.
    * @throws IOException if an I/O error occurs
-   * @throws IOException if there is data on the outgoing network buffer and we are unable to flush it
    */
   @Override
   public void close()
@@ -128,7 +125,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * Flushes the buffer to the network, non blocking
+   * Flushes the buffer to the network
    * @param buf ByteBuffer
    * @return boolean true if the buffer has been emptied out, false otherwise
    * @throws IOException
@@ -145,10 +142,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
 
   /**
    * Performs SSL handshake, non blocking.
-   * Before application data (amrby protocols) can be sent client & amrby server must
+   * Before application data (ambry protocols) can be sent client & ambry server must
    * perform ssl handshake.
    * During the handshake SSLEngine generates encrypted data  that will be transported over socketChannel.
-   * Each SSLEngine operation generates SSLEngineResult , of which SSLEngineResult.handshakeStatus field is used to
+   * Each SSLEngine operation generates SSLEngineResult, of which SSLEngineResult.handshakeStatus field is used to
    * determine what operation needs to occur to move handshake along.
    * A typical handshake might look like this.
    * +-------------+----------------------------------+-------------+
@@ -327,7 +324,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         && result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_TASK) {
       handshakeStatus = runDelegatedTasks();
     }
-
     if (doWrite) {
       flush(netWriteBuffer);
     }
@@ -383,7 +379,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * {@inheritDoc}
    * Reads a sequence of bytes from this channel into the given buffer.
    *
    * @param dst The buffer into which bytes are to be transferred. Decryption happens within this method. Not all data

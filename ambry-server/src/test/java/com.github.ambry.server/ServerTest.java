@@ -92,8 +92,7 @@ public class ServerTest {
         TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
     SSLConfig clientSSLConfig3 =
         TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
-    serverSSLProps =
-        TestSSLUtils.createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    serverSSLProps = TestSSLUtils.createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     coordinatorProps =
         TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
 
@@ -143,7 +142,7 @@ public class ServerTest {
   }
 
   @Test
-    public void endToEndSSLTest()
+  public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
@@ -1678,7 +1677,7 @@ public class ServerTest {
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
               Port port =
                   new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
-              SSLSocketFactory sslSocketFactory = sslSocketFactories.get((counter++)%(sslSocketFactories.size()));
+              SSLSocketFactory sslSocketFactory = sslSocketFactories.get((counter++) % (sslSocketFactories.size()));
               BlockingChannel channel1 =
                   getBlockingChannelBasedOnPortType(port, dataNodeId.getHostname(), sslSocketFactory);
               channel1.connect();
@@ -1775,7 +1774,6 @@ public class ServerTest {
 
               channel1.disconnect();
             }
-
             requestsVerified.incrementAndGet();
           }
         }
@@ -1802,8 +1800,8 @@ public class ServerTest {
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL, sslCluster);
   }
 
-  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
-      PortType portType, MockCluster cluster)
+  private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter, PortType portType,
+      MockCluster cluster)
       throws InterruptedException, IOException, InstantiationException, GeneralSecurityException {
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");

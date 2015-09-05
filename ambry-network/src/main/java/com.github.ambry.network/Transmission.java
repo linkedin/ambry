@@ -62,14 +62,14 @@ public abstract class Transmission {
   }
 
   /**
-   * Prepare the channel to accept read or write calls
+   * Prepare the channel to accept read and write calls
    * @throws IOException
    */
   public abstract void prepare()
       throws IOException;
 
   /**
-   * To check if the channel is ready to accept read or write calls
+   * To check if the channel is ready to accept read and write calls
    */
   public abstract boolean ready();
 

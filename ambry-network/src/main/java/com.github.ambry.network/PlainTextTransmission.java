@@ -21,7 +21,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * No handshaking or anything of those prepare phase required for plain text interactions
+   * Prepare is a no op for Plaintext
    * @throws IOException
    */
   @Override
@@ -30,7 +30,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Since there is no handshake, channel is always ready
+   * Plain text channel is always ready to accept read and write calls
    * @return
    */
   @Override
@@ -59,7 +59,7 @@ public class PlainTextTransmission extends Transmission {
   /**
    * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
    *
-   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), fla
+   * @returns true if {@Send} in {@NetworkSend} is completely written to the channel, false otherwise
    * @throws IOException If some other I/O error occurs
    */
   @Override
