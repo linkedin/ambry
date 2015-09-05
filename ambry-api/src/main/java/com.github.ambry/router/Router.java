@@ -2,7 +2,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.ReadableStreamChannel;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.Future;

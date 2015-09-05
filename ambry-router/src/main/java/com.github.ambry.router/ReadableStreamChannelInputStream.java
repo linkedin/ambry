@@ -1,6 +1,5 @@
 package com.github.ambry.router;
 
-import com.github.ambry.network.ReadableStreamChannel;
 import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.io.InputStream;

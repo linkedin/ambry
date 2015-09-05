@@ -8,7 +8,8 @@ import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
@@ -274,7 +275,9 @@ class CoordinatorOperation implements Runnable {
       switch (opType) {
         case GetBlob:
           BlobOutput blobOutput = coordinator.getBlob(blobId);
-          operationResult = new DataStreamChannel(blobOutput.getStream(), blobOutput.getSize());
+          byte[] buf = new byte[(int) blobOutput.getSize()];
+          Utils.readBytesFromStream(blobOutput.getStream(), buf, 0, (int) blobOutput.getSize());
+          operationResult = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
           break;
         case GetBlobInfo:
           blobProperties = coordinator.getBlobProperties(blobId);

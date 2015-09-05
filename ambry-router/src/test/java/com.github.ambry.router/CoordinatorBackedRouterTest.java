@@ -6,7 +6,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.ReadableStreamChannel;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -199,7 +198,9 @@ public class CoordinatorBackedRouterTest {
   private String putBlob(Router router, BlobProperties blobProperties, byte[] usermetadata, byte[] content,
       RouterOperationCallback<String> putBlobCallback)
       throws Exception {
-    ReadableStreamChannel blobDataChannel = new DataStreamChannel(new ByteArrayInputStream(content), content.length);
+    byte[] buf = new byte[content.length];
+    Utils.readBytesFromStream(new ByteArrayInputStream(content), buf, 0, content.length);
+    ReadableStreamChannel blobDataChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
     Future<String> putBlobFuture;
     if (putBlobCallback == null) {
       putBlobFuture = router.putBlob(blobProperties, usermetadata, blobDataChannel);

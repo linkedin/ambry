@@ -1,7 +1,5 @@
 package com.github.ambry.router;
 
-import com.github.ambry.network.ReadableStreamChannel;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -15,23 +13,17 @@ import java.util.concurrent.locks.ReentrantLock;
  * Represents blob data as a {@link ReadableStreamChannel}. Consumes an {@link InputStream} containing the bytes in the
  * blob and stores the data in a {@link ByteBuffer}.
  */
-class DataStreamChannel implements ReadableStreamChannel {
+class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;
 
   /**
-   * Constructs a DataStreamChannel by consuming {@code size} bytes of data from the given {@link InputStream}.
-   * @param inputStream the {@link InputStream} to consume bytes from.
-   * @param size the number of bytes to consume.
-   * @throws IllegalStateException if the stream reached EOF before {@code size} bytes of data was read from it.
-   * @throws IOException if data from the backing {@link InputStream} could not be read.
+   * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
+   * @param buffer the {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
    */
-  public DataStreamChannel(InputStream inputStream, long size)
-      throws IOException {
-    byte[] buf = new byte[(int) size];
-    Utils.readBytesFromStream(inputStream, buf, 0, (int) size);
-    buffer = ByteBuffer.wrap(buf);
+  public ByteBufferReadableStreamChannel(ByteBuffer buffer) {
+    this.buffer = buffer;
   }
 
   @Override
