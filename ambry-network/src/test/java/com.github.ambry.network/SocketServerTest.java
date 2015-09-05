@@ -25,7 +25,7 @@ public class SocketServerTest {
   private static SSLFactory clientSSLFactory;
   private static SSLSocketFactory clientSSLSocketFactory;
   private static SSLConfig clientSSLConfig;
-  private static SSLConfig serverSSLConfig;
+  private static SSLFactory serverSSLFactory;
   private SocketServer server = null;
 
   /**
@@ -35,11 +35,12 @@ public class SocketServerTest {
   public static void initializeTests()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
-    serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     clientSSLFactory = new SSLFactory(clientSSLConfig);
     SSLContext sslContext = clientSSLFactory.getSSLContext();
     clientSSLSocketFactory = sslContext.getSocketFactory();
+    serverSSLFactory = new SSLFactory(serverSSLConfig);
   }
 
   public SocketServerTest()
@@ -50,7 +51,7 @@ public class SocketServerTest {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(config.port, PortType.PLAINTEXT));
     ports.add(new Port(config.port + 1000, PortType.SSL));
-    server = new SocketServer(config, serverSSLConfig, new MetricRegistry(), ports);
+    server = new SocketServer(config, serverSSLFactory, new MetricRegistry(), ports);
     server.start();
   }
 

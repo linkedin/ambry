@@ -1,12 +1,10 @@
 package com.github.ambry.network;
 
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
@@ -20,12 +18,18 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * SSLTransmission to interact with a given socketChannel through ssl encryption
+ * Core class responsible for carrying out SSL interactions. {@SSLEngine} is the one which drives the actual encryption
+ * and decryption. And it carries out the same with the some buffers during read and write calls. Before accepting read
+ * or write calls, handshake negotiation happens. Certificate verification, key negotiation and so on happens during
+ * handshake. If the server/client participating in the interaction couldn't verify the authenticity, handshake may fail
+ * which will result in connection termination. Once handshake negotiation succeeds, all further interactions are encrypted
+ * via the key decided during handshake. Also, every read or write should be checked for handshake status before proceeding.
+ *
  */
 public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel {
 
-  private static final Logger log = LoggerFactory.getLogger(SSLTransmission.class);
-  protected final SSLEngine sslEngine;
+  private static final Logger logger = LoggerFactory.getLogger(SSLTransmission.class);
+  private final SSLEngine sslEngine;
   private SSLEngineResult.HandshakeStatus handshakeStatus;
   private SSLEngineResult handshakeResult;
   private boolean handshakeComplete = false;
@@ -36,9 +40,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
-      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, Logger logger, SSLFactory.Mode mode)
-      throws GeneralSecurityException, IOException {
-    super(connectionId, socketChannel, key, time, metrics, logger);
+      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode)
+      throws IOException {
+    super(connectionId, socketChannel, key, time, metrics);
     this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
     this.netReadBuffer = ByteBuffer.allocate(packetBufferSize());
     this.netWriteBuffer = ByteBuffer.allocate(packetBufferSize());
@@ -63,16 +67,32 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     handshakeStatus = sslEngine.getHandshakeStatus();
   }
 
+  /**
+   * {@inheritdoc}
+   * Returns the handshake status
+   * @return
+   */
   @Override
   public boolean ready() {
     return handshakeComplete;
   }
 
-  void prepare()
+  /**
+   * {@inheritDoc}
+   * Prepares the channel to accept read or write. We do handshake if not yet complete
+   * @throws IOException
+   */
+  @Override
+  public void prepare()
       throws IOException {
     if (!ready()) {
       handshake();
     }
+  }
+
+  @Override
+  public boolean isOpen() {
+    return socketChannel.isOpen();
   }
 
   /**
@@ -105,7 +125,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       socketChannel.socket().close();
       socketChannel.close();
     } catch (IOException ie) {
-      log.warn("Failed to send SSL Close message ", ie);
+      logger.warn("Failed to send SSL close message ", ie);
     }
     key.attach(null);
     key.cancel();
@@ -129,7 +149,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
 
   /**
    * Performs SSL handshake, non blocking.
-   * Before application data (kafka protocols) can be sent client & kafka broker must
+   * Before application data (amrby protocols) can be sent client & amrby server must
    * perform ssl handshake.
    * During the handshake SSLEngine generates encrypted data  that will be transported over socketChannel.
    * Each SSLEngine operation generates SSLEngineResult , of which SSLEngineResult.handshakeStatus field is used to
@@ -162,13 +182,13 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     try {
       switch (handshakeStatus) {
         case NEED_TASK:
-          log.trace(
+          logger.trace(
               "SSLHandshake NEED_TASK channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshakeStatus = runDelegatedTasks();
           break;
         case NEED_WRAP:
-          log.trace(
+          logger.trace(
               "SSLHandshake NEED_WRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshakeResult = handshakeWrap(write);
@@ -184,7 +204,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           } else if (handshakeResult.getStatus() == SSLEngineResult.Status.CLOSED) {
             throw new EOFException();
           }
-          log.trace(
+          logger.trace(
               "SSLHandshake NEED_WRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), handshakeResult, appReadBuffer.position(), netReadBuffer.position(),
               netWriteBuffer.position());
@@ -195,7 +215,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
             break;
           }
         case NEED_UNWRAP:
-          log.trace(
+          logger.trace(
               "SSLHandshake NEED_UNWRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshakeResult = handshakeUnwrap(read);
@@ -215,7 +235,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           } else if (handshakeResult.getStatus() == SSLEngineResult.Status.CLOSED) {
             throw new EOFException("SSL handshake status CLOSED during handshake UNWRAP");
           }
-          log.trace(
+          logger.trace(
               "SSLHandshake NEED_UNWRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), handshakeResult, appReadBuffer.position(), netReadBuffer.position(),
               netWriteBuffer.position());
@@ -280,7 +300,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
       }
 
-      log.trace(
+      logger.trace(
           "SSLHandshake FINISHED channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {} ",
           getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
     } else {
@@ -296,7 +316,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    */
   private SSLEngineResult handshakeWrap(Boolean doWrite)
       throws IOException {
-    log.trace("SSLHandshake handshakeWrap", getConnectionId());
+    logger.trace("SSLHandshake handshakeWrap", getConnectionId());
     if (netWriteBuffer.hasRemaining()) {
       throw new IllegalStateException("handshakeWrap called with netWriteBuffer not empty");
     }
@@ -326,7 +346,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    */
   private SSLEngineResult handshakeUnwrap(Boolean doRead)
       throws IOException {
-    log.trace("SSLHandshake handshakeUnwrap", getConnectionId());
+    logger.trace("SSLHandshake handshakeUnwrap", getConnectionId());
     SSLEngineResult result;
     boolean cont = false;
     int read = 0;
@@ -348,14 +368,14 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
       cont = result.getStatus() == SSLEngineResult.Status.OK
           && handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_UNWRAP;
-      log.trace("SSLHandshake handshakeUnwrap: handshakeStatus ", handshakeStatus);
+      logger.trace("SSLHandshake handshakeUnwrap: handshakeStatus ", handshakeStatus);
     } while (netReadBuffer.position() != 0 && cont);
 
     return result;
   }
 
   @Override
-  long read()
+  public long read()
       throws IOException {
     if (!hasReceive()) {
       this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
@@ -366,9 +386,12 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
+   * {@inheritDoc}
    * Reads a sequence of bytes from this channel into the given buffer.
    *
-   * @param dst The buffer into which bytes are to be transferred
+   * @param dst The buffer into which bytes are to be transferred. Decryption happens within this method. Not all data
+   *            that is decrypted are guaranteed to be copied to the src dst buffer. Future calls will ensure to copy
+   *            the pending data if any from the already decrypted data
    * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
    * @throws IOException if some other I/O error occurs
    */
@@ -404,7 +427,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         netReadBuffer.compact();
         // handle ssl renegotiation.
         if (unwrapResult.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
-          log.trace(
+          logger.trace(
               "SSLChannel Read begin renegotiation getConnectionId() {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshake();
@@ -446,11 +469,16 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   @Override
-  boolean write()
+  public boolean write()
       throws IOException {
     Send send = networkSend.getPayload();
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
+    }
+    if (!closing && handshakeComplete) {
+      if (!flush(netWriteBuffer)) {
+        return false;
+      }
     }
     send.writeTo(this);
     logger
@@ -462,7 +490,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * Writes a sequence of bytes to this channel from the given buffer.
    *
    * @param src The buffer from which bytes are to be retrieved
-   * @returns The number of bytes read, possibly zero, or -1 if the channel has reached end-of-stream
+   * @returns The number of bytes decrypted and written to netWriteBuffer. No guarantee that data in the temporary
+   * buffer will be completely written to the underlying channel right away. So the caller has to make sure to check
+   * the remaining bytes in the netWriteBuffer apart from checking the remaining bytes in src bytebuffer. This method
+   * is called from write() in the same class
    * @throws IOException If some other I/O error occurs
    */
   public int write(ByteBuffer src)
@@ -546,7 +577,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     try {
       sslEngine.closeInbound();
     } catch (SSLException e) {
-      log.debug("SSLEngine.closeInBound() raised an exception.", e);
+      logger.debug("SSLEngine.closeInBound() raised an exception.", e);
     }
   }
 }

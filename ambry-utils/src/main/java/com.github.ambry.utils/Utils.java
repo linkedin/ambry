@@ -598,10 +598,11 @@ public class Utils {
   }
 
   /**
-   * Check if the given ByteBuffer capacity
+   * Make sure that the ByteBuffer capacity is equal to or greater than the expected length.
+   * If not, create a new ByteBuffer of expected length and copy contents from previous ByteBuffer to the new one
    * @param existingBuffer ByteBuffer capacity to check
    * @param newLength new length for the ByteBuffer.
-   * returns ByteBuffer
+   * returns ByteBuffer with a minimum capacity of new length
    */
   public static ByteBuffer ensureCapacity(ByteBuffer existingBuffer, int newLength) {
     if (newLength > existingBuffer.capacity()) {

@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,7 +138,7 @@ public class Selector implements Selectable {
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
     Transmission transmission = TransmissionFactory
-        .getChannelWrapper(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics, logger,
+        .getTransmission(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics,
             portType, sslFactory, SSLFactory.Mode.CLIENT);
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
@@ -158,8 +157,8 @@ public class Selector implements Selectable {
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
     Transmission transmission = TransmissionFactory
-        .getChannelWrapper(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
-            metrics, logger, portType, sslFactory, SSLFactory.Mode.SERVER);
+        .getTransmission(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
+            metrics, portType, sslFactory, SSLFactory.Mode.SERVER);
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
@@ -432,7 +431,6 @@ public class Selector implements Selectable {
             transmission.getConnectionId(), e);
       }
     } else {
-      // is it possible to reach here? if so, how
       key.attach(null);
       key.cancel();
       SocketAddress address = null;
@@ -481,7 +479,7 @@ public class Selector implements Selectable {
       metrics.selectorBytesReceived.update(bytesRead);
       metrics.selectorBytesReceivedCount.inc(bytesRead);
 
-      if (transmission.getNetworkReceive().getReceivedBytes().isReadComplete()) {
+      if (transmission.isReadComplete()) {
         this.completedReceives.add(transmission.getNetworkReceive());
         transmission.clearReceive();
       }
@@ -501,8 +499,8 @@ public class Selector implements Selectable {
       boolean sendComplete = transmission.write();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}",
-            transmission.getSocketChannel().socket().getRemoteSocketAddress());
-        transmission.getNetworkSend().onSendComplete();
+            transmission.getRemoteSocketAddress());
+        transmission.onSendComplete();
         this.completedSends.add(transmission.getNetworkSend());
         metrics.sendInFlight.dec();
         transmission.clearSend();

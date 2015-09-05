@@ -2,15 +2,20 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.Time;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * Based class for transmission (plaintext/ssl) to interact with any given socketChannel
+ * Defines the interface for channel interactions. Once the connection is established, {@Selector} assigns a {@Transmission}
+ * object as attachment for a key. All operations to the channel like read, write, close, etc happens via this class.
+ * This class is also responsible for exposing the characteristics of the underlying channel like ready,
+ * isConnected and so on.
  */
 public abstract class Transmission {
 
@@ -21,29 +26,32 @@ public abstract class Transmission {
   protected SelectionKey key = null;
   protected final Time time;
   protected final NetworkMetrics metrics;
-  protected Logger logger;
 
   public Transmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
-      NetworkMetrics metrics, Logger logger) {
+      NetworkMetrics metrics) {
     this.connectionId = connectionId;
     this.socketChannel = socketChannel;
     this.key = key;
     this.time = time;
     this.metrics = metrics;
-    this.logger = logger;
   }
 
+  /**
+   * Actions taken as part of finishing a connection initiation. This will be called by client when server accepting
+   * its connection request.
+   * @throws IOException
+   */
   public void finishConnect()
       throws IOException {
     socketChannel.finishConnect();
     key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
   }
 
-  public boolean isOpen() {
-    return socketChannel.isOpen();
-  }
-
-  void setNetworkSend(NetworkSend networkSend) {
+  /**
+   * Setting network send to be written to the underlying channel asynchronously
+   * @param networkSend
+   */
+  public void setNetworkSend(NetworkSend networkSend) {
     if (hasSend()) {
       throw new IllegalStateException(
           "Attempt to begin a networkSend operation with prior networkSend operation still in progress.");
@@ -53,64 +61,100 @@ public abstract class Transmission {
     key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
   }
 
-  abstract void prepare()
-      throws IOException;
-
-  abstract boolean ready();
-
   /**
-   * Reads data from the socketChannel
-   * @return total bytes read from the socket channel
+   * Prepare the channel to accept read or write calls
+   * @throws IOException
    */
-  abstract long read()
+  public abstract void prepare()
       throws IOException;
 
   /**
-   * Writes the payload to the socket channel
-   * @return true if send is complete, false otherwise
+   * To check if the channel is ready to accept read or write calls
    */
-  abstract boolean write()
+  public abstract boolean ready();
+
+  /**
+   * Reads a sequence of bytes from the channel into the {@NetworkReceive}
+   *
+   * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
+   * @throws IOException if some other I/O error occurs
+   */
+  public abstract long read()
       throws IOException;
 
+  /**
+   * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
+   *
+   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), false otherwise
+   * @throws IOException If some other I/O error occurs
+   */
+  public abstract boolean write()
+      throws IOException;
+
+  /**
+   * Returns true if {@NetworkReceive} is read completely
+   * @return true if {@NetworkReceive} is read completely, false otherwise
+   */
+  public boolean isReadComplete(){
+    if(networkReceive!= null){
+      return networkReceive.getReceivedBytes().isReadComplete();
+    }
+    return false;
+  }
+
+  /**
+   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   */
+  public void onSendComplete(){
+    this.networkSend.onSendComplete();
+  }
+
+  /**
+   * Returns the remote socket address of the underlying socket channel
+   * @return
+   */
+  public SocketAddress getRemoteSocketAddress(){
+    return socketChannel.socket().getRemoteSocketAddress();
+  }
   /**
    * Close the connection for the socket channel
    */
   public abstract void close()
       throws IOException;
 
-  String getConnectionId() {
+  public String getConnectionId() {
     return connectionId;
   }
 
-  SocketChannel getSocketChannel() {
+  public SocketChannel getSocketChannel() {
     return this.socketChannel;
   }
 
-  boolean hasSend() {
+  public boolean hasSend() {
     return networkSend != null;
   }
 
-  void clearSend() {
+  public void clearSend() {
     networkSend = null;
   }
 
-  boolean hasReceive() {
+  public boolean hasReceive() {
     return networkReceive != null;
   }
 
-  void clearReceive() {
+  public void clearReceive() {
     networkReceive = null;
   }
 
-  NetworkReceive getNetworkReceive() {
+  public NetworkReceive getNetworkReceive() {
     return this.networkReceive;
   }
 
-  NetworkSend getNetworkSend() {
+  public NetworkSend getNetworkSend() {
     return this.networkSend;
   }
 
-  boolean isConnected() {
+  public boolean isConnected() {
     return socketChannel.isConnected();
   }
 }

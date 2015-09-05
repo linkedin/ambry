@@ -1795,7 +1795,7 @@ public class ServerTest {
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT, sslCluster);
   }
 
-  @Test
+  //@Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     sslCluster.startServers();
@@ -1816,7 +1816,7 @@ public class ServerTest {
     int numberOfSenderThreads = 3;
     int numberOfVerifierThreads = 1;
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
-    int numberOfRequestsToSendPerThread = 1;
+    int numberOfRequestsToSendPerThread = 5;
     for (int i = 0; i < numberOfSenderThreads; i++) {
       senderThreads[i] =
           new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));

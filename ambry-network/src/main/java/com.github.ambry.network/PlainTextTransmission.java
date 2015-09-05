@@ -6,28 +6,40 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * PlainTextTransmission to interact with a given socketChannel in plain text
+ * Transmission used to speak plain text to the underlying channel.
  */
 public class PlainTextTransmission extends Transmission {
+  private static final Logger logger = LoggerFactory.getLogger(SSLTransmission.class);
 
   public PlainTextTransmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
-      NetworkMetrics metrics, Logger logger) {
-    super(connectionId, socketChannel, key, time, metrics, logger);
+      NetworkMetrics metrics) {
+    super(connectionId, socketChannel, key, time, metrics);
   }
 
-  void prepare()
+  /**
+   * No handshaking or anything of those prepare phase required for plain text interactions
+   * @throws IOException
+   */
+  @Override
+  public void prepare()
       throws IOException {
   }
 
-  boolean ready() {
+  /**
+   * Since there is no handshake, channel is always ready
+   * @return
+   */
+  @Override
+  public boolean ready() {
     return true;
   }
 
   /**
-   * Reads a sequence of bytes from the channel into the networkReceive
+   * Reads a sequence of bytes from the channel into the {@NetworkReceive}
    *
    * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
    * @throws IOException if some other I/O error occurs
@@ -43,9 +55,9 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Writes a sequence of bytes to the channel from the payload in networkSend
+   * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
    *
-   * @returns The number of bytes written, possibly zero, or -1 if the channel has reached end-of-stream
+   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), false otherwise
    * @throws IOException If some other I/O error occurs
    */
   @Override
@@ -64,6 +76,7 @@ public class PlainTextTransmission extends Transmission {
   /**
    * Close the connection for the socket channel
    */
+  @Override
   public void close()
       throws IOException {
     key.attach(null);

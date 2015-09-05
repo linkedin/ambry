@@ -52,7 +52,7 @@ public class SocketServer implements NetworkServer {
   private final HashMap<PortType, Port> ports;
   private SSLFactory sslFactory;
 
-  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
+  public SocketServer(NetworkConfig config, SSLFactory sslFactory, MetricRegistry registry, ArrayList<Port> portList) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -66,7 +66,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
-    this.initializeSSLFactory(sslConfig);
+    this.sslFactory = sslFactory;
   }
 
   public String getHost() {
@@ -75,18 +75,6 @@ public class SocketServer implements NetworkServer {
 
   public int getPort() {
     return port;
-  }
-
-  private void initializeSSLFactory(SSLConfig sslConfig) {
-    try {
-      if (sslConfig.sslEnabledDatacenters.length() > 0) {
-        this.sslFactory = new SSLFactory(sslConfig);
-      } else {
-        this.sslFactory = null;
-      }
-    } catch (Exception e) {
-      throw new IllegalStateException("Exception thrown during initialization of SSLFactory ");
-    }
   }
 
   public int getSSLPort() {
