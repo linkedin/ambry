@@ -41,23 +41,25 @@ public class PlainTextTransmission extends Transmission {
   /**
    * Reads a sequence of bytes from the channel into the {@NetworkReceive}
    *
-   * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
+   * @return true if the read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
    */
   @Override
-  public long read()
+  public boolean read()
       throws IOException {
     if (!hasReceive()) {
       networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
     long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
-    return bytesRead;
+    metrics.selectorBytesReceived.update(bytesRead);
+    metrics.selectorBytesReceivedCount.inc(bytesRead);
+    return networkReceive.getReceivedBytes().isReadComplete();
   }
 
   /**
    * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
    *
-   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), false otherwise
+   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), fla
    * @throws IOException If some other I/O error occurs
    */
   @Override

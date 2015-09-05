@@ -18,13 +18,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Core class responsible for carrying out SSL interactions. {@SSLEngine} is the one which drives the actual encryption
- * and decryption. And it carries out the same with the some buffers during read and write calls. Before accepting read
- * or write calls, handshake negotiation happens. Certificate verification, key negotiation and so on happens during
- * handshake. If the server/client participating in the interaction couldn't verify the authenticity, handshake may fail
- * which will result in connection termination. Once handshake negotiation succeeds, all further interactions are encrypted
- * via the key decided during handshake. Also, every read or write should be checked for handshake status before proceeding.
- *
+ * Handles all the SSL related interactions. It is mainly responsible for establishing the handshake completely,
+ * performing reads/writes and closing the transmission safely. This class also implements
+ * ReadableByteChannel and WritableByteChannel to provide a way to encrypt and decrypt to/from a channel
  */
 public class SSLTransmission extends Transmission implements ReadableByteChannel, WritableByteChannel {
 
@@ -375,14 +371,15 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   @Override
-  public long read()
+  public boolean read()
       throws IOException {
     if (!hasReceive()) {
       this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
-
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
-    return bytesRead;
+    metrics.selectorBytesReceived.update(bytesRead);
+    metrics.selectorBytesReceivedCount.inc(bytesRead);
+    return networkReceive.getReceivedBytes().isReadComplete();
   }
 
   /**

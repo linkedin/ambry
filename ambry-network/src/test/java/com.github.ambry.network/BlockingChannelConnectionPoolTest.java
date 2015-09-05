@@ -44,9 +44,12 @@ public class BlockingChannelConnectionPoolTest {
   public static void initializeTests()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    SSLConfig serverSSLConfig1 = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1");
-    SSLConfig serverSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2");
-    SSLConfig serverSSLConfig3 = TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3");
+    SSLConfig serverSSLConfig1 =
+        TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1");
+    SSLConfig serverSSLConfig2 =
+        TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2");
+    SSLConfig serverSSLConfig3 =
+        TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3");
     sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();

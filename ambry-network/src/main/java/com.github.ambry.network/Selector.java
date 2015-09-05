@@ -471,15 +471,8 @@ public class Selector implements Selectable {
       throws IOException {
     long startTimeToReadInMs = time.milliseconds();
     try {
-      long bytesRead = transmission.read();
-      if (bytesRead == -1) {
-        close(key);
-        return;
-      }
-      metrics.selectorBytesReceived.update(bytesRead);
-      metrics.selectorBytesReceivedCount.inc(bytesRead);
-
-      if (transmission.isReadComplete()) {
+      boolean readComplete = transmission.read();
+      if (readComplete) {
         this.completedReceives.add(transmission.getNetworkReceive());
         transmission.clearReceive();
       }

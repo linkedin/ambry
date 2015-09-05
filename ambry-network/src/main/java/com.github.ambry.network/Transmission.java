@@ -76,10 +76,10 @@ public abstract class Transmission {
   /**
    * Reads a sequence of bytes from the channel into the {@NetworkReceive}
    *
-   * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
+   * @return true if read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
    */
-  public abstract long read()
+  public abstract boolean read()
       throws IOException;
 
   /**
