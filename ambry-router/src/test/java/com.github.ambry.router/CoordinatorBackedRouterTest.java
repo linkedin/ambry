@@ -61,10 +61,18 @@ public class CoordinatorBackedRouterTest {
     }
 
     Properties properties = new Properties();
-    properties.setProperty("router.operation.pool.size", "0");
+    properties.setProperty("coordinator.backed.router.operation.pool.size", "0");
     verifiableProperties = getVProps(properties);
     try {
       new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
+    // CoordinatorOperation instantiation test
+    try {
+      new CoordinatorOperation(coordinator, new FutureRouterResult<String>(), "@@blobid@@", null,
+          CoordinatorOperationType.PutBlob);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -122,21 +130,31 @@ public class CoordinatorBackedRouterTest {
   @Test
   public void exceptionHandlingTest()
       throws Exception {
+    ClusterMap clusterMap = new MockClusterMap();
+
     Properties properties = new Properties();
     properties.setProperty(MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START, "true");
     VerifiableProperties verifiableProperties = getVProps(properties);
-    ClusterMap clusterMap = new MockClusterMap();
-
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    triggerExceptionHandlingTest(verifiableProperties, clusterMap, coordinator,
+    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
+    triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.UnexpectedInternalError,
         MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START);
+    router.close();
 
     properties = new Properties();
     properties.setProperty(MockCoordinator.RUNTIME_EXCEPTION_ON_OPERATION_START, "true");
     verifiableProperties = getVProps(properties);
     coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    triggerExceptionHandlingTest(verifiableProperties, clusterMap, coordinator,
+    router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
+    triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.UnexpectedInternalError,
         MockCoordinator.RUNTIME_EXCEPTION_ON_OPERATION_START);
+    router.close();
+
+    verifiableProperties = getVProps(properties);
+    coordinator = new MockCoordinator(verifiableProperties, clusterMap);
+    router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
+    router.close();
+    triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.RouterClosed, null);
   }
 
   // helpers
@@ -335,15 +353,14 @@ public class CoordinatorBackedRouterTest {
 
   // exceptionHandlingTest() helpers
   private void triggerExceptionHandlingTest(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Coordinator coordinator, String expectedErrorMsg)
+      Router router, RouterErrorCode routerErrorCode, String expectedErrorMsg)
       throws Exception {
-    Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
-    doExceptionHandlingTest(router, RouterUsage.WithCallback, expectedErrorMsg);
-    doExceptionHandlingTest(router, RouterUsage.WithoutCallback, expectedErrorMsg);
-    router.close();
+    doExceptionHandlingTest(router, RouterUsage.WithCallback, routerErrorCode, expectedErrorMsg);
+    doExceptionHandlingTest(router, RouterUsage.WithoutCallback, routerErrorCode, expectedErrorMsg);
   }
 
-  private void doExceptionHandlingTest(Router router, RouterUsage routerUsage, String expectedErrorMsg)
+  private void doExceptionHandlingTest(Router router, RouterUsage routerUsage, RouterErrorCode routerErrorCode,
+      String expectedErrorMsg)
       throws Exception {
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -363,40 +380,40 @@ public class CoordinatorBackedRouterTest {
     String blobId = "@@placeholder@";
     try {
       blobId = putBlob(router, putBlobProperties, putUserMetadata, putContent, putBlobCallback);
-      fail("MockCoordinator would have thrown exception which should have been propagated");
+      fail("Operation would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.UnexpectedInternalError);
-      matchExpectedCoordinatorErrorMessage(e, expectedErrorMsg);
+      checkException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       getBlobInfoAndCompare(router, blobId, putBlobProperties, putUserMetadata, getBlobInfoCallback);
-      fail("MockCoordinator would have thrown exception which should have been propagated");
+      fail("Operation would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.UnexpectedInternalError);
-      matchExpectedCoordinatorErrorMessage(e, expectedErrorMsg);
+      checkException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       getBlobAndCompare(router, blobId, putContent, getBlobCallback);
       fail("MockCoordinator would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.UnexpectedInternalError);
-      matchExpectedCoordinatorErrorMessage(e, expectedErrorMsg);
+      checkException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       deleteBlob(router, blobId, deleteBlobCallback);
       fail("MockCoordinator would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.UnexpectedInternalError);
-      matchExpectedCoordinatorErrorMessage(e, expectedErrorMsg);
+      checkException(e, routerErrorCode, expectedErrorMsg);
     }
   }
 
-  private void matchExpectedCoordinatorErrorMessage(Exception e, String expectedErrorMsg) {
-    String exceptionMsg = e.getMessage().substring(e.getMessage().lastIndexOf(": ") + 2);
-    assertEquals("Unexpected error message", expectedErrorMsg, exceptionMsg);
+  private void checkException(Exception e, RouterErrorCode routerErrorCode, String expectedErrorMsg)
+      throws Exception {
+    matchRouterErrorCode(e, routerErrorCode);
+    if (expectedErrorMsg != null) {
+      String exceptionMsg = e.getMessage().substring(e.getMessage().lastIndexOf(": ") + 2);
+      assertEquals("Unexpected error message", expectedErrorMsg, exceptionMsg);
+    }
   }
 }
 

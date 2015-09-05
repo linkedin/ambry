@@ -4,6 +4,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ReadableStreamChannel;
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.concurrent.Future;
 
 
@@ -81,7 +82,14 @@ public interface Router extends Closeable {
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback);
 
   /**
-   * Close the router
+   * Closes the router and releases any resources held by the router. If the router is already closed, then this
+   * method has no effect.
+   * <p/>
+   * After a router is closed, any further attempt to invoke Router operations will cause a {@link RouterException} with
+   * error code {@link RouterErrorCode#RouterClosed} will be returned as part of the {@link Future} and {@link Callback}
+   * if any.
+   * @throws IOException if an I/O error occurs.
    */
-  public void close();
+  public void close()
+      throws IOException;
 }

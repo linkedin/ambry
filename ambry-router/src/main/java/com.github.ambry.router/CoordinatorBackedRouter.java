@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A {@link Router} that uses a {@link Coordinator} in the background to perform its operations.
  * <p/>
- * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerOperationPoolSize} on
+ * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#coordinatorBackedRouterOperationPoolSize} on
  * instantiation. This thread pool is used to provide non-blocking behavior by executing the blocking operations of the
  * {@link Coordinator} in the background.
  * <p/>
@@ -31,7 +31,10 @@ import org.slf4j.LoggerFactory;
  * spike.
  */
 public class CoordinatorBackedRouter implements Router {
-  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+  private static RouterException ROUTER_CLOSED_EXCEPTION =
+      new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+
+  private final AtomicBoolean routerOpen = new AtomicBoolean(true);
   private final Coordinator coordinator;
   private final ExecutorService operationPool;
   private final RouterConfig routerConfig;
@@ -43,7 +46,7 @@ public class CoordinatorBackedRouter implements Router {
    * @param metricRegistry the {@link MetricRegistry} to use for metrics.
    * @param coordinator the {@link Coordinator} that will back this router.
    * @throws IllegalArgumentException if any of the arguments received are null or if
-   * {@link RouterConfig#routerOperationPoolSize} is less than or equal to 0.
+   * {@link RouterConfig#coordinatorBackedRouterOperationPoolSize} is less than or equal to 0.
    */
   public CoordinatorBackedRouter(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Coordinator coordinator) {
@@ -62,12 +65,11 @@ public class CoordinatorBackedRouter implements Router {
       throw new IllegalArgumentException(errorMessage.toString());
     }
     this.routerConfig = new RouterConfig(verifiableProperties);
-    if (routerConfig.routerOperationPoolSize > 0) {
-      this.operationPool = Executors.newFixedThreadPool(routerConfig.routerOperationPoolSize);
+    if (routerConfig.coordinatorBackedRouterOperationPoolSize > 0) {
+      this.operationPool = Executors.newFixedThreadPool(routerConfig.coordinatorBackedRouterOperationPoolSize);
     } else {
-      throw new IllegalArgumentException(
-          "Router operation pool size defined in config should be > 0 (is " + routerConfig.routerOperationPoolSize
-              + ")");
+      throw new IllegalArgumentException("Router operation pool size defined in config should be > 0 (is "
+          + routerConfig.coordinatorBackedRouterOperationPoolSize + ")");
     }
     this.coordinator = coordinator;
   }
@@ -80,8 +82,9 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
     FutureRouterResult<BlobInfo> futureRouterResult = new FutureRouterResult<BlobInfo>();
-    operationPool.submit(new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback,
-        CoordinatorOperationType.GetBlobInfo));
+    CoordinatorOperation operation = new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback,
+        CoordinatorOperationType.GetBlobInfo);
+    submitOperation(operation, futureRouterResult, callback);
     return futureRouterResult;
   }
 
@@ -93,8 +96,9 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
     FutureRouterResult<ReadableStreamChannel> futureRouterResult = new FutureRouterResult<ReadableStreamChannel>();
-    operationPool.submit(
-        new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback, CoordinatorOperationType.GetBlob));
+    CoordinatorOperation operation =
+        new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback, CoordinatorOperationType.GetBlob);
+    submitOperation(operation, futureRouterResult, callback);
     return futureRouterResult;
   }
 
@@ -107,8 +111,9 @@ public class CoordinatorBackedRouter implements Router {
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
     FutureRouterResult<String> futureRouterResult = new FutureRouterResult<String>();
-    operationPool.submit(
-        new CoordinatorOperation(coordinator, futureRouterResult, blobProperties, usermetadata, channel, callback));
+    CoordinatorOperation operation =
+        new CoordinatorOperation(coordinator, futureRouterResult, blobProperties, usermetadata, channel, callback);
+    submitOperation(operation, futureRouterResult, callback);
     return futureRouterResult;
   }
 
@@ -120,15 +125,16 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
     FutureRouterResult<Void> futureRouterResult = new FutureRouterResult<Void>();
-    operationPool.submit(new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback,
-        CoordinatorOperationType.DeleteBlob));
+    CoordinatorOperation operation = new CoordinatorOperation(coordinator, futureRouterResult, blobId, callback,
+        CoordinatorOperationType.DeleteBlob);
+    submitOperation(operation, futureRouterResult, callback);
     return futureRouterResult;
   }
 
   @Override
   public void close() {
     try {
-      if (shuttingDown.compareAndSet(false, true)) {
+      if (routerOpen.compareAndSet(true, false)) {
         logger.info("CoordinatorBackedRouter closing");
         operationPool.shutdown();
         operationPool.awaitTermination(1, TimeUnit.MINUTES);
@@ -141,6 +147,46 @@ public class CoordinatorBackedRouter implements Router {
       logger.error("Error closing Coordinator in CoordinatorBackedRouter", e);
     } catch (InterruptedException e) {
       logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
+    }
+  }
+
+  /**
+   * Submits a {@link CoordinatorOperation} for execution. Immediately completes the operation with an exception if the
+   * router is closed or if the task submission fails.
+   * @param coordinatorOperation the {@link CoordinatorOperation} that needs to be executed.
+   * @param futureRouterResult the {@link FutureRouterResult} that will hold the result of the operation eventually.
+   * @param callback the {@link Callback} that will be invoked when the operation completes. Can be null.
+   */
+  private void submitOperation(CoordinatorOperation coordinatorOperation, FutureRouterResult futureRouterResult,
+      Callback callback) {
+    if (routerOpen.get()) {
+      try {
+        operationPool.submit(coordinatorOperation);
+      } catch (Exception e) {
+        completeOperation(futureRouterResult, callback, null, e);
+      }
+    } else {
+      completeOperation(futureRouterResult, callback, null, ROUTER_CLOSED_EXCEPTION);
+    }
+  }
+
+  /**
+   * Completes a router operation by invoking the {@code callback} and setting the {@code futureRouterResult} with
+   * {@code operationResult} (if any) and {@code exception} (if any).
+   * @param futureRouterResult the {@link FutureRouterResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param operationResult the result of the operation (if any).
+   * @param exception {@link Exception} encountered while performing the operation (if any).
+   */
+  protected static void completeOperation(FutureRouterResult futureRouterResult, Callback callback,
+      Object operationResult, Exception exception) {
+    RuntimeException runtimeException = null;
+    if (exception != null) {
+      runtimeException = new RuntimeException(exception);
+    }
+    futureRouterResult.done(operationResult, runtimeException);
+    if (callback != null) {
+      callback.onCompletion(operationResult, exception);
     }
   }
 }
@@ -256,14 +302,7 @@ class CoordinatorOperation implements Runnable {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      RuntimeException runtimeException = null;
-      if (exception != null) {
-        runtimeException = new RuntimeException(exception);
-      }
-      futureRouterResult.done(operationResult, runtimeException);
-      if (callback != null) {
-        callback.onCompletion(operationResult, exception);
-      }
+      CoordinatorBackedRouter.completeOperation(futureRouterResult, callback, operationResult, exception);
     }
   }
 }

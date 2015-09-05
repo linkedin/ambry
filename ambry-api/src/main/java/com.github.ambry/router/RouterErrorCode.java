@@ -9,24 +9,11 @@ import com.github.ambry.coordinator.CoordinatorError;
 public enum RouterErrorCode {
   // General errors. May occur for any operation.
   /**
-   * Router experienced an unexpected internal error. The caller should retry the operation. An operation that
-   * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
-   * future.
-   */
-  UnexpectedInternalError,
-  /**
    * Insufficient Ambry DataNodes could be contacted to successfully complete an operation. The caller should retry the
    * operation. An operation that changes the state of an existing blob (delete) may have partially completed and so may
    * eventually complete in the future.
    */
   AmbryUnavailable,
-  /**
-   * Operation did not complete within specified time out. The caller should retry the operation. An operation that
-   * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
-   * future.
-   */
-  OperationTimedOut,
-
   /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
    * {@link Router#getBlobInfo(String)}, {@link Router#getBlob(String)}, {@link Router#deleteBlob(String)} (and their
@@ -39,26 +26,42 @@ public enum RouterErrorCode {
    * operation (and its variant).
    */
   InvalidPutArgument,
+  /**
+   * Operation did not complete within specified time out. The caller should retry the operation. An operation that
+   * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
+   * future.
+   */
+  OperationTimedOut,
+  /**
+   * Thrown when an operation is attempted after the {@link Router} is closed.
+   */
+  RouterClosed,
+  /**
+   * Router experienced an unexpected internal error. The caller should retry the operation. An operation that
+   * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
+   * future.
+   */
+  UnexpectedInternalError,
 
   // Errors on write path. May occur for put operations.
-  /**
-   * Insufficient capacity available in Ambry for object to be stored.
-   */
-  InsufficientCapacity,
   /**
    * Blob is too large. Cannot store blob of such size.
    */
   BlobTooLarge,
+  /**
+   * Insufficient capacity available in Ambry for object to be stored.
+   */
+  InsufficientCapacity,
 
   // Errors on read path. May occur for getBlobInfo, getBlob or deleteBlob operations.
-  /**
-   * No Blob could be found for specified blob id.
-   */
-  BlobDoesNotExist,
   /**
    * Blob has been deleted and so cannot be retrieved.
    */
   BlobDeleted,
+  /**
+   * No Blob could be found for specified blob id.
+   */
+  BlobDoesNotExist,
   /**
    * TTL of Blob has expired and so Blob cannot be retrieved.
    */

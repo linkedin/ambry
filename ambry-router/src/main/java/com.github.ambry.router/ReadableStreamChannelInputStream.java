@@ -6,19 +6,20 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  *  Class that converts a (possibly non-blocking) {@link ReadableStreamChannel} into a blocking {@link InputStream}.
+ *  <p/>
+ *  This class is not thread-safe and will result in undefined behaviour if accesses to the stream are not synchronized.
  */
 class ReadableStreamChannelInputStream extends InputStream {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicInteger totalBytesRead = new AtomicInteger(0);
   private final ByteBufferChannel singleByteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate(1));
   private final ReadableStreamChannel readableStreamChannel;
+  private volatile long totalBytesRead = 0;
 
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
@@ -26,8 +27,8 @@ class ReadableStreamChannelInputStream extends InputStream {
 
   @Override
   public int available() {
-    return readableStreamChannel.getSize() - totalBytesRead.get() < Integer.MAX_VALUE ?
-        (int) readableStreamChannel.getSize() - totalBytesRead.get() : Integer.MAX_VALUE;
+    return readableStreamChannel.getSize() - totalBytesRead < Integer.MAX_VALUE ? (int) (readableStreamChannel.getSize()
+        - totalBytesRead) : Integer.MAX_VALUE;
   }
 
   @Override
@@ -39,7 +40,7 @@ class ReadableStreamChannelInputStream extends InputStream {
     if (read(singleByteBufferChannel) != -1) {
       buffer.flip();
       data = buffer.get() & 0xFF;
-      totalBytesRead.incrementAndGet();
+      totalBytesRead++;
     }
     return data;
   }
@@ -58,7 +59,7 @@ class ReadableStreamChannelInputStream extends InputStream {
     ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.wrap(b, off, len));
     int bytesRead = read(byteBufferChannel);
     if (bytesRead > 0) {
-      totalBytesRead.addAndGet(bytesRead);
+      totalBytesRead += bytesRead;
     }
     return bytesRead;
   }
