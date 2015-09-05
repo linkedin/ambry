@@ -289,7 +289,7 @@ public class Selector implements Selectable {
             handleConnect(key, transmission);
           }
 
-          /* if channel is not ready finish prepare */
+          /* if channel is not ready, finish prepare */
           if (transmission.isConnected() && !transmission.ready()) {
             transmission.prepare();
             break;
