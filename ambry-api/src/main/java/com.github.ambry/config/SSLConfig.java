@@ -123,8 +123,7 @@ public class SSLConfig {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
     sslEnabledProtocols = verifiableProperties.getString("ssl.enabled.protocols", "TLSv1.2");
-    sslEndpointIdentificationAlgorithm =
-        verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
+    sslEndpointIdentificationAlgorithm = verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
     sslClientAuthentication = verifiableProperties.getString("ssl.client.authentication", "required");
     sslKeymanagerAlgorithm = verifiableProperties.getString("ssl.keymanager.algorithm", "");
     sslTrustmanagerAlgorithm = verifiableProperties.getString("ssl.trustmanager.algorithm", "");

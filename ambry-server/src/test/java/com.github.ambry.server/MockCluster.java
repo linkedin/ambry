@@ -3,9 +3,9 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
@@ -13,15 +13,10 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -39,13 +34,15 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
+  private boolean serverInitialized = false;
 
   public MockCluster(NotificationSystem notificationSystem)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "");
+    this(notificationSystem, false, "", new Properties(), true);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
+      boolean enableHardDeletes)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
@@ -55,20 +52,13 @@ public class MockCluster {
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-        Properties sslProperties;
         if (enableSSL) {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
-          sslProperties = TestSSLUtils.createSSLProperties(sslEnabledDatacenters);
-        } else {
-          sslProperties = new Properties();
+          sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
         }
-        startServer(dataNodeId, sslProperties);
+        initializeServer(dataNodeId, sslProps, enableHardDeletes);
       }
     } catch (InstantiationException e) {
-      // clean up other servers which was started already
-      cleanup();
-      throw e;
-    } catch (GeneralSecurityException e) {
       // clean up other servers which was started already
       cleanup();
       throw e;
@@ -83,14 +73,14 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId, Properties sslProperties)
+  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes)
       throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.deleted.message.retention.days", "0");
-    props.setProperty("store.enable.hard.delete", "true");
+    props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
@@ -98,22 +88,29 @@ public class MockCluster {
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
     serverList.add(server);
-    server.startup();
+  }
+
+  public void startServers()
+      throws InstantiationException {
+    serverInitialized = true;
+    for (AmbryServer server : serverList) {
+      server.startup();
+    }
   }
 
   public void cleanup() {
-    CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
-    for (AmbryServer server : serverList) {
-
-      new Thread(new ServerShutdown(shutdownLatch, server)).start();
+    if (serverInitialized) {
+      CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
+      for (AmbryServer server : serverList) {
+        new Thread(new ServerShutdown(shutdownLatch, server)).start();
+      }
+      try {
+        shutdownLatch.await();
+      } catch (Exception e) {
+        assertTrue(false);
+      }
+      clusterMap.cleanup();
     }
-    try {
-      shutdownLatch.await();
-    } catch (Exception e) {
-      assertTrue(false);
-    }
-
-    clusterMap.cleanup();
   }
 
   /**
@@ -123,8 +120,9 @@ public class MockCluster {
    * @return the config value for sslEnabledDatacenters for the given datacenter
    */
   private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
-    sslEnabledDataCenterList.remove(datacenter);
-    String sslEnabledDatacenters = Utils.concatenateString(sslEnabledDataCenterList, ",");
+    ArrayList<String> localCopy = (ArrayList<String>)sslEnabledDataCenterList.clone();
+    localCopy.remove(datacenter);
+    String sslEnabledDatacenters = Utils.concatenateString(localCopy, ",");
     return sslEnabledDatacenters;
   }
 

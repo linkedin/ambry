@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.SSLConfig;
+import java.io.File;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -26,17 +27,28 @@ public class SSLFactoryTest {
   @Test
   public void testSSLFactory()
       throws Exception {
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig clientSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+
     SSLFactory sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     SSLSocketFactory socketFactory = sslContext.getSocketFactory();
     Assert.assertNotNull(socketFactory);
     SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
     Assert.assertNotNull(serverSocketFactory);
-    SSLEngine clientSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
-    SSLEngine serverSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
+    SSLEngine serverSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
+    TestSSLUtils.verifySSLConfig(sslContext, serverSideSSLEngine, false);
 
-    TestSSLUtils.verifySSLConfig(sslContext, clientSSLEngine, true);
-    TestSSLUtils.verifySSLConfig(sslContext, serverSSLEngine, false);
+    //client
+    sslFactory = new SSLFactory(clientSSLConfig);
+    sslContext = sslFactory.getSSLContext();
+    socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine clientSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
+    TestSSLUtils.verifySSLConfig(sslContext, clientSideSSLEngine, true);
   }
 }

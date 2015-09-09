@@ -5,6 +5,7 @@ import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,8 +29,12 @@ public class BlockingChannelConnectionPoolTest {
   private SocketServer server1 = null;
   private SocketServer server2 = null;
   private SocketServer server3 = null;
+  private static File trustStoreFile = null;
   private static SSLFactory sslFactory;
   private static SSLConfig sslConfig;
+  private static SSLFactory serverSSLFactory1;
+  private static SSLFactory serverSSLFactory2;
+  private static SSLFactory serverSSLFactory3;
   private static SSLSocketFactory sslSocketFactory;
 
   /**
@@ -38,10 +43,20 @@ public class BlockingChannelConnectionPoolTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3");
+    trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig serverSSLConfig1 =
+        TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1");
+    SSLConfig serverSSLConfig2 =
+        TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2");
+    SSLConfig serverSSLConfig3 =
+        TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3");
+    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
+    serverSSLFactory1 = new SSLFactory(serverSSLConfig1);
+    serverSSLFactory2 = new SSLFactory(serverSSLConfig2);
+    serverSSLFactory3 = new SSLFactory(serverSSLConfig3);
   }
 
   public BlockingChannelConnectionPoolTest()
@@ -53,7 +68,7 @@ public class BlockingChannelConnectionPoolTest {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(6667, PortType.PLAINTEXT));
     ports.add(new Port(7667, PortType.SSL));
-    server1 = new SocketServer(config, new MetricRegistry(), ports);
+    server1 = new SocketServer(config, serverSSLFactory1, new MetricRegistry(), ports);
     server1.start();
     props.setProperty("port", "6668");
     propverify = new VerifiableProperties(props);
@@ -61,7 +76,7 @@ public class BlockingChannelConnectionPoolTest {
     ports = new ArrayList<Port>();
     ports.add(new Port(6668, PortType.PLAINTEXT));
     ports.add(new Port(7668, PortType.SSL));
-    server2 = new SocketServer(config, new MetricRegistry(), ports);
+    server2 = new SocketServer(config, serverSSLFactory2, new MetricRegistry(), ports);
     server2.start();
     props.setProperty("port", "6669");
     propverify = new VerifiableProperties(props);
@@ -69,7 +84,7 @@ public class BlockingChannelConnectionPoolTest {
     ports = new ArrayList<Port>();
     ports.add(new Port(6669, PortType.PLAINTEXT));
     ports.add(new Port(7669, PortType.SSL));
-    server3 = new SocketServer(config, new MetricRegistry(), ports);
+    server3 = new SocketServer(config, serverSSLFactory3, new MetricRegistry(), ports);
     server3.start();
   }
 
@@ -127,7 +142,7 @@ public class BlockingChannelConnectionPoolTest {
     testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 5);
   }
 
-  //@Test
+  @Test
   public void testBlockingChannelInfoForSSL()
       throws Exception {
     testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 5, 5);
@@ -321,7 +336,7 @@ public class BlockingChannelConnectionPoolTest {
     connectionPool.shutdown();
   }
 
-  //@Test
+  @Test
   public void testSSLBlockingChannelConnectionPool()
       throws Exception {
     Properties props = new Properties();
@@ -336,13 +351,13 @@ public class BlockingChannelConnectionPoolTest {
     CountDownLatch releaseComplete = new CountDownLatch(10);
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     Map<String, CountDownLatch> channelCount = new HashMap<String, CountDownLatch>();
-    channelCount.put("localhost" + 6667, new CountDownLatch(5));
-    channelCount.put("localhost" + 6668, new CountDownLatch(5));
-    channelCount.put("localhost" + 6669, new CountDownLatch(5));
+    channelCount.put("localhost" + 7667, new CountDownLatch(5));
+    channelCount.put("localhost" + 7668, new CountDownLatch(5));
+    channelCount.put("localhost" + 7669, new CountDownLatch(5));
     Map<String, Port> channelToPortMap = new HashMap<String, Port>();
-    channelToPortMap.put("localhost" + 6667, new Port(6667, PortType.SSL));
-    channelToPortMap.put("localhost" + 6668, new Port(6668, PortType.SSL));
-    channelToPortMap.put("localhost" + 6669, new Port(6669, PortType.SSL));
+    channelToPortMap.put("localhost" + 7667, new Port(7667, PortType.SSL));
+    channelToPortMap.put("localhost" + 7668, new Port(7668, PortType.SSL));
+    channelToPortMap.put("localhost" + 7669, new Port(7669, PortType.SSL));
     for (int i = 0; i < 10; i++) {
       ConnectionPoolThread connectionPoolThread =
           new ConnectionPoolThread(channelCount, channelToPortMap, connectionPool, false, shouldRelease,

@@ -44,10 +44,9 @@ import org.junit.Assert;
 public class TestSSLUtils {
   private final static String sslContextProtocol = "TLS";
   private final static String sslContextProvider = "SunJSSE";
-  private final static String sslEnabledProtocol = "TLSv1.2";
+  private final static String sslEnabledProtocol = "TLSv1";
   private final static String endpointIdentificationAlgorithm = "HTTPS";
   private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
-  private final static String keyStorePassword = "UnitTestKeyStorePassword";
   private final static String trustStorePassword = "UnitTestTrustStorePassword";
 
   /**
@@ -145,16 +144,29 @@ public class TestSSLUtils {
     saveKeyStore(ks, filename, password);
   }
 
-  public static Properties createSSLProperties(String sslEnabledDatacenters)
+  public static Properties createSSLProperties(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
+      String certAlias)
       throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
-    File keyStoreFile = File.createTempFile("selfsigned-keystore", ".jks");
-    KeyPair sKP = generateKeyPair("RSA");
-    X509Certificate sCert = generateCertificate("CN=localhost, O=ambry_test", sKP, 30, "SHA1withRSA");
-    createKeyStore(keyStoreFile.getPath(), keyStorePassword, keyStorePassword, "test_key", sKP.getPrivate(), sCert);
+    File keyStoreFile;
+    String password;
 
-    File trustStoreFile = File.createTempFile("selfsigned-truststore", ".jks");
-    certs.put("test_cert", sCert);
+    if (mode == SSLFactory.Mode.CLIENT) {
+      password = "UnitTestClientKeyStorePassword";
+      keyStoreFile = File.createTempFile("selfsigned-keystore-client", ".jks");
+      KeyPair cKP = generateKeyPair("RSA");
+      X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA");
+      createKeyStore(keyStoreFile.getPath(), password, password, certAlias, cKP.getPrivate(), cCert);
+      certs.put(certAlias, cCert);
+    } else {
+      password = "UnitTestServerKeyStorePassword";
+      keyStoreFile = File.createTempFile("selfsigned-keystore-server", ".jks");
+      KeyPair sKP = generateKeyPair("RSA");
+      X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA1withRSA");
+      createKeyStore(keyStoreFile.getPath(), password, password, certAlias, sKP.getPrivate(), sCert);
+      certs.put(certAlias, sCert);
+    }
+
     createTrustStore(trustStoreFile.getPath(), trustStorePassword, certs);
 
     Properties props = new Properties();
@@ -164,22 +176,33 @@ public class TestSSLUtils {
     props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
     props.put("ssl.client.authentication", "required");
     props.put("ssl.keymanager.algorithm", "PKIX");
-    props.put("ssl.trustmanager.algorithm", "PKIX");
     props.put("ssl.keystore.type", "JKS");
     props.put("ssl.keystore.path", keyStoreFile.getPath());
-    props.put("ssl.keystore.password", keyStorePassword);
-    props.put("ssl.key.password", keyStorePassword);
+    props.put("ssl.keystore.password", password);
+    props.put("ssl.key.password", password);
+    props.put("ssl.trustmanager.algorithm", "PKIX");
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", trustStorePassword);
-    props.put("ssl.cipher.suites", sslCipherSuits);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
 
-  public static SSLConfig createSSLConfig(String sslEnabledDatacenters)
+  /**
+   * Creates SSLConfig based on the values passed and few other pre-populated values
+   * @param sslEnabledDatacenters Comma separated list of datacenters against which ssl connections should be
+   *                              established
+   * @param mode Represents if the caller is a client or server
+   * @param trustStoreFile File path of the truststore file
+   * @param certAlias alais used for the certificate
+   * @return {@SSLConfig} with all the required values populated
+   * @throws IOException
+   * @throws GeneralSecurityException
+   */
+  public static SSLConfig createSSLConfig(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
+      String certAlias)
       throws IOException, GeneralSecurityException {
-    Properties props = createSSLProperties(sslEnabledDatacenters);
+    Properties props = createSSLProperties(sslEnabledDatacenters, mode, trustStoreFile, certAlias);
     SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
     return sslConfig;
   }
@@ -193,9 +216,6 @@ public class TestSSLUtils {
     String[] enabledProtocols = sslEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
     Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
-    String[] enabledCipherSuites = sslEngine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], sslCipherSuits);
     Assert.assertEquals(sslEngine.getWantClientAuth(), false);
     if (isClient) {
       Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),
