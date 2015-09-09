@@ -1,5 +1,6 @@
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.DataNodeId;
@@ -8,6 +9,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
@@ -19,6 +21,9 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
@@ -67,7 +72,6 @@ import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 
@@ -1650,11 +1654,11 @@ public class ServerTest {
     MockClusterMap clusterMap;
     AtomicBoolean cancelTest;
     PortType portType;
-    ArrayList<SSLSocketFactory> sslSocketFactories;
+    ConnectionPool connectionPool;
 
     public Verifier(BlockingQueue<Payload> blockingQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
         AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
-        ArrayList<SSLSocketFactory> sslSocketFactories) {
+        ConnectionPool connectionPool) {
       this.blockingQueue = blockingQueue;
       this.completedLatch = completedLatch;
       this.totalRequests = totalRequests;
@@ -1662,7 +1666,7 @@ public class ServerTest {
       this.clusterMap = clusterMap;
       this.cancelTest = cancelTest;
       this.portType = portType;
-      this.sslSocketFactories = sslSocketFactories;
+      this.connectionPool = connectionPool;
     }
 
     @Override
@@ -1673,106 +1677,115 @@ public class ServerTest {
           Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (payload != null) {
             notificationSystem.awaitBlobCreations(payload.blobId);
-            int counter = 0;
             for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
-              Port port =
-                  new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
-              SSLSocketFactory sslSocketFactory = sslSocketFactories.get((counter++) % (sslSocketFactories.size()));
-              BlockingChannel channel1 =
-                  getBlockingChannelBasedOnPortType(port, dataNodeId.getHostname(), sslSocketFactory);
-              channel1.connect();
-              ArrayList<BlobId> ids = new ArrayList<BlobId>();
-              ids.add(new BlobId(payload.blobId, clusterMap));
-              partitionRequestInfoList.clear();
-              PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
-              partitionRequestInfoList.add(partitionRequestInfo);
-              GetRequest getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                      GetOptions.None);
-              channel1.send(getRequest);
-              InputStream stream = channel1.receive().getInputStream();
-              GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-              if (resp.getError() != ServerErrorCode.No_Error) {
-                System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
-                throw new IllegalStateException();
-              } else {
-                try {
-                  BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
-                  if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
-                    System.out.println("blob size not matching " + " expected " +
-                        payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
-                    throw new IllegalStateException();
-                  }
-                  if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
-                    System.out.println("service id not matching " + " expected " +
-                        payload.blobProperties.getServiceId() + " actual " + propertyOutput.getBlobSize());
-                    throw new IllegalStateException();
-                  }
-                } catch (MessageFormatException e) {
-                  e.printStackTrace();
+              ConnectedChannel channel1 = null;
+              try {
+                Port port =
+                    new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
+                channel1 = connectionPool.checkOutConnection(dataNodeId.getHostname(), port, 10000);
+                ArrayList<BlobId> ids = new ArrayList<BlobId>();
+                ids.add(new BlobId(payload.blobId, clusterMap));
+                partitionRequestInfoList.clear();
+                PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+                partitionRequestInfoList.add(partitionRequestInfo);
+                GetRequest getRequest =
+                    new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
+                        GetOptions.None);
+                channel1.send(getRequest);
+                InputStream stream = channel1.receive().getInputStream();
+                GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+                if (resp.getError() != ServerErrorCode.No_Error) {
+                  System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
                   throw new IllegalStateException();
+                } else {
+                  try {
+                    BlobProperties propertyOutput =
+                        MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
+                    if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
+                      System.out.println("blob size not matching " + " expected " +
+                          payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
+                      throw new IllegalStateException();
+                    }
+                    if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
+                      System.out.println("service id not matching " + " expected " +
+                          payload.blobProperties.getServiceId() + " actual " + propertyOutput.getBlobSize());
+                      throw new IllegalStateException();
+                    }
+                  } catch (MessageFormatException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException();
+                  }
+                }
+
+                // get user metadata
+                ids.clear();
+                ids.add(new BlobId(payload.blobId, clusterMap));
+                partitionRequestInfoList.clear();
+                partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+                partitionRequestInfoList.add(partitionRequestInfo);
+                getRequest =
+                    new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
+                        GetOptions.None);
+                channel1.send(getRequest);
+                stream = channel1.receive().getInputStream();
+                resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+                if (resp.getError() != ServerErrorCode.No_Error) {
+                  System.out.println("Error after get user metadata " + resp.getError());
+                  throw new IllegalStateException();
+                } else {
+                  try {
+                    ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
+                    if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0) {
+                      throw new IllegalStateException();
+                    }
+                  } catch (MessageFormatException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException();
+                  }
+                }
+
+                // get blob
+                ids.clear();
+                ids.add(new BlobId(payload.blobId, clusterMap));
+                partitionRequestInfoList.clear();
+                partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
+                partitionRequestInfoList.add(partitionRequestInfo);
+                getRequest =
+                    new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+                channel1.send(getRequest);
+                stream = channel1.receive().getInputStream();
+                resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+                //System.out.println("response from get " + resp.getError());
+                if (resp.getError() != ServerErrorCode.No_Error) {
+                  System.out.println("Error after get blob " + resp.getError());
+                  throw new IllegalStateException();
+                } else {
+                  try {
+                    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+                    byte[] blobout = new byte[(int) blobOutput.getSize()];
+                    int readsize = 0;
+                    while (readsize < blobOutput.getSize()) {
+                      readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+                    }
+                    if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
+                      throw new IllegalStateException();
+                    }
+                  } catch (MessageFormatException e) {
+                    e.printStackTrace();
+                    throw new IllegalStateException();
+                  }
+                }
+              } catch (Exception e) {
+                if (channel1 != null) {
+                  connectionPool.destroyConnection(channel1);
+                  channel1 = null;
+                }
+              } finally {
+                if (channel1 != null) {
+                  connectionPool.checkInConnection(channel1);
+                  channel1 = null;
                 }
               }
-
-              // get user metadata
-              ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
-              partitionRequestInfoList.clear();
-              partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
-              partitionRequestInfoList.add(partitionRequestInfo);
-              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-                  GetOptions.None);
-              channel1.send(getRequest);
-              stream = channel1.receive().getInputStream();
-              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-              if (resp.getError() != ServerErrorCode.No_Error) {
-                System.out.println("Error after get user metadata " + resp.getError());
-                throw new IllegalStateException();
-              } else {
-                try {
-                  ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-                  if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0) {
-                    throw new IllegalStateException();
-                  }
-                } catch (MessageFormatException e) {
-                  e.printStackTrace();
-                  throw new IllegalStateException();
-                }
-              }
-
-              // get blob
-              ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
-              partitionRequestInfoList.clear();
-              partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
-              partitionRequestInfoList.add(partitionRequestInfo);
-              getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
-              channel1.send(getRequest);
-              stream = channel1.receive().getInputStream();
-              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-              //System.out.println("response from get " + resp.getError());
-              if (resp.getError() != ServerErrorCode.No_Error) {
-                System.out.println("Error after get blob " + resp.getError());
-                throw new IllegalStateException();
-              } else {
-                try {
-                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-                  byte[] blobout = new byte[(int) blobOutput.getSize()];
-                  int readsize = 0;
-                  while (readsize < blobOutput.getSize()) {
-                    readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
-                  }
-                  if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
-                    throw new IllegalStateException();
-                  }
-                } catch (MessageFormatException e) {
-                  e.printStackTrace();
-                  throw new IllegalStateException();
-                }
-              }
-
-              channel1.disconnect();
             }
             requestsVerified.incrementAndGet();
           }
@@ -1788,21 +1801,21 @@ public class ServerTest {
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+      throws Exception {
     sslCluster.startServers();
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.PLAINTEXT, sslCluster);
   }
 
-  // @Test
+  @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+      throws Exception {
     sslCluster.startServers();
     endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", PortType.SSL, sslCluster);
   }
 
   private void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter, PortType portType,
       MockCluster cluster)
-      throws InterruptedException, IOException, InstantiationException, GeneralSecurityException {
+      throws Exception {
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);
@@ -1812,7 +1825,7 @@ public class ServerTest {
     Thread[] senderThreads = new Thread[3];
     LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
-    int numberOfVerifierThreads = 1;
+    int numberOfVerifierThreads = 3;
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
     int numberOfRequestsToSendPerThread = 5;
     for (int i = 0; i < numberOfSenderThreads; i++) {
@@ -1827,10 +1840,10 @@ public class ServerTest {
       throw new IllegalStateException();
     }
 
-    ArrayList<SSLSocketFactory> sslSocketFactories = new ArrayList<SSLSocketFactory>();
-    sslSocketFactories.add(clientSSLSocketFactory1);
-    sslSocketFactories.add(clientSSLSocketFactory2);
-    sslSocketFactories.add(clientSSLSocketFactory3);
+    coordinatorProps.setProperty("ssl.enabled.datacenters", "DC1,DC2,DC3");
+    ConnectionPool connectionPool =
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
+            new SSLConfig(new VerifiableProperties(coordinatorProps)), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
@@ -1838,7 +1851,7 @@ public class ServerTest {
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
           new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
-              cancelTest, portType, sslSocketFactories));
+              cancelTest, portType, connectionPool));
       thread.start();
     }
     verifierLatch.await();
