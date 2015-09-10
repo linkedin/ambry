@@ -37,9 +37,10 @@ class BlockingChannelInfo {
   private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerHostPerPort;
   private final SSLSocketFactory sslSocketFactory;
+  private final SSLConfig sslConfig;
 
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory) {
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     this.config = config;
     this.port = port;
     if (port.getPortType() == PortType.SSL) {
@@ -54,6 +55,7 @@ class BlockingChannelInfo {
     this.lock = new Object();
     this.host = host;
     this.sslSocketFactory = sslSocketFactory;
+    this.sslConfig = sslConfig;
 
     availableConnections = new Gauge<Integer>() {
       @Override
@@ -177,7 +179,7 @@ class BlockingChannelInfo {
     } else if (this.port.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
           config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-          config.connectionPoolConnectTimeoutMs, sslSocketFactory);
+          config.connectionPoolConnectTimeoutMs, sslSocketFactory, sslConfig);
     }
     return channel;
   }
@@ -259,6 +261,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   private final Timer connectionDestroyTime;
   private final AtomicInteger requestsWaitingToCheckoutConnectionCount;
   private final SSLSocketFactory sslSocketFactory;
+  private final SSLConfig sslConfig;
   // Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
   private Gauge<Integer> totalNumberOfNodesConnectedTo;
   // Represents the total number of connections, in other words, aggregate of the connections from all nodes
@@ -271,6 +274,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
     this.config = config;
     this.registry = registry;
+    this.sslConfig = sslConfig;
     if (sslConfig.sslEnabledDatacenters.length() > 0) {
       SSLFactory sslFactory = new SSLFactory(sslConfig);
       SSLContext sslContext = sslFactory.getSSLContext();
@@ -349,7 +353,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port.getPort());
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory, sslConfig);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort()

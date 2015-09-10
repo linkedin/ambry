@@ -77,6 +77,9 @@ import org.junit.Test;
 
 public class ServerTest {
   private static SSLFactory sslFactory;
+  private static SSLConfig clientSSLConfig1;
+  private static SSLConfig clientSSLConfig2;
+  private static SSLConfig clientSSLConfig3;
   private static SSLSocketFactory clientSSLSocketFactory1;
   private static SSLSocketFactory clientSSLSocketFactory2;
   private static SSLSocketFactory clientSSLSocketFactory3;
@@ -90,12 +93,9 @@ public class ServerTest {
   public void initializeTests()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    SSLConfig clientSSLConfig1 =
-        TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
-    SSLConfig clientSSLConfig2 =
-        TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
-    SSLConfig clientSSLConfig3 =
-        TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
+    clientSSLConfig1 = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
+    clientSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
+    clientSSLConfig3 = TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
     serverSSLProps = TestSSLUtils.createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     coordinatorProps =
         TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
@@ -172,7 +172,8 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel = getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory1);
+      BlockingChannel channel =
+          getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
@@ -418,7 +419,7 @@ public class ServerTest {
             new ByteBufferInputStream(ByteBuffer.wrap(data.get(0))));
     BlockingChannel channel =
         getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost",
-            clientSSLSocketFactory1);
+            clientSSLSocketFactory1, clientSSLConfig1);
     channel.connect();
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
@@ -735,9 +736,12 @@ public class ServerTest {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)));
-      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1);
-      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory1);
-      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory1);
+      BlockingChannel channel1 =
+          getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
+      BlockingChannel channel2 =
+          getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
+      BlockingChannel channel3 =
+          getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
 
       channel1.connect();
       channel2.connect();
@@ -1194,9 +1198,12 @@ public class ServerTest {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1);
-      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory2);
-      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory3);
+      BlockingChannel channel1 =
+          getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
+      BlockingChannel channel2 =
+          getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory2, clientSSLConfig2);
+      BlockingChannel channel3 =
+          getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory3, clientSSLConfig3);
 
       // put all the blobs to random servers
       channel1.connect();
@@ -1926,12 +1933,13 @@ public class ServerTest {
    * @return BlockingChannel
    */
   public BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
-      SSLSocketFactory sslSocketFactory) {
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     } else if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 4000, sslSocketFactory);
+      channel = new SSLBlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 4000, sslSocketFactory,
+          sslConfig);
     }
     return channel;
   }
