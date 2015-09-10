@@ -8,7 +8,6 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Properties;
@@ -60,7 +59,7 @@ public class CoordinatorBackedRouterTest {
     }
 
     Properties properties = new Properties();
-    properties.setProperty("coordinator.backed.router.operation.pool.size", "0");
+    properties.setProperty("router.coordinator.backed.router.operation.pool.size", "0");
     verifiableProperties = getVProps(properties);
     try {
       new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
@@ -138,7 +137,12 @@ public class CoordinatorBackedRouterTest {
     Router router = new CoordinatorBackedRouter(verifiableProperties, clusterMap.getMetricRegistry(), coordinator);
     triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.UnexpectedInternalError,
         MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START);
-    router.close();
+
+    try {
+      router.close();
+    } catch (IOException e) {
+      assertEquals("Unexpected error message", MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START, e.getMessage());
+    }
 
     properties = new Properties();
     properties.setProperty(MockCoordinator.RUNTIME_EXCEPTION_ON_OPERATION_START, "true");
@@ -172,13 +176,22 @@ public class CoordinatorBackedRouterTest {
     return new VerifiableProperties(properties);
   }
 
-  private void verifyExceptionMatch(RouterOperationCallback routerOperationCallback, Future future) {
+  private void verifyFutureCallbackExceptionMatch(RouterOperationCallback routerOperationCallback, Future future) {
     try {
       future.get();
       fail("Callback had an exception but future.get() did not throw exception");
     } catch (Exception e) {
       assertEquals("Callback and future exceptions do not match", routerOperationCallback.getException(),
           e.getCause().getCause());
+    }
+  }
+
+  private void verifyExpectedException(Exception e, RouterErrorCode routerErrorCode, String expectedErrorMsg)
+      throws Exception {
+    matchRouterErrorCode(e, routerErrorCode);
+    if (expectedErrorMsg != null) {
+      String exceptionMsg = e.getMessage().substring(e.getMessage().lastIndexOf(": ") + 2);
+      assertEquals("Unexpected error message", expectedErrorMsg, exceptionMsg);
     }
   }
 
@@ -198,23 +211,24 @@ public class CoordinatorBackedRouterTest {
   private String putBlob(Router router, BlobProperties blobProperties, byte[] usermetadata, byte[] content,
       RouterOperationCallback<String> putBlobCallback)
       throws Exception {
-    byte[] buf = new byte[content.length];
-    Utils.readBytesFromStream(new ByteArrayInputStream(content), buf, 0, content.length);
-    ReadableStreamChannel blobDataChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
+    ReadableStreamChannel blobDataChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
     Future<String> putBlobFuture;
     if (putBlobCallback == null) {
       putBlobFuture = router.putBlob(blobProperties, usermetadata, blobDataChannel);
     } else {
       putBlobFuture = router.putBlob(blobProperties, usermetadata, blobDataChannel, putBlobCallback);
-      if (!putBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+      if (putBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+        assertTrue("PutBlob: Future is not done but callback has been received", putBlobFuture.isDone());
+        if (putBlobCallback.getException() == null) {
+          assertEquals("PutBlob: Future BlobId and callback BlobId do not match", putBlobFuture.get(),
+              putBlobCallback.getResult());
+        } else {
+          verifyFutureCallbackExceptionMatch(putBlobCallback, putBlobFuture);
+          throw putBlobCallback.getException();
+        }
+      } else {
         throw new IllegalStateException("putBlob() timed out");
-      } else if (putBlobCallback.getException() != null) {
-        verifyExceptionMatch(putBlobCallback, putBlobFuture);
-        throw putBlobCallback.getException();
       }
-      assertTrue("PutBlob: Future is not done but callback has been received", putBlobFuture.isDone());
-      assertEquals("PutBlob: Future BlobId and callback BlobId do not match", putBlobFuture.get(),
-          putBlobCallback.getResult());
     }
     return putBlobFuture.get();
   }
@@ -227,18 +241,21 @@ public class CoordinatorBackedRouterTest {
       getBlobInfoFuture = router.getBlobInfo(blobId);
     } else {
       getBlobInfoFuture = router.getBlobInfo(blobId, getBlobInfoCallback);
-      if (!getBlobInfoCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+      if (getBlobInfoCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+        assertTrue("GetBlobInfo: Future is not done but callback has been received", getBlobInfoFuture.isDone());
+        if (getBlobInfoCallback.getException() == null) {
+          assertEquals("GetBlobInfo: Future BlobInfo and callback BlobInfo do not match", getBlobInfoFuture.get(),
+              getBlobInfoCallback.getResult());
+        } else {
+          verifyFutureCallbackExceptionMatch(getBlobInfoCallback, getBlobInfoFuture);
+          throw getBlobInfoCallback.getException();
+        }
+      } else {
         throw new IllegalStateException("getBlobInfo() timed out");
-      } else if (getBlobInfoCallback.getException() != null) {
-        verifyExceptionMatch(getBlobInfoCallback, getBlobInfoFuture);
-        throw getBlobInfoCallback.getException();
       }
-      assertTrue("GetBlobInfo: Future is not done but callback has been received", getBlobInfoFuture.isDone());
-      assertEquals("GetBlobInfo: Future BlobInfo and callback BlobInfo do not match", getBlobInfoFuture.get(),
-          getBlobInfoCallback.getResult());
     }
     BlobInfo blobInfo = getBlobInfoFuture.get();
-    compareBlobProperties(blobProperties, blobInfo.getBlobProperties());
+    verifyBlobPropertiesMatch(blobProperties, blobInfo.getBlobProperties());
     byte[] getBlobInfoUserMetadata = blobInfo.getUserMetadata();
     assertArrayEquals("User metadata does not match what was put", usermetadata, getBlobInfoUserMetadata);
   }
@@ -251,15 +268,18 @@ public class CoordinatorBackedRouterTest {
       getBlobFuture = router.getBlob(blobId);
     } else {
       getBlobFuture = router.getBlob(blobId, getBlobCallback);
-      if (!getBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+      if (getBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+        assertTrue("GetBlob: Future is not done but callback has been received", getBlobFuture.isDone());
+        if (getBlobCallback.getException() == null) {
+          assertEquals("GetBlob: Future Blob and callback Blob do not match", getBlobFuture.get(),
+              getBlobCallback.getResult());
+        } else {
+          verifyFutureCallbackExceptionMatch(getBlobCallback, getBlobFuture);
+          throw getBlobCallback.getException();
+        }
+      } else {
         throw new IllegalStateException("getBlob() timed out");
-      } else if (getBlobCallback.getException() != null) {
-        verifyExceptionMatch(getBlobCallback, getBlobFuture);
-        throw getBlobCallback.getException();
       }
-      assertTrue("GetBlob: Future is not done but callback has been received", getBlobFuture.isDone());
-      assertEquals("GetBlob: Future Blob and callback Blob do not match", getBlobFuture.get(),
-          getBlobCallback.getResult());
     }
     ReadableStreamChannel blobData = getBlobFuture.get();
     ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate((int) blobData.getSize()));
@@ -274,19 +294,21 @@ public class CoordinatorBackedRouterTest {
       deleteBlobFuture = router.deleteBlob(blobId);
     } else {
       deleteBlobFuture = router.deleteBlob(blobId, deleteBlobCallback);
-      if (!deleteBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+      if (deleteBlobCallback.awaitCallback(1, TimeUnit.SECONDS)) {
+        assertTrue("DeleteBlob: Future is not done but callback has been received", deleteBlobFuture.isDone());
+        if (deleteBlobCallback.getException() != null) {
+          verifyFutureCallbackExceptionMatch(deleteBlobCallback, deleteBlobFuture);
+          throw deleteBlobCallback.getException();
+        }
+      } else {
         throw new IllegalStateException("deleteBlob() timed out");
-      } else if (deleteBlobCallback.getException() != null) {
-        verifyExceptionMatch(deleteBlobCallback, deleteBlobFuture);
-        throw deleteBlobCallback.getException();
       }
-      assertTrue("DeleteBlob: Future is not done but callback has been received", deleteBlobFuture.isDone());
     }
     // to throw any exceptions.
     deleteBlobFuture.get();
   }
 
-  private void compareBlobProperties(BlobProperties srcBlobProperties, BlobProperties rcvdBlobProperties) {
+  private void verifyBlobPropertiesMatch(BlobProperties srcBlobProperties, BlobProperties rcvdBlobProperties) {
     assertEquals("BlobProperties: Blob size does not match", srcBlobProperties.getBlobSize(),
         rcvdBlobProperties.getBlobSize());
     assertEquals("BlobProperties: Content type does not match", srcBlobProperties.getContentType(),
@@ -333,7 +355,7 @@ public class CoordinatorBackedRouterTest {
       getBlobInfoAndCompare(router, blobId, putBlobProperties, putUserMetadata, getBlobInfoCallback);
       fail("GetBlobInfo on deleted blob should have failed");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.BlobDeleted);
+      verifyExpectedException(e, RouterErrorCode.BlobDeleted, null);
     }
 
     try {
@@ -343,7 +365,7 @@ public class CoordinatorBackedRouterTest {
       getBlobAndCompare(router, blobId, putContent, getBlobCallback);
       fail("GetBlob on deleted blob should have failed");
     } catch (Exception e) {
-      matchRouterErrorCode(e, RouterErrorCode.BlobDeleted);
+      verifyExpectedException(e, RouterErrorCode.BlobDeleted, null);
     }
     // delete blob of deleted blob should NOT throw exception.
     if (deleteBlobCallback != null) {
@@ -383,37 +405,28 @@ public class CoordinatorBackedRouterTest {
       blobId = putBlob(router, putBlobProperties, putUserMetadata, putContent, putBlobCallback);
       fail("Operation would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      checkException(e, routerErrorCode, expectedErrorMsg);
+      verifyExpectedException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       getBlobInfoAndCompare(router, blobId, putBlobProperties, putUserMetadata, getBlobInfoCallback);
       fail("Operation would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      checkException(e, routerErrorCode, expectedErrorMsg);
+      verifyExpectedException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       getBlobAndCompare(router, blobId, putContent, getBlobCallback);
       fail("MockCoordinator would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      checkException(e, routerErrorCode, expectedErrorMsg);
+      verifyExpectedException(e, routerErrorCode, expectedErrorMsg);
     }
 
     try {
       deleteBlob(router, blobId, deleteBlobCallback);
       fail("MockCoordinator would have thrown exception which should have been propagated");
     } catch (Exception e) {
-      checkException(e, routerErrorCode, expectedErrorMsg);
-    }
-  }
-
-  private void checkException(Exception e, RouterErrorCode routerErrorCode, String expectedErrorMsg)
-      throws Exception {
-    matchRouterErrorCode(e, routerErrorCode);
-    if (expectedErrorMsg != null) {
-      String exceptionMsg = e.getMessage().substring(e.getMessage().lastIndexOf(": ") + 2);
-      assertEquals("Unexpected error message", expectedErrorMsg, exceptionMsg);
+      verifyExpectedException(e, routerErrorCode, expectedErrorMsg);
     }
   }
 }

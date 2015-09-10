@@ -85,7 +85,7 @@ public interface Router extends Closeable {
    * method has no effect.
    * <p/>
    * After a router is closed, any further attempt to invoke Router operations will cause a {@link RouterException} with
-   * error code {@link RouterErrorCode#RouterClosed} will be returned as part of the {@link Future} and {@link Callback}
+   * error code {@link RouterErrorCode#RouterClosed} to be returned as part of the {@link Future} and {@link Callback}
    * if any.
    * @throws IOException if an I/O error occurs.
    */

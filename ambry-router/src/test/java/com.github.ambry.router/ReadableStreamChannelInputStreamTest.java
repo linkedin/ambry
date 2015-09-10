@@ -1,7 +1,5 @@
 package com.github.ambry.router;
 
-import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -37,8 +35,7 @@ public class ReadableStreamChannelInputStreamTest {
       throws IOException {
     byte[] in = new byte[1024];
     new Random().nextBytes(in);
-    InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(consumeStream(srcInputStream, in.length));
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     try {
       dstInputStream.read(null, 0, in.length);
@@ -87,8 +84,7 @@ public class ReadableStreamChannelInputStreamTest {
       throws IOException {
     byte[] in = new byte[1024];
     new Random().nextBytes(in);
-    ReadableStreamChannel channel =
-        new ByteBufferReadableStreamChannel(consumeStream(new ByteArrayInputStream(in), in.length));
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
 
     byte[] out = new byte[in.length / 5];
@@ -105,19 +101,10 @@ public class ReadableStreamChannelInputStreamTest {
   }
 
   // helpers
-  // general
-  private ByteBuffer consumeStream(InputStream inputStream, int size)
-      throws IOException {
-    byte[] buf = new byte[size];
-    Utils.readBytesFromStream(inputStream, buf, 0, size);
-    return ByteBuffer.wrap(buf);
-  }
-
   // commonCaseTest() helpers
   private void readByteByByteTest(byte[] in)
       throws IOException {
-    InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(consumeStream(srcInputStream, in.length));
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     for (int i = 0; i < in.length; i++) {
       assertEquals("Byte [" + i + "] does not match expected", in[i], (byte) dstInputStream.read());
@@ -127,8 +114,7 @@ public class ReadableStreamChannelInputStreamTest {
 
   private void readPartByPartTest(byte[] in)
       throws IOException {
-    InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(consumeStream(srcInputStream, in.length));
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     byte[] out = new byte[in.length];
     for (int start = 0; start < in.length; ) {
@@ -144,8 +130,7 @@ public class ReadableStreamChannelInputStreamTest {
 
   private void readAllAtOnceTest(byte[] in)
       throws IOException {
-    InputStream srcInputStream = new ByteArrayInputStream(in);
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(consumeStream(srcInputStream, in.length));
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     byte[] out = new byte[in.length];
     assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));

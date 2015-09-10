@@ -9,7 +9,6 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
@@ -24,7 +23,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A {@link Router} that uses a {@link Coordinator} in the background to perform its operations.
  * <p/>
- * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#coordinatorBackedRouterOperationPoolSize} on
+ * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerCoordinatorBackedRouterOperationPoolSize} on
  * instantiation. This thread pool is used to provide non-blocking behavior by executing the blocking operations of the
  * {@link Coordinator} in the background.
  * <p/>
@@ -47,7 +46,7 @@ public class CoordinatorBackedRouter implements Router {
    * @param metricRegistry the {@link MetricRegistry} to use for metrics.
    * @param coordinator the {@link Coordinator} that will back this router.
    * @throws IllegalArgumentException if any of the arguments received are null or if
-   * {@link RouterConfig#coordinatorBackedRouterOperationPoolSize} is less than or equal to 0.
+   * {@link RouterConfig#routerCoordinatorBackedRouterOperationPoolSize} is less than or equal to 0.
    */
   public CoordinatorBackedRouter(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Coordinator coordinator) {
@@ -66,11 +65,11 @@ public class CoordinatorBackedRouter implements Router {
       throw new IllegalArgumentException(errorMessage.toString());
     }
     this.routerConfig = new RouterConfig(verifiableProperties);
-    if (routerConfig.coordinatorBackedRouterOperationPoolSize > 0) {
-      this.operationPool = Executors.newFixedThreadPool(routerConfig.coordinatorBackedRouterOperationPoolSize);
+    if (routerConfig.routerCoordinatorBackedRouterOperationPoolSize > 0) {
+      this.operationPool = Executors.newFixedThreadPool(routerConfig.routerCoordinatorBackedRouterOperationPoolSize);
     } else {
       throw new IllegalArgumentException("Router operation pool size defined in config should be > 0 (is "
-          + routerConfig.coordinatorBackedRouterOperationPoolSize + ")");
+          + routerConfig.routerCoordinatorBackedRouterOperationPoolSize + ")");
     }
     this.coordinator = coordinator;
   }
@@ -133,7 +132,8 @@ public class CoordinatorBackedRouter implements Router {
   }
 
   @Override
-  public void close() {
+  public void close()
+      throws IOException {
     try {
       if (routerOpen.compareAndSet(true, false)) {
         logger.info("CoordinatorBackedRouter closing");
@@ -144,8 +144,6 @@ public class CoordinatorBackedRouter implements Router {
       } else {
         operationPool.awaitTermination(1, TimeUnit.MINUTES);
       }
-    } catch (IOException e) {
-      logger.error("Error closing Coordinator in CoordinatorBackedRouter", e);
     } catch (InterruptedException e) {
       logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
     }
@@ -275,8 +273,9 @@ class CoordinatorOperation implements Runnable {
       switch (opType) {
         case GetBlob:
           BlobOutput blobOutput = coordinator.getBlob(blobId);
-          byte[] buf = new byte[(int) blobOutput.getSize()];
-          Utils.readBytesFromStream(blobOutput.getStream(), buf, 0, (int) blobOutput.getSize());
+          // (int) blobOutput.getSize() will not work for blobs >2GB in size but that is not a concern right now.
+          // CoordinatorBackedRouter will be long gone before (if) we support blobs with that size.
+          byte[] buf = Utils.readBytesFromStream(blobOutput.getStream(), (int) blobOutput.getSize());
           operationResult = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
           break;
         case GetBlobInfo:

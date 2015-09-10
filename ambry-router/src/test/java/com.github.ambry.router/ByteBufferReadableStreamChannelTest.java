@@ -1,10 +1,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
@@ -43,7 +40,7 @@ public class ByteBufferReadableStreamChannelTest {
     String errMsg = "@@ExpectedExceptionMessage@@";
     byte[] in = fillRandomBytes(new byte[1]);
     ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(consumeStream(new ByteArrayInputStream(in), in.length));
+        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
 
     try {
       byteBufferReadableStreamChannel.read(new BadWritableChannel(new IOException(errMsg)));
@@ -88,9 +85,8 @@ public class ByteBufferReadableStreamChannelTest {
   public void idempotentOperationsTest()
       throws IOException {
     byte[] in = fillRandomBytes(new byte[1]);
-
     ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(consumeStream(new ByteArrayInputStream(in), in.length));
+        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     assertTrue("ByteBufferReadableStreamChannel is not open", byteBufferReadableStreamChannel.isOpen());
     byteBufferReadableStreamChannel.close();
     assertFalse("ByteBufferReadableStreamChannel is not closed", byteBufferReadableStreamChannel.isOpen());
@@ -106,19 +102,12 @@ public class ByteBufferReadableStreamChannelTest {
     return in;
   }
 
-  private ByteBuffer consumeStream(InputStream inputStream, int size)
-      throws IOException {
-    byte[] buf = new byte[size];
-    Utils.readBytesFromStream(inputStream, buf, 0, size);
-    return ByteBuffer.wrap(buf);
-  }
-
   // commonCaseTest() helpers
   private void readToChannelTest()
       throws IOException {
-    byte[] in = new byte[1024];
+    byte[] in = fillRandomBytes(new byte[1024]);
     ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(consumeStream(new ByteArrayInputStream(fillRandomBytes(in)), in.length));
+        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     assertTrue("ByteBufferReadableStreamChannel is not open", byteBufferReadableStreamChannel.isOpen());
     assertEquals("Size returned by ByteBufferReadableStreamChannel did not match source array size", in.length,
         byteBufferReadableStreamChannel.getSize());
