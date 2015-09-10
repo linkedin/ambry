@@ -1682,7 +1682,7 @@ public class ServerTest {
               try {
                 Port port =
                     new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
-                channel1 = connectionPool.checkOutConnection(dataNodeId.getHostname(), port, 10000);
+                channel1 = connectionPool.checkOutConnection("localhost", port, 10000);
                 ArrayList<BlobId> ids = new ArrayList<BlobId>();
                 ids.add(new BlobId(payload.blobId, clusterMap));
                 partitionRequestInfoList.clear();
@@ -1840,10 +1840,12 @@ public class ServerTest {
       throw new IllegalStateException();
     }
 
-    coordinatorProps.setProperty("ssl.enabled.datacenters", "DC1,DC2,DC3");
+    Properties sslProps = new Properties();
+    sslProps.putAll(coordinatorProps);
+    sslProps.setProperty("ssl.enabled.datacenters", "DC1,DC2,DC3");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
-            new SSLConfig(new VerifiableProperties(coordinatorProps)), new MetricRegistry());
+            new SSLConfig(new VerifiableProperties(sslProps)), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSendPerThread * numberOfSenderThreads);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
@@ -1858,6 +1860,7 @@ public class ServerTest {
 
     Assert.assertEquals(totalRequests.get(), verifiedRequests.get());
     coordinator.close();
+    connectionPool.shutdown();
   }
 
   private void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data)
