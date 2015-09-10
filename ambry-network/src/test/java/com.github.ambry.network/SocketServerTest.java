@@ -35,7 +35,8 @@ public class SocketServerTest {
   public static void initializeTests()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
-    SSLConfig serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig serverSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     clientSSLFactory = new SSLFactory(clientSSLConfig);
     SSLContext sslContext = clientSSLFactory.getSSLContext();
@@ -82,7 +83,8 @@ public class SocketServerTest {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
       channel =
-          new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, clientSSLSocketFactory, clientSSLConfig);
+          new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, clientSSLSocketFactory,
+              clientSSLConfig);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }
