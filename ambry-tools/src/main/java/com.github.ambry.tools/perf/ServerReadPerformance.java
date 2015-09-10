@@ -8,6 +8,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
@@ -127,7 +128,8 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       long maxLatencyForGetBlobs = 0;

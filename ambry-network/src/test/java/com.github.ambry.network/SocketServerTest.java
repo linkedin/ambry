@@ -2,11 +2,15 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.File;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,18 +22,36 @@ import java.util.Random;
 
 
 public class SocketServerTest {
-
+  private static SSLFactory clientSSLFactory;
+  private static SSLSocketFactory clientSSLSocketFactory;
+  private static SSLConfig clientSSLConfig;
+  private static SSLFactory serverSSLFactory;
   private SocketServer server = null;
 
+  /**
+   * Run only once for all tests
+   */
+  @BeforeClass
+  public static void initializeTests()
+      throws Exception {
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    clientSSLFactory = new SSLFactory(clientSSLConfig);
+    SSLContext sslContext = clientSSLFactory.getSSLContext();
+    clientSSLSocketFactory = sslContext.getSocketFactory();
+    serverSSLFactory = new SSLFactory(serverSSLConfig);
+  }
+
   public SocketServerTest()
-      throws InterruptedException, IOException {
+      throws Exception {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(config.port, PortType.PLAINTEXT));
     ports.add(new Port(config.port + 1000, PortType.SSL));
-    server = new SocketServer(config, new MetricRegistry(), ports);
+    server = new SocketServer(config, serverSSLFactory, new MetricRegistry(), ports);
     server.start();
   }
 
@@ -59,7 +81,8 @@ public class SocketServerTest {
     BoundedByteBufferSend bufferToSend = new BoundedByteBufferSend(byteBufferToSend);
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
+      channel =
+          new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, clientSSLSocketFactory);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }

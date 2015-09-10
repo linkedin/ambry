@@ -6,4 +6,5 @@ ext {
     jsonVersion = "20090211"
     metricsVersion = "3.0.1"
     commonsVersion = "1.5"
+    bouncycastleVersion = "1.52"
 }

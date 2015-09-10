@@ -8,6 +8,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -15,6 +16,7 @@ import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
@@ -54,6 +56,7 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
+  private SSLFactory sslFactory = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
       throws IOException {
@@ -84,6 +87,7 @@ public class AmbryServer {
       ServerConfig serverConfig = new ServerConfig(properties);
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
+      SSLConfig sslConfig = new SSLConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -103,20 +107,22 @@ public class AmbryServer {
               new BlobStoreRecovery(), new BlobStoreHardDelete());
       storeManager.start();
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, registry);
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, registry);
       connectionPool.start();
 
       replicationManager =
-          new ReplicationManager(replicationConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
-              nodeId, connectionPool, registry, notificationSystem);
+          new ReplicationManager(replicationConfig, sslConfig, storeConfig, storeManager, storeKeyFactory, clusterMap,
+              scheduler, nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
-      if(nodeId.hasSSLPort()) {
+      if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
-      networkServer = new SocketServer(networkConfig, registry, ports);
+
+      initializeSSLFactory(sslConfig);
+      networkServer = new SocketServer(networkConfig, sslFactory, registry, ports);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
@@ -131,6 +137,18 @@ public class AmbryServer {
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
+    }
+  }
+
+  private void initializeSSLFactory(SSLConfig sslConfig) {
+    try {
+      if (sslConfig.sslEnabledDatacenters.length() > 0) {
+        this.sslFactory = new SSLFactory(sslConfig);
+      } else {
+        this.sslFactory = null;
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Exception thrown during initialization of SSLFactory ");
     }
   }
 

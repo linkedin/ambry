@@ -9,6 +9,7 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -140,7 +141,8 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       connectionPool.start();
 
       for (int i = 0; i < numberOfWriters; i++) {

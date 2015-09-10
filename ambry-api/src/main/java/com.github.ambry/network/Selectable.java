@@ -13,12 +13,13 @@ public interface Selectable {
   /**
    * Begin establishing a socket connection to the given address identified by the given address
    * @param address The address to connect to
-   * @param sendBufferSize The send buffer for the socket
-   * @param receiveBufferSize The receive buffer for the socket
+   * @param sendBufferSize The send buffer size for the socket
+   * @param receiveBufferSize The receive buffer size for the socket
+   * @param portType {@PortType} which represents the type of connection to establish
    * @return The id for the connection that was created
    * @throws java.io.IOException If we cannot begin connecting
    */
-  public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize)
+  public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType)
       throws IOException;
 
   /**

@@ -18,4 +18,5 @@ deploy
 */build/
 out/
 jars/
+build/
 
