@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 
 public class SSLBlockingChannelTest {
   private static SSLFactory sslFactory;
+  private static SSLConfig clientSSLConfig;
   private static SSLSocketFactory sslSocketFactory;
   private static EchoServer sslEchoServer;
   private static String hostName = "localhost";
@@ -35,18 +36,15 @@ public class SSLBlockingChannelTest {
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    SSLConfig clientSSLConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
 
     sslFactory = new SSLFactory(sslConfig);
-    SSLContext sslContext = sslFactory.getSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
     sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
 
     //client
     sslFactory = new SSLFactory(clientSSLConfig);
-    sslContext = sslFactory.getSSLContext();
+    SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }
 
@@ -74,7 +72,8 @@ public class SSLBlockingChannelTest {
   @Test
   public void testSendAndReceive()
       throws Exception {
-    BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+    BlockingChannel channel =
+        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     sendAndReceive(channel);
     channel.disconnect();
   }
@@ -82,7 +81,8 @@ public class SSLBlockingChannelTest {
   @Test
   public void testRenegotiation()
       throws Exception {
-    BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+    BlockingChannel channel =
+        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     sendAndReceive(channel);
     sslEchoServer.renegotiate();
     sendAndReceive(channel);
@@ -93,7 +93,7 @@ public class SSLBlockingChannelTest {
   public void testWrongPortConnection()
       throws Exception {
     BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory);
+        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     try {
       // send request
       channel.connect();
