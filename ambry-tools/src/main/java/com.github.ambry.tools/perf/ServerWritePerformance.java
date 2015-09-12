@@ -18,6 +18,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.tools.util.ToolUtil;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -27,7 +28,6 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
@@ -85,6 +85,22 @@ public class ServerWritePerformance {
           parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
               .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
 
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
+          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
+              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
+          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
+              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
+          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
+              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
+          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
+              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -98,6 +114,14 @@ public class ServerWritePerformance {
           System.exit(1);
         }
       }
+
+      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
+
+      Properties sslProperties = ToolUtil
+          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
+              options.valueOf(sslTruststorePasswordOpt));
 
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
@@ -141,7 +165,7 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       connectionPool.start();
 

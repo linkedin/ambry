@@ -1,22 +1,31 @@
 package com.github.ambry.tools.admin;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.tools.util.ToolUtil;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -35,6 +44,13 @@ import joptsimple.OptionSpec;
  * List Replicas for a given blobid
  */
 public class AdminTool {
+  ConnectionPool connectionPool;
+  ArrayList<String> sslEnabledDatacentersList;
+
+  public AdminTool(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
+    this.connectionPool = connectionPool;
+    this.sslEnabledDatacentersList = sslEnabledDatacentersList;
+  }
 
   public static void main(String args[]) {
     try {
@@ -61,6 +77,26 @@ public class AdminTool {
               .describedAs("Whether to include expired blobs while querying or not").defaultsTo("false")
               .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
+          parser.accepts("sslEnabledDatacenters", "SSL enabled data centers").withOptionalArg()
+              .describedAs("The data centers that needs SSL to communicate").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
+          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
+              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
+          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
+              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
+          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
+              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
+          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
+              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -73,18 +109,33 @@ public class AdminTool {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation "
-              + "LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA --ambryBlobId blobId");
+              + "LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA --ambryBlobId blobId "
+              + "--sslEnabledDatacenters datacenters");
           System.exit(1);
         }
       }
 
+      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
+      Properties sslProperties = ToolUtil
+          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
+              options.valueOf(sslTruststorePasswordOpt));
+      Properties connectionPoolProperties = ToolUtil.createConnectionPoolProperties();
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
+      ConnectionPoolConfig connectionPoolConfig =
+          new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
+      ConnectionPool connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
-      AdminTool adminTool = new AdminTool();
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+      AdminTool adminTool = new AdminTool(connectionPool, sslEnabledDatacentersList);
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       boolean includeExpiredBlobs = Boolean.parseBoolean(options.valueOf(includeExpiredBlobsOpt));
@@ -117,9 +168,7 @@ public class AdminTool {
     BlobProperties blobProperties = null;
     for (ReplicaId replicaId : replicas) {
       try {
-        blobProperties =
-            getBlobProperties(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                expiredBlobs);
+        blobProperties = getBlobProperties(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
       }
@@ -127,12 +176,12 @@ public class AdminTool {
     return blobProperties;
   }
 
-  public BlobProperties getBlobProperties(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
+  public BlobProperties getBlobProperties(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId,
       boolean expiredBlobs)
-      throws MessageFormatException, IOException {
+      throws MessageFormatException, IOException, ConnectionPoolTimeoutException, InterruptedException {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
-    BlockingChannel blockingChannel = null;
+    ConnectedChannel connectedChannel = null;
     AtomicInteger correlationId = new AtomicInteger(1);
 
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
@@ -142,8 +191,8 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      blockingChannel = new BlockingChannel(replicaHost, replicaPort, 20000000, 20000000, 10000, 2000);
-      blockingChannel.connect();
+      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
@@ -151,11 +200,11 @@ public class AdminTool {
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
-      getResponse = BlobValidator.getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
-        blockingChannel = null;
+        connectedChannel = null;
         return null;
       }
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -163,7 +212,7 @@ public class AdminTool {
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
         System.out.println("getBlobProperties error on response " + getResponse.getError() +
             " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaHost + " port " + replicaPort +
+            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
             " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
@@ -188,8 +237,8 @@ public class AdminTool {
       System.out.println("IOException " + e);
       throw e;
     } finally {
-      if (blockingChannel != null) {
-        blockingChannel.disconnect();
+      if (connectedChannel != null) {
+        connectionPool.checkInConnection(connectedChannel);
       }
     }
   }
@@ -200,8 +249,7 @@ public class AdminTool {
     BlobOutput blobOutput = null;
     for (ReplicaId replicaId : replicas) {
       try {
-        blobOutput = getBlob(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-            expiredBlobs);
+        blobOutput = getBlob(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
       }
@@ -209,12 +257,11 @@ public class AdminTool {
     return blobOutput;
   }
 
-  public BlobOutput getBlob(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
-      boolean expiredBlobs)
-      throws MessageFormatException, IOException {
+  public BlobOutput getBlob(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId, boolean expiredBlobs)
+      throws MessageFormatException, IOException, ConnectionPoolTimeoutException, InterruptedException {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
-    BlockingChannel blockingChannel = null;
+    ConnectedChannel connectedChannel = null;
     AtomicInteger correlationId = new AtomicInteger(1);
 
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
@@ -224,18 +271,18 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      blockingChannel = new BlockingChannel(replicaHost, replicaPort, 20000000, 20000000, 10000, 2000);
-      blockingChannel.connect();
+      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to get blob : " + getRequest);
       GetResponse getResponse = null;
-      getResponse = BlobValidator.getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob is null ");
         System.out.println(blobId + " STATE FAILED");
-        blockingChannel = null;
+        connectedChannel = null;
         return null;
       }
       System.out.println("Get Response to get blob : " + getResponse.getError());
@@ -243,7 +290,7 @@ public class AdminTool {
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
         System.out.println("blob get error on response " + getResponse.getError() +
             " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaHost + " port " + replicaPort +
+            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
             " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
@@ -263,8 +310,8 @@ public class AdminTool {
       System.out.println("IOException " + e);
       throw e;
     } finally {
-      if (blockingChannel != null) {
-        blockingChannel.disconnect();
+      if (connectedChannel != null) {
+        connectionPool.checkInConnection(connectedChannel);
       }
     }
   }
@@ -275,9 +322,7 @@ public class AdminTool {
     ByteBuffer userMetadata = null;
     for (ReplicaId replicaId : replicas) {
       try {
-        userMetadata =
-            getUserMetadata(blobId, map, replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(),
-                expiredBlobs);
+        userMetadata = getUserMetadata(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
       }
@@ -285,12 +330,11 @@ public class AdminTool {
     return userMetadata;
   }
 
-  public ByteBuffer getUserMetadata(BlobId blobId, ClusterMap clusterMap, String replicaHost, int replicaPort,
-      boolean expiredBlobs)
-      throws MessageFormatException, IOException {
+  public ByteBuffer getUserMetadata(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId, boolean expiredBlobs)
+      throws MessageFormatException, IOException, ConnectionPoolTimeoutException, InterruptedException {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
-    BlockingChannel blockingChannel = null;
+    ConnectedChannel connectedChannel = null;
     AtomicInteger correlationId = new AtomicInteger(1);
 
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
@@ -300,19 +344,19 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      blockingChannel = new BlockingChannel(replicaHost, replicaPort, 20000000, 20000000, 10000, 2000);
-      blockingChannel.connect();
+      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
               partitionRequestInfos, getOptions);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       GetResponse getResponse = null;
-      getResponse = BlobValidator.getGetResponseFromStream(blockingChannel, getRequest, clusterMap);
+      getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");
-        blockingChannel = null;
+        connectedChannel = null;
         return null;
       }
       System.out.println("Get Response to check blob usermetadata : " + getResponse.getError());
@@ -321,7 +365,7 @@ public class AdminTool {
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
         System.out.println("usermetadata get error on response " + getResponse.getError() +
             " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaHost + " port " + replicaPort +
+            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
             " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
@@ -342,8 +386,8 @@ public class AdminTool {
       System.out.println("IOException " + e);
       throw e;
     } finally {
-      if (blockingChannel != null) {
-        blockingChannel.disconnect();
+      if (connectedChannel != null) {
+        connectionPool.checkInConnection(connectedChannel);
       }
     }
   }

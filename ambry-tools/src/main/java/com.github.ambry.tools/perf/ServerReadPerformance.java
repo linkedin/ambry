@@ -24,6 +24,7 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.tools.util.ToolUtil;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -33,7 +34,6 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.FileReader;
@@ -77,6 +77,22 @@ public class ServerReadPerformance {
           parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
               .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
 
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
+          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
+              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
+          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
+              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
+          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
+              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
+          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
+              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -91,6 +107,14 @@ public class ServerReadPerformance {
           System.exit(1);
         }
       }
+
+      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
+
+      Properties sslProperties = ToolUtil
+          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
+              options.valueOf(sslTruststorePasswordOpt));
 
       String logToRead = options.valueOf(logToReadOpt);
 
@@ -128,7 +152,7 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
@@ -165,6 +189,8 @@ public class ServerReadPerformance {
               sizeRead++;
             }
             long endTimeGetBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
+            totalTimeTaken.addAndGet(endTimeGetBlob);
+            totalReads.incrementAndGet();
             totalNumberOfGetBlobs++;
             totalLatencyForGetBlobs += endTimeGetBlob;
             if (endTimeGetBlob > maxLatencyForGetBlobs) {
