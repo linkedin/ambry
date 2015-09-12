@@ -116,6 +116,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
       netWriteBuffer.flip();
       flush(netWriteBuffer);
+      clearReceive();
+      clearSend();
       socketChannel.socket().close();
       socketChannel.close();
     } catch (IOException ie) {

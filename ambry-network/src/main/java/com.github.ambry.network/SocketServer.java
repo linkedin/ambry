@@ -52,7 +52,7 @@ public class SocketServer implements NetworkServer {
   private final HashMap<PortType, Port> ports;
   private SSLFactory sslFactory;
 
-  public SocketServer(NetworkConfig config, SSLFactory sslFactory, MetricRegistry registry, ArrayList<Port> portList) {
+  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -66,7 +66,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
-    this.sslFactory = sslFactory;
+    this.initializeSSLFactory(sslConfig);
   }
 
   public String getHost() {
@@ -83,6 +83,18 @@ public class SocketServer implements NetworkServer {
       return sslPort.getPort();
     }
     throw new IllegalStateException("No SSL Port Exists for Server " + host + ":" + port);
+  }
+
+  private void initializeSSLFactory(SSLConfig sslConfig) {
+    if (ports.get(PortType.SSL) != null) {
+      try {
+        this.sslFactory = new SSLFactory(sslConfig);
+        metrics.sslFactoryInitializationCount.inc();
+      } catch (Exception e) {
+        metrics.sslFactoryInitializationErrorCount.inc();
+        throw new IllegalStateException("Exception thrown during initialization of SSLFactory ", e);
+      }
+    }
   }
 
   public int getNumProcessorThreads() {
@@ -296,6 +308,7 @@ class Acceptor extends AbstractServerThread {
       serverChannel.close();
       nioSelector.close();
       shutdownComplete();
+      super.shutdown();
     } catch (Exception e) {
       metrics.acceptorShutDownErrorCount.inc();
       logger.error("Error during shutdown of acceptor thread", e);
@@ -422,8 +435,14 @@ class Processor extends AbstractServerThread {
       logger.error("Error in processor thread", e);
     } finally {
       logger.debug("Closing server socket and selector.");
-      closeAll();
-      shutdownComplete();
+      try {
+        closeAll();
+        shutdownComplete();
+        super.shutdown();
+      } catch (InterruptedException ie) {
+        metrics.processorShutDownErrorCount.inc();
+        logger.error("InterruptedException on processor shutdown ", ie);
+      }
     }
   }
 
@@ -478,7 +497,11 @@ class Processor extends AbstractServerThread {
       SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id,
           socketChannelPortTypePair.getSocketChannel().socket().getRemoteSocketAddress());
-      selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
+      try {
+        selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
+      } catch (IOException e) {
+        logger.error("Error on registering new connection ", e);
+      }
     }
   }
 

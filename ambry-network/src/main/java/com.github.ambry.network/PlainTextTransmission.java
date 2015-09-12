@@ -82,6 +82,8 @@ public class PlainTextTransmission extends Transmission {
    */
   @Override
   public void close() {
+    clearReceive();
+    clearSend();
     key.attach(null);
     key.cancel();
     try {

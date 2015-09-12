@@ -370,7 +370,9 @@ public final class ReplicationManager {
    */
   public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters) {
     if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+      Port toReturn = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+      logger.trace("Assigning ssl for remote replica " + replicaId);
+      return toReturn;
     } else {
       return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
