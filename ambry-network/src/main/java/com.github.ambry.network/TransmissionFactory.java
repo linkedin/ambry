@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 
 
 public class TransmissionFactory {
+  private static final Logger logger = LoggerFactory.getLogger(SSLTransmission.class);
+
   public static Transmission getTransmission(String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, PortType portType, SSLFactory sslFactory,
       SSLFactory.Mode mode)
@@ -18,8 +20,18 @@ public class TransmissionFactory {
     if (portType == PortType.PLAINTEXT) {
       return new PlainTextTransmission(connectionId, socketChannel, key, time, metrics);
     } else if (portType == PortType.SSL) {
-      return new SSLTransmission(sslFactory, connectionId, socketChannel, key, remoteHost, remotePort, time, metrics,
-          mode);
+      SSLTransmission sslTransmission = null;
+      try {
+        sslTransmission =
+            new SSLTransmission(sslFactory, connectionId, socketChannel, key, remoteHost, remotePort, time, metrics,
+                mode);
+        metrics.sslTransmissionInitializationCount.inc();
+      } catch (IOException e) {
+        metrics.sslTransmissionInitializationErrorCount.inc();
+        logger.error("SSLTransmission initialization error ", e);
+        throw e;
+      }
+      return sslTransmission;
     } else {
       throw new IllegalArgumentException("UnSupported portType " + portType + " passed in");
     }

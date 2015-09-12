@@ -56,7 +56,6 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
-  private SSLFactory sslFactory = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap)
       throws IOException {
@@ -121,10 +120,7 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
 
-      if (nodeId.hasSSLPort()) {
-        initializeSSLFactory(sslConfig);
-      }
-      networkServer = new SocketServer(networkConfig, sslFactory, registry, ports);
+      networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
@@ -139,14 +135,6 @@ public class AmbryServer {
     } catch (Exception e) {
       logger.error("Error during startup", e);
       throw new InstantiationException("failure during startup " + e);
-    }
-  }
-
-  private void initializeSSLFactory(SSLConfig sslConfig) {
-    try {
-      this.sslFactory = new SSLFactory(sslConfig);
-    } catch (Exception e) {
-      throw new IllegalStateException("Exception thrown during initialization of SSLFactory ");
     }
   }
 
