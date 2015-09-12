@@ -96,8 +96,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @throws IOException if an I/O error occurs
    */
   @Override
-  public void close()
-      throws IOException {
+  public void close() {
     if (closing) {
       return;
     }

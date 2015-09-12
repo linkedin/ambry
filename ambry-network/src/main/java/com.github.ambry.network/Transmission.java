@@ -120,7 +120,7 @@ public abstract class Transmission {
    * Close the connection for the socket channel
    */
   public abstract void close()
-      throws IOException;
+  throws IOException;
 
   public String getConnectionId() {
     return connectionId;

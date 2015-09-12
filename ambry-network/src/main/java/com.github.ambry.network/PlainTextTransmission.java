@@ -81,8 +81,7 @@ public class PlainTextTransmission extends Transmission {
    * Close the connection for the socket channel
    */
   @Override
-  public void close()
-      throws IOException {
+  public void close() {
     key.attach(null);
     key.cancel();
     try {

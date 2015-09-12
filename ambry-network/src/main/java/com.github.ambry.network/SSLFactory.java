@@ -43,8 +43,6 @@ public class SSLFactory {
   public SSLFactory(SSLConfig sslConfig)
       throws Exception {
 
-    printSSLParams(sslConfig);
-
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
       this.provider = sslConfig.sslContextProvider;
@@ -85,24 +83,6 @@ public class SSLFactory {
     createTrustStore(sslConfig.sslTruststoreType, sslConfig.sslTruststorePath, sslConfig.sslTruststorePassword);
 
     this.sslContext = createSSLContext();
-  }
-
-  private void printSSLParams(SSLConfig sslConfig) {
-    logger.info("SSL Protocol " + sslConfig.sslContextProtocol);
-    logger.info("SSL Provider " + sslConfig.sslContextProvider);
-    logger.info("Supported cipher suites " + sslConfig.sslCipherSuites);
-    logger.info("SSL enabled protocols " + sslConfig.sslEnabledProtocols);
-    logger.info("SSL end point identification algorithm " + sslConfig.sslEndpointIdentificationAlgorithm);
-    logger.info("SSL ClientAuthentication " + sslConfig.sslClientAuthentication);
-    logger.info("SSL kmfAlgorithm " + sslConfig, kmfAlgorithm);
-    logger.info("SSL tmfAlgorithm " + sslConfig.sslTrustmanagerAlgorithm);
-    logger.info("SSL keysore type " + sslConfig.sslKeystoreType);
-    logger.info("SSL keysore path " + sslConfig.sslKeystorePath);
-    logger.info("SSL keysore password " + sslConfig.sslKeystorePassword);
-    logger.info("SSL key password " + sslConfig.sslKeyPassword);
-    logger.info("SSL trustsore type " + sslConfig.sslTruststoreType);
-    logger.info("SSL trustsore path " + sslConfig.sslTruststorePath);
-    logger.info("SSL trustsore password " + sslConfig.sslTruststorePassword);
   }
 
   /**
