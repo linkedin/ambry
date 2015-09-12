@@ -301,7 +301,9 @@ public class Selector implements Selectable {
             write(key, transmission);
           } else if (!key.isValid()) {
             close(key);
-          }
+          }else {
+          throw new IllegalStateException("Unrecognized key state for processor thread.");
+        }
         } catch (IOException e) {
           String socketDescription = socketDescription(channel(key));
           if (e instanceof EOFException || e instanceof ConnectException) {
@@ -425,6 +427,8 @@ public class Selector implements Selectable {
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
       try {
+        transmission.clearReceive();
+        transmission.clearSend();
         transmission.close();
       } catch (IOException e) {
         logger.error("IOException thrown during closing of transmission with connectionId {} :",
