@@ -441,8 +441,6 @@ public class Selector implements Selectable {
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
       try {
-        transmission.clearReceive();
-        transmission.clearSend();
         transmission.close();
       } catch (IOException e) {
         logger.error("IOException thrown during closing of transmission with connectionId {} :",

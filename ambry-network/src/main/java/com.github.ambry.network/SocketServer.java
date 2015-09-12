@@ -172,14 +172,12 @@ public class SocketServer implements NetworkServer {
     try {
       logger.info("Shutting down server");
       for (Acceptor acceptor : acceptors) {
-        if (acceptor != null && acceptor.isRunning()) {
+        if (acceptor != null) {
           acceptor.shutdown();
         }
       }
       for (Processor processor : processors) {
-        if (processor.isRunning()) {
-          processor.shutdown();
-        }
+        processor.shutdown();
       }
       logger.info("Shutdown completed");
     } catch (Exception e) {
@@ -501,7 +499,7 @@ class Processor extends AbstractServerThread {
           socketChannelPortTypePair.getSocketChannel().socket().getRemoteSocketAddress());
       try {
         selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
-      } catch (IOException e){
+      } catch (IOException e) {
         logger.error("Error on registering new connection ", e);
       }
     }
