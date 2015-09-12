@@ -499,7 +499,11 @@ class Processor extends AbstractServerThread {
       SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id,
           socketChannelPortTypePair.getSocketChannel().socket().getRemoteSocketAddress());
-      selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
+      try {
+        selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
+      } catch (IOException e){
+        logger.error("Error on registering new connection ", e);
+      }
     }
   }
 

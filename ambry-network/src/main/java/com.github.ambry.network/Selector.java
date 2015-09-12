@@ -146,7 +146,7 @@ public class Selector implements Selectable {
       logger.error("IOException on transmission creation " + e);
       channel.socket().close();
       channel.close();
-      // we dont throw here so that this shouldn't affect the processor for other connections
+      throw e;
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
@@ -173,7 +173,7 @@ public class Selector implements Selectable {
       logger.error("IOException on transmission creation " + e);
       socket.close();
       channel.close();
-      // we dont throw here so that this shouldn't affect the processor for other connections
+      throw e;
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);

@@ -346,7 +346,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     }
   }
 
-  public void initializeSSLSocketFactory()
+  private void initializeSSLSocketFactory()
       throws Exception {
     try {
       SSLFactory sslFactory = new SSLFactory(sslConfig);
