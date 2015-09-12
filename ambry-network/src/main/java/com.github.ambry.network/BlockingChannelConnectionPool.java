@@ -382,7 +382,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
         throw new IllegalArgumentException("Connection does not belong to the pool");
       }
       blockingChannelInfo.releaseBlockingChannel((BlockingChannel) connectedChannel);
-      logger.trace("CheckingIn connection for host {} and port {}", connectedChannel.getRemoteHost(),
+      logger.trace("Checking in connection for host {} and port {}", connectedChannel.getRemoteHost(),
           connectedChannel.getRemotePort());
     } finally {
       context.stop();

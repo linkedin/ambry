@@ -95,8 +95,8 @@ public abstract class Transmission {
    * Returns true if {@NetworkReceive} is read completely
    * @return true if {@NetworkReceive} is read completely, false otherwise
    */
-  public boolean isReadComplete(){
-    if(networkReceive!= null){
+  public boolean isReadComplete() {
+    if (networkReceive != null) {
       return networkReceive.getReceivedBytes().isReadComplete();
     }
     return false;
@@ -105,7 +105,7 @@ public abstract class Transmission {
   /**
    * Actions to be taken on completion of {@Send} in {@NetworkSend}
    */
-  public void onSendComplete(){
+  public void onSendComplete() {
     this.networkSend.onSendComplete();
   }
 
@@ -113,14 +113,15 @@ public abstract class Transmission {
    * Returns the remote socket address of the underlying socket channel
    * @return
    */
-  public SocketAddress getRemoteSocketAddress(){
+  public SocketAddress getRemoteSocketAddress() {
     return socketChannel.socket().getRemoteSocketAddress();
   }
+
   /**
    * Close the connection for the socket channel
    */
   public abstract void close()
-  throws IOException;
+      throws IOException;
 
   public String getConnectionId() {
     return connectionId;
