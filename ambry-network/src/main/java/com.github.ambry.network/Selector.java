@@ -137,9 +137,17 @@ public class Selector implements Selectable {
     }
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
-    Transmission transmission = TransmissionFactory
-        .getTransmission(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics,
-            portType, sslFactory, SSLFactory.Mode.CLIENT);
+    Transmission transmission = null;
+    try {
+      transmission = TransmissionFactory
+          .getTransmission(connectionId, channel, key, address.getHostName(), address.getPort(), time, metrics,
+              portType, sslFactory, SSLFactory.Mode.CLIENT);
+    } catch (IOException e) {
+      logger.error("IOException on transmission creation " + e);
+      channel.socket().close();
+      channel.close();
+      throw e;
+    }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
@@ -156,9 +164,17 @@ public class Selector implements Selectable {
     Socket socket = channel.socket();
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
-    Transmission transmission = TransmissionFactory
-        .getTransmission(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
-            metrics, portType, sslFactory, SSLFactory.Mode.SERVER);
+    Transmission transmission = null;
+    try {
+      transmission = TransmissionFactory
+          .getTransmission(connectionId, channel, key, socket.getInetAddress().getHostAddress(), socket.getPort(), time,
+              metrics, portType, sslFactory, SSLFactory.Mode.SERVER);
+    } catch (IOException e) {
+      logger.error("IOException on transmission creation " + e);
+      socket.close();
+      channel.close();
+      throw e;
+    }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
     activeConnections.set(this.keyMap.size());
@@ -491,8 +507,7 @@ public class Selector implements Selectable {
     try {
       boolean sendComplete = transmission.write();
       if (sendComplete) {
-        logger.trace("Finished writing, registering for read on connection {}",
-            transmission.getRemoteSocketAddress());
+        logger.trace("Finished writing, registering for read on connection {}", transmission.getRemoteSocketAddress());
         transmission.onSendComplete();
         this.completedSends.add(transmission.getNetworkSend());
         metrics.sendInFlight.dec();

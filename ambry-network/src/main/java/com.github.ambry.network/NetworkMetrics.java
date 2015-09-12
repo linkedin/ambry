@@ -26,6 +26,7 @@ public class NetworkMetrics {
   public final Counter sendInFlight;
   public final Counter acceptConnectionErrorCount;
   public final Counter acceptorShutDownErrorCount;
+  public final Counter processorShutDownErrorCount;
   public final Counter processNewResponseErrorCount;
   public Gauge<Integer> numberOfProcessorThreads;
 
@@ -50,6 +51,10 @@ public class NetworkMetrics {
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // ssl metrics
+  public final Counter sslFactoryInitializationCount;
+  public final Counter sslTransmissionInitializationCount;
+  public final Counter sslFactoryInitializationErrorCount;
+  public final Counter sslTransmissionInitializationErrorCount;
   public final Histogram sslHandshakeTime;
   public final Counter sslHandshakeCount;
   public final Counter sslHandshakeErrorCount;
@@ -96,8 +101,15 @@ public class NetworkMetrics {
     selectorCloseSocketErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
     selectorBytesSentCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesSentCount"));
-    selectorBytesReceivedCount =
-        registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesReceivedCount"));
+    selectorBytesReceivedCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesReceivedCount"));
+    sslFactoryInitializationCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationCount"));
+    sslFactoryInitializationErrorCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationErrorCount"));
+    sslTransmissionInitializationCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslTransmissionInitializationCount"));
+    sslTransmissionInitializationErrorCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslTransmissionInitializationErrorCount"));
     sslHandshakeTime = registry.histogram(MetricRegistry.name(Selector.class, "SslHandshakeTime"));
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
@@ -114,6 +126,8 @@ public class NetworkMetrics {
         registry.counter(MetricRegistry.name(SocketServer.class, "AcceptConnectionErrorCount"));
     acceptorShutDownErrorCount =
         registry.counter(MetricRegistry.name(SocketServer.class, "AcceptorShutDownErrorCount"));
+    processorShutDownErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessorShutDownErrorCount"));
     processNewResponseErrorCount =
         registry.counter(MetricRegistry.name(SocketServer.class, "ProcessNewResponseErrorCount"));
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
