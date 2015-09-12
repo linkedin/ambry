@@ -121,7 +121,9 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
 
-      initializeSSLFactory(sslConfig);
+      if (nodeId.hasSSLPort()) {
+        initializeSSLFactory(sslConfig);
+      }
       networkServer = new SocketServer(networkConfig, sslFactory, registry, ports);
       requests =
           new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
@@ -142,11 +144,7 @@ public class AmbryServer {
 
   private void initializeSSLFactory(SSLConfig sslConfig) {
     try {
-      if (sslConfig.sslEnabledDatacenters.length() > 0) {
-        this.sslFactory = new SSLFactory(sslConfig);
-      } else {
-        this.sslFactory = null;
-      }
+      this.sslFactory = new SSLFactory(sslConfig);
     } catch (Exception e) {
       throw new IllegalStateException("Exception thrown during initialization of SSLFactory ");
     }
