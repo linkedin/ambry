@@ -53,6 +53,8 @@ public class PlainTextTransmission extends Transmission {
     long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
     metrics.selectorBytesReceived.update(bytesRead);
     metrics.selectorBytesReceivedCount.inc(bytesRead);
+    logger.trace("Bytes read " + bytesRead + " from {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
+        getConnectionId());
     return networkReceive.getReceivedBytes().isReadComplete();
   }
 
