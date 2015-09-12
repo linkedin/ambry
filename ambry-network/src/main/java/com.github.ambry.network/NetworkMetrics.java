@@ -49,6 +49,11 @@ public class NetworkMetrics {
   public Gauge<Long> selectorActiveConnections;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
+  // ssl metrics
+  public final Histogram sslHandshakeTime;
+  public final Counter sslHandshakeCount;
+  public final Counter sslHandshakeErrorCount;
+
   public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {
     this.registry = registry;
@@ -93,6 +98,9 @@ public class NetworkMetrics {
     selectorBytesSentCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesSentCount"));
     selectorBytesReceivedCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesReceivedCount"));
+    sslHandshakeTime = registry.histogram(MetricRegistry.name(Selector.class, "SslHandshakeTime"));
+    sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
+    sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
 
     numberOfProcessorThreads = new Gauge<Integer>() {
       @Override

@@ -14,12 +14,16 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Factory to create SSLContext and SSLEngine
  */
 public class SSLFactory {
+  protected Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+
   public enum Mode {CLIENT, SERVER}
 
   private String protocol;
@@ -38,6 +42,7 @@ public class SSLFactory {
 
   public SSLFactory(SSLConfig sslConfig)
       throws Exception {
+
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
       this.provider = sslConfig.sslContextProvider;

@@ -34,6 +34,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private ByteBuffer netWriteBuffer;
   private ByteBuffer appReadBuffer;
   private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
+  private long handshakeStartTime;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
       String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode)
@@ -59,6 +60,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     handshakeComplete = false;
     closing = false;
     //initiate handshake
+    handshakeStartTime = time.milliseconds();
     sslEngine.beginHandshake();
     handshakeStatus = sslEngine.getHandshakeStatus();
   }
@@ -94,8 +96,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @throws IOException if an I/O error occurs
    */
   @Override
-  public void close()
-      throws IOException {
+  public void close() {
     if (closing) {
       return;
     }
@@ -118,6 +119,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       socketChannel.socket().close();
       socketChannel.close();
     } catch (IOException ie) {
+      metrics.selectorCloseSocketErrorCount.inc();
       logger.warn("Failed to send SSL close message ", ie);
     }
     key.attach(null);
@@ -291,6 +293,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
       } else {
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+        metrics.sslHandshakeCount.inc();
+        metrics.sslHandshakeTime.update(time.milliseconds() - handshakeStartTime);
       }
 
       logger.trace(
@@ -375,6 +379,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
     metrics.selectorBytesReceived.update(bytesRead);
     metrics.selectorBytesReceivedCount.inc(bytesRead);
+    logger.trace("Bytes read " + bytesRead + " from {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
+        getConnectionId());
     return networkReceive.getReceivedBytes().isReadComplete();
   }
 
@@ -566,6 +572,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private void handshakeFailure() {
     //Release all resources such as internal buffers that SSLEngine is managing
     sslEngine.closeOutbound();
+    metrics.sslHandshakeErrorCount.inc();
     try {
       sslEngine.closeInbound();
     } catch (SSLException e) {
