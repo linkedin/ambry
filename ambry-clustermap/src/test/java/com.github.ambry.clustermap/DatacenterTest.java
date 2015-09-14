@@ -58,8 +58,8 @@ public class DatacenterTest {
 
   JSONArray getDataNodes()
       throws JSONException {
-    return TestUtils
-        .getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, HardwareState.AVAILABLE, getDisks());
+    return TestUtils.getJsonArrayDataNodes(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE,
+        getDisks());
   }
 
   @Test

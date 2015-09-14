@@ -31,6 +31,9 @@ public class CoordinatorMetrics {
   public final Meter getBlobUserMetadataOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter operationExceptionRate;
+  public final Meter plainTextConnectionsRequestRate;
+  public final Meter sslConnectionsRequestRate;
+
   public final Counter blobAlreadyExistsInLocalColoError;
   public final Counter blobAlreadyExistsInRemoteColoError;
 
@@ -58,13 +61,13 @@ public class CoordinatorMetrics {
   public final Counter successfulCrossColoProxyCallCount;
   public final Counter totalCrossColoProxyCallCount;
 
-  public final Gauge<Integer> crossColoCallsEnabled;
+  public final Gauge<Integer> crossDCCallsEnabled;
 
   private final Map<DataNodeId, RequestMetrics> requestMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CoordinatorMetrics(ClusterMap clusterMap, final boolean crossDCProxyCallsEnabled) {
+  public CoordinatorMetrics(ClusterMap clusterMap, final boolean isCrossDatacenterCallsEnabled) {
     MetricRegistry registry = clusterMap.getMetricRegistry();
     putBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationLatencyInMs"));
@@ -116,12 +119,16 @@ public class CoordinatorMetrics {
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "successfulCrossColoProxyCallCount"));
     totalCrossColoProxyCallCount =
         registry.counter(MetricRegistry.name(AmbryCoordinator.class, "totalCrossColoProxyCallCount"));
-    this.crossColoCallsEnabled = new Gauge<Integer>() {
+    this.crossDCCallsEnabled = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return (crossDCProxyCallsEnabled == true ? 1 : 0);
+        return (isCrossDatacenterCallsEnabled == true ? 1 : 0);
       }
     };
+    plainTextConnectionsRequestRate =
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "plainTextConnectionsRequestRate"));
+    sslConnectionsRequestRate =
+        registry.meter(MetricRegistry.name(AmbryCoordinator.class, "sslConnectionsRequestRate"));
 
     // Track metrics at DataNode granularity.
     // In the future, could track at Disk and/or Partition granularity as well/instead.
@@ -228,12 +235,38 @@ public class CoordinatorMetrics {
     public final Histogram getBlobUserMetadataRequestLatencyInMs;
     public final Histogram getBlobRequestLatencyInMs;
 
+    public final Histogram plainTextPutBlobRequestLatencyInMs;
+    public final Histogram plainTextDeleteBlobRequestLatencyInMs;
+    public final Histogram plainTextGetBlobPropertiesRequestLatencyInMs;
+    public final Histogram plainTextGetBlobUserMetadataRequestLatencyInMs;
+    public final Histogram plainTextGetBlobRequestLatencyInMs;
+
+    public final Histogram sslPutBlobRequestLatencyInMs;
+    public final Histogram sslDeleteBlobRequestLatencyInMs;
+    public final Histogram sslGetBlobPropertiesRequestLatencyInMs;
+    public final Histogram sslGetBlobUserMetadataRequestLatencyInMs;
+    public final Histogram sslGetBlobRequestLatencyInMs;
+
     public final Meter putBlobRequestRate;
     public final Meter deleteBlobRequestRate;
     public final Meter getBlobPropertiesRequestRate;
     public final Meter getBlobUserMetadataRequestRate;
     public final Meter getBlobRequestRate;
     public final Meter requestErrorRate;
+
+    public final Meter plainTextPutBlobRequestRate;
+    public final Meter plainTextDeleteBlobRequestRate;
+    public final Meter plainTextGetBlobPropertiesRequestRate;
+    public final Meter plainTextGetBlobUserMetadataRequestRate;
+    public final Meter plainTextGetBlobRequestRate;
+    public final Meter plainTextRequestErrorRate;
+
+    public final Meter sslPutBlobRequestRate;
+    public final Meter sslDeleteBlobRequestRate;
+    public final Meter sslGetBlobPropertiesRequestRate;
+    public final Meter sslGetBlobUserMetadataRequestRate;
+    public final Meter sslGetBlobRequestRate;
+    public final Meter sslRequestErrorRate;
 
     private final Counter unexpectedError;
     private final Counter ioError;
@@ -242,6 +275,22 @@ public class CoordinatorMetrics {
     private final Counter messageFormatDataCorruptError;
     private final Counter messageFormatHeaderConstraintError;
     private final Counter messageFormatUnknownFormatError;
+
+    private final Counter plainTextUnexpectedError;
+    private final Counter plainTextIoError;
+    private final Counter plainTextTimeoutError;
+    private final Counter plainTextUnknownError;
+    private final Counter plainTextMessageFormatDataCorruptError;
+    private final Counter plainTextMessageFormatHeaderConstraintError;
+    private final Counter plainTextMessageFormatUnknownFormatError;
+
+    private final Counter sslUnexpectedError;
+    private final Counter sslIoError;
+    private final Counter sslTimeoutError;
+    private final Counter sslUnknownError;
+    private final Counter sslMessageFormatDataCorruptError;
+    private final Counter sslMessageFormatHeaderConstraintError;
+    private final Counter sslMessageFormatUnknownFormatError;
 
     RequestMetrics(MetricRegistry registry, DataNodeId dataNodeId) {
       putBlobRequestLatencyInMs = registry.histogram(MetricRegistry
@@ -259,6 +308,38 @@ public class CoordinatorMetrics {
       getBlobRequestLatencyInMs = registry.histogram(MetricRegistry
           .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
               Integer.toString(dataNodeId.getPort()), "getBlobRequestLatencyInMs"));
+
+      plainTextPutBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextPutBlobRequestLatencyInMs"));
+      plainTextDeleteBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextDeleteBlobRequestLatencyInMs"));
+      plainTextGetBlobPropertiesRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobPropertiesRequestLatencyInMs"));
+      plainTextGetBlobUserMetadataRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobUserMetadataRequestLatencyInMs"));
+      plainTextGetBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobRequestLatencyInMs"));
+
+      sslPutBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslPutBlobRequestLatencyInMs"));
+      sslDeleteBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslDeleteBlobRequestLatencyInMs"));
+      sslGetBlobPropertiesRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobPropertiesRequestLatencyInMs"));
+      sslGetBlobUserMetadataRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobUserMetadataRequestLatencyInMs"));
+      sslGetBlobRequestLatencyInMs = registry.histogram(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobRequestLatencyInMs"));
 
       putBlobRequestRate = registry.meter(MetricRegistry
           .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
@@ -278,6 +359,44 @@ public class CoordinatorMetrics {
       requestErrorRate = registry.meter(MetricRegistry
           .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
               Integer.toString(dataNodeId.getPort()), "requestErrorRate"));
+
+      plainTextPutBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextPutBlobRequestRate"));
+      plainTextDeleteBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextDeleteBlobRequestRate"));
+      plainTextGetBlobPropertiesRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobPropertiesRequestRate"));
+      plainTextGetBlobUserMetadataRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobUserMetadataRequestRate"));
+      plainTextGetBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextGetBlobRequestRate"));
+      plainTextRequestErrorRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextRequestErrorRate"));
+
+      sslPutBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslPutBlobRequestRate"));
+      sslDeleteBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslDeleteBlobRequestRate"));
+      sslGetBlobPropertiesRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobPropertiesRequestRate"));
+      sslGetBlobUserMetadataRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobUserMetadataRequestRate"));
+      sslGetBlobRequestRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslGetBlobRequestRate"));
+      sslRequestErrorRate = registry.meter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslRequestErrorRate"));
 
       unexpectedError = registry.counter(MetricRegistry
           .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
@@ -300,42 +419,216 @@ public class CoordinatorMetrics {
       messageFormatUnknownFormatError = registry.counter(MetricRegistry
           .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
               Integer.toString(dataNodeId.getPort()), "messageFormatUnknownFormatError"));
+
+      plainTextUnexpectedError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextUnexpectedError"));
+      plainTextIoError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextIoError"));
+      plainTextTimeoutError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextTimeoutError"));
+      plainTextUnknownError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextUnknownError"));
+      plainTextMessageFormatDataCorruptError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextMessageFormatDataCorruptError"));
+      plainTextMessageFormatHeaderConstraintError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextMessageFormatHeaderConstraintError"));
+      plainTextMessageFormatUnknownFormatError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "plainTextMessageFormatUnknownFormatError"));
+
+      sslUnexpectedError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslUnexpectedError"));
+      sslIoError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslIoError"));
+      sslTimeoutError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslTimeoutError"));
+      sslUnknownError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslUnknownError"));
+      sslMessageFormatDataCorruptError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslMessageFormatDataCorruptError"));
+      sslMessageFormatHeaderConstraintError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslMessageFormatHeaderConstraintError"));
+      sslMessageFormatUnknownFormatError = registry.counter(MetricRegistry
+          .name(OperationRequest.class, dataNodeId.getDatacenterName(), dataNodeId.getHostname(),
+              Integer.toString(dataNodeId.getPort()), "sslMessageFormatUnknownFormatError"));
     }
 
-    public void countError(MessageFormatErrorCodes error) {
+    public void incrementPutBlobRequestRate(boolean sslRequest) {
+      putBlobRequestRate.mark();
+      if (sslRequest) {
+        sslPutBlobRequestRate.mark();
+      } else {
+        plainTextPutBlobRequestRate.mark();
+      }
+    }
+
+    public void updatePutBlobRequestLatency(long latency, boolean sslRequest) {
+      putBlobRequestLatencyInMs.update(latency);
+      if (sslRequest) {
+        sslPutBlobRequestLatencyInMs.update(latency);
+      } else {
+        plainTextPutBlobRequestLatencyInMs.update(latency);
+      }
+    }
+
+    public void incrementGetBlobRequestRate(boolean sslRequest) {
+      getBlobRequestRate.mark();
+      if (sslRequest) {
+        sslGetBlobRequestRate.mark();
+      } else {
+        plainTextGetBlobRequestRate.mark();
+      }
+    }
+
+    public void updateGetBlobRequestLatency(long latency, boolean sslRequest) {
+      getBlobRequestLatencyInMs.update(latency);
+      if (sslRequest) {
+        sslGetBlobRequestLatencyInMs.update(latency);
+      } else {
+        plainTextGetBlobRequestLatencyInMs.update(latency);
+      }
+    }
+
+    public void incrementGetBlobPropertiesRequestRate(boolean sslRequest) {
+      getBlobPropertiesRequestRate.mark();
+      if (sslRequest) {
+        sslGetBlobPropertiesRequestRate.mark();
+      } else {
+        plainTextGetBlobPropertiesRequestRate.mark();
+      }
+    }
+
+    public void updateGetBlobPropertiesRequestLatency(long latency, boolean sslRequest) {
+      getBlobPropertiesRequestLatencyInMs.update(latency);
+      if (sslRequest) {
+        sslGetBlobPropertiesRequestLatencyInMs.update(latency);
+      } else {
+        plainTextGetBlobPropertiesRequestLatencyInMs.update(latency);
+      }
+    }
+
+    public void incrementGetBlobUserMetadataRequestRate(boolean sslRequest) {
+      getBlobUserMetadataRequestRate.mark();
+      if (sslRequest) {
+        sslGetBlobUserMetadataRequestRate.mark();
+      } else {
+        plainTextGetBlobUserMetadataRequestRate.mark();
+      }
+    }
+
+    public void updateGetBlobUserMetadataRequestLatency(long latency, boolean sslRequest) {
+      getBlobUserMetadataRequestLatencyInMs.update(latency);
+      if (sslRequest) {
+        sslGetBlobUserMetadataRequestLatencyInMs.update(latency);
+      } else {
+        plainTextGetBlobUserMetadataRequestLatencyInMs.update(latency);
+      }
+    }
+
+    public void incrementDeleteBlobRequestRate(boolean sslRequest) {
+      deleteBlobRequestRate.mark();
+      if (sslRequest) {
+        sslDeleteBlobRequestRate.mark();
+      } else {
+        plainTextDeleteBlobRequestRate.mark();
+      }
+    }
+
+    public void updateDeleteBlobRequestLatency(long latency, boolean sslEnabled) {
+      deleteBlobRequestLatencyInMs.update(latency);
+      if (sslEnabled) {
+        sslDeleteBlobRequestLatencyInMs.update(latency);
+      } else {
+        plainTextDeleteBlobRequestLatencyInMs.update(latency);
+      }
+    }
+
+    public void countError(MessageFormatErrorCodes error, boolean sslRequest) {
       requestErrorRate.mark();
       switch (error) {
         case Data_Corrupt:
           messageFormatDataCorruptError.inc();
+          if (sslRequest) {
+            sslMessageFormatDataCorruptError.inc();
+          } else {
+            plainTextMessageFormatDataCorruptError.inc();
+          }
           break;
         case Header_Constraint_Error:
           messageFormatHeaderConstraintError.inc();
+          if (sslRequest) {
+            sslMessageFormatHeaderConstraintError.inc();
+          } else {
+            plainTextMessageFormatHeaderConstraintError.inc();
+          }
           break;
         case Unknown_Format_Version:
           messageFormatUnknownFormatError.inc();
+          if (sslRequest) {
+            sslMessageFormatUnknownFormatError.inc();
+          } else {
+            plainTextMessageFormatUnknownFormatError.inc();
+          }
           break;
         default:
           logger.warn("Unknown MessageFormatErrorCodes: " + error);
           unknownError.inc();
+          if (sslRequest) {
+            sslUnknownError.inc();
+          } else {
+            plainTextUnknownError.inc();
+          }
           break;
       }
     }
 
-    public void countError(RequestResponseError error) {
+    public void countError(RequestResponseError error, boolean sslRequest) {
       requestErrorRate.mark();
       switch (error) {
         case UNEXPECTED_ERROR:
           unexpectedError.inc();
+          if (sslRequest) {
+            sslUnexpectedError.inc();
+          } else {
+            plainTextUnexpectedError.inc();
+          }
           break;
         case IO_ERROR:
           ioError.inc();
+          if (sslRequest) {
+            sslIoError.inc();
+          } else {
+            plainTextIoError.inc();
+          }
           break;
         case TIMEOUT_ERROR:
           timeoutError.inc();
+          if (sslRequest) {
+            sslTimeoutError.inc();
+          } else {
+            plainTextTimeoutError.inc();
+          }
           break;
         default:
           logger.warn("Unknown RequestResponseError: " + error);
           unknownError.inc();
+          if (sslRequest) {
+            sslUnknownError.inc();
+          } else {
+            plainTextUnknownError.inc();
+          }
           break;
       }
     }

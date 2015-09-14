@@ -45,8 +45,8 @@ public class PersistentIndexTest {
   class MockIndex extends PersistentIndex {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-          new StoreMetrics(datadir, new MetricRegistry()));
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()));
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
@@ -1472,7 +1472,7 @@ public class PersistentIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
-      FindInfo infoempty = index.findDeletedEntriesSince(token, 1000, SystemTime.getInstance().milliseconds()/1000);
+      FindInfo infoempty = index.findDeletedEntriesSince(token, 1000, SystemTime.getInstance().milliseconds() / 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id01");
       MockId blobId2 = new MockId("id02");
@@ -1582,45 +1582,45 @@ public class PersistentIndexTest {
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
       //segment 5: [16 17 18 19d 20d]
-      FindInfo info = index.findDeletedEntriesSince(token, 500, SystemTime.getInstance().milliseconds()/1000);
+      FindInfo info = index.findDeletedEntriesSince(token, 500, SystemTime.getInstance().milliseconds() / 1000);
       List<MessageInfo> messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 1);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId2);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
       Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12567);
       Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
-      Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId5);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), blobId5);
 
       //Segment 1: [1 2d 3 4 *5*]
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
       //segment 5: [16 17 18 19d 20d]
-      info = index.findDeletedEntriesSince(info.getFindToken(), 200, SystemTime.getInstance().milliseconds()/1000);
+      info = index.findDeletedEntriesSince(info.getFindToken(), 200, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 1);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
       Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
       Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
-      Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId6);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), blobId6);
 
       //Segment 1: [1 2d 3 4 5]
       //Segment 2: [1d *6* 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
       //segment 5: [16 17 18 19d 20d]
-      info = index.findDeletedEntriesSince(info.getFindToken(), 300, SystemTime.getInstance().milliseconds()/1000);
+      info = index.findDeletedEntriesSince(info.getFindToken(), 300, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);
-      Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId9);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), blobId9);
 
       //Segment 1: [1 2d 3 4 5]
       //Segment 2: [1d 6 7 8 *9*]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
       //segment 5: [16 17 18 19d 20d]
-      info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds()/1000);
+      info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 4);
       // in the order in the segment
@@ -1629,7 +1629,7 @@ public class PersistentIndexTest {
       // these come from the next segment
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId4);
       Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId7);
-      Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId7);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), blobId7);
 
       //Segment 1: [1 2d 3 4 5]
       //Segment 2: [1d 6 7 8 9]
@@ -1638,7 +1638,7 @@ public class PersistentIndexTest {
       //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d. In messageEntries, 19 comes before 20
       // as we would have ...19 20 20d 20... from the journal, and then we lookup keys in that order when filtering
       // out non-delete entries.
-      info = index.findDeletedEntriesSince(info.getFindToken(), 800, SystemTime.getInstance().milliseconds()/1000);
+      info = index.findDeletedEntriesSince(info.getFindToken(), 800, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 4);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId12);
@@ -1678,7 +1678,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(5).getStoreKey(), blobId7);
       Assert.assertEquals(messageEntries.get(6).getStoreKey(), blobId12);
       Assert.assertEquals(messageEntries.get(7).getStoreKey(), blobId15);
-      Assert.assertEquals(((StoreFindToken)info.getFindToken()).getStoreKey(), blobId15);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), blobId15);
 
       // just close and open again to execute the shutdown logic once again.
       index.close();

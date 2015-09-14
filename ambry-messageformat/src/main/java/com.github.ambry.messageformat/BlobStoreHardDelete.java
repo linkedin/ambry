@@ -12,9 +12,9 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import org.slf4j.Logger;
@@ -86,10 +86,10 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
 }
 
 class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
-  private Logger logger = LoggerFactory.getLogger(getClass());
-  private int readSetIndex = 0;
   private final MessageReadSet readSet;
   private final StoreKeyFactory storeKeyFactory;
+  private Logger logger = LoggerFactory.getLogger(getClass());
+  private int readSetIndex = 0;
 
   public BlobStoreHardDeleteIterator(MessageReadSet readSet, StoreKeyFactory storeKeyFactory) {
     this.readSet = readSet;
@@ -179,11 +179,16 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           }
           break;
         default:
-          throw new IllegalStateException(
-              "Unknown header version during hard delete" + version + "storeKey " + readSet.getKeyAt(readSetIndex));
+          throw new MessageFormatException(
+              "Unknown header version during hard delete " + version + " storeKey " + readSet.getKeyAt(readSetIndex),
+              MessageFormatErrorCodes.Unknown_Format_Version);
       }
     } catch (Exception e) {
-      logger.error("Exception when reading blob", e);
+      if (e instanceof ClosedChannelException) {
+        logger.info("Received closed channel exception during hard delete");
+      } else {
+        logger.error("Exception when reading blob: ", e);
+      }
     }
     return hardDeleteInfo;
   }

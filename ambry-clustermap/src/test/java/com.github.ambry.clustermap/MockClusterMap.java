@@ -2,6 +2,8 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -20,33 +22,73 @@ public class MockClusterMap implements ClusterMap {
 
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
+  private int currentPlainTextPort = 62000;
+  private int currentSSLPort = 63000;
 
   public MockClusterMap()
       throws IOException {
+    this(false);
+  }
 
-    // create 3 nodes with each having 3 mount paths
-    MockDataNodeId dataNodeId1 = createDataNode(64422, "DC1");
-    MockDataNodeId dataNodeId2 = createDataNode(64423, "DC1");
-    MockDataNodeId dataNodeId3 = createDataNode(64424, "DC1");
-
-    MockDataNodeId dataNodeId4 = createDataNode(64425, "DC2");
-    MockDataNodeId dataNodeId5 = createDataNode(64426, "DC2");
-    MockDataNodeId dataNodeId6 = createDataNode(64427, "DC2");
-
-    MockDataNodeId dataNodeId7 = createDataNode(64428, "DC3");
-    MockDataNodeId dataNodeId8 = createDataNode(64429, "DC3");
-    MockDataNodeId dataNodeId9 = createDataNode(64430, "DC3");
+  public MockClusterMap(boolean enableSSLPorts)
+      throws IOException {
 
     dataNodes = new ArrayList<MockDataNodeId>(9);
-    dataNodes.add(dataNodeId1);
-    dataNodes.add(dataNodeId2);
-    dataNodes.add(dataNodeId3);
-    dataNodes.add(dataNodeId4);
-    dataNodes.add(dataNodeId5);
-    dataNodes.add(dataNodeId6);
-    dataNodes.add(dataNodeId7);
-    dataNodes.add(dataNodeId8);
-    dataNodes.add(dataNodeId9);
+    // create 3 nodes with each having 3 mount paths
+    if (enableSSLPorts) {
+      MockDataNodeId dataNodeId1 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
+      MockDataNodeId dataNodeId2 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
+      MockDataNodeId dataNodeId3 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
+
+      MockDataNodeId dataNodeId4 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
+      MockDataNodeId dataNodeId5 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
+      MockDataNodeId dataNodeId6 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
+
+      MockDataNodeId dataNodeId7 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
+      MockDataNodeId dataNodeId8 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
+      MockDataNodeId dataNodeId9 =
+          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
+
+      dataNodes.add(dataNodeId1);
+      dataNodes.add(dataNodeId2);
+      dataNodes.add(dataNodeId3);
+      dataNodes.add(dataNodeId4);
+      dataNodes.add(dataNodeId5);
+      dataNodes.add(dataNodeId6);
+      dataNodes.add(dataNodeId7);
+      dataNodes.add(dataNodeId8);
+      dataNodes.add(dataNodeId9);
+    } else {
+      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
+      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
+      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
+
+      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
+      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
+      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
+
+      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
+      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
+      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
+
+      dataNodes.add(dataNodeId1);
+      dataNodes.add(dataNodeId2);
+      dataNodes.add(dataNodeId3);
+      dataNodes.add(dataNodeId4);
+      dataNodes.add(dataNodeId5);
+      dataNodes.add(dataNodeId6);
+      dataNodes.add(dataNodeId7);
+      dataNodes.add(dataNodeId8);
+      dataNodes.add(dataNodeId9);
+    }
     partitions = new HashMap<Long, PartitionId>();
 
     // create three partitions on each mount path
@@ -60,9 +102,32 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private MockDataNodeId createDataNode(int port, String datacenter)
+  ArrayList<Port> getListOfPorts(int port) {
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(port, PortType.PLAINTEXT));
+    return ports;
+  }
+
+  ArrayList<Port> getListOfPorts(int port, int sslPort) {
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(port, PortType.PLAINTEXT));
+    ports.add(new Port(sslPort, PortType.SSL));
+    return ports;
+  }
+
+  private int getPlainTextPort(ArrayList<Port> ports) {
+    for (Port port : ports) {
+      if (port.getPortType() == PortType.PLAINTEXT) {
+        return port.getPort();
+      }
+    }
+    throw new IllegalArgumentException("No PlainText port found ");
+  }
+
+  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter)
       throws IOException {
     File f = null;
+    int port = getPlainTextPort(ports);
     try {
       List<String> mountPaths = new ArrayList<String>(3);
       f = File.createTempFile("ambry", ".tmp");
@@ -80,7 +145,7 @@ public class MockClusterMap implements ClusterMap {
       mountPaths.add(mountPath1);
       mountPaths.add(mountPath2);
       mountPaths.add(mountPath3);
-      MockDataNodeId dataNode = new MockDataNodeId(port, mountPaths, datacenter);
+      MockDataNodeId dataNode = new MockDataNodeId(ports, mountPaths, datacenter);
       return dataNode;
     } finally {
       if (f != null) {

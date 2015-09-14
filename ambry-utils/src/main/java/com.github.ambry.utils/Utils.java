@@ -1,5 +1,7 @@
 package com.github.ambry.utils;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -557,5 +559,58 @@ public class Utils {
       offset += sizeRead;
     }
     return data;
+  }
+
+  /**
+   * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
+   * @param data
+   * @param delimiter
+   * @return
+   */
+  public static ArrayList<String> splitString(String data, String delimiter) {
+    if (data == null) {
+      throw new IllegalArgumentException("Passed in string is null ");
+    }
+    ArrayList<String> toReturn = new ArrayList<String>();
+    String[] slices = data.split(delimiter);
+    toReturn.addAll(Arrays.asList(slices));
+    return toReturn;
+  }
+
+  /**
+   * Merge/Concatenate the input list of strings using the delimiter and return the new string
+   * @param data List of strings to be merged/concatenated
+   * @param delimiter using which the list of strings need to be merged/concatenated
+   * @return the obtained string after merging/concatenating
+   */
+  public static String concatenateString(ArrayList<String> data, String delimiter) {
+    if (data == null) {
+      throw new IllegalArgumentException("Passed in List is null ");
+    }
+    StringBuilder sb = new StringBuilder();
+    if (data.size() > 1) {
+      for (int i = 0; i < data.size() - 1; i++) {
+        sb.append(data.get(i)).append(delimiter);
+      }
+      sb.append(data.get(data.size() - 1));
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Make sure that the ByteBuffer capacity is equal to or greater than the expected length.
+   * If not, create a new ByteBuffer of expected length and copy contents from previous ByteBuffer to the new one
+   * @param existingBuffer ByteBuffer capacity to check
+   * @param newLength new length for the ByteBuffer.
+   * returns ByteBuffer with a minimum capacity of new length
+   */
+  public static ByteBuffer ensureCapacity(ByteBuffer existingBuffer, int newLength) {
+    if (newLength > existingBuffer.capacity()) {
+      ByteBuffer newBuffer = ByteBuffer.allocate(newLength);
+      existingBuffer.flip();
+      newBuffer.put(existingBuffer);
+      return newBuffer;
+    }
+    return existingBuffer;
   }
 }

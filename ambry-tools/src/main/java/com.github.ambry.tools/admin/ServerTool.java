@@ -9,6 +9,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.CoordinatorException;
@@ -16,6 +17,8 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import java.io.DataInputStream;
@@ -49,9 +52,11 @@ public class ServerTool {
   private ConnectionPool connectionPool;
   private PartitionId partitionId;
 
-  public ServerTool() {
+  public ServerTool()
+      throws Exception {
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
     connectionPool.start();
   }
 
@@ -158,7 +163,8 @@ public class ServerTool {
 
     try {
       blockingChannel = connectionPool
-          .checkOutConnection(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort(), 100000);
+          .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
+              PortType.PLAINTEXT), 100000);
       PutRequest putRequest =
           new PutRequest(correlationId.incrementAndGet(), "consumerThread", blobId, blobProperties, userMetaData,
               stream);

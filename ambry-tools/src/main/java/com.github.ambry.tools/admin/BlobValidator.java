@@ -208,8 +208,8 @@ public class BlobValidator {
   }
 
   private void validateBlobOnAllReplicas(ArrayList<BlobId> blobIdList, ClusterMap clusterMap, boolean expiredBlobs) {
-    Map<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>> resultMap =
-        new HashMap<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>>();
+    Map<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>> resultMap =
+        new HashMap<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>>();
     for (BlobId blobId : blobIdList) {
       System.out.println("Validating blob " + blobId + " on all replicas \n");
       validateBlobOnAllReplicas(blobId, clusterMap, expiredBlobs, resultMap);
@@ -217,9 +217,9 @@ public class BlobValidator {
     }
     System.out.println("\nOverall Summary \n");
     for (BlobId blobId : resultMap.keySet()) {
-      Map<ReplicaResponse, ArrayList<ReplicaId>> resultSet = resultMap.get(blobId);
-      System.out.println(blobId + " : " + resultSet.keySet());
-      for (Object result : resultSet.keySet()) {
+      Map<ServerErrorCode, ArrayList<ReplicaId>> resultSet = resultMap.get(blobId);
+      System.out.println(blobId);
+      for (ServerErrorCode result : resultSet.keySet()) {
         System.out.println(result + " -> " + resultSet.get(result));
       }
       System.out.println();
@@ -230,40 +230,40 @@ public class BlobValidator {
   }
 
   private void validateBlobOnAllReplicas(BlobId blobId, ClusterMap clusterMap, boolean expiredBlobs,
-      Map<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>> resultMap) {
-    Map<ReplicaResponse, ArrayList<ReplicaId>> responseMap = new HashMap<ReplicaResponse, ArrayList<ReplicaId>>();
+      Map<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>> resultMap) {
+    Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      ReplicaResponse response = null;
+      ServerErrorCode serverErrorCode = null;
       try {
         ServerErrorCode errorCode = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
             replicaId.getDataNodeId().getPort(), expiredBlobs);
-        response = new ReplicaResponse(errorCode);
+        serverErrorCode = errorCode;
       } catch (MessageFormatException e) {
-        response = new ReplicaResponse("MessageFormatException");
+        serverErrorCode = ServerErrorCode.Data_Corrupt;
       } catch (IOException e) {
-        response = new ReplicaResponse("IOException");
+        serverErrorCode = ServerErrorCode.IO_Error;
       } catch (Exception e) {
-        response = new ReplicaResponse("Exception");
+        serverErrorCode = ServerErrorCode.Unknown_Error;
       }
-      if (responseMap.containsKey(response)) {
-        responseMap.get(response).add(replicaId);
+      if (responseMap.containsKey(serverErrorCode)) {
+        responseMap.get(serverErrorCode).add(replicaId);
       } else {
         ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
         replicaList.add(replicaId);
-        responseMap.put(response, replicaList);
+        responseMap.put(serverErrorCode, replicaList);
       }
     }
     System.out.println("\nSummary ");
-    for (ReplicaResponse response : responseMap.keySet()) {
-      System.out.println(response.getErrorCode() + ": " + responseMap.get(response));
+    for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
+      System.out.println(serverErrorCode + ": " + responseMap.get(serverErrorCode));
     }
     resultMap.put(blobId, responseMap);
   }
 
   private void validateBlobOnDatacenter(ArrayList<BlobId> blobIdList, ClusterMap clusterMap, String datacenter,
       boolean expiredBlobs) {
-    Map<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>> resultMap =
-        new HashMap<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>>();
+    Map<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>> resultMap =
+        new HashMap<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>>();
     for (BlobId blobId : blobIdList) {
       System.out.println("Validating blob " + blobId + " on datacenter " + datacenter + "\n");
       validateBlobOnDatacenter(blobId, clusterMap, datacenter, expiredBlobs, resultMap);
@@ -271,53 +271,53 @@ public class BlobValidator {
     }
     System.out.println("\nOverall Summary \n");
     for (BlobId blobId : resultMap.keySet()) {
-      Map<ReplicaResponse, ArrayList<ReplicaId>> resultSet = resultMap.get(blobId);
-      System.out.println(blobId + " : " + resultSet.keySet());
-      for (ReplicaResponse result : resultSet.keySet()) {
-        System.out.println(result.getErrorCode() + " -> " + resultSet.get(result));
+      Map<ServerErrorCode, ArrayList<ReplicaId>> resultSet = resultMap.get(blobId);
+      System.out.println(blobId);
+      for (ServerErrorCode serverErrorCode : resultSet.keySet()) {
+        System.out.println(serverErrorCode + " -> " + resultSet.get(serverErrorCode));
       }
       System.out.println();
     }
   }
 
   private void validateBlobOnDatacenter(BlobId blobId, ClusterMap clusterMap, String datacenter, boolean expiredBlobs,
-      Map<BlobId, Map<ReplicaResponse, ArrayList<ReplicaId>>> resultMap) {
-    Map<ReplicaResponse, ArrayList<ReplicaId>> responseMap = new HashMap<ReplicaResponse, ArrayList<ReplicaId>>();
+      Map<BlobId, Map<ServerErrorCode, ArrayList<ReplicaId>>> resultMap) {
+    Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
       if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
-        ReplicaResponse response = null;
+        ServerErrorCode serverErrorCode = null;
         try {
           ServerErrorCode errorCode = validateBlobOnReplica(blobId, clusterMap, replicaId.getDataNodeId().getHostname(),
               replicaId.getDataNodeId().getPort(), expiredBlobs);
-          response = new ReplicaResponse(errorCode);
+          serverErrorCode = errorCode;
         } catch (MessageFormatException e) {
-          response = new ReplicaResponse("MessageFormatException");
+          serverErrorCode = ServerErrorCode.Data_Corrupt;
         } catch (IOException e) {
-          response = new ReplicaResponse("IOException");
+          serverErrorCode = ServerErrorCode.IO_Error;
         } catch (Exception e) {
-          response = new ReplicaResponse("Exception");
+          serverErrorCode = ServerErrorCode.Unknown_Error;
         }
-        if (responseMap.containsKey(response)) {
-          responseMap.get(response).add(replicaId);
+        if (responseMap.containsKey(serverErrorCode)) {
+          responseMap.get(serverErrorCode).add(replicaId);
         } else {
           ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
           replicaList.add(replicaId);
-          responseMap.put(response, replicaList);
+          responseMap.put(serverErrorCode, replicaList);
         }
       }
     }
     System.out.println("\nSummary ");
-    for (ReplicaResponse response : responseMap.keySet()) {
-      System.out.println(response.getErrorCode() + ": " + responseMap.get(response));
+    for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
+      System.out.println(serverErrorCode + ": " + responseMap.get(serverErrorCode));
     }
     resultMap.put(blobId, responseMap);
   }
 
   private void validateBlobOnReplica(ArrayList<BlobId> blobIdList, ClusterMap clusterMap, String replicaHost,
       int replicaPort, boolean expiredBlobs) {
-    Map<BlobId, ReplicaResponse> resultMap = new HashMap<BlobId, ReplicaResponse>();
+    Map<BlobId, ServerErrorCode> resultMap = new HashMap<BlobId, ServerErrorCode>();
     for (BlobId blobId : blobIdList) {
-      System.out.println("Validating blob " + blobId + " on all replica " + replicaHost + ":" + replicaPort + "\n");
+      System.out.println("Validating blob " + blobId + " on replica " + replicaHost + ":" + replicaPort + "\n");
       ServerErrorCode response = null;
       try {
         response = validateBlobOnReplica(blobId, clusterMap, replicaHost, replicaPort, expiredBlobs);
@@ -326,13 +326,13 @@ public class BlobValidator {
         } else {
           System.out.println("Failed to read the blob " + blobId + " due to " + response);
         }
-        resultMap.put(blobId, new ReplicaResponse(response));
+        resultMap.put(blobId, response);
       } catch (MessageFormatException e) {
-        resultMap.put(blobId, new ReplicaResponse("MessageFormatException"));
+        resultMap.put(blobId, ServerErrorCode.Data_Corrupt);
       } catch (IOException e) {
-        resultMap.put(blobId, new ReplicaResponse("IOException"));
+        resultMap.put(blobId, ServerErrorCode.IO_Error);
       } catch (Exception e) {
-        resultMap.put(blobId, new ReplicaResponse("Exception"));
+        resultMap.put(blobId, ServerErrorCode.Unknown_Error);
       }
       System.out.println();
     }
@@ -512,38 +512,5 @@ public class BlobValidator {
       return null;
     }
     return getResponse;
-  }
-
-  class ReplicaResponse {
-    public ServerErrorCode errorCode;
-    public String exception;
-
-    public ReplicaResponse(ServerErrorCode errorCode) {
-      this.errorCode = errorCode;
-      this.exception = null;
-    }
-
-    public ReplicaResponse(String exception) {
-      this.exception = exception;
-      this.errorCode = null;
-    }
-
-    public ServerErrorCode getErrorCode() {
-      return this.errorCode;
-    }
-
-    public String getException() {
-      return this.exception;
-    }
-
-    public boolean equals(ReplicaResponse that) {
-      if (this.errorCode != null && that.getErrorCode() != null) {
-        return this.errorCode.equals(that.getErrorCode());
-      } else if (this.exception != null && that.getErrorCode() != null) {
-        return this.exception.equals(that.getException());
-      } else {
-        return false;
-      }
-    }
   }
 }
