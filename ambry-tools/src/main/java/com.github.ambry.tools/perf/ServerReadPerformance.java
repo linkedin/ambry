@@ -141,7 +141,7 @@ public class ServerReadPerformance {
             shutdown.set(true);
             System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
                 " Nano Seconds  Average time taken per read " +
-                ((double) totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+                ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalReads.get() + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }

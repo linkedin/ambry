@@ -155,7 +155,7 @@ public class ServerWritePerformance {
             latch.await();
             System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get() +
                 " Nano Seconds  Average time taken per write " +
-                ((double) totalWrites.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+                ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalWrites.get() + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
