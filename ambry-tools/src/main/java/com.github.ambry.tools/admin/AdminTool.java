@@ -15,6 +15,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -24,8 +25,7 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.tools.util.ToolUtil;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.tools.util.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -44,8 +44,8 @@ import joptsimple.OptionSpec;
  * List Replicas for a given blobid
  */
 public class AdminTool {
-  ConnectionPool connectionPool;
-  ArrayList<String> sslEnabledDatacentersList;
+  private ConnectionPool connectionPool;
+  private ArrayList<String> sslEnabledDatacentersList;
 
   public AdminTool(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
     this.connectionPool = connectionPool;
@@ -78,8 +78,8 @@ public class AdminTool {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "SSL enabled data centers").withOptionalArg()
-              .describedAs("The data centers that needs SSL to communicate").defaultsTo("").ofType(String.class);
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
+              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
@@ -92,6 +92,10 @@ public class AdminTool {
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
           parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
               .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
+          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
+              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
@@ -110,18 +114,20 @@ public class AdminTool {
           parser.printHelpOn(System.err);
           System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation "
               + "LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA --ambryBlobId blobId "
-              + "--sslEnabledDatacenters datacenters");
+              + "--sslEnabledDatacenters DC1,DC2 --sslKeystorePath keystore --sslTruststorePath truststore "
+              + "--sslKeystorePassword password --sslKeyPassword password --sslTruststorePassword password");
           System.exit(1);
         }
       }
 
-      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
-      Properties sslProperties = ToolUtil
-          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
-              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
-              options.valueOf(sslTruststorePasswordOpt));
-      Properties connectionPoolProperties = ToolUtil.createConnectionPoolProperties();
+      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      Properties sslProperties = Utils
+          .createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+              options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      Properties connectionPoolProperties = Utils.createConnectionPoolProperties();
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
@@ -133,8 +139,7 @@ public class AdminTool {
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
-      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
       AdminTool adminTool = new AdminTool(connectionPool, sslEnabledDatacentersList);
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
@@ -232,9 +237,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw e;
     } finally {
       if (connectedChannel != null) {
@@ -305,9 +312,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw e;
     } finally {
       if (connectedChannel != null) {
@@ -381,9 +390,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
+      ((BlockingChannel)connectedChannel).disconnect();
       throw e;
     } finally {
       if (connectedChannel != null) {

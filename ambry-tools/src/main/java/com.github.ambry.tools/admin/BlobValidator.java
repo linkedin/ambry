@@ -15,6 +15,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
@@ -25,8 +26,7 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.tools.util.ToolUtil;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.tools.util.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,9 +52,9 @@ import joptsimple.OptionSpec;
  *
  */
 public class BlobValidator {
-  ConnectionPool connectionPool;
-  ArrayList<String> sslEnabledDatacentersList;
-  Map<String, Exception> invalidBlobs;
+  private ConnectionPool connectionPool;
+  private ArrayList<String> sslEnabledDatacentersList;
+  private Map<String, Exception> invalidBlobs;
 
   public BlobValidator(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
     this.connectionPool = connectionPool;
@@ -76,7 +76,7 @@ public class BlobValidator {
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to execute - VALIDATE_BLOB_ON_REPLICA/"
-              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICASS").withRequiredArg()
+              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS").withRequiredArg()
           .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdListOpt =
@@ -101,8 +101,8 @@ public class BlobValidator {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "SSL enabled data centers").withOptionalArg()
-              .describedAs("The data centers that needs SSL to communicate").defaultsTo("").ofType(String.class);
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
+              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
@@ -115,6 +115,10 @@ public class BlobValidator {
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
           parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
               .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
+          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
+              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
@@ -135,21 +139,23 @@ public class BlobValidator {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("BlobValidator --hardwareLayout hl --partitionLayout pl --typeOfOperation " +
-              "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/" +
-              " --blobIds blobId --datacenter datacenter --replicaHost replicaHost " +
-              "--replicaPort replicaPort --includeExpiredBlob true/false");
+          System.out.println("BlobValidator --hardwareLayout hl --partitionLayout pl --typeOfOperation "
+              + "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/"
+              + " --blobIds blobId --datacenter datacenter --replicaHost replicaHost "
+              + "--replicaPort replicaPort --includeExpiredBlob true/false "
+              + "--sslEnabledDatacenters DC1,DC2 --sslKeystorePath keystore --sslTruststorePath truststore "
+              + "--sslKeystorePassword password --sslKeyPassword password --sslTruststorePassword password");
           System.exit(1);
         }
       }
 
-      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
-      Properties sslProperties = ToolUtil
-          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
-              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
-              options.valueOf(sslTruststorePasswordOpt));
-      Properties connectionPoolProperties = ToolUtil.createConnectionPoolProperties();
+      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      Properties sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+          options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+          options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      Properties connectionPoolProperties = Utils.createConnectionPoolProperties();
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
@@ -198,8 +204,8 @@ public class BlobValidator {
         System.out.println("ReplicPort " + replicaPort);
       }
 
-      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList =
+          com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
       BlobValidator blobValidator = new BlobValidator(connectionPool, sslEnabledDatacentersList);
 
       ArrayList<BlobId> blobIdList = blobValidator.generateBlobId(blobList, map);
@@ -400,7 +406,8 @@ public class BlobValidator {
     }
   }
 
-  private ServerErrorCode validateBlobOnReplica(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId, boolean expiredBlobs)
+  private ServerErrorCode validateBlobOnReplica(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId,
+      boolean expiredBlobs)
       throws MessageFormatException, IOException, ConnectionPoolTimeoutException, InterruptedException {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
@@ -420,8 +427,8 @@ public class BlobValidator {
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
               partitionRequestInfos, getOptions);
-      System.out.println(
-          "----- Contacting " + replicaId.getDataNodeId().getHostname() + ":" + port.toString() + " -------");
+      System.out
+          .println("----- Contacting " + replicaId.getDataNodeId().getHostname() + ":" + port.toString() + " -------");
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
@@ -536,9 +543,11 @@ public class BlobValidator {
       return ServerErrorCode.No_Error;
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
+      ((BlockingChannel) connectedChannel).disconnect();
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
+      ((BlockingChannel) connectedChannel).disconnect();
       throw e;
     } finally {
       if (connectedChannel != null) {

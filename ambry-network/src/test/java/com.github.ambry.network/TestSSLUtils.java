@@ -44,10 +44,15 @@ import org.junit.Assert;
 public class TestSSLUtils {
   private final static String sslContextProtocol = "TLS";
   private final static String sslContextProvider = "SunJSSE";
-  private final static String sslEnabledProtocol = "TLSv1";
+  private final static String sslEnabledProtocol = "TLSv1.2";
   private final static String endpointIdentificationAlgorithm = "HTTPS";
-  private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
+  private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA";
   private final static String trustStorePassword = "UnitTestTrustStorePassword";
+  private final static String clientAuthentication = "required";
+  private final static String keyManagerAlgorithm = "PKIX";
+  private final static String trustManagerAlgorithm = "PKIX";
+  private final static String keyStoreType = "JKS";
+  private final static String trustStoreType = "JKS";
 
   /**
    * Create a self-signed X.509 Certificate.
@@ -174,16 +179,17 @@ public class TestSSLUtils {
     props.put("ssl.context.provider", sslContextProvider);
     props.put("ssl.enabled.protocols", sslEnabledProtocol);
     props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
-    props.put("ssl.client.authentication", "required");
-    props.put("ssl.keymanager.algorithm", "PKIX");
-    props.put("ssl.keystore.type", "JKS");
+    props.put("ssl.client.authentication", clientAuthentication);
+    props.put("ssl.keymanager.algorithm", keyManagerAlgorithm);
+    props.put("ssl.trustmanager.algorithm", trustManagerAlgorithm);
+    props.put("ssl.keystore.type", keyStoreType);
     props.put("ssl.keystore.path", keyStoreFile.getPath());
     props.put("ssl.keystore.password", password);
     props.put("ssl.key.password", password);
-    props.put("ssl.trustmanager.algorithm", "PKIX");
-    props.put("ssl.truststore.type", "JKS");
+    props.put("ssl.truststore.type", trustStoreType);
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", trustStorePassword);
+    props.put("ssl.cipher.suites", sslCipherSuits);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
@@ -216,6 +222,9 @@ public class TestSSLUtils {
     String[] enabledProtocols = sslEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
     Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
+    String[] enabledCipherSuite = sslEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuite.length, 1);
+    Assert.assertEquals(enabledCipherSuite[0], sslCipherSuits);
     Assert.assertEquals(sslEngine.getWantClientAuth(), false);
     if (isClient) {
       Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),

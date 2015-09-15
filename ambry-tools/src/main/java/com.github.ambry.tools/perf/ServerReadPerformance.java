@@ -24,11 +24,10 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.tools.util.ToolUtil;
+import com.github.ambry.tools.util.Utils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
 import java.rmi.UnexpectedException;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -74,8 +73,8 @@ public class ServerReadPerformance {
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
-              .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
+              .describedAs("Comma separated list").ofType(String.class).defaultsTo("");
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
@@ -88,6 +87,10 @@ public class ServerReadPerformance {
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
           parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
               .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
+          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
+              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
@@ -108,13 +111,14 @@ public class ServerReadPerformance {
         }
       }
 
-      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
+      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
-      Properties sslProperties = ToolUtil
-          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
-              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
-              options.valueOf(sslTruststorePasswordOpt));
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      Properties sslProperties = Utils
+          .createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+              options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
 
       String logToRead = options.valueOf(logToReadOpt);
 
@@ -128,8 +132,7 @@ public class ServerReadPerformance {
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
-      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);

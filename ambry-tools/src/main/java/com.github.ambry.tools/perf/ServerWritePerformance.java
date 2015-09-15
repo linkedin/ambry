@@ -18,11 +18,10 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.tools.util.ToolUtil;
+import com.github.ambry.tools.util.Utils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
 import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -82,8 +81,8 @@ public class ServerWritePerformance {
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
-              .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
+              .describedAs("Comma separated list").ofType(String.class).defaultsTo("");
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
@@ -96,6 +95,10 @@ public class ServerWritePerformance {
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
           parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
               .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
+          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
+              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
@@ -115,13 +118,14 @@ public class ServerWritePerformance {
         }
       }
 
-      ToolUtil.sslOptsCheck(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslTruststorePasswordOpt);
+      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
-      Properties sslProperties = ToolUtil
-          .createSSLProperties(options.valueOf(sslEnabledDatacentersOpt), options.valueOf(sslKeystorePathOpt),
-              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslTruststorePathOpt),
-              options.valueOf(sslTruststorePasswordOpt));
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      Properties sslProperties = Utils
+          .createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+              options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
 
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
@@ -141,8 +145,7 @@ public class ServerWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
-      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
 
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);

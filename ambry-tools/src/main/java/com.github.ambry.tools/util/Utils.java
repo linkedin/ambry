@@ -13,11 +13,12 @@ import joptsimple.OptionSpec;
 /**
  * util functions for ambry tool
  */
-public final class ToolUtil {
-  public static void sslOptsCheck(OptionSet options, OptionParser parser,
+public final class Utils {
+  public static void validateSSLOptions(OptionSet options, OptionParser parser,
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt,
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
       throws IOException {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
@@ -25,6 +26,7 @@ public final class ToolUtil {
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(sslKeystorePathOpt);
       listOpt.add(sslKeystorePasswordOpt);
+      listOpt.add(sslKeyPasswordOpt);
       listOpt.add(sslTruststorePathOpt);
       listOpt.add(sslTruststorePasswordOpt);
       for (OptionSpec opt : listOpt) {
@@ -38,8 +40,7 @@ public final class ToolUtil {
   }
 
   public static Properties createSSLProperties(String sslEnabledDatacenters, String sslKeystorePath,
-      String sslKeystorePassword, String sslTruststorePath, String sslTruststorePassword)
-      throws IOException, GeneralSecurityException {
+      String sslKeystorePassword, String keyPassword, String sslTruststorePath, String sslTruststorePassword) {
     Properties props = new Properties();
     props.put("ssl.context.protocol", "TLS");
     props.put("ssl.context.provider", "SunJSSE");
@@ -51,7 +52,7 @@ public final class ToolUtil {
     props.put("ssl.keystore.type", "JKS");
     props.put("ssl.keystore.path", sslKeystorePath);
     props.put("ssl.keystore.password", sslKeystorePassword);
-    props.put("ssl.key.password", sslKeystorePassword);
+    props.put("ssl.key.password", keyPassword);
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", sslTruststorePath);
     props.put("ssl.truststore.password", sslTruststorePassword);
