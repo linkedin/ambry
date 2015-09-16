@@ -28,7 +28,10 @@ import com.github.ambry.tools.util.Utils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import java.io.File;
+import java.io.FileWriter;
 import java.rmi.UnexpectedException;
+import java.util.Collections;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -50,6 +53,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ServerReadPerformance {
   public static void main(String args[]) {
     ConnectionPool connectionPool = null;
+    FileWriter writer = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
@@ -127,6 +131,8 @@ public class ServerReadPerformance {
       if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
       }
+      File logFile = new File(System.getProperty("user.dir"), "readperfresult");
+      writer = new FileWriter(logFile);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
@@ -142,9 +148,10 @@ public class ServerReadPerformance {
           try {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
-            System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
-                " Nano Seconds  Average time taken per read " +
-                ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalReads.get() + " Seconds");
+            String message = "Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get()
+                + " Nano Seconds  Average time taken per read "
+                + ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalReads.get() + " Seconds";
+            System.out.println(message);
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
@@ -159,6 +166,7 @@ public class ServerReadPerformance {
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
+      ArrayList<Long> latenciesForGetBlobs = new ArrayList<Long>();
       long maxLatencyForGetBlobs = 0;
       long minLatencyForGetBlobs = Long.MAX_VALUE;
 
@@ -191,22 +199,31 @@ public class ServerReadPerformance {
               streamOut.write(output.getStream().read());
               sizeRead++;
             }
-            long endTimeGetBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
-            totalTimeTaken.addAndGet(endTimeGetBlob);
+            long latencyGetOneBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
+            totalTimeTaken.addAndGet(latencyGetOneBlob);
+            latenciesForGetBlobs.add(latencyGetOneBlob);
             totalReads.incrementAndGet();
             totalNumberOfGetBlobs++;
-            totalLatencyForGetBlobs += endTimeGetBlob;
-            if (endTimeGetBlob > maxLatencyForGetBlobs) {
-              maxLatencyForGetBlobs = endTimeGetBlob;
+            totalLatencyForGetBlobs += latencyGetOneBlob;
+            if (latencyGetOneBlob > maxLatencyForGetBlobs) {
+              maxLatencyForGetBlobs = latencyGetOneBlob;
             }
-            if (endTimeGetBlob < minLatencyForGetBlobs) {
-              minLatencyForGetBlobs = endTimeGetBlob;
+            if (latencyGetOneBlob < minLatencyForGetBlobs) {
+              minLatencyForGetBlobs = latencyGetOneBlob;
             }
-            if (totalLatencyForGetBlobs >= 1000000000) {
-              System.out.println(totalNumberOfGetBlobs + "    " + totalLatencyForGetBlobs * .001 + "    " +
-                  maxLatencyForGetBlobs * .001 + "    " + minLatencyForGetBlobs * .001 + "    " +
-                  ((double) totalLatencyForGetBlobs / totalNumberOfGetBlobs) * .001);
+            if (totalLatencyForGetBlobs >= 300000000000L) {
+              // report performance in every 5 minutes
+              Collections.sort(latenciesForGetBlobs);
+              int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
+              int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
+              String message = totalNumberOfGetBlobs + "    "
+                  + latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + "    "
+                  + latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "    "
+                  + ((double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
+              System.out.println(message);
+              writer.write(message + "\n");
               totalLatencyForGetBlobs = 0;
+              latenciesForGetBlobs.clear();
               totalNumberOfGetBlobs = 0;
               maxLatencyForGetBlobs = 0;
               minLatencyForGetBlobs = Long.MAX_VALUE;
@@ -262,6 +279,13 @@ public class ServerReadPerformance {
       e.printStackTrace();
       System.out.println("Error in server read performance " + e);
     } finally {
+      if (writer != null) {
+        try {
+          writer.close();
+        } catch (Exception e) {
+          System.out.println("Error when closing writer");
+        }
+      }
       if (connectionPool != null) {
         connectionPool.shutdown();
       }

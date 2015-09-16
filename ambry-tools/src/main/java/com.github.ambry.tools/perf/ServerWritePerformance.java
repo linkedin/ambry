@@ -22,6 +22,7 @@ import com.github.ambry.tools.util.Utils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import java.util.Collections;
 import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -47,7 +48,8 @@ import static com.github.ambry.utils.Utils.getRandomLong;
  */
 public class ServerWritePerformance {
   public static void main(String args[]) {
-    FileWriter writer = null;
+    FileWriter blobIdsWriter = null;
+    FileWriter performanceWriter = null;
     ConnectionPool connectionPool = null;
     try {
       OptionParser parser = new OptionParser();
@@ -143,7 +145,9 @@ public class ServerWritePerformance {
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
-      writer = new FileWriter(logFile);
+      blobIdsWriter = new FileWriter(logFile);
+      File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");
+      performanceWriter = new FileWriter(performanceFile);
 
       ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
 
@@ -174,8 +178,9 @@ public class ServerWritePerformance {
 
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
-            new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, writer, totalTimeTaken,
-                totalWrites, enableVerboseLogging, map, connectionPool, sslEnabledDatacentersList));
+            new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, blobIdsWriter,
+                performanceWriter, totalTimeTaken, totalWrites, enableVerboseLogging, map, connectionPool,
+                sslEnabledDatacentersList));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -184,11 +189,18 @@ public class ServerWritePerformance {
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {
-      if (writer != null) {
+      if (blobIdsWriter != null) {
         try {
-          writer.close();
+          blobIdsWriter.close();
         } catch (Exception e) {
-          System.out.println("Error when closing the writer");
+          System.out.println("Error when closing the blob id writer");
+        }
+      }
+      if (performanceWriter != null) {
+        try {
+          performanceWriter.close();
+        } catch (Exception e) {
+          System.out.println("Error when closing the performance writer");
         }
       }
       if (connectionPool != null) {
@@ -206,7 +218,8 @@ public class ServerWritePerformance {
     private Random rand = new Random();
     private int minBlobSize;
     private int maxBlobSize;
-    private FileWriter writer;
+    private FileWriter blobIdWriter;
+    private FileWriter performanceWriter;
     private AtomicLong totalTimeTaken;
     private AtomicLong totalWrites;
     private boolean enableVerboseLogging;
@@ -215,9 +228,9 @@ public class ServerWritePerformance {
     private ArrayList<String> sslEnabledDatacenters;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
-        int minBlobSize, int maxBlobSize, FileWriter writer, AtomicLong totalTimeTaken, AtomicLong totalWrites,
-        boolean enableVerboseLogging, ClusterMap clusterMap, ConnectionPool connectionPool,
-        ArrayList<String> sslEnabledDatacenters) {
+        int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
+        AtomicLong totalTimeTaken, AtomicLong totalWrites, boolean enableVerboseLogging, ClusterMap clusterMap,
+        ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -225,7 +238,8 @@ public class ServerWritePerformance {
       this.clusterMap = clusterMap;
       this.minBlobSize = minBlobSize;
       this.maxBlobSize = maxBlobSize;
-      this.writer = writer;
+      this.blobIdWriter = blobIdWriter;
+      this.performanceWriter = performanceWriter;
       this.totalTimeTaken = totalTimeTaken;
       this.totalWrites = totalWrites;
       this.enableVerboseLogging = enableVerboseLogging;
@@ -241,6 +255,7 @@ public class ServerWritePerformance {
         long maxLatencyInNanoSeconds = 0;
         long minLatencyInNanoSeconds = Long.MAX_VALUE;
         long totalLatencyInNanoSeconds = 0;
+        ArrayList<Long> latenciesForPutBlobs = new ArrayList<Long>();
         while (!isShutdown.get()) {
 
           int randomNum = rand.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
@@ -265,33 +280,42 @@ public class ServerWritePerformance {
             if (putResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + putResponse.getError());
             }
-            long endTime = SystemTime.getInstance().nanoseconds();
-            timePassedInNanoSeconds += (endTime - startTime);
-            writer.write("Blob-" + blobId + "\n");
+            long latencyPutOneBlob = SystemTime.getInstance().nanoseconds() - startTime;
+            timePassedInNanoSeconds += latencyPutOneBlob;
+            latenciesForPutBlobs.add(latencyPutOneBlob);
+            blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in us " + (endTime - startTime) * .001
+              System.out.println("Time taken to put blob id " + blobId + " in us " + latencyPutOneBlob * .001
                   + " for blob of size " + blob.length);
             }
             numberOfPuts++;
-            if (maxLatencyInNanoSeconds < (endTime - startTime)) {
-              maxLatencyInNanoSeconds = (endTime - startTime);
+            if (maxLatencyInNanoSeconds < latencyPutOneBlob) {
+              maxLatencyInNanoSeconds = latencyPutOneBlob;
             }
-            if (minLatencyInNanoSeconds > (endTime - startTime)) {
-              minLatencyInNanoSeconds = (endTime - startTime);
+            if (minLatencyInNanoSeconds > latencyPutOneBlob) {
+              minLatencyInNanoSeconds = latencyPutOneBlob;
             }
-            totalLatencyInNanoSeconds += (endTime - startTime);
-            if (timePassedInNanoSeconds >= 1000000000) {
-              System.out.println(threadIndex + "    " + numberOfPuts + "    " + timePassedInNanoSeconds * .001 +
-                  "    " + maxLatencyInNanoSeconds * .001 + "    " + minLatencyInNanoSeconds * .001 +
-                  "    " + (((double) totalLatencyInNanoSeconds) / numberOfPuts) * .001);
+            totalLatencyInNanoSeconds += latencyPutOneBlob;
+            if (timePassedInNanoSeconds >= 300000000000L) {
+              // report performance in every 5 minutes
+              Collections.sort(latenciesForPutBlobs);
+              int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
+              int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
+              String message = threadIndex + "    " + numberOfPuts + "    "
+                  + latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + "    "
+                  + latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "    "
+                  + (((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
+              System.out.println();
+              performanceWriter.write(message + "\n");
               numberOfPuts = 0;
               timePassedInNanoSeconds = 0;
+              latenciesForPutBlobs.clear();
               maxLatencyInNanoSeconds = 0;
               minLatencyInNanoSeconds = Long.MAX_VALUE;
               totalLatencyInNanoSeconds = 0;
             }
-            totalTimeTaken.addAndGet(endTime - startTime);
+            totalTimeTaken.addAndGet(latencyPutOneBlob);
             throttler.maybeThrottle(1);
           } catch (Exception e) {
             System.out.println("Exception when putting blob " + e);
