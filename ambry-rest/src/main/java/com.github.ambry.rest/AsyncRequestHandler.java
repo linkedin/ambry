@@ -114,10 +114,10 @@ class AsyncRequestHandler implements RestRequestHandler {
         restServerMetrics.asyncRequestHandlerRestRequestMetadataNullError.inc();
         throw new RestServiceException("RestRequestMetadata is null in received RestRequestInfo",
             RestServiceErrorCode.RequestMetadataNull);
-      } else if (restRequestInfo.getRestResponseHandler() == null) {
-        restServerMetrics.asyncRequestHandlerRestResponseHandlerNullError.inc();
-        throw new RestServiceException("RestResponseHandler is null in received RestRequestInfo",
-            RestServiceErrorCode.ResponseHandlerNull);
+      } else if (restRequestInfo.getRestResponseChannel() == null) {
+        restServerMetrics.asyncRequestHandlerRestResponseChannelNullError.inc();
+        throw new RestServiceException("RestResponseChannel is null in received RestRequestInfo",
+            RestServiceErrorCode.ResponseChannelNull);
       }
       queueRequest(restRequestInfo);
     } else {
@@ -383,12 +383,12 @@ class DequeuedRequestHandler implements Runnable {
       logger.error("Swallowing exception during onComplete tasks.", ee);
       restServerMetrics.dequeuedRequestHandlerHandlingCompleteTasksError.inc();
     } finally {
-      RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
+      RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
       if (e != null) {
-        responseHandler.onRequestComplete(e, false);
+        responseChannel.onRequestComplete(e, false);
       }
-      if (responseHandler.isRequestComplete()) {
-        logger.trace("Marking request {} as complete based on information from the RestResponseHandler", uri);
+      if (responseChannel.isRequestComplete()) {
+        logger.trace("Marking request {} as complete based on information from the RestResponseChannel", uri);
         onRequestComplete(restRequestInfo.getRestRequestMetadata());
       }
       logger.trace("Handling of RestRequestInfo of request {} completed", uri);

@@ -8,7 +8,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequestContent;
 import com.github.ambry.rest.MockRestRequestMetadata;
-import com.github.ambry.rest.MockRestResponseHandler;
+import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequestContent;
 import com.github.ambry.rest.RestRequestInfo;
@@ -322,7 +322,7 @@ public class AdminBlobStorageServiceTest {
    * @param uri string representation of the desired URI.
    * @param headers any associated headers as a {@link JSONObject}.
    * @return A {@link RestRequestInfo} object that defines the operation required by the input along with a
-   * {@link com.github.ambry.rest.RestResponseHandler}.
+   * {@link com.github.ambry.rest.RestResponseChannel}.
    * @throws JSONException
    * @throws URISyntaxException
    */
@@ -335,7 +335,7 @@ public class AdminBlobStorageServiceTest {
       request.put(MockRestRequestMetadata.HEADERS_KEY, headers);
     }
     RestRequestMetadata restRequestMetadata = new MockRestRequestMetadata(request);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseHandler(), true);
+    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseChannel(), true);
   }
 
   /**
@@ -347,8 +347,8 @@ public class AdminBlobStorageServiceTest {
    */
   private JSONObject getJsonizedResponseBody(RestRequestInfo restRequestInfo)
       throws JSONException, RestServiceException {
-    MockRestResponseHandler restResponseHandler = (MockRestResponseHandler) restRequestInfo.getRestResponseHandler();
-    return new JSONObject(restResponseHandler.getFlushedResponseBody());
+    MockRestResponseChannel restResponseChannel = (MockRestResponseChannel) restRequestInfo.getRestResponseChannel();
+    return new JSONObject(restResponseChannel.getFlushedResponseBody());
   }
 
   /**
@@ -364,9 +364,8 @@ public class AdminBlobStorageServiceTest {
       throws InstantiationException, JSONException, RestServiceException {
     RestRequestContent restRequestContent = createRestContent(null, true);
     adminBlobStorageService.handleGet(new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), restRequestContent,
-        restRequestInfo.getRestResponseHandler()));
-    assertFalse("Channel is not closed",
-        ((MockRestResponseHandler) restRequestInfo.getRestResponseHandler()).getChannelActive());
+        restRequestInfo.getRestResponseChannel()));
+    assertFalse("Channel is not closed", ((MockRestResponseChannel) restRequestInfo.getRestResponseChannel()).isOpen());
   }
 
   /**

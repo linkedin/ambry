@@ -20,14 +20,17 @@ class NettyMetrics {
   public final Meter channelCreationRate;
   public final Meter channelDestructionRate;
   public final Meter httpObjectArrivalRate;
+  // NettyResponseChannel
   public final Meter requestCompletionRate;
 
   // Latencies
+  // NettyResponseChannel
   public final Histogram channelWriteLatencyInMs;
 
   // Errors
+  // NettyMessageProcessor
   public final Counter channelActiveTasksError;
-  public final Counter missingResponseHandlerError;
+  public final Counter missingResponseChannelError;
   public final Counter idleConnectionClose;
   public final Counter unknownHttpObjectError;
   public final Counter malformedRequestError;
@@ -36,12 +39,11 @@ class NettyMetrics {
   public final Counter processorRequestCompleteTasksError;
   public final Counter processorExceptionCaught;
   public final Counter fallbackErrorSendingError;
+  // NettyResponseChannel
   public final Counter requestHandlingError;
   public final Counter responseSendingError;
-  public final Counter responseHandlerRequestCompleteTasksError;
-  public final Counter channelWriteLockInterruptedError;
-  public final Counter responseMetadataWriteLockInterruptedError;
-  public final Counter channelCloseLockInterruptedError;
+  public final Counter responseChannelRequestCompleteTasksError;
+  public final Counter responseMetadataBuildingFailure;
   public final Counter badRequestError;
   public final Counter internalServerError;
   public final Counter unknownExceptionError;
@@ -51,10 +53,12 @@ class NettyMetrics {
   public final Counter channelWriteFutureAlreadyExistsError;
   public final Counter channelWriteFutureNotFoundError;
   public final Counter channelWriteError;
+  // NettyServer
   public final Counter nettyServerStartError;
   public final Counter nettyServerShutdownError;
 
   // Other
+  // NettyServer
   public final Histogram nettyServerStartTimeInMs;
   public final Histogram nettyServerShutdownTimeInMs;
 
@@ -69,15 +73,15 @@ class NettyMetrics {
     httpObjectArrivalRate =
         metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "HttpObjectArrivalRate"));
     requestCompletionRate =
-        metricRegistry.meter(MetricRegistry.name(NettyResponseHandler.class, "RequestCompletionRate"));
+        metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "RequestCompletionRate"));
 
     channelWriteLatencyInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteLatencyInMs"));
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteLatencyInMs"));
 
     channelActiveTasksError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelActiveTasksError"));
-    missingResponseHandlerError =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "MissingResponseHandlerError"));
+    missingResponseChannelError =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "MissingResponseChannelError"));
     idleConnectionClose =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionClose"));
     unknownHttpObjectError =
@@ -94,33 +98,29 @@ class NettyMetrics {
     fallbackErrorSendingError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "FallbackErrorSendingError"));
     requestHandlingError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "RequestHandlingError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "RequestHandlingError"));
     responseSendingError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ErrorResponseSendingError"));
-    responseHandlerRequestCompleteTasksError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "OnRequestCompleteTasksError"));
-    channelWriteLockInterruptedError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteLockInterruptedError"));
-    responseMetadataWriteLockInterruptedError = metricRegistry
-        .counter(MetricRegistry.name(NettyResponseHandler.class, "ResponseMetadataWriteLockInterruptedError"));
-    channelCloseLockInterruptedError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelCloseLockInterruptedError"));
-    badRequestError = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "BadRequestError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseSendingError"));
+    responseChannelRequestCompleteTasksError =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OnRequestCompleteTasksError"));
+    responseMetadataBuildingFailure =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataBuildingFailure"));
+    badRequestError = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestError"));
     internalServerError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "InternalServerError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerError"));
     unknownExceptionError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "UnknownExceptionError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnknownExceptionError"));
     unknownRestServiceExceptionError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "UnknownRestServiceExceptionError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnknownRestServiceExceptionError"));
     channelWriteAfterCloseError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteAfterClose"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteAfterClose"));
     deadResponseAccessError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "DeadResponseAccessError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DeadResponseAccessError"));
     channelWriteFutureAlreadyExistsError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "WriteFutureAlreadyExistsError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "WriteFutureAlreadyExistsError"));
     channelWriteFutureNotFoundError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "WriteFutureNotFoundError"));
-    channelWriteError = metricRegistry.counter(MetricRegistry.name(NettyResponseHandler.class, "ChannelWriteError"));
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "WriteFutureNotFoundError"));
+    channelWriteError = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
 
