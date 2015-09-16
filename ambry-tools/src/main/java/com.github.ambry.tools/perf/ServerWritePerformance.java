@@ -303,10 +303,10 @@ public class ServerWritePerformance {
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
               String message = threadIndex + "    " + numberOfPuts + "    "
-                  + latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + "    "
-                  + latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "    "
+                  + (double) latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + "    "
+                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "    "
                   + (((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
-              System.out.println();
+              System.out.println(message);
               performanceWriter.write(message + "\n");
               numberOfPuts = 0;
               timePassedInNanoSeconds = 0;

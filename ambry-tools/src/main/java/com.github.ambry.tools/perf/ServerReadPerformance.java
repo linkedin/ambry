@@ -217,8 +217,8 @@ public class ServerReadPerformance {
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
               String message = totalNumberOfGetBlobs + "    "
-                  + latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + "    "
-                  + latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "    "
+                  + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + "    "
+                  + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "    "
                   + ((double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
               System.out.println(message);
               writer.write(message + "\n");
