@@ -544,10 +544,12 @@ public class BlobValidator {
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
       ((BlockingChannel) connectedChannel).disconnect();
+      connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
       ((BlockingChannel) connectedChannel).disconnect();
+      connectedChannel = null;
       throw e;
     } finally {
       if (connectedChannel != null) {
