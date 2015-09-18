@@ -124,10 +124,14 @@ public class ServerWritePerformance {
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      Properties sslProperties = Utils
-          .createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-              options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-              options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      Properties sslProperties;
+      if (sslEnabledDatacenters != null && sslEnabledDatacenters.length() != 0) {
+        sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      } else {
+        sslProperties = new Properties();
+      }
 
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);

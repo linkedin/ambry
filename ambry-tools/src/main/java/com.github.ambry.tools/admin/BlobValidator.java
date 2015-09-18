@@ -152,9 +152,13 @@ public class BlobValidator {
       Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      Properties sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-          options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-          options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      Properties sslProperties;
+      if (sslEnabledDatacenters != null && sslEnabledDatacenters.length() != 0) {
+        sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      } else {
+        sslProperties = new Properties();
+      }
       Properties connectionPoolProperties = Utils.createConnectionPoolProperties();
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
@@ -544,11 +548,13 @@ public class BlobValidator {
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
       ((BlockingChannel) connectedChannel).disconnect();
+      connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
       ((BlockingChannel) connectedChannel).disconnect();
+      connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw e;
     } finally {
