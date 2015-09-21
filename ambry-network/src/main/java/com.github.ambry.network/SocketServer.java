@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -9,6 +10,8 @@ import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -47,8 +50,9 @@ public class SocketServer implements NetworkServer {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final NetworkMetrics metrics;
   private final HashMap<PortType, Port> ports;
+  private SSLFactory sslFactory;
 
-  public SocketServer(NetworkConfig config, MetricRegistry registry, ArrayList<Port> portList) {
+  public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -62,6 +66,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
+    this.initializeSSLFactory(sslConfig);
   }
 
   public String getHost() {
@@ -78,6 +83,18 @@ public class SocketServer implements NetworkServer {
       return sslPort.getPort();
     }
     throw new IllegalStateException("No SSL Port Exists for Server " + host + ":" + port);
+  }
+
+  private void initializeSSLFactory(SSLConfig sslConfig) {
+    if (ports.get(PortType.SSL) != null) {
+      try {
+        this.sslFactory = new SSLFactory(sslConfig);
+        metrics.sslFactoryInitializationCount.inc();
+      } catch (Exception e) {
+        metrics.sslFactoryInitializationErrorCount.inc();
+        throw new IllegalStateException("Exception thrown during initialization of SSLFactory ", e);
+      }
+    }
   }
 
   public int getNumProcessorThreads() {
@@ -121,7 +138,7 @@ public class SocketServer implements NetworkServer {
       throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for (int i = 0; i < numProcessorThreads; i++) {
-      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics));
+      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
@@ -140,7 +157,8 @@ public class SocketServer implements NetworkServer {
 
     Port sslPort = ports.get(PortType.SSL);
     if (sslPort != null) {
-      SSLAcceptor sslAcceptor = new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
+      SSLAcceptor sslAcceptor =
+          new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
       acceptors.add(sslAcceptor);
       Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
     }
@@ -225,19 +243,7 @@ abstract class AbstractServerThread implements Runnable {
 }
 
 /**
- * Thread that accepts and configures new connections for an SSL Port. There is only need for one of these
- */
-class SSLAcceptor extends Acceptor {
-
-  public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
-      NetworkMetrics metrics)
-      throws IOException {
-    super(host, port, processors, sendBufferSize, recvBufferSize, metrics);
-  }
-}
-
-/**
- * Thread that accepts and configures new connections. There is only need for one of these
+ * Thread that accepts and configures new connections.
  */
 class Acceptor extends AbstractServerThread {
   private final String host;
@@ -265,7 +271,7 @@ class Acceptor extends AbstractServerThread {
   }
 
   /**
-   * Accept loop that checks for new connection attempts
+   * Accept loop that checks for new connection attempts for a plain text port
    */
   public void run() {
     try {
@@ -302,6 +308,7 @@ class Acceptor extends AbstractServerThread {
       serverChannel.close();
       nioSelector.close();
       shutdownComplete();
+      super.shutdown();
     } catch (Exception e) {
       metrics.acceptorShutDownErrorCount.inc();
       logger.error("Error during shutdown of acceptor thread", e);
@@ -329,7 +336,13 @@ class Acceptor extends AbstractServerThread {
   /*
    * Accept a new connection
    */
-  private void accept(SelectionKey key, Processor processor)
+  protected void accept(SelectionKey key, Processor processor)
+      throws SocketException, IOException {
+    SocketChannel socketChannel = acceptConnection(key);
+    processor.accept(socketChannel, PortType.PLAINTEXT);
+  }
+
+  protected SocketChannel acceptConnection(SelectionKey key)
       throws SocketException, IOException {
     ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
     serverSocketChannel.socket().setReceiveBufferSize(recvBufferSize);
@@ -342,13 +355,35 @@ class Acceptor extends AbstractServerThread {
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
         socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(),
         recvBufferSize);
-    processor.accept(socketChannel);
+    return socketChannel;
   }
 
   public void shutdown()
       throws InterruptedException {
     nioSelector.wakeup();
     super.shutdown();
+  }
+}
+
+/**
+ * Thread that accepts and configures new connections for an SSL Port
+ */
+class SSLAcceptor extends Acceptor {
+
+  public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
+      NetworkMetrics metrics)
+      throws IOException {
+    super(host, port, processors, sendBufferSize, recvBufferSize, metrics);
+  }
+
+  /*
+   * Accept a new connection
+   */
+  @Override
+  protected void accept(SelectionKey key, Processor processor)
+      throws SocketException, IOException {
+    SocketChannel socketChannel = acceptConnection(key);
+    processor.accept(socketChannel, PortType.SSL);
   }
 }
 
@@ -361,18 +396,19 @@ class Processor extends AbstractServerThread {
   private final SocketRequestResponseChannel channel;
   private final int id;
   private final Time time;
-  private final ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
+  private final ConcurrentLinkedQueue<SocketChannelPortTypePair> newConnections =
+      new ConcurrentLinkedQueue<SocketChannelPortTypePair>();
   private final Selector selector;
   private final NetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
 
-  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics)
+  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics, SSLFactory sslFactory)
       throws IOException {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
     this.time = SystemTime.getInstance();
-    selector = new Selector(metrics, time);
+    selector = new Selector(metrics, time, sslFactory);
     this.metrics = metrics;
   }
 
@@ -399,8 +435,14 @@ class Processor extends AbstractServerThread {
       logger.error("Error in processor thread", e);
     } finally {
       logger.debug("Closing server socket and selector.");
-      closeAll();
-      shutdownComplete();
+      try {
+        closeAll();
+        shutdownComplete();
+        super.shutdown();
+      } catch (InterruptedException ie) {
+        metrics.processorShutDownErrorCount.inc();
+        logger.error("InterruptedException on processor shutdown ", ie);
+      }
     }
   }
 
@@ -434,8 +476,8 @@ class Processor extends AbstractServerThread {
   /**
    * Queue up a new connection for reading
    */
-  public void accept(SocketChannel socketChannel) {
-    newConnections.add(socketChannel);
+  public void accept(SocketChannel socketChannel, PortType portType) {
+    newConnections.add(new SocketChannelPortTypePair(socketChannel, portType));
     wakeup();
   }
 
@@ -450,11 +492,16 @@ class Processor extends AbstractServerThread {
    * Register any new connections that have been queued up
    */
   private void configureNewConnections()
-      throws ClosedChannelException {
+      throws ClosedChannelException, IOException {
     while (newConnections.size() > 0) {
-      SocketChannel channel = newConnections.poll();
-      logger.debug("Processor {} listening to new connection from {}", id, channel.socket().getRemoteSocketAddress());
-      selector.register(channel);
+      SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
+      logger.debug("Processor {} listening to new connection from {}", id,
+          socketChannelPortTypePair.getSocketChannel().socket().getRemoteSocketAddress());
+      try {
+        selector.register(socketChannelPortTypePair.getSocketChannel(), socketChannelPortTypePair.getPortType());
+      } catch (IOException e) {
+        logger.error("Error on registering new connection ", e);
+      }
     }
   }
 
@@ -472,5 +519,23 @@ class Processor extends AbstractServerThread {
    */
   public void wakeup() {
     selector.wakeup();
+  }
+
+  class SocketChannelPortTypePair {
+    private SocketChannel socketChannel;
+    private PortType portType;
+
+    public SocketChannelPortTypePair(SocketChannel socketChannel, PortType portType) {
+      this.socketChannel = socketChannel;
+      this.portType = portType;
+    }
+
+    public PortType getPortType() {
+      return portType;
+    }
+
+    public SocketChannel getSocketChannel() {
+      return this.socketChannel;
+    }
   }
 }

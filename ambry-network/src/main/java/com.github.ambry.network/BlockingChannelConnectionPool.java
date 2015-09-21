@@ -1,12 +1,13 @@
 package com.github.ambry.network;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import java.io.IOException;
 import java.net.SocketException;
-import java.security.GeneralSecurityException;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +36,10 @@ class BlockingChannelInfo {
   private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerHostPerPort;
   private final SSLSocketFactory sslSocketFactory;
+  private final SSLConfig sslConfig;
 
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory) {
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     this.config = config;
     this.port = port;
     if (port.getPortType() == PortType.SSL) {
@@ -51,6 +54,7 @@ class BlockingChannelInfo {
     this.lock = new Object();
     this.host = host;
     this.sslSocketFactory = sslSocketFactory;
+    this.sslConfig = sslConfig;
 
     availableConnections = new Gauge<Integer>() {
       @Override
@@ -96,7 +100,7 @@ class BlockingChannelInfo {
             blockingChannelAvailableConnections.size(), blockingChannelActiveConnections.size());
       } else {
         logger.error("Tried to add invalid connection. Channel does not belong in the active queue. Host {} port {}"
-                + " channel host {} channel port {}", host, port.getPort(), blockingChannel.getRemoteHost(),
+            + " channel host {} channel port {}", host, port.getPort(), blockingChannel.getRemoteHost(),
             blockingChannel.getRemotePort());
       }
     } finally {
@@ -154,11 +158,6 @@ class BlockingChannelInfo {
       logger.error("IOException when trying to connect to the remote host {} and port {}", host, port.getPort());
       throw new ConnectionPoolTimeoutException(
           "IOException when trying to connect to remote host " + host + " port " + port.getPort(), e);
-    } catch (IllegalArgumentException e) {
-      logger.error("IllegalArgumentException when trying to connect to the remote host {} and port {}", host,
-          port.getPort());
-      throw new ConnectionPoolTimeoutException(
-          "IllegalArgumentException when trying to connect to remote host " + host + " port " + port.getPort(), e);
     } finally {
       rwlock.readLock().unlock();
     }
@@ -179,7 +178,7 @@ class BlockingChannelInfo {
     } else if (this.port.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
           config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-          config.connectionPoolConnectTimeoutMs, sslSocketFactory);
+          config.connectionPoolConnectTimeoutMs, sslSocketFactory, sslConfig);
     }
     return channel;
   }
@@ -190,7 +189,7 @@ class BlockingChannelInfo {
       boolean changed = blockingChannelActiveConnections.remove(blockingChannel);
       if (!changed) {
         logger.error("Invalid connection being destroyed. "
-                + "Channel does not belong to this queue. queue host {} port {} channel host {} port {}", host,
+            + "Channel does not belong to this queue. queue host {} port {} channel host {} port {}", host,
             port.getPort(), blockingChannel.getRemoteHost(), blockingChannel.getRemotePort());
         throw new IllegalArgumentException("Invalid connection. Channel does not belong to this queue");
       }
@@ -260,20 +259,25 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   private final Timer connectionCheckInTime;
   private final Timer connectionDestroyTime;
   private final AtomicInteger requestsWaitingToCheckoutConnectionCount;
-  private final SSLSocketFactory sslSocketFactory;
+  private SSLSocketFactory sslSocketFactory;
+  private final SSLConfig sslConfig;
   // Represents the total number to nodes connectedTo, i.e. if the blockingchannel has atleast 1 connection
   private Gauge<Integer> totalNumberOfNodesConnectedTo;
   // Represents the total number of connections, in other words, aggregate of the connections from all nodes
   public Gauge<Integer> totalNumberOfConnections;
   // Represents the number of requests waiting to checkout a connection
   public Gauge<Integer> requestsWaitingToCheckoutConnection;
+  // Represents the number of sslSocketFactory Initializations
+  public Counter sslSocketFactoryInitializationCount;
+  // Represents the number of sslSocketFactory Initialization Error
+  public Counter sslSocketFactoryInitializationErrorCount;
 
-  public BlockingChannelConnectionPool(ConnectionPoolConfig config, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory) {
+  public BlockingChannelConnectionPool(ConnectionPoolConfig config, SSLConfig sslConfig, MetricRegistry registry)
+      throws Exception {
     connections = new ConcurrentHashMap<String, BlockingChannelInfo>();
     this.config = config;
     this.registry = registry;
-    this.sslSocketFactory = sslSocketFactory;
+    this.sslConfig = sslConfig;
     connectionCheckOutTime =
         registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionCheckOutTime"));
     connectionCheckInTime =
@@ -317,6 +321,16 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "requestsWaitingToCheckoutConnection"),
         requestsWaitingToCheckoutConnection);
+    sslSocketFactoryInitializationCount = registry
+        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryInitializationCount"));
+    sslSocketFactoryInitializationErrorCount = registry
+        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryInitializationErrorCount"));
+
+    if (sslConfig.sslEnabledDatacenters.length() > 0) {
+      initializeSSLSocketFactory();
+    } else {
+      this.sslSocketFactory = null;
+    }
   }
 
   @Override
@@ -332,6 +346,20 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     }
   }
 
+  private void initializeSSLSocketFactory()
+      throws Exception {
+    try {
+      SSLFactory sslFactory = new SSLFactory(sslConfig);
+      SSLContext sslContext = sslFactory.getSSLContext();
+      this.sslSocketFactory = sslContext.getSocketFactory();
+      this.sslSocketFactoryInitializationCount.inc();
+    } catch (Exception e) {
+      this.sslSocketFactoryInitializationErrorCount.inc();
+      logger.error("SSLSocketFactory Initialization Error ", e);
+      throw e;
+    }
+  }
+
   @Override
   public ConnectedChannel checkOutConnection(String host, Port port, long timeoutInMs)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
@@ -344,7 +372,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
           blockingChannelInfo = connections.get(host + port.getPort());
           if (blockingChannelInfo == null) {
             logger.trace("Creating new blocking channel info for host {} and port {}", host, port.getPort());
-            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory);
+            blockingChannelInfo = new BlockingChannelInfo(config, host, port, registry, sslSocketFactory, sslConfig);
             connections.put(host + port.getPort(), blockingChannelInfo);
           } else {
             logger.trace("Using already existing BlockingChannelInfo for " + host + ":" + port.getPort()
@@ -373,6 +401,8 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
         throw new IllegalArgumentException("Connection does not belong to the pool");
       }
       blockingChannelInfo.releaseBlockingChannel((BlockingChannel) connectedChannel);
+      logger.trace("Checking in connection for host {} and port {}", connectedChannel.getRemoteHost(),
+          connectedChannel.getRemotePort());
     } finally {
       context.stop();
     }
@@ -390,6 +420,8 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
         throw new IllegalArgumentException("Connection does not belong to the pool");
       }
       blockingChannelInfo.destroyBlockingChannel((BlockingChannel) connectedChannel);
+      logger.trace("Destroying connection for host {} and port {}", connectedChannel.getRemoteHost(),
+          connectedChannel.getRemotePort());
     } finally {
       context.stop();
     }

@@ -1,5 +1,6 @@
 package com.github.ambry.rest;
 
+import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
@@ -40,6 +41,7 @@ public class RestServer {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
+  private final JmxReporter reporter;
   private final BlobStorageService blobStorageService;
   private final RestRequestHandlerController requestHandlerController;
   private final NioServer nioServer;
@@ -62,6 +64,7 @@ public class RestServer {
 
     restServerConfig = new RestServerConfig(verifiableProperties);
     restServerMetrics = new RestServerMetrics(metricRegistry);
+    reporter = JmxReporter.forRegistry(metricRegistry).build();
     try {
       BlobStorageServiceFactory blobStorageServiceFactory = Utils
           .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, metricRegistry, clusterMap);
@@ -102,6 +105,7 @@ public class RestServer {
     long startupBeginTime = System.currentTimeMillis();
     try {
       // ordering is important.
+      reporter.start();
       blobStorageService.start();
       requestHandlerController.start();
       nioServer.start();
@@ -123,6 +127,7 @@ public class RestServer {
       nioServer.shutdown();
       requestHandlerController.shutdown();
       blobStorageService.shutdown();
+      reporter.stop();
     } finally {
       long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
       logger.info("RestServer shutdown took {} ms", shutdownTime);

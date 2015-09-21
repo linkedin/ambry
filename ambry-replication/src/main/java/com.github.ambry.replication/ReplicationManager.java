@@ -1,6 +1,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
@@ -244,9 +245,10 @@ public final class ReplicationManager {
   private static final short Crc_Size = 8;
   private static final short Replication_Delay_Multiplier = 5;
 
-  public ReplicationManager(ReplicationConfig replicationConfig, StoreConfig storeConfig, StoreManager storeManager,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler, DataNodeId dataNode,
-      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification)
+  public ReplicationManager(ReplicationConfig replicationConfig, SSLConfig sslConfig, StoreConfig storeConfig,
+      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler,
+      DataNodeId dataNode, ConnectionPool connectionPool, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification)
       throws ReplicationException {
 
     try {
@@ -273,7 +275,7 @@ public final class ReplicationManager {
       this.metricRegistry = metricRegistry;
       this.replicasToReplicateIntraDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.replicasToReplicateInterDC = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      this.sslEnabledDatacenters = Utils.splitString(replicationConfig.replicationSslEnabledDatacenters, ",");
+      this.sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -368,7 +370,9 @@ public final class ReplicationManager {
    */
   public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters) {
     if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      return new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+      Port toReturn = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
+      logger.trace("Assigning ssl for remote replica " + replicaId);
+      return toReturn;
     } else {
       return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
@@ -478,10 +482,17 @@ public final class ReplicationManager {
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
+    if (numberOfReplicaThreads == 0) {
+      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads");
+      return;
+    }
+
     if (replicasToReplicate.size() == 0) {
       logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
       return;
-    } else if (replicasToReplicate.size() < numberOfReplicaThreads) {
+    }
+
+    if (replicasToReplicate.size() < numberOfReplicaThreads) {
       logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
           numberOfReplicaThreads, replicasToReplicate.size());
       numberOfReplicaThreads = replicasToReplicate.size();

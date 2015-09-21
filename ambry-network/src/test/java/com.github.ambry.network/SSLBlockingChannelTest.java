@@ -1,6 +1,8 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -20,23 +22,37 @@ import static org.junit.Assert.fail;
 
 public class SSLBlockingChannelTest {
   private static SSLFactory sslFactory;
+  private static SSLConfig clientSSLConfig;
   private static SSLSocketFactory sslSocketFactory;
-  private static SSLBlockingEchoServer sslEchoServer;
+  private static EchoServer sslEchoServer;
   private static String hostName = "localhost";
   private static int sslPort = 18284;
 
+  /**
+   * Run only once for all tests
+   */
   @BeforeClass
-  public static void onceExecutedBeforeAll()
+  public static void initializeTests()
       throws Exception {
-    sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    sslSocketFactory = sslContext.getSocketFactory();
-    sslEchoServer = new SSLBlockingEchoServer(sslFactory, sslPort);
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+
+    sslFactory = new SSLFactory(sslConfig);
+    sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
+
+    //client
+    sslFactory = new SSLFactory(clientSSLConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
+    sslSocketFactory = sslContext.getSocketFactory();
   }
 
+  /**
+   * Run only once for all tests
+   */
   @AfterClass
-  public static void onceExecutedAfterAll()
+  public static void finalizeTests()
       throws Exception {
     int serverExceptionCount = sslEchoServer.getExceptionCount();
     assertEquals(serverExceptionCount, 0);
@@ -56,14 +72,17 @@ public class SSLBlockingChannelTest {
   @Test
   public void testSendAndReceive()
       throws Exception {
-    BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+    BlockingChannel channel =
+        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     sendAndReceive(channel);
     channel.disconnect();
   }
 
   @Test
-  public void testRenegotiation() throws Exception {
-    BlockingChannel channel = new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory);
+  public void testRenegotiation()
+      throws Exception {
+    BlockingChannel channel =
+        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     sendAndReceive(channel);
     sslEchoServer.renegotiate();
     sendAndReceive(channel);
@@ -74,7 +93,7 @@ public class SSLBlockingChannelTest {
   public void testWrongPortConnection()
       throws Exception {
     BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory);
+        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
     try {
       // send request
       channel.connect();
@@ -84,7 +103,8 @@ public class SSLBlockingChannelTest {
     }
   }
 
-  private void sendAndReceive(BlockingChannel channel) throws Exception {
+  private void sendAndReceive(BlockingChannel channel)
+      throws Exception {
     long blobSize = 1028;
     byte[] bytesToSend = new byte[(int) blobSize];
     new Random().nextBytes(bytesToSend);

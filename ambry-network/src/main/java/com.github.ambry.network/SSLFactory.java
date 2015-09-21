@@ -1,49 +1,98 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.util.List;
+import java.security.SecureRandom;
+import java.util.ArrayList;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * The factory to set SSL related parameters and create SSL related objects
+ * Factory to create SSLContext and SSLEngine
  */
 public class SSLFactory {
+  protected Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+
+  public enum Mode {CLIENT, SERVER}
+
   private String protocol;
   private String provider;
   private String kmfAlgorithm;
   private String tmfAlgorithm;
-  private SecurityStore keyStore;
+  private SecurityStore keystore;
   private String keyPassword;
-  private SecurityStore trustStore;
+  private SecurityStore truststore;
   private String[] cipherSuites;
   private String[] enabledProtocols;
+  private String endpointIdentification;
+  private SSLContext sslContext;
+  private boolean needClientAuth;
+  private boolean wantClientAuth;
 
-  public SSLContext createSSLContext()
+  public SSLFactory(SSLConfig sslConfig)
+      throws Exception {
+
+    this.protocol = sslConfig.sslContextProtocol;
+    if (sslConfig.sslContextProvider.length() > 0) {
+      this.provider = sslConfig.sslContextProvider;
+    }
+
+    ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
+    if (cipherSuitesList != null && cipherSuitesList.size() > 0 &&
+        !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+      this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+    }
+
+    ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
+    if (protocolsList != null && protocolsList.size() > 0) {
+      this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
+    }
+
+    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0 && !sslConfig.sslEndpointIdentificationAlgorithm
+        .equals("")) {
+      this.endpointIdentification = sslConfig.sslEndpointIdentificationAlgorithm;
+    }
+
+    if (sslConfig.sslClientAuthentication.equals("required")) {
+      this.needClientAuth = true;
+    } else if (sslConfig.sslClientAuthentication.equals("requested")) {
+      this.wantClientAuth = true;
+    }
+
+    if (sslConfig.sslKeymanagerAlgorithm.length() > 0) {
+      this.kmfAlgorithm = sslConfig.sslKeymanagerAlgorithm;
+    }
+
+    if (sslConfig.sslTrustmanagerAlgorithm.length() > 0) {
+      this.tmfAlgorithm = sslConfig.sslTrustmanagerAlgorithm;
+    }
+
+    createKeyStore(sslConfig.sslKeystoreType, sslConfig.sslKeystorePath, sslConfig.sslKeystorePassword,
+        sslConfig.sslKeyPassword);
+    createTrustStore(sslConfig.sslTruststoreType, sslConfig.sslTruststorePath, sslConfig.sslTruststorePassword);
+
+    this.sslContext = createSSLContext();
+  }
+
+  /**
+   * Create SSLContext by loading keystore and trustsotre
+   * One factory only has one SSLContext
+   * @return SSLContext
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  private SSLContext createSSLContext()
       throws GeneralSecurityException, IOException {
     SSLContext sslContext;
     if (provider != null) {
@@ -53,84 +102,84 @@ public class SSLFactory {
     }
 
     KeyManager[] keyManagers = null;
-    if (keyStore != null) {
+    if (keystore != null) {
       String kmfAlgorithm = this.kmfAlgorithm != null ? this.kmfAlgorithm : KeyManagerFactory.getDefaultAlgorithm();
       KeyManagerFactory kmf = KeyManagerFactory.getInstance(kmfAlgorithm);
-      KeyStore ks = keyStore.load();
-      String keyPassword = this.keyPassword != null ? this.keyPassword : keyStore.password;
+      KeyStore ks = keystore.load();
+      String keyPassword = this.keyPassword != null ? this.keyPassword : keystore.password;
       kmf.init(ks, keyPassword.toCharArray());
       keyManagers = kmf.getKeyManagers();
     }
 
     String tmfAlgorithm = this.tmfAlgorithm != null ? this.tmfAlgorithm : TrustManagerFactory.getDefaultAlgorithm();
     TrustManagerFactory tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
-    KeyStore ts = trustStore == null ? null : trustStore.load();
+    KeyStore ts = truststore == null ? null : truststore.load();
     tmf.init(ts);
 
-    sslContext.init(keyManagers, tmf.getTrustManagers(), null);
+    sslContext.init(keyManagers, tmf.getTrustManagers(), new SecureRandom());
     return sslContext;
   }
 
-  public SSLEngine createSSLEngine(SSLContext sslContext, String peerHost, int peerPort, boolean useClientMode) {
+  /**
+   * Create SSLEngine for given host name and port number
+   * @param peerHost The remote host name
+   * @param peerPort The remote port number
+   * @param mode The local SSL mode, Client or Server
+   * @return SSLEngine
+   */
+  public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
     SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
     if (cipherSuites != null) {
       sslEngine.setEnabledCipherSuites(cipherSuites);
     }
-    sslEngine.setUseClientMode(useClientMode);
     if (enabledProtocols != null) {
       sslEngine.setEnabledProtocols(enabledProtocols);
+    }
+
+    if (mode == Mode.SERVER) {
+      sslEngine.setUseClientMode(false);
+      if (needClientAuth) {
+        sslEngine.setNeedClientAuth(needClientAuth);
+      } else {
+        sslEngine.setWantClientAuth(wantClientAuth);
+      }
+    } else {
+      sslEngine.setUseClientMode(true);
+      SSLParameters sslParams = sslEngine.getSSLParameters();
+      sslParams.setEndpointIdentificationAlgorithm(endpointIdentification);
+      sslEngine.setSSLParameters(sslParams);
     }
     return sslEngine;
   }
 
-  public void setProtocol(String protocol) {
-    this.protocol = protocol;
+  /**
+   * Returns a configured SSLContext.
+   * @return SSLContext.
+   */
+  public SSLContext getSSLContext() {
+    return sslContext;
   }
 
-  public void setProvider(String provider) {
-    this.provider = provider;
-  }
-
-  public void setKeyManagerFactoryAlgorithm(String algorithm) {
-    this.kmfAlgorithm = algorithm;
-  }
-
-  public void setTrustManagerFactoryAlgorithm(String algorithm) {
-    this.tmfAlgorithm = algorithm;
-  }
-
-  public void setKeyStore(String type, String path, String password, String keyPassword)
+  private void createKeyStore(String type, String path, String password, String keyPassword)
       throws Exception {
     if (path == null && password != null) {
       throw new Exception("SSL key store password is not specified.");
     } else if (path != null && password == null) {
       throw new Exception("SSL key store is not specified, but key store password is specified.");
     } else if (path != null && password != null) {
-      this.keyStore = new SecurityStore(type, path, password);
+      this.keystore = new SecurityStore(type, path, password);
       this.keyPassword = keyPassword;
     }
   }
 
-  public void setTrustStore(String type, String path, String password)
+  private void createTrustStore(String type, String path, String password)
       throws Exception {
     if (path == null && password != null) {
       throw new Exception("SSL key store password is not specified.");
     } else if (path != null && password == null) {
       throw new Exception("SSL key store is not specified, but key store password is specified.");
     } else if (path != null && password != null) {
-      this.trustStore = new SecurityStore(type, path, password);
-    }
-  }
-
-  public void setCipherSuites(List<String> cipherSuites) {
-    if (cipherSuites != null && cipherSuites.size() > 0) {
-      this.cipherSuites = cipherSuites.toArray(new String[cipherSuites.size()]);
-    }
-  }
-
-  public void setEnabledProtocols(List<String> enabledProtocols) {
-    if (enabledProtocols != null && enabledProtocols.size() > 0) {
-      this.enabledProtocols = enabledProtocols.toArray(new String[enabledProtocols.size()]);
+      this.truststore = new SecurityStore(type, path, password);
     }
   }
 

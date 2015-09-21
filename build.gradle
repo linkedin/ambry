@@ -72,6 +72,7 @@ project(':ambry-network') {
         compile project(':ambry-api'),
                 project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
@@ -90,6 +91,7 @@ project(':ambry-server') {
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-network').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
@@ -186,5 +188,23 @@ project(':ambry-admin') {
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
+    }
+}
+
+subprojects.each { subproject -> evaluationDependsOn(subproject.path)}
+
+task allJar(type: Jar, dependsOn: subprojects.assemble) {
+    manifest {
+        attributes 'Implementation-Title': 'Ambry',
+                   'Main-Class': 'com.github.ambry.server.AmbryMain'
+    }
+    destinationDir = file('target')
+    baseName = 'ambry'
+    subprojects.each { subproject ->
+        from  {
+            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtime).collect {
+                zipTree(it)
+            }
+        }
     }
 }

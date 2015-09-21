@@ -124,7 +124,7 @@ public class DataNode extends DataNodeId {
 
   @Override
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
-    if (sslEnabledDataCenters.contains(datacenter)) {
+    if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return new Port(ports.get(PortType.SSL), PortType.SSL);
       } else {

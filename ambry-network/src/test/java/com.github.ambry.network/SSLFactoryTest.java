@@ -1,5 +1,7 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
+import java.io.File;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocketFactory;
@@ -25,24 +27,28 @@ public class SSLFactoryTest {
   @Test
   public void testSSLFactory()
       throws Exception {
-    SSLFactory sslFactory = TestUtils.createSSLFactory();
-    SSLContext sslContext = sslFactory.createSSLContext();
-    SSLSocketFactory socketFactory = sslContext.getSocketFactory();
-    SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
-    SSLEngine engine = sslFactory.createSSLEngine(sslContext, "localhost", 9095, true);
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig clientSSLConfig =
+        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
 
-    Assert.assertEquals(sslContext.getProtocol(), "TLS");
-    String[] enabledCipherSuites = engine.getEnabledCipherSuites();
-    Assert.assertEquals(enabledCipherSuites.length, 1);
-    Assert.assertEquals(enabledCipherSuites[0], "TLS_RSA_WITH_AES_128_CBC_SHA256");
-    String[] enabledProtocols = engine.getEnabledProtocols();
-    Assert.assertEquals(enabledProtocols.length, 1);
-    Assert.assertEquals(enabledProtocols[0], "TLSv1.2");
-    Assert.assertEquals(engine.getNeedClientAuth(), false);
-    Assert.assertEquals(engine.getUseClientMode(), true);
-    Assert.assertEquals(engine.getWantClientAuth(), false);
-    System.out.println(socketFactory.toString());
-    System.out.println(serverSocketFactory.toString());
-    System.out.println(engine.toString());
+    SSLFactory sslFactory = new SSLFactory(sslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
+    SSLSocketFactory socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine serverSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
+    TestSSLUtils.verifySSLConfig(sslContext, serverSideSSLEngine, false);
+
+    //client
+    sslFactory = new SSLFactory(clientSSLConfig);
+    sslContext = sslFactory.getSSLContext();
+    socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine clientSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
+    TestSSLUtils.verifySSLConfig(sslContext, clientSideSSLEngine, true);
   }
 }

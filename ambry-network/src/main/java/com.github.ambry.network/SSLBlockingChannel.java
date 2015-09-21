@@ -1,12 +1,14 @@
 package com.github.ambry.network;
 
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.net.SocketException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.channels.Channels;
+import java.util.ArrayList;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -15,14 +17,16 @@ import org.slf4j.LoggerFactory;
 public class SSLBlockingChannel extends BlockingChannel {
   private SSLSocket sslSocket = null;
   private final SSLSocketFactory sslSocketFactory;
+  private final SSLConfig sslConfig;
 
   public SSLBlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
-      int connectTimeoutMs, SSLSocketFactory sslSocketFactory) {
+      int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
     if (sslSocketFactory == null) {
       throw new IllegalArgumentException("sslSocketFactory is null when creating SSLBlockingChannel");
     }
     this.sslSocketFactory = sslSocketFactory;
+    this.sslConfig = sslConfig;
   }
 
   @Override
@@ -30,20 +34,34 @@ public class SSLBlockingChannel extends BlockingChannel {
       throws IOException {
     synchronized (lock) {
       if (!connected) {
-        sslSocket = (SSLSocket) sslSocketFactory.createSocket(host, port);
+        Socket socket = new Socket();
+        socket.setSoTimeout(readTimeoutMs);
+        socket.setKeepAlive(true);
+        socket.setTcpNoDelay(true);
         if (readBufferSize > 0) {
-          sslSocket.setReceiveBufferSize(readBufferSize);
+          socket.setReceiveBufferSize(readBufferSize);
         }
         if (writeBufferSize > 0) {
-          sslSocket.setSendBufferSize(writeBufferSize);
+          socket.setSendBufferSize(writeBufferSize);
         }
-        sslSocket.setSoTimeout(readTimeoutMs);
-        sslSocket.setKeepAlive(true);
-        sslSocket.setTcpNoDelay(true);
+        socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+        sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
+
+        ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
+        if (protocolsList != null && protocolsList.size() > 0) {
+          String[] enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
+          sslSocket.setEnabledProtocols(enabledProtocols);
+        }
+
+        ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
+        if (cipherSuitesList != null && cipherSuitesList.size() > 0 &&
+            !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+          String[] cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+          sslSocket.setEnabledCipherSuites(cipherSuites);
+        }
 
         // handshake in a blocking way
         sslSocket.startHandshake();
-
         writeChannel = Channels.newChannel(sslSocket.getOutputStream());
         readChannel = sslSocket.getInputStream();
         connected = true;
