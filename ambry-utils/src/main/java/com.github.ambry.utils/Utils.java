@@ -531,7 +531,7 @@ public class Utils {
    * @return byte[] which has the data that is read from the stream
    * @throws IOException
    */
-  public static byte[] readBytesFromStream(DataInputStream stream, int size)
+  public static byte[] readBytesFromStream(InputStream stream, int size)
       throws IOException {
     byte[] outputBytes = new byte[size];
     readBytesFromStream(stream, outputBytes, 0, size);
