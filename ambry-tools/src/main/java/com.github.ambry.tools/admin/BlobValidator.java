@@ -140,12 +140,6 @@ public class BlobValidator {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("BlobValidator --hardwareLayout hl --partitionLayout pl --typeOfOperation "
-              + "/VALIDATE_BLOB_ON_REPLICA/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS/"
-              + " --blobIds blobId --datacenter datacenter --replicaHost replicaHost "
-              + "--replicaPort replicaPort --includeExpiredBlob true/false "
-              + "--sslEnabledDatacenters DC1,DC2 --sslKeystorePath keystore --sslTruststorePath truststore "
-              + "--sslKeystorePassword password --sslKeyPassword password --sslTruststorePassword password");
           System.exit(1);
         }
       }

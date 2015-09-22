@@ -113,10 +113,6 @@ public class AdminTool {
         if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.out.println("AdminTool --hardwareLayout hl --partitionLayout pl --typeOfOperation "
-              + "LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA --ambryBlobId blobId "
-              + "--sslEnabledDatacenters DC1,DC2 --sslKeystorePath keystore --sslTruststorePath truststore "
-              + "--sslKeystorePassword password --sslKeyPassword password --sslTruststorePassword password");
           System.exit(1);
         }
       }
