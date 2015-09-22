@@ -72,6 +72,10 @@ public class ServerReadPerformance {
           parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
               .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
 
+      ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
+          parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
+              .describedAs("The measurement Interval").ofType(Long.class).defaultsTo(300000000000L);
+
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
@@ -115,6 +119,7 @@ public class ServerReadPerformance {
         }
       }
 
+      long measurementInterval = options.valueOf(measurementIntervalOpt);
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -142,7 +147,8 @@ public class ServerReadPerformance {
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
-      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList =
+          com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -203,27 +209,27 @@ public class ServerReadPerformance {
               streamOut.write(output.getStream().read());
               sizeRead++;
             }
-            long latencyGetOneBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
-            totalTimeTaken.addAndGet(latencyGetOneBlob);
-            latenciesForGetBlobs.add(latencyGetOneBlob);
+            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
+            totalTimeTaken.addAndGet(latencyPerBlob);
+            latenciesForGetBlobs.add(latencyPerBlob);
             totalReads.incrementAndGet();
             totalNumberOfGetBlobs++;
-            totalLatencyForGetBlobs += latencyGetOneBlob;
-            if (latencyGetOneBlob > maxLatencyForGetBlobs) {
-              maxLatencyForGetBlobs = latencyGetOneBlob;
+            totalLatencyForGetBlobs += latencyPerBlob;
+            if (latencyPerBlob > maxLatencyForGetBlobs) {
+              maxLatencyForGetBlobs = latencyPerBlob;
             }
-            if (latencyGetOneBlob < minLatencyForGetBlobs) {
-              minLatencyForGetBlobs = latencyGetOneBlob;
+            if (latencyPerBlob < minLatencyForGetBlobs) {
+              minLatencyForGetBlobs = latencyPerBlob;
             }
-            if (totalLatencyForGetBlobs >= 300000000000L) {
+            if (totalLatencyForGetBlobs >= measurementInterval) {
               // report performance in every 5 minutes
               Collections.sort(latenciesForGetBlobs);
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
-              String message = totalNumberOfGetBlobs + "    "
-                  + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + "    "
-                  + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "    "
-                  + ((double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
+              String message =
+                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec
+                      + "," + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "," + (
+                      (double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
               System.out.println(message);
               writer.write(message + "\n");
               totalLatencyForGetBlobs = 0;

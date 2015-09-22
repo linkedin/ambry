@@ -78,6 +78,10 @@ public class ServerWritePerformance {
           parser.accepts("writesPerSecond", "The rate at which writes need to be performed").withRequiredArg()
               .describedAs("The number of writes per second").ofType(Integer.class).defaultsTo(1000);
 
+      ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
+          parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
+              .describedAs("The measurement Interval").ofType(Long.class).defaultsTo(300000000000L);
+
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
@@ -120,6 +124,7 @@ public class ServerWritePerformance {
         }
       }
 
+      long measurementInterval = options.valueOf(measurementIntervalOpt);
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -183,8 +188,8 @@ public class ServerWritePerformance {
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
             new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, blobIdsWriter,
-                performanceWriter, totalTimeTaken, totalWrites, enableVerboseLogging, map, connectionPool,
-                sslEnabledDatacentersList));
+                performanceWriter, totalTimeTaken, totalWrites, measurementInterval, enableVerboseLogging, map,
+                connectionPool, sslEnabledDatacentersList));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -226,6 +231,7 @@ public class ServerWritePerformance {
     private FileWriter performanceWriter;
     private AtomicLong totalTimeTaken;
     private AtomicLong totalWrites;
+    private long measurementInterval;
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
@@ -233,7 +239,7 @@ public class ServerWritePerformance {
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
-        AtomicLong totalTimeTaken, AtomicLong totalWrites, boolean enableVerboseLogging, ClusterMap clusterMap,
+        AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementInterval, boolean enableVerboseLogging, ClusterMap clusterMap,
         ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
@@ -246,6 +252,7 @@ public class ServerWritePerformance {
       this.performanceWriter = performanceWriter;
       this.totalTimeTaken = totalTimeTaken;
       this.totalWrites = totalWrites;
+      this.measurementInterval = measurementInterval;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
       this.sslEnabledDatacenters = sslEnabledDatacenters;
@@ -284,31 +291,31 @@ public class ServerWritePerformance {
             if (putResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + putResponse.getError());
             }
-            long latencyPutOneBlob = SystemTime.getInstance().nanoseconds() - startTime;
-            timePassedInNanoSeconds += latencyPutOneBlob;
-            latenciesForPutBlobs.add(latencyPutOneBlob);
+            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
+            timePassedInNanoSeconds += latencyPerBlob;
+            latenciesForPutBlobs.add(latencyPerBlob);
             blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in us " + latencyPutOneBlob * .001
+              System.out.println("Time taken to put blob id " + blobId + " in us " + latencyPerBlob * .001
                   + " for blob of size " + blob.length);
             }
             numberOfPuts++;
-            if (maxLatencyInNanoSeconds < latencyPutOneBlob) {
-              maxLatencyInNanoSeconds = latencyPutOneBlob;
+            if (maxLatencyInNanoSeconds < latencyPerBlob) {
+              maxLatencyInNanoSeconds = latencyPerBlob;
             }
-            if (minLatencyInNanoSeconds > latencyPutOneBlob) {
-              minLatencyInNanoSeconds = latencyPutOneBlob;
+            if (minLatencyInNanoSeconds > latencyPerBlob) {
+              minLatencyInNanoSeconds = latencyPerBlob;
             }
-            totalLatencyInNanoSeconds += latencyPutOneBlob;
-            if (timePassedInNanoSeconds >= 300000000000L) {
+            totalLatencyInNanoSeconds += latencyPerBlob;
+            if (timePassedInNanoSeconds >= measurementInterval) {
               // report performance in every 5 minutes
               Collections.sort(latenciesForPutBlobs);
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
-              String message = threadIndex + "    " + numberOfPuts + "    "
-                  + (double) latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + "    "
-                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "    "
+              String message = threadIndex + "," + numberOfPuts + ","
+                  + (double) latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + ","
+                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + ","
                   + (((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
               System.out.println(message);
               performanceWriter.write(message + "\n");
@@ -319,7 +326,7 @@ public class ServerWritePerformance {
               minLatencyInNanoSeconds = Long.MAX_VALUE;
               totalLatencyInNanoSeconds = 0;
             }
-            totalTimeTaken.addAndGet(latencyPutOneBlob);
+            totalTimeTaken.addAndGet(latencyPerBlob);
             throttler.maybeThrottle(1);
           } catch (Exception e) {
             System.out.println("Exception when putting blob " + e);
