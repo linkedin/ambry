@@ -1,7 +1,5 @@
 package com.github.ambry.tools.util;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -13,14 +11,14 @@ import joptsimple.OptionSpec;
 /**
  * util functions for ambry tool
  */
-public final class Utils {
+public final class ToolUtils {
   public static void validateSSLOptions(OptionSet options, OptionParser parser,
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt,
       ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
-      throws IOException {
+      throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -30,10 +28,10 @@ public final class Utils {
       listOpt.add(sslTruststorePathOpt);
       listOpt.add(sslTruststorePasswordOpt);
       for (OptionSpec opt : listOpt) {
-        if (!options.has(sslKeystorePathOpt)) {
+        if (!options.has(opt)) {
           System.err.println("If sslEnabledDatacentersOpt is not empty, missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
-          System.exit(1);
+          throw new Exception("Lack of SSL arguments " + opt);
         }
       }
     }

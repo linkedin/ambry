@@ -25,7 +25,7 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.tools.util.Utils;
+import com.github.ambry.tools.util.ToolUtils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -44,8 +44,8 @@ import joptsimple.OptionSpec;
  * List Replicas for a given blobid
  */
 public class AdminTool {
-  private ConnectionPool connectionPool;
-  private ArrayList<String> sslEnabledDatacentersList;
+  private final ConnectionPool connectionPool;
+  private final ArrayList<String> sslEnabledDatacentersList;
 
   public AdminTool(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
     this.connectionPool = connectionPool;
@@ -53,6 +53,7 @@ public class AdminTool {
   }
 
   public static void main(String args[]) {
+    ConnectionPool connectionPool = null;
     try {
       OptionParser parser = new OptionParser();
 
@@ -120,22 +121,22 @@ public class AdminTool {
         }
       }
 
-      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
-      if (sslEnabledDatacenters != null && sslEnabledDatacenters.length() != 0) {
-        sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+      if (sslEnabledDatacenters.length() != 0) {
+        sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
             options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
             options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
-      Properties connectionPoolProperties = Utils.createConnectionPoolProperties();
+      Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      ConnectionPool connectionPool =
+      connectionPool =
           new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
@@ -165,6 +166,10 @@ public class AdminTool {
       }
     } catch (Exception e) {
       System.out.println("Closed with error " + e);
+    } finally {
+      if (connectionPool != null) {
+        connectionPool.shutdown();
+      }
     }
   }
 
@@ -180,6 +185,7 @@ public class AdminTool {
         blobProperties = getBlobProperties(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
+        System.out.println("Get blob properties error " + e);
       }
     }
     return blobProperties;
@@ -213,8 +219,7 @@ public class AdminTool {
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return null;
+        throw new IOException(" Get Response from Stream to verify replica blob properties is null ");
       }
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       System.out.println("Get Response from Stream to verify replica blob properties : " + getResponse.getError());
@@ -241,13 +246,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw e;
@@ -267,6 +270,7 @@ public class AdminTool {
         blobOutput = getBlob(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
+        System.out.println("Get blob error " + e);
       }
     }
     return blobOutput;
@@ -297,8 +301,7 @@ public class AdminTool {
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return null;
+        throw new IOException(" Get Response from Stream to verify replica blob properties is null ");
       }
       System.out.println("Get Response to get blob : " + getResponse.getError());
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -320,13 +323,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw e;
@@ -346,6 +347,7 @@ public class AdminTool {
         userMetadata = getUserMetadata(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
+        System.out.println("Get user metadata error " + e);
       }
     }
     return userMetadata;
@@ -377,8 +379,7 @@ public class AdminTool {
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return null;
+        throw new IOException(" Get Response from Stream to verify replica blob properties is null ");
       }
       System.out.println("Get Response to check blob usermetadata : " + getResponse.getError());
 
@@ -402,13 +403,11 @@ public class AdminTool {
       }
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
-      ((BlockingChannel)connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw e;

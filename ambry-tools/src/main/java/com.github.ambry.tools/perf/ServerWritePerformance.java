@@ -18,7 +18,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.tools.util.Utils;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
@@ -120,13 +120,13 @@ public class ServerWritePerformance {
         }
       }
 
-      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
-      if (sslEnabledDatacenters != null && sslEnabledDatacenters.length() != 0) {
-        sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+      if (sslEnabledDatacenters.length() != 0) {
+        sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
             options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
             options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
       } else {

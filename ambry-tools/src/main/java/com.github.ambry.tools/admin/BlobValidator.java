@@ -26,7 +26,7 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.tools.util.Utils;
+import com.github.ambry.tools.util.ToolUtils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,9 +52,9 @@ import joptsimple.OptionSpec;
  *
  */
 public class BlobValidator {
-  private ConnectionPool connectionPool;
-  private ArrayList<String> sslEnabledDatacentersList;
-  private Map<String, Exception> invalidBlobs;
+  private final ConnectionPool connectionPool;
+  private final ArrayList<String> sslEnabledDatacentersList;
+  private final Map<String, Exception> invalidBlobs;
 
   public BlobValidator(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
     this.connectionPool = connectionPool;
@@ -63,6 +63,7 @@ public class BlobValidator {
   }
 
   public static void main(String args[]) {
+    ConnectionPool connectionPool = null;
     try {
       OptionParser parser = new OptionParser();
 
@@ -77,7 +78,7 @@ public class BlobValidator {
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to execute - VALIDATE_BLOB_ON_REPLICA/"
               + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS").withRequiredArg()
-          .describedAs("The type of file").ofType(String.class).defaultsTo("GET");
+          .describedAs("The type of operation").ofType(String.class).defaultsTo("VALIDATE_BLOB_ON_ALL_REPLICAS");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdListOpt =
           parser.accepts("blobIds", "Comma separated blobIds to execute get on").withRequiredArg()
@@ -149,21 +150,22 @@ public class BlobValidator {
         }
       }
 
-      Utils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
           sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
-      if (sslEnabledDatacenters != null && sslEnabledDatacenters.length() != 0) {
-        sslProperties = Utils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+      if (sslEnabledDatacenters.length() != 0) {
+        sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
+            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
+            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
-      Properties connectionPoolProperties = Utils.createConnectionPoolProperties();
+      Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      ConnectionPool connectionPool =
+      connectionPool =
           new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
 
       boolean verbose = Boolean.parseBoolean(options.valueOf(verboseOpt));
@@ -198,7 +200,7 @@ public class BlobValidator {
       if (verbose) {
         System.out.println("ReplciaHost " + replicaHost);
       }
-      ;
+
       boolean expiredBlobs = Boolean.parseBoolean(options.valueOf(expiredBlobsOpt));
       if (verbose) {
         System.out.println("Exp blobs " + expiredBlobs);
@@ -227,6 +229,10 @@ public class BlobValidator {
       }
     } catch (Exception e) {
       System.out.println("Closed with error " + e);
+    } finally {
+      if (connectionPool != null) {
+        connectionPool.shutdown();
+      }
     }
   }
 
@@ -440,8 +446,7 @@ public class BlobValidator {
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob properties is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return ServerErrorCode.Unknown_Error;
+        throw new IOException("Get Response from Stream to verify replica blob properties is null");
       }
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       System.out.println("Get Response from Stream to verify replica blob properties : " + getResponse.getError());
@@ -473,13 +478,11 @@ public class BlobValidator {
       getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
-      getResponse = null;
       getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob usermetadata is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return ServerErrorCode.Unknown_Error;
+        throw new IOException("Get Response from Stream to verify replica blob usermetadata is null");
       }
       System.out.println("Get Response to check blob usermetadata : " + getResponse.getError());
 
@@ -508,13 +511,11 @@ public class BlobValidator {
       getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
           partitionRequestInfos, getOptions);
       System.out.println("Get Request to get blob : " + getRequest);
-      getResponse = null;
       getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
         System.out.println(" Get Response from Stream to verify replica blob is null ");
         System.out.println(blobId + " STATE FAILED");
-        connectedChannel = null;
-        return ServerErrorCode.Unknown_Error;
+        throw new IOException("Get Response from Stream to verify replica blob is null");
       }
       System.out.println("Get Response to get blob : " + getResponse.getError());
       serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -547,13 +548,11 @@ public class BlobValidator {
       return ServerErrorCode.No_Error;
     } catch (MessageFormatException mfe) {
       System.out.println("MessageFormat Exception Error " + mfe);
-      ((BlockingChannel) connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw mfe;
     } catch (IOException e) {
       System.out.println("IOException " + e);
-      ((BlockingChannel) connectedChannel).disconnect();
       connectionPool.destroyConnection(connectedChannel);
       connectedChannel = null;
       throw e;
