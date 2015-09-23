@@ -14,22 +14,23 @@ import joptsimple.OptionSpec;
 public final class ToolUtils {
   public static void validateSSLOptions(OptionSet options, OptionParser parser,
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt,
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
-      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt,
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
+      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
+      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
       throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
       listOpt.add(sslKeystorePathOpt);
+      listOpt.add(sslKeystoreTypeOpt);
       listOpt.add(sslKeystorePasswordOpt);
       listOpt.add(sslKeyPasswordOpt);
       listOpt.add(sslTruststorePathOpt);
       listOpt.add(sslTruststorePasswordOpt);
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
-          System.err.println("If sslEnabledDatacentersOpt is not empty, missing required argument \"" + opt + "\"");
+          System.err.println("If sslEnabledDatacenters is not empty, missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           throw new Exception("Lack of SSL arguments " + opt);
         }
@@ -38,7 +39,8 @@ public final class ToolUtils {
   }
 
   public static Properties createSSLProperties(String sslEnabledDatacenters, String sslKeystorePath,
-      String sslKeystorePassword, String keyPassword, String sslTruststorePath, String sslTruststorePassword) {
+      String sslKeyStoreType, String sslKeystorePassword, String keyPassword, String sslTruststorePath,
+      String sslTruststorePassword) {
     Properties props = new Properties();
     props.put("ssl.context.protocol", "TLS");
     props.put("ssl.context.provider", "SunJSSE");
@@ -47,7 +49,7 @@ public final class ToolUtils {
     props.put("ssl.client.authentication", "required");
     props.put("ssl.keymanager.algorithm", "PKIX");
     props.put("ssl.trustmanager.algorithm", "PKIX");
-    props.put("ssl.keystore.type", "JKS");
+    props.put("ssl.keystore.type", sslKeyStoreType);
     props.put("ssl.keystore.path", sslKeystorePath);
     props.put("ssl.keystore.password", sslKeystorePassword);
     props.put("ssl.key.password", keyPassword);

@@ -28,6 +28,7 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileWriter;
 import java.rmi.UnexpectedException;
@@ -74,7 +75,7 @@ public class ServerReadPerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The measurement Interval").ofType(Long.class).defaultsTo(300000000000L);
+              .describedAs("The CPU time for getting blobs").ofType(Long.class).defaultsTo(300000000000L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -87,6 +88,10 @@ public class ServerReadPerformance {
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
               .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
+          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
+              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
           parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
@@ -120,15 +125,16 @@ public class ServerReadPerformance {
       }
 
       long measurementInterval = options.valueOf(measurementIntervalOpt);
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
+            options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
+            options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
@@ -147,8 +153,7 @@ public class ServerReadPerformance {
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
-      ArrayList<String> sslEnabledDatacentersList =
-          com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -215,6 +220,9 @@ public class ServerReadPerformance {
             totalReads.incrementAndGet();
             totalNumberOfGetBlobs++;
             totalLatencyForGetBlobs += latencyPerBlob;
+            if (enableVerboseLogging) {
+              System.out.println("Time taken to get blob id " + blobId + " in us " + latencyPerBlob * .001);
+            }
             if (latencyPerBlob > maxLatencyForGetBlobs) {
               maxLatencyForGetBlobs = latencyPerBlob;
             }
@@ -222,13 +230,12 @@ public class ServerReadPerformance {
               minLatencyForGetBlobs = latencyPerBlob;
             }
             if (totalLatencyForGetBlobs >= measurementInterval) {
-              // report performance in every 5 minutes
               Collections.sort(latenciesForGetBlobs);
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
               String message =
-                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec
-                      + "," + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "," + (
+                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + ","
+                      + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "," + (
                       (double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
               System.out.println(message);
               writer.write(message + "\n");

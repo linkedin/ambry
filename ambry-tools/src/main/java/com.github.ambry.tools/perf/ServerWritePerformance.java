@@ -22,6 +22,7 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -80,7 +81,7 @@ public class ServerWritePerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The measurement Interval").ofType(Long.class).defaultsTo(300000000000L);
+              .describedAs("The CPU time for putting blobs").ofType(Long.class).defaultsTo(300000000000L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -93,6 +94,10 @@ public class ServerWritePerformance {
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
               .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
+          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
+              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
           parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
@@ -125,15 +130,16 @@ public class ServerWritePerformance {
       }
 
       long measurementInterval = options.valueOf(measurementIntervalOpt);
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
+            options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
+            options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
@@ -158,7 +164,7 @@ public class ServerWritePerformance {
       File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");
       performanceWriter = new FileWriter(performanceFile);
 
-      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
 
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -239,8 +245,8 @@ public class ServerWritePerformance {
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
-        AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementInterval, boolean enableVerboseLogging, ClusterMap clusterMap,
-        ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
+        AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementInterval, boolean enableVerboseLogging,
+        ClusterMap clusterMap, ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -297,8 +303,9 @@ public class ServerWritePerformance {
             blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in us " + latencyPerBlob * .001
-                  + " for blob of size " + blob.length);
+              System.out.println(
+                  "Time taken to put blob id " + blobId + " in us " + latencyPerBlob * .001 + " for blob of size "
+                      + blob.length);
             }
             numberOfPuts++;
             if (maxLatencyInNanoSeconds < latencyPerBlob) {
@@ -309,14 +316,13 @@ public class ServerWritePerformance {
             }
             totalLatencyInNanoSeconds += latencyPerBlob;
             if (timePassedInNanoSeconds >= measurementInterval) {
-              // report performance in every 5 minutes
               Collections.sort(latenciesForPutBlobs);
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
               String message = threadIndex + "," + numberOfPuts + ","
                   + (double) latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + ","
-                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + ","
-                  + (((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
+                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "," + (
+                  ((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
               System.out.println(message);
               performanceWriter.write(message + "\n");
               numberOfPuts = 0;

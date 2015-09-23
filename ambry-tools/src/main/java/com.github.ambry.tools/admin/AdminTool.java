@@ -26,6 +26,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -86,6 +87,10 @@ public class AdminTool {
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
               .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
+          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
+              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
           parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
               .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
@@ -117,14 +122,15 @@ public class AdminTool {
         }
       }
 
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
+            options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
+            options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
@@ -132,15 +138,14 @@ public class AdminTool {
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool =
-          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
-      ArrayList<String> sslEnabledDatacentersList = com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       AdminTool adminTool = new AdminTool(connectionPool, sslEnabledDatacentersList);
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
@@ -181,7 +186,8 @@ public class AdminTool {
         blobProperties = getBlobProperties(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
-        System.out.println("Get blob properties error " + e);
+        System.out.println("Get blob properties error ");
+        e.printStackTrace();
       }
     }
     return blobProperties;
@@ -266,7 +272,8 @@ public class AdminTool {
         blobOutput = getBlob(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
-        System.out.println("Get blob error " + e);
+        System.out.println("Get blob error ");
+        e.printStackTrace();
       }
     }
     return blobOutput;
@@ -343,7 +350,8 @@ public class AdminTool {
         userMetadata = getUserMetadata(blobId, map, replicaId, expiredBlobs);
         break;
       } catch (Exception e) {
-        System.out.println("Get user metadata error " + e);
+        System.out.println("Get user metadata error ");
+        e.printStackTrace();
       }
     }
     return userMetadata;

@@ -27,6 +27,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -109,6 +110,10 @@ public class BlobValidator {
           parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
               .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
+          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
+              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
           parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
               .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
@@ -144,14 +149,15 @@ public class BlobValidator {
         }
       }
 
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslTruststorePathOpt,
-          sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystorePasswordOpt), options.valueOf(sslKeyPasswordOpt),
-            options.valueOf(sslTruststorePathOpt), options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
+            options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
+            options.valueOf(sslTruststorePasswordOpt));
       } else {
         sslProperties = new Properties();
       }
@@ -159,8 +165,7 @@ public class BlobValidator {
       SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool =
-          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
 
       boolean verbose = Boolean.parseBoolean(options.valueOf(verboseOpt));
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
@@ -204,8 +209,7 @@ public class BlobValidator {
         System.out.println("ReplicPort " + replicaPort);
       }
 
-      ArrayList<String> sslEnabledDatacentersList =
-          com.github.ambry.utils.Utils.splitString(sslEnabledDatacenters, ",");
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       BlobValidator blobValidator = new BlobValidator(connectionPool, sslEnabledDatacentersList);
 
       ArrayList<BlobId> blobIdList = blobValidator.generateBlobId(blobList, map);
