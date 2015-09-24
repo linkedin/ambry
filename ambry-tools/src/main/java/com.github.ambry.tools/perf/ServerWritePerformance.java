@@ -81,7 +81,8 @@ public class ServerWritePerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time for putting blobs").ofType(Long.class).defaultsTo(300000000000L);
+              .describedAs("The CPU time spent for putting blobs, not wall time").ofType(Long.class)
+              .defaultsTo(300000000000L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -304,7 +305,7 @@ public class ServerWritePerformance {
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
               System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs
-                      + " for blob of size " + blob.length);
+                  + " for blob of size " + blob.length);
             }
             numberOfPuts++;
             if (maxLatencyInNanoSeconds < latencyPerBlob) {

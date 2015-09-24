@@ -75,7 +75,8 @@ public class ServerReadPerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time for getting blobs").ofType(Long.class).defaultsTo(300000000000L);
+              .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class)
+              .defaultsTo(300000000000L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
