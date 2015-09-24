@@ -221,7 +221,8 @@ public class ServerReadPerformance {
             totalNumberOfGetBlobs++;
             totalLatencyForGetBlobs += latencyPerBlob;
             if (enableVerboseLogging) {
-              System.out.println("Time taken to get blob id " + blobId + " in us " + latencyPerBlob * .001);
+              System.out
+                  .println("Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
             }
             if (latencyPerBlob > maxLatencyForGetBlobs) {
               maxLatencyForGetBlobs = latencyPerBlob;
