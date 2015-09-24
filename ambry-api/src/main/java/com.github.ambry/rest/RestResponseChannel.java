@@ -59,18 +59,17 @@ public interface RestResponseChannel extends WritableByteChannel {
    * Notifies that request handling is complete (successfully or unsuccessfully) and tasks that need to be done after
    * handling of a request is complete can proceed (e.g. cleanup code + closing of connection if not keepalive).
    * <p/>
-   * If cause is not not null, then it indicates that there was an error while handling the request and cause defines
-   * the error that occurred. The expectation is that an appropriate error response will be constructed, returned to the
-   * client if possible and the connection closed (if required).
+   * If {@code cause} is not null, then it indicates that there was an error while handling the request and
+   * {@code cause} defines the error that occurred. The expectation is that an appropriate error response will be
+   * constructed, returned to the client if possible and the connection closed (if required).
    * <p/>
    * It is possible that the connection might be closed/severed before this is called. Therefore this function needs to
    * always check if the channel of communication with the client is still open if it wants to send data.
    * <p/>
-   * A request is considered to be complete when no more {@link RestRequestInfo}s associated with the same request are
-   * expected at the {@link NioServer} (they might still be in the other layers) or if there was an error while
-   * handling the request or if the client timed out.
+   * A request is considered to be complete when all {@link RestRequestInfo}s associated with the same request have been
+   * processed or if there was an error while handling the request or if the client timed out.
    * <p/>
-   * A response of OK is returned if cause is null and no response body was constructed (i.e if there were no
+   * A response of OK is returned if {@code cause} is null and no response body was constructed (i.e if there were no
    * {@link #write(ByteBuffer)} calls).
    * <p/>
    * This is (has to be) called regardless of the request being concluded successfully or unsuccessfully
@@ -83,7 +82,7 @@ public interface RestResponseChannel extends WritableByteChannel {
   public void onRequestComplete(Throwable cause, boolean forceClose);
 
   /**
-   * Returns completion status of the request represented by the given {@link RestRequestMetadata}.
+   * Returns completion status of the request being handled by this RestResponseChannel.
    * @return {@code true} if there has been a call to {@link #onRequestComplete(Throwable, boolean)} and the request has
    * been marked complete. {@code false} otherwise.
    */

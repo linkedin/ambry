@@ -38,7 +38,8 @@ import static org.junit.Assert.fail;
 /**
  * Tests functionality of {@link NettyResponseChannel}.
  * <p/>
- * To examine functionality of each URI, refer to {@link MockNettyMessageProcessor#handleRequest(HttpRequest)} and
+ * To understand what each {@link TestingUri} is doing, refer to
+ * {@link MockNettyMessageProcessor#handleRequest(HttpRequest)} and
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
  */
 public class NettyResponseChannelTest {
@@ -52,7 +53,7 @@ public class NettyResponseChannelTest {
    * @throws JSONException
    */
   @Test
-  public void responseChannelCommonCaseTest()
+  public void commonCaseTest()
       throws IOException, JSONException {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
@@ -76,10 +77,10 @@ public class NettyResponseChannelTest {
 
   /**
    * Tests that the right exceptions are thrown on bad input to the various functions of {@link NettyResponseChannel}.
-   * @throws IOException
+   * @throws JSONException
    */
   @Test
-  public void responseChannelExceptionsTest()
+  public void reactionToBadInputTest()
       throws JSONException {
     try {
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
@@ -98,7 +99,7 @@ public class NettyResponseChannelTest {
    * @throws JSONException
    */
   @Test
-  public void responseChannelNoBodyTest()
+  public void noResponseBodyTest()
       throws JSONException {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     EmbeddedChannel channel = new EmbeddedChannel(processor);
@@ -111,25 +112,25 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Checks {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} with a valid {@link RestServiceException}
-   * and with a null exception.
+   * Checks behaviour of {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} with valid
+   * {@link RestServiceException}s and a {@link RuntimeException}.
    * @throws JSONException
    */
   @Test
   public void onRequestCompleteWithExceptionTest()
       throws JSONException {
-    // Throws RestServiceException. There should be a response which is BAD_REQUEST. This is the expected response.
-    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseBr, HttpResponseStatus.BAD_REQUEST);
+    // Throws BadRequest RestServiceException. There should be a BAD_REQUEST HTTP response.
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithBadRequest, HttpResponseStatus.BAD_REQUEST);
 
-    // INTERNAL_SERVER_ERROR
-    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseIse,
+    // Throws InternalServerError RestServiceException. There should be a INTERNAL_SERVER_ERROR HTTP response.
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithInternalServerError,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
-    // Unknown RestServiceException.
-    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRseUnknown,
+    // Throws Unknown RestServiceException. There should be a INTERNAL_SERVER_ERROR HTTP response.
+    doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithUnknownErrorCode,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
-    // Runtime exception.
+    // Throws RuntimeException. There should be a INTERNAL_SERVER_ERROR HTTP response.
     doOnRequestCompleteWithExceptionTest(TestingUri.OnRequestCompleteWithRuntimeException,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
   }
@@ -169,7 +170,7 @@ public class NettyResponseChannelTest {
   public void behaviourUnderWriteFailuresTest()
       throws Exception {
     onRequestCompleteUnderWriteFailureTest(TestingUri.ImmediateRequestComplete);
-    onRequestCompleteUnderWriteFailureTest(TestingUri.OnRequestCompleteWithRseBr);
+    onRequestCompleteUnderWriteFailureTest(TestingUri.OnRequestCompleteWithBadRequest);
 
     try {
       String content = "@@randomContent@@@";
@@ -280,10 +281,10 @@ public class NettyResponseChannelTest {
   // onRequestCompleteWithExceptionTest() helpers
 
   /**
-   * Creates a channel and send the request to the {@link EmbeddedChannel}. Checks the response for the expected
+   * Creates a channel and sends the request to the {@link EmbeddedChannel}. Checks the response for the expected
    * status code.
    * @param uri the uri to hit.
-   * @param expectedResponseStatus the response status that is expected
+   * @param expectedResponseStatus the response status that is expected.
    * @throws JSONException
    */
   private void doOnRequestCompleteWithExceptionTest(TestingUri uri, HttpResponseStatus expectedResponseStatus)
@@ -367,8 +368,8 @@ public class NettyResponseChannelTest {
  */
 enum TestingUri {
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
-   * immediately with null {@code cause} when this request is received.
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * immediately with null {@code cause}.
    */
   ImmediateRequestComplete,
   /**
@@ -379,48 +380,49 @@ enum TestingUri {
   FillWriteBuffer,
   /**
    * When this request is received, some data is initially written to the channel via
-   * {@link RestResponseChannel#write(ByteBuffer)}. An attempt to modify response headers (metadata) is made after this.
+   * {@link NettyResponseChannel#write(ByteBuffer)}. An attempt to modify response headers (metadata) is made after
+   * this.
    */
   ModifyResponseMetadataAfterWrite,
   /**
-   * When this request is received, {@link RestResponseChannel#close()} is called multiple times.
+   * When this request is received, {@link NettyResponseChannel#close()} is called multiple times.
    */
   MultipleClose,
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called multiple
-   * times.
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * multiple times.
    */
   MultipleOnRequestComplete,
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
    * error code is {@link RestServiceErrorCode#BadRequest}.
    */
-  OnRequestCompleteWithRseBr,
+  OnRequestCompleteWithBadRequest,
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
    * error code is {@link RestServiceErrorCode#InternalServerError}.
    */
-  OnRequestCompleteWithRseIse,
+  OnRequestCompleteWithInternalServerError,
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
    * error code is {@link RestServiceErrorCode#UnknownErrorCode}.
    */
-  OnRequestCompleteWithRseUnknown,
+  OnRequestCompleteWithUnknownErrorCode,
   /**
-   * When this request is received, {@link RestResponseChannel#onRequestComplete(Throwable, boolean)} is called
+   * When this request is received, {@link NettyResponseChannel#onRequestComplete(Throwable, boolean)} is called
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
   OnRequestCompleteWithRuntimeException,
   /**
-   * When this request is received, the {@link RestResponseChannel} is closed and then a write operation is attempted.
+   * When this request is received, the {@link NettyResponseChannel} is closed and then a write operation is attempted.
    */
   WriteAfterClose,
   /**
    * When this request is received, a direct {@link ByteBuffer} is used as {@code src} for
-   * {@link RestResponseChannel#write(ByteBuffer)}.
+   * {@link NettyResponseChannel#write(ByteBuffer)}. {@link NettyResponseChannel} only works with non-direct buffers.
    */
   WriteWithDirectBuffer,
   /**
@@ -520,23 +522,23 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           assertTrue("Request not marked complete even after a call to onRequestComplete()",
               restResponseChannel.isRequestComplete());
           break;
-        case OnRequestCompleteWithRseBr:
+        case OnRequestCompleteWithBadRequest:
           restResponseChannel.onRequestComplete(
-              new RestServiceException(TestingUri.OnRequestCompleteWithRseBr.toString(),
+              new RestServiceException(TestingUri.OnRequestCompleteWithBadRequest.toString(),
                   RestServiceErrorCode.BadRequest), false);
           assertTrue("Request not marked complete even after a call to onRequestComplete()",
               restResponseChannel.isRequestComplete());
           break;
-        case OnRequestCompleteWithRseIse:
+        case OnRequestCompleteWithInternalServerError:
           restResponseChannel.onRequestComplete(
-              new RestServiceException(TestingUri.OnRequestCompleteWithRseIse.toString(),
+              new RestServiceException(TestingUri.OnRequestCompleteWithInternalServerError.toString(),
                   RestServiceErrorCode.InternalServerError), false);
           assertTrue("Request not marked complete even after a call to onRequestComplete()",
               restResponseChannel.isRequestComplete());
           break;
-        case OnRequestCompleteWithRseUnknown:
+        case OnRequestCompleteWithUnknownErrorCode:
           restResponseChannel.onRequestComplete(
-              new RestServiceException(TestingUri.OnRequestCompleteWithRseUnknown.toString(),
+              new RestServiceException(TestingUri.OnRequestCompleteWithUnknownErrorCode.toString(),
                   RestServiceErrorCode.UnknownErrorCode), false);
           assertTrue("Request not marked complete even after a call to onRequestComplete()",
               restResponseChannel.isRequestComplete());
@@ -557,7 +559,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           break;
       }
     } else {
-      restResponseChannel.onRequestComplete(null, false);
+      restResponseChannel.onRequestComplete(null, true);
       assertTrue("Request not marked complete even after a call to onRequestComplete()",
           restResponseChannel.isRequestComplete());
     }

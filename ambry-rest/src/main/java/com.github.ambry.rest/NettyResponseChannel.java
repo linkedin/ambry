@@ -31,7 +31,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 /**
  * Netty specific implementation of {@link RestResponseChannel}. It is supported by an underlying Netty channel whose
- * handle it has in the form of a {@link ChannelHandlerContext}.
+ * handle this class has in the form of a {@link ChannelHandlerContext}.
  * <p/>
  * Used by implementations of {@link BlobStorageService} to return their response via Netty.
  * <p/>
@@ -106,9 +106,29 @@ class NettyResponseChannel implements RestResponseChannel {
       throws ClosedChannelException {
     if (!src.hasArray()) {
       throw new IllegalArgumentException(
-          "NettyResponseChannel does not work with ByteBuffers that are not backed by " + "byte arrrays");
+          "NettyResponseChannel does not work with ByteBuffers that are not backed by byte arrays");
     }
-    return addToResponseBody(src);
+
+    if (!responseMetadataWritten.get()) {
+      maybeWriteResponseMetadata(responseMetadata);
+    }
+    verifyChannelActive();
+    int bytesWritten = 0;
+    if (ctx.channel().isWritable()) {
+      emptyingFlushRequired.set(true);
+      int bytesToWrite = Math.min(src.remaining(), ctx.channel().config().getWriteBufferLowWaterMark());
+      logger.trace("Adding {} bytes of data to response on channel {}", bytesToWrite, ctx.channel());
+      ByteBuf buf =
+          Unpooled.wrappedBuffer(src.array(), src.arrayOffset() + src.position(), bytesToWrite).order(src.order());
+      ChannelFuture writeFuture = writeToChannel(new DefaultHttpContent(buf), ChannelWriteType.Safe);
+      if (!writeFuture.isDone() || writeFuture.isSuccess()) {
+        bytesWritten = bytesToWrite;
+        src.position(src.position() + bytesToWrite);
+      }
+    } else if (emptyingFlushRequired.compareAndSet(true, false)) {
+      flush();
+    }
+    return bytesWritten;
   }
 
   /**
@@ -190,37 +210,6 @@ class NettyResponseChannel implements RestResponseChannel {
           RestServiceErrorCode.ResponseMetadataBuildingFailure);
     }
     logger.trace("Set content type to {} for response on channel {}", type, ctx.channel());
-  }
-
-  /**
-   * Writes some bytes, starting from {@code src.position()} possibly until {@code src.remaining()}, from {@code src} to
-   * the channel. The number of bytes written depends on the current space remaining in the channel's write buffer.
-   * @param src the {@link ByteBuffer} containing the bytes that need to be written.
-   * @return the number of bytes written to the channel.
-   * @throws ClosedChannelException if the channel is not active.
-   */
-  private int addToResponseBody(ByteBuffer src)
-      throws ClosedChannelException {
-    if (!responseMetadataWritten.get()) {
-      maybeWriteResponseMetadata(responseMetadata);
-    }
-    verifyChannelActive();
-    int bytesWritten = 0;
-    if (ctx.channel().isWritable()) {
-      emptyingFlushRequired.set(true);
-      int bytesToWrite = Math.min(src.remaining(), ctx.channel().config().getWriteBufferLowWaterMark());
-      logger.trace("Adding {} bytes of data to response on channel {}", bytesToWrite, ctx.channel());
-      ByteBuf buf =
-          Unpooled.wrappedBuffer(src.array(), src.arrayOffset() + src.position(), bytesToWrite).order(src.order());
-      ChannelFuture writeFuture = writeToChannel(new DefaultHttpContent(buf), ChannelWriteType.Safe);
-      if (!writeFuture.isDone() || writeFuture.isSuccess()) {
-        bytesWritten = bytesToWrite;
-        src.position(src.position() + bytesToWrite);
-      }
-    } else if (emptyingFlushRequired.compareAndSet(true, false)) {
-      flush();
-    }
-    return bytesWritten;
   }
 
   /**

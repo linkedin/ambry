@@ -55,11 +55,15 @@ public class MockRestResponseChannel implements RestResponseChannel {
   @Override
   public synchronized int write(ByteBuffer src)
       throws IOException {
-    if (!src.hasArray()) {
-      throw new IllegalArgumentException(
-          "NettyResponseChannel does not work with ByteBuffers that are not backed by " + "byte arrrays");
+    if (!isOpen()) {
+      throw new ClosedChannelException();
     }
-    return addToResponseBody(src);
+    responseMetadataFinalized.set(true);
+    int bytesWritten = src.remaining();
+    for (int i = 0; i < bytesWritten; i++) {
+      bodyBytes.write(src.get());
+    }
+    return bytesWritten;
   }
 
   @Override
@@ -128,18 +132,6 @@ public class MockRestResponseChannel implements RestResponseChannel {
   @Override
   public void close() {
     channelOpen.set(false);
-  }
-
-  private int addToResponseBody(ByteBuffer src)
-      throws IOException {
-    if (!isOpen()) {
-      throw new ClosedChannelException();
-    }
-    responseMetadataFinalized.set(true);
-    int bytesWritten = src.remaining();
-    bodyBytes.write(src.array());
-    src.position(src.limit());
-    return bytesWritten;
   }
 
   // MockRestResponseChannel specific functions (for testing)
