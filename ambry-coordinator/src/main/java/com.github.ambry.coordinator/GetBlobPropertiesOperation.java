@@ -31,7 +31,7 @@ final public class GetBlobPropertiesOperation extends GetOperation {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
         MessageFormatFlags.BlobProperties);
     logger.trace(
-        "DatacenterNAme " + datacenterName + " Connection pool " + connectionPool + ", requestorPool " + requesterPool
+        "Datacenter name " + datacenterName + " Connection pool " + connectionPool + ", requester pool " + requesterPool
             + ", Operation context " + oc + ", blobId " + blobId + ", timeout " + operationTimeoutMs + ", clustermap "
             + clusterMap);
     this.blobProperties = null;
