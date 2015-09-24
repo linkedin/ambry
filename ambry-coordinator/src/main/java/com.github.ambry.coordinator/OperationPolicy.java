@@ -348,6 +348,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
       Collections.shuffle(replicaListPerDatacenter.get(dataCenter));
       replicasInFlightPerDatacenter.put(dataCenter, new ArrayList<ReplicaId>());
     }
+    logger.trace("ReplicaListPerDatacenter " + replicaListPerDatacenter);
   }
 
   @Override
@@ -414,6 +415,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     } else {
       nextReplicaId = null;
     }
+    logger.trace("NextReplicaId to send within sendMoreRequests " + nextReplicaId);
     return (nextReplicaId != null);
   }
 
@@ -433,6 +435,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
    * Sets the next replica for which the request to be sent to a remote data centre
    */
   private void setNextReplicaToSend(boolean forRemoteDatacenter) {
+    logger.trace("setNextReplicaToSend called for remote Datacenter " + forRemoteDatacenter);
     String nextDataCenterToSend = localDataCenterName;
     if (forRemoteDatacenter) {
       int requestParallelismPerDatacenter = requestParallelism / remoteDataCenterCount;
@@ -446,6 +449,7 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
           }
         }
       }
+      logger.trace("NextDataCenter to send " + nextDataCenterToSend);
       if (getReplicasInFlightCount() == 0) {
         proxied = true;
         logger.trace("Operation going cross colo after exhausting all local replicas");
@@ -454,6 +458,8 @@ class GetCrossColoParallelOperationPolicy extends ParallelOperationPolicy {
     }
     ReplicaId nextReplicaToSend = null;
     if (replicaListPerDatacenter.get(nextDataCenterToSend).size() > 0) {
+      logger.trace(
+          "List of pending replicas in next datacenter to send " + replicaListPerDatacenter.get(nextDataCenterToSend));
       nextReplicaToSend = replicaListPerDatacenter.get(nextDataCenterToSend).remove(0);
       replicasInFlightPerDatacenter.get(nextDataCenterToSend).add(nextReplicaToSend);
       remainingReplicaCount--;

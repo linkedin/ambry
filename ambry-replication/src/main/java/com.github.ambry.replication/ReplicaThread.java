@@ -622,7 +622,7 @@ class ReplicaThread implements Runnable {
                     new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
                         metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
-                  replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
+                  replicationMetrics.replicationInvalidMessageStreamErrorCount.inc();
                   logger.error("Out of " + (messageInfoList.size()) + " messages, " +
                       (messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size())
                       + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
