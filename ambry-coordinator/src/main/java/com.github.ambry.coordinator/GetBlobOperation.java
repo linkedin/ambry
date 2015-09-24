@@ -30,6 +30,10 @@ final public class GetBlobOperation extends GetOperation {
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
         MessageFormatFlags.Blob);
+    logger.trace(
+        "GetBlob: Datacenter name " + datacenterName + " Connection pool " + connectionPool + ", requester pool " + (
+            requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId + ", timeout "
+            + operationTimeoutMs + ", clustermap " + (clusterMap != null));
     this.blobOutput = null;
   }
 
