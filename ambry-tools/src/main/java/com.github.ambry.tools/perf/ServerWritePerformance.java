@@ -82,7 +82,7 @@ public class ServerWritePerformance {
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
               .describedAs("The CPU time spent for putting blobs, not wall time").ofType(Long.class)
-              .defaultsTo(300000000000L);
+              .defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -130,7 +130,7 @@ public class ServerWritePerformance {
         }
       }
 
-      long measurementInterval = options.valueOf(measurementIntervalOpt);
+      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -195,7 +195,7 @@ public class ServerWritePerformance {
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
             new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, blobIdsWriter,
-                performanceWriter, totalTimeTaken, totalWrites, measurementInterval, enableVerboseLogging, map,
+                performanceWriter, totalTimeTaken, totalWrites, measurementIntervalNs, enableVerboseLogging, map,
                 connectionPool, sslEnabledDatacentersList));
         threadIndexPerf[i].start();
       }
@@ -238,7 +238,7 @@ public class ServerWritePerformance {
     private FileWriter performanceWriter;
     private AtomicLong totalTimeTaken;
     private AtomicLong totalWrites;
-    private long measurementInterval;
+    private long measurementIntervalNs;
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
@@ -246,7 +246,7 @@ public class ServerWritePerformance {
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
-        AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementInterval, boolean enableVerboseLogging,
+        AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementIntervalNs, boolean enableVerboseLogging,
         ClusterMap clusterMap, ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
@@ -259,7 +259,7 @@ public class ServerWritePerformance {
       this.performanceWriter = performanceWriter;
       this.totalTimeTaken = totalTimeTaken;
       this.totalWrites = totalWrites;
-      this.measurementInterval = measurementInterval;
+      this.measurementIntervalNs = measurementIntervalNs;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
       this.sslEnabledDatacenters = sslEnabledDatacenters;
@@ -315,7 +315,7 @@ public class ServerWritePerformance {
               minLatencyInNanoSeconds = latencyPerBlob;
             }
             totalLatencyInNanoSeconds += latencyPerBlob;
-            if (timePassedInNanoSeconds >= measurementInterval) {
+            if (timePassedInNanoSeconds >= measurementIntervalNs) {
               Collections.sort(latenciesForPutBlobs);
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;

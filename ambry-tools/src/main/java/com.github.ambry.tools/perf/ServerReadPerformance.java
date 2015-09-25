@@ -76,7 +76,7 @@ public class ServerReadPerformance {
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
               .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class)
-              .defaultsTo(300000000000L);
+              .defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -125,7 +125,7 @@ public class ServerReadPerformance {
         }
       }
 
-      long measurementInterval = options.valueOf(measurementIntervalOpt);
+      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -231,7 +231,7 @@ public class ServerReadPerformance {
             if (latencyPerBlob < minLatencyForGetBlobs) {
               minLatencyForGetBlobs = latencyPerBlob;
             }
-            if (totalLatencyForGetBlobs >= measurementInterval) {
+            if (totalLatencyForGetBlobs >= measurementIntervalNs) {
               Collections.sort(latenciesForGetBlobs);
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
