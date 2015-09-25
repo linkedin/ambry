@@ -125,7 +125,7 @@ public class ServerReadPerformance {
         }
       }
 
-      long measurementInterval = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
+      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -231,7 +231,7 @@ public class ServerReadPerformance {
             if (latencyPerBlob < minLatencyForGetBlobs) {
               minLatencyForGetBlobs = latencyPerBlob;
             }
-            if (totalLatencyForGetBlobs >= measurementInterval) {
+            if (totalLatencyForGetBlobs >= measurementIntervalNs) {
               Collections.sort(latenciesForGetBlobs);
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
