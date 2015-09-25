@@ -418,7 +418,7 @@ public class PersistentIndex {
   /**
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
-   * @param fileSpan The file range represented by this entry in the log
+   * @param fileSpan The file span represented by this entry in the log
    * @throws StoreException
    */
   public void markAsDeleted(StoreKey id, FileSpan fileSpan)
@@ -435,8 +435,7 @@ public class PersistentIndex {
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
-    indexes.lastEntry().getValue().addEntry(new IndexEntry(id, newValue), fileSpan.getEndOffset());
-    journal.addEntry(fileSpan.getStartOffset(), id);
+    addToIndex(new IndexEntry(id, newValue), fileSpan);
   }
 
   /**
