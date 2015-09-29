@@ -101,12 +101,14 @@ public class ReplicationMetrics {
   private Map<String, Counter> metadataRequestErrorMap;
   private Map<String, Counter> getRequestErrorMap;
   private Map<String, Counter> localStoreErrorMap;
+  private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
 
   public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
       final List<ReplicaThread> replicaInterDCThreads, List<ReplicaId> replicaIds) {
     metadataRequestErrorMap = new HashMap<String, Counter>();
     getRequestErrorMap = new HashMap<String, Counter>();
     localStoreErrorMap = new HashMap<String, Counter>();
+    partitionIdToInvalidMessageStreamErrorCounter = new HashMap<PartitionId, Counter>();
     interColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicationBytesRate"));
     intraColoReplicationBytesRate =
@@ -271,6 +273,7 @@ public class ReplicationMetrics {
     registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInterDCReplicaThreads"),
         numberOfInterDCReplicaThreads);
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
+    populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {
@@ -295,6 +298,24 @@ public class ReplicationMetrics {
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
+  }
+
+  public void populateInvalidMessageMetricForReplicas(List<ReplicaId> replicaIds) {
+    for (ReplicaId replicaId : replicaIds) {
+      PartitionId partitionId = replicaId.getPartitionId();
+      if (!partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {
+        Counter partitionBasedCorruptionErrorCount =
+            registry.counter(MetricRegistry.name(ReplicaThread.class, partitionId + "-CorruptionErrorCount"));
+        partitionIdToInvalidMessageStreamErrorCounter.put(partitionId, partitionBasedCorruptionErrorCount);
+      }
+    }
+  }
+
+  public void incrementInvalidMessageError(PartitionId partitionId) {
+    replicationInvalidMessageStreamErrorCount.inc();
+    if (partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {
+      partitionIdToInvalidMessageStreamErrorCounter.get(partitionId).inc();
+    }
   }
 
   public void createRemoteReplicaErrorMetrics(RemoteReplicaInfo remoteReplicaInfo) {
