@@ -203,7 +203,7 @@ class NettyResponseChannel implements RestResponseChannel {
   @Override
   public void setContentType(String type)
       throws RestServiceException {
-    HttpHeaders headers = changeResponseHeader(HttpHeaders.Names.CONTENT_TYPE, type);
+    HttpHeaders headers = setResponseHeader(HttpHeaders.Names.CONTENT_TYPE, type);
     if (!type.equals(headers.get(HttpHeaders.Names.CONTENT_TYPE))) {
       nettyMetrics.responseMetadataBuildingFailure.inc();
       throw new RestServiceException("Unable to set content-type to " + type,
@@ -270,14 +270,14 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Changes the value of response headers after making sure that the response metadata is not already sent or is being
+   * Sets the value of response headers after making sure that the response metadata is not already sent or is being
    * sent.
    * @param headerName The name of the header.
    * @param headerValue The intended value of the header.
    * @return The updated headers.
    * @throws RestServiceException if the response metadata is already sent or is being sent.
    */
-  private HttpHeaders changeResponseHeader(String headerName, Object headerValue)
+  private HttpHeaders setResponseHeader(String headerName, Object headerValue)
       throws RestServiceException {
     try {
       responseMetadataChangeLock.lock();
