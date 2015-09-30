@@ -42,7 +42,6 @@ public class BoundedByteBufferReceive implements Receive {
       }
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
-        // for now we support only intmax size. We need to extend it to streaming
         sizeToRead = sizeBuffer.getLong();
         sizeRead += 8;
         bytesRead += 8;
