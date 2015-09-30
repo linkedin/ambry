@@ -10,7 +10,6 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
-import java.security.GeneralSecurityException;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
@@ -68,7 +67,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
 
   /**
    * Returns the handshake status
-   * @return
    */
   @Override
   public boolean ready() {
@@ -504,7 +502,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * Writes a sequence of bytes to this channel from the given buffer.
    *
    * @param src The buffer from which bytes are to be retrieved
-   * @returns The number of bytes decrypted and written to netWriteBuffer. No guarantee that data in the temporary
+   * @return The number of bytes decrypted and written to netWriteBuffer. No guarantee that data in the temporary
    * buffer will be completely written to the underlying channel right away. So the caller has to make sure to check
    * the remaining bytes in the netWriteBuffer apart from checking the remaining bytes in src bytebuffer. This method
    * is called from write() in the same class
@@ -604,7 +602,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
    */
   @Override
   public void onSendComplete() {
@@ -615,7 +613,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
-   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
    */
   @Override
   public void onReceiveComplete() {

@@ -65,7 +65,7 @@ public class NetworkMetrics {
   public final Histogram sslSendTime;             // the time to send data in one write call
   public final Histogram sslEncryptionTimePerKB;
   public final Histogram sslDecryptionTimePerKB;
-  public final Counter sslRenegotiationCount;
+  public final Counter sslRenegotiationCount;     // the count of renegotiation after initial handshake done
 
   public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {

@@ -70,7 +70,8 @@ public class BoundedByteBufferReceive implements Receive {
 
   /**
    * The total size in bytes that needs to receive from the channel
-   * @return The size of the data in bytes to receive
+   * It will be initialized only after header is read.
+   * @return the size of the data in bytes to receive after reading header, otherwise return 0
    */
   long sizeInBytes() {
     return sizeToRead;

@@ -3,7 +3,6 @@ package com.github.ambry.network;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import org.slf4j.Logger;
@@ -32,7 +31,7 @@ public class PlainTextTransmission extends Transmission {
 
   /**
    * Plain text channel is always ready to accept read and write calls
-   * @return
+   * @return true
    */
   @Override
   public boolean ready() {
@@ -40,7 +39,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Reads a sequence of bytes from the channel into the {@NetworkReceive}
+   * Reads a sequence of bytes from the channel into the {@link NetworkReceive}
    *
    * @return true if the read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
@@ -63,9 +62,9 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
+   * Writes a sequence of bytes to the channel from the payload in {@link NetworkSend}
    *
-   * @returns true if {@Send} in {@NetworkSend} is completely written to the channel, false otherwise
+   * @return true if {@link Send} in {@link NetworkSend} is completely written to the channel, false otherwise
    * @throws IOException If some other I/O error occurs
    */
   @Override
@@ -103,7 +102,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
    */
   @Override
   public void onSendComplete() {
@@ -114,7 +113,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
    */
   @Override
   public void onReceiveComplete() {

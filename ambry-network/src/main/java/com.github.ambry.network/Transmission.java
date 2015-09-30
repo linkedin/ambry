@@ -3,19 +3,15 @@ package com.github.ambry.network;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.nio.channels.WritableByteChannel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
- * Defines the interface for channel interactions. Once the connection is established, {@Selector} assigns a {@Transmission}
- * object as attachment for a key. All operations to the channel like read, write, close, etc happens via this class.
- * This class is also responsible for exposing the characteristics of the underlying channel like ready,
- * isConnected and so on.
+ * Defines the interface for channel interactions. Once the connection is established, {@link Selector} assigns
+ * a {@link Transmission} object as attachment for a key. All operations to the channel like read, write, close, etc
+ * happens via this class. This class is also responsible for exposing the characteristics of the underlying channel
+ * like ready, isConnected and so on.
  */
 public abstract class Transmission {
 
@@ -74,7 +70,7 @@ public abstract class Transmission {
   public abstract boolean ready();
 
   /**
-   * Reads a sequence of bytes from the channel into the {@NetworkReceive}
+   * Reads a sequence of bytes from the channel into the {@link NetworkReceive}
    *
    * @return true if read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
@@ -83,27 +79,28 @@ public abstract class Transmission {
       throws IOException;
 
   /**
-   * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
+   * Writes a sequence of bytes to the channel from the payload in {@link NetworkSend}
    *
-   * @returns true if {@Send} in {@NetworkSend} is complete (by writing all bytes to the channel), false otherwise
+   * @return true if {@link Send} in {@link NetworkSend} is complete (by writing all bytes to the channel),
+   * false otherwise
    * @throws IOException If some other I/O error occurs
    */
   public abstract boolean write()
       throws IOException;
 
   /**
-   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
    */
   public abstract void onSendComplete();
 
   /**
-   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
    */
   public abstract void onReceiveComplete();
 
   /**
-   * Returns true if {@NetworkReceive} is read completely
-   * @return true if {@NetworkReceive} is read completely, false otherwise
+   * Returns true if {@link NetworkReceive} is read completely
+   * @return true if {@link NetworkReceive} is read completely, false otherwise
    */
   public boolean isReadComplete() {
     if (networkReceive != null) {
@@ -114,7 +111,6 @@ public abstract class Transmission {
 
   /**
    * Returns the remote socket address of the underlying socket channel
-   * @return
    */
   public SocketAddress getRemoteSocketAddress() {
     return socketChannel.socket().getRemoteSocketAddress();
