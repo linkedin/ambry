@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
@@ -378,11 +379,14 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     if (!hasReceive()) {
       this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
-    metrics.selectorBytesReceived.update(bytesRead);
-    metrics.selectorBytesReceivedCount.inc(bytesRead);
-    logger.trace("Bytes read " + bytesRead + " from {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
-        getConnectionId());
+    long readTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
+    if (bytesRead > 0) {
+      metrics.plaintextReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
+    }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
 
@@ -423,7 +427,13 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
       do {
         netReadBuffer.flip();
+        long startTimeMs = SystemTime.getInstance().milliseconds();
         SSLEngineResult unwrapResult = sslEngine.unwrap(netReadBuffer, appReadBuffer);
+        long decryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+        logger.trace("SSL decryption time: {} ms for {} bytes", decryptionTimeMs, unwrapResult.bytesProduced());
+        if (unwrapResult.bytesProduced() > 0) {
+          metrics.sslDecryptionTimePerKB.update(decryptionTimeMs * 1024 / unwrapResult.bytesProduced());
+        }
         netReadBuffer.compact();
         // handle ssl renegotiation.
         if (unwrapResult.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
@@ -431,6 +441,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
               "SSLChannel Read begin renegotiation getConnectionId() {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshake();
+          metrics.sslRenegotiationCount.inc();
           break;
         }
 
@@ -480,9 +491,12 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         return false;
       }
     }
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     send.writeTo(this);
-    logger
-        .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), getConnectionId());
+    long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    metrics.sslSendTime.update(writeTimeMs);
+    logger.trace("Bytes written to {} using key {} Time: {}", socketChannel.socket().getRemoteSocketAddress(),
+        getConnectionId(), writeTimeMs);
     return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }
 
@@ -511,12 +525,19 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     }
 
     netWriteBuffer.clear();
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
+    long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
+    if (wrapResult.bytesConsumed() > 0) {
+      metrics.sslEncryptionTimePerKB.update(encryptionTimeMs * 1024 / wrapResult.bytesConsumed());
+    }
     netWriteBuffer.flip();
 
     //handle ssl renegotiation
     if (wrapResult.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
       handshake();
+      metrics.sslRenegotiationCount.inc();
       return written;
     }
 
@@ -580,5 +601,27 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     } catch (SSLException e) {
       logger.debug("SSLEngine.closeInBound() raised an exception.", e);
     }
+  }
+
+  /**
+   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   */
+  @Override
+  public void onSendComplete() {
+    long sendTimeMs = SystemTime.getInstance().milliseconds() - networkSend.getSendStartTimeInMs();
+    networkSend.onSendComplete();
+    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
+    metrics.sslSendBytesRate.update((long) sendBytesRate);
+  }
+
+  /**
+   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   */
+  @Override
+  public void onReceiveComplete() {
+    long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
+    double receiveBytesRate =
+        networkReceive.getReceivedBytes().sizeInBytes() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+    metrics.sslReceiveBytesRate.update((long) receiveBytesRate);
   }
 }

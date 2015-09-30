@@ -92,6 +92,16 @@ public abstract class Transmission {
       throws IOException;
 
   /**
+   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   */
+  public abstract void onSendComplete();
+
+  /**
+   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   */
+  public abstract void onReceiveComplete();
+
+  /**
    * Returns true if {@NetworkReceive} is read completely
    * @return true if {@NetworkReceive} is read completely, false otherwise
    */
@@ -100,13 +110,6 @@ public abstract class Transmission {
       return networkReceive.getReceivedBytes().isReadComplete();
     }
     return false;
-  }
-
-  /**
-   * Actions to be taken on completion of {@Send} in {@NetworkSend}
-   */
-  public void onSendComplete() {
-    this.networkSend.onSendComplete();
   }
 
   /**

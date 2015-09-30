@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -50,11 +51,14 @@ public class PlainTextTransmission extends Transmission {
     if (!hasReceive()) {
       networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
-    metrics.selectorBytesReceived.update(bytesRead);
-    metrics.selectorBytesReceivedCount.inc(bytesRead);
-    logger.trace("Bytes read " + bytesRead + " from {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
-        getConnectionId());
+    long readTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
+    if (bytesRead > 0) {
+      metrics.plaintextReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
+    }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
 
@@ -71,9 +75,12 @@ public class PlainTextTransmission extends Transmission {
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     }
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     send.writeTo(socketChannel);
-    logger
-        .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), getConnectionId());
+    long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    metrics.plaintextSendTime.update(writeTimeMs);
+    logger.trace("Bytes written to {} using key {} Time: {}",
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     return send.isSendComplete();
   }
 
@@ -93,5 +100,27 @@ public class PlainTextTransmission extends Transmission {
       metrics.selectorCloseSocketErrorCount.inc();
       logger.error("Exception closing connection to node {}:", getConnectionId(), e);
     }
+  }
+
+  /**
+   * Actions to be taken on completion of {@Send} in {@NetworkSend}
+   */
+  @Override
+  public void onSendComplete() {
+    long sendTimeMs = SystemTime.getInstance().milliseconds() - networkSend.getSendStartTimeInMs();
+    networkSend.onSendComplete();
+    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
+    metrics.plaintextSendBytesRate.update((long) sendBytesRate);
+  }
+
+  /**
+   * Actions to be taken on completion of {@BoundedByteBufferReceive} in {@NetworkReceive}
+   */
+  @Override
+  public void onReceiveComplete() {
+    long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
+    double receiveBytesRate =
+        networkReceive.getReceivedBytes().sizeInBytes() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+    metrics.plaintextReceiveBytesRate.update((long) receiveBytesRate);
   }
 }
