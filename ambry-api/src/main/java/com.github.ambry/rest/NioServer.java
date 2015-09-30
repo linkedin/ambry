@@ -6,7 +6,7 @@ package com.github.ambry.rest;
  * <p/>
  * A typical implementation of a NioServer will handle incoming connections from clients, decode the REST protocol
  * (usually HTTP), convert them to generic objects that the {@link BlobStorageService} can understand, instantiate a
- * NioServer specific implementation of {@link RestResponseHandler} to return responses to clients and push them down
+ * NioServer specific implementation of {@link RestResponseChannel} to return responses to clients and push them down
  * the pipeline. The NioServer should be non-blocking while receiving requests and sending responses. It should also
  * provide methods that the downstream can use to control the flow of data towards the {@link BlobStorageService}.
  */

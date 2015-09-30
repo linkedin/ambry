@@ -42,12 +42,17 @@ import org.junit.Assert;
 
 
 public class TestSSLUtils {
-  private final static String sslContextProtocol = "TLS";
-  private final static String sslContextProvider = "SunJSSE";
-  private final static String sslEnabledProtocol = "TLSv1";
-  private final static String endpointIdentificationAlgorithm = "HTTPS";
-  private final static String sslCipherSuits = "TLS_RSA_WITH_AES_128_CBC_SHA256";
-  private final static String trustStorePassword = "UnitTestTrustStorePassword";
+  private final static String SSL_CONTEXT_PROTOCOL = "TLS";
+  private final static String SSL_CONTEXT_PROVIDER = "SunJSSE";
+  private final static String SSL_ENABLED_PROTOCOLS = "TLSv1.2";
+  private final static String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
+  private final static String SSL_CIPHER_SUITES = "TLS_RSA_WITH_AES_128_CBC_SHA";
+  private final static String TRUSTSTORE_PASSWORD = "UnitTestTrustStorePassword";
+  private final static String CLIENT_AUTHENTICATION = "required";
+  private final static String KEYMANAGER_ALGORITHM = "PKIX";
+  private final static String TRUSTMANAGER_ALGORITHM = "PKIX";
+  private final static String KEYSTORE_TYPE = "JKS";
+  private final static String TRUSTSTORE_TYPE = "JKS";
 
   /**
    * Create a self-signed X.509 Certificate.
@@ -167,23 +172,24 @@ public class TestSSLUtils {
       certs.put(certAlias, sCert);
     }
 
-    createTrustStore(trustStoreFile.getPath(), trustStorePassword, certs);
+    createTrustStore(trustStoreFile.getPath(), TRUSTSTORE_PASSWORD, certs);
 
     Properties props = new Properties();
-    props.put("ssl.context.protocol", sslContextProtocol);
-    props.put("ssl.context.provider", sslContextProvider);
-    props.put("ssl.enabled.protocols", sslEnabledProtocol);
-    props.put("ssl.endpoint.identification.algorithm", endpointIdentificationAlgorithm);
-    props.put("ssl.client.authentication", "required");
-    props.put("ssl.keymanager.algorithm", "PKIX");
-    props.put("ssl.keystore.type", "JKS");
+    props.put("ssl.context.protocol", SSL_CONTEXT_PROTOCOL);
+    props.put("ssl.context.provider", SSL_CONTEXT_PROVIDER);
+    props.put("ssl.enabled.protocols", SSL_ENABLED_PROTOCOLS);
+    props.put("ssl.endpoint.identification.algorithm", ENDPOINT_IDENTIFICATION_ALGORITHM);
+    props.put("ssl.client.authentication", CLIENT_AUTHENTICATION);
+    props.put("ssl.keymanager.algorithm", KEYMANAGER_ALGORITHM);
+    props.put("ssl.trustmanager.algorithm", TRUSTMANAGER_ALGORITHM);
+    props.put("ssl.keystore.type", KEYSTORE_TYPE);
     props.put("ssl.keystore.path", keyStoreFile.getPath());
     props.put("ssl.keystore.password", password);
     props.put("ssl.key.password", password);
-    props.put("ssl.trustmanager.algorithm", "PKIX");
-    props.put("ssl.truststore.type", "JKS");
+    props.put("ssl.truststore.type", TRUSTSTORE_TYPE);
     props.put("ssl.truststore.path", trustStoreFile.getPath());
-    props.put("ssl.truststore.password", trustStorePassword);
+    props.put("ssl.truststore.password", TRUSTSTORE_PASSWORD);
+    props.put("ssl.cipher.suites", SSL_CIPHER_SUITES);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
@@ -209,17 +215,20 @@ public class TestSSLUtils {
 
   public static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {
     // SSLContext verify
-    Assert.assertEquals(sslContext.getProtocol(), sslContextProtocol);
-    Assert.assertEquals(sslContext.getProvider().getName(), sslContextProvider);
+    Assert.assertEquals(sslContext.getProtocol(), SSL_CONTEXT_PROTOCOL);
+    Assert.assertEquals(sslContext.getProvider().getName(), SSL_CONTEXT_PROVIDER);
 
     // SSLEngine verify
     String[] enabledProtocols = sslEngine.getEnabledProtocols();
     Assert.assertEquals(enabledProtocols.length, 1);
-    Assert.assertEquals(enabledProtocols[0], sslEnabledProtocol);
+    Assert.assertEquals(enabledProtocols[0], SSL_ENABLED_PROTOCOLS);
+    String[] enabledCipherSuite = sslEngine.getEnabledCipherSuites();
+    Assert.assertEquals(enabledCipherSuite.length, 1);
+    Assert.assertEquals(enabledCipherSuite[0], SSL_CIPHER_SUITES);
     Assert.assertEquals(sslEngine.getWantClientAuth(), false);
     if (isClient) {
       Assert.assertEquals(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm(),
-          endpointIdentificationAlgorithm);
+          ENDPOINT_IDENTIFICATION_ALGORITHM);
       Assert.assertEquals(sslEngine.getNeedClientAuth(), false);
       Assert.assertEquals(sslEngine.getUseClientMode(), true);
     } else {

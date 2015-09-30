@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * 2. Make it easy to plug in any implementation of {@link NioServer} as long as it can provide implementations that
  * abstract framework specific objects and actions (like write/read from channel) into generic APIs through
  * {@link RestRequestMetadata}, {@link RestRequestContent},
- * {@link RestResponseHandler} etc.
+ * {@link RestResponseChannel} etc.
  * 3. Provide scaling capabilities independent of any other component through implementations of
  * {@link RestRequestHandlerController} and {@link RestRequestHandler}.
  */

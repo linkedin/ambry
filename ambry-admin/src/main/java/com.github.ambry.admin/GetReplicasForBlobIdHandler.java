@@ -6,10 +6,11 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestRequestInfo;
 import com.github.ambry.rest.RestRequestMetadata;
-import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
@@ -30,7 +31,7 @@ class GetReplicasForBlobIdHandler {
    * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
    * <p/>
    * Extracts the parameters from the {@link RestRequestMetadata}, infers replicas of the blobId if possible and writes
-   * the response to the client via a {@link RestResponseHandler}.
+   * the response to the client via a {@link RestResponseChannel}.
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} of the request). Any other content is ignored.
@@ -41,7 +42,7 @@ class GetReplicasForBlobIdHandler {
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, ClusterMap clusterMap, AdminMetrics adminMetrics)
       throws RestServiceException {
-    RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
+    RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
     if (restRequestInfo.isFirstPart()) {
       logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.getReplicasForBlobIdRate.mark();
@@ -49,11 +50,13 @@ class GetReplicasForBlobIdHandler {
       try {
         String replicaStr =
             getReplicasForBlobId(restRequestInfo.getRestRequestMetadata(), clusterMap, adminMetrics).toString();
-        responseHandler.setContentType("application/json");
-        responseHandler.addToResponseBody(replicaStr.getBytes(), true);
-        responseHandler.flush();
+        responseChannel.setContentType("application/json");
+        responseChannel.write(ByteBuffer.wrap(replicaStr.getBytes()));
+        responseChannel.flush();
         logger.trace("Sent getReplicasForBlobId response for request {}",
             restRequestInfo.getRestRequestMetadata().getUri());
+      } catch (IOException e) {
+        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
       } finally {
         long processingTime = System.currentTimeMillis() - startTime;
         logger.trace("Processing getReplicasForBlobId response for request {} took {} ms",
@@ -61,7 +64,7 @@ class GetReplicasForBlobIdHandler {
         adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
-      responseHandler.onRequestComplete(null, false);
+      responseChannel.onRequestComplete(null, false);
       logger.trace("GetReplicasForBlobId request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }
