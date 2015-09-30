@@ -30,9 +30,10 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
         MessageFormatFlags.BlobUserMetadata);
-    logger.trace("GetBlobUserMetadata: Datacenter name " + datacenterName + " Connection pool " + connectionPool
-        + ", requester pool " + (requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId
-        + ", timeout " + operationTimeoutMs + ", clustermap " + (clusterMap != null));
+    logger.trace(
+        "GetBlobUserMetadata: Datacenter name " + datacenterName + " Connection pool " + (connectionPool != null)
+            + ", requester pool " + (requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId
+            + ", timeout " + operationTimeoutMs + ", clustermap " + (clusterMap != null));
     this.userMetadata = null;
   }
 
