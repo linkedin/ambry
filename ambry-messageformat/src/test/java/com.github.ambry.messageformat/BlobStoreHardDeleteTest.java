@@ -213,10 +213,14 @@ public class BlobStoreHardDeleteTest {
       hardDeletedList.add(iter.next());
     }
 
-    Assert.assertNotNull(hardDeletedList.get(0)); // msg1
-    Assert.assertNotNull(hardDeletedList.get(1)); // msg2
-    Assert.assertNotNull(hardDeletedList.get(2)); // msg4
-    Assert.assertNull(hardDeletedList.get(3)); // msg5 - NULL
+    // msg1
+    Assert.assertNotNull(hardDeletedList.get(0));
+    // msg2
+    Assert.assertNotNull(hardDeletedList.get(1));
+    // msg4
+    Assert.assertNotNull(hardDeletedList.get(2));
+    // msg5 - NULL.
+    Assert.assertNull(hardDeletedList.get(3));
   }
 }
 

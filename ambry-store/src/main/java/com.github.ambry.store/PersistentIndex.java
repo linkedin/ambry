@@ -64,7 +64,7 @@ public class PersistentIndex {
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
-  private HardDeleteThread hardDeleter;
+  protected HardDeleteThread hardDeleter;
   private Thread hardDeleteThread;
   private MessageStoreHardDelete hardDelete;
   private StoreKeyFactory factory;
@@ -962,6 +962,7 @@ public class PersistentIndex {
         }
       }
       filterDeleteEntries(messageEntries);
+      eliminateDuplicates(messageEntries);
       return new FindInfo(messageEntries, newToken);
     } catch (IOException e) {
       throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
@@ -1137,7 +1138,7 @@ public class PersistentIndex {
     }
   }
 
-  private class HardDeleteThread implements Runnable {
+  protected class HardDeleteThread implements Runnable {
     /** A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
      * hard delete will be from this range. The reason to keep this range is to finish off any incomplete and ongoing
      * hard deletes when we do a crash recovery.
@@ -1157,18 +1158,18 @@ public class PersistentIndex {
      * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
      *                           flushed, this is used to set startTokenSafeToPersist.
      */
-    FindToken startToken;
-    FindToken startTokenBeforeLogFlush;
-    FindToken startTokenSafeToPersist;
-    FindToken endToken;
-    StoreFindToken recoveryStartToken;
-    StoreFindToken recoveryEndToken;
-    HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
+    private FindToken startToken;
+    private FindToken startTokenBeforeLogFlush;
+    private FindToken startTokenSafeToPersist;
+    private FindToken endToken;
+    private StoreFindToken recoveryStartToken;
+    private StoreFindToken recoveryEndToken;
+    private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
     private final int scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     private final int messageRetentionSeconds = config.storeDeletedMessageRetentionDays * time.SecsPerDay;
-    Throttler throttler;
+    private Throttler throttler;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-    AtomicBoolean running = new AtomicBoolean(true);
+    protected AtomicBoolean running = new AtomicBoolean(true);
     boolean isCaughtUp = false;
 
     //how long to sleep if token does not advance.
@@ -1301,7 +1302,7 @@ public class PersistentIndex {
     /**
      * This method will be called before the log is flushed.
      */
-    private void preLogFlush() {
+    protected void preLogFlush() {
       /* Save the current start token before the log gets flushed */
       startTokenBeforeLogFlush = startToken;
     }
@@ -1309,7 +1310,7 @@ public class PersistentIndex {
     /**
      * This method will be called after the log is flushed.
      */
-    private void postLogFlush() {
+    protected void postLogFlush() {
       /* start token saved before the flush is now safe to be persisted */
       startTokenSafeToPersist = startTokenBeforeLogFlush;
     }
@@ -1481,7 +1482,7 @@ public class PersistentIndex {
      *
      * @return true if the token moved forward, false otherwise.
      */
-    private boolean hardDelete()
+    protected boolean hardDelete()
         throws StoreException {
       if (indexes.size() > 0) {
         final Timer.Context context = metrics.hardDeleteTime.time();

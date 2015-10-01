@@ -336,12 +336,14 @@ class HardDeleteRecoveryMetadata {
   }
 
   byte[] toBytes() {
-    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes + // headerVersion
-        MessageFormatRecord.Version_Field_Size_In_Bytes +                     // userMetadataVersion
-        Integer.SIZE / 8 +                                                      // userMetadataSize
-        MessageFormatRecord.Version_Field_Size_In_Bytes +                     // blobRecordVersion
-        Long.SIZE / 8 +                                                         // blobRecordSize
-        storeKey.sizeInBytes()];                                              // storeKey
+    // create a byte array to hold the headerVersion + userMetadataVersion + userMetadataSize + blobRecordVersion +
+    // blobRecordSize + storeKey.
+    byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
+        MessageFormatRecord.Version_Field_Size_In_Bytes +
+        Integer.SIZE / 8 +
+        MessageFormatRecord.Version_Field_Size_In_Bytes +
+        Long.SIZE / 8 +
+        storeKey.sizeInBytes()];
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
     bufWrap.putShort(headerVersion);

@@ -78,7 +78,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
 
   public static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory)
       throws IOException {
-    // read version
     short version = stream.readShort();
     switch(version) {
       case 0:

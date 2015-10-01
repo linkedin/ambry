@@ -6,16 +6,25 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -42,10 +51,33 @@ public class PersistentIndexTest {
   }
 
   class MockIndex extends PersistentIndex {
-    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        MessageStoreHardDelete messageStoreHardDelete, Time time)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
+          messageStoreHardDelete, new StoreMetrics(datadir, new MetricRegistry()), time);
+    }
+
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
+        throws StoreException {
+      this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+    }
+
+    public void setHardDeleteRunningStatus(boolean status) {
+      super.hardDeleter.running.set(status);
+    }
+
+    public boolean hardDelete()
+        throws StoreException {
+      return super.hardDeleter.hardDelete();
+    }
+
+    public void hardDeletePreLogFlush() {
+      super.hardDeleter.preLogFlush();
+    }
+
+    public void hardDeletePostLogFlush() {
+      super.hardDeleter.postLogFlush();
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
@@ -1449,7 +1481,7 @@ public class PersistentIndexTest {
     }
   }
 
-  //@Test
+  @Test
   public void testFindDeletedEntries() {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
@@ -1637,13 +1669,28 @@ public class PersistentIndexTest {
       //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d. In messageEntries, 19 comes before 20
       // as we would have ...19 20 20d 20... from the journal, and then we lookup keys in that order when filtering
       // out non-delete entries.
-      info = index.findDeletedEntriesSince(info.getFindToken(), 800, SystemTime.getInstance().milliseconds() / 1000);
+      info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
-      Assert.assertEquals(messageEntries.size(), 4);
+      Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId12);
       Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId15);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId19);
-      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId20);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), null);
+      // journal based token with offset of blobid19
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getOffset(), 2600);
+
+      //Segment 1: [1 2d 3 4 5]
+      //Segment 2: [1d 6 7 8 9]
+      //Segment 3: [6d 10d 11 12 13]
+      //Segment 4: [4d 7d 12d 14 15d]
+      //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d.
+      //journal: .... 19 20 20d 19d
+      //this time we read from the journal, so 20 will come before 19.
+      info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds() / 1000);
+      messageEntries = info.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 2);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId20);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId19);
 
       //Test end time
 
@@ -1695,6 +1742,191 @@ public class PersistentIndexTest {
       if (map != null) {
         map.cleanup();
       }
+    }
+  }
+
+  @Test
+  public void testHardDelete() {
+    // Create a mock index with regular log.
+    // perform puts to the index.
+    // perform deletes to the index.
+    // call hardDelete() explicitly (set the thread frequency time to a large number if required) -
+    // that will do findDeleted, prune and performHardDelete()
+    // perform will need a messageStoreHardDelete implementation that just returns something
+    // that will be written back. - need to implement that.
+    // disable index persistor if that can be done.
+    // call persist cleanup token and close the index. Reopen it to execute recovery path.
+    // perform hard deletes upto some point.
+    // perform more deletes.
+    // do recovery.
+
+    class HardDeleteTestHelper implements MessageStoreHardDelete {
+      private long nextOffset;
+      private long sizeOfEntry;
+      private MockIndex index;
+      private Log log;
+      HashMap<Long, MessageInfo> offsetMap;
+
+      HardDeleteTestHelper(long offset, long size) {
+        nextOffset = offset;
+        sizeOfEntry = size;
+        offsetMap = new HashMap<Long, MessageInfo>();
+      }
+
+      void setIndex(MockIndex index, Log log) {
+        this.index = index;
+        this.log = log;
+      }
+
+      void add(MockId id)
+          throws IOException, StoreException {
+        index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, nextOffset, (byte) 0, 12345)),
+            new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int)sizeOfEntry);
+        log.appendFrom(byteBuffer);
+        offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
+        nextOffset += sizeOfEntry;
+      }
+
+      void delete(MockId id)
+          throws IOException, StoreException {
+        index.markAsDeleted(id, new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int)sizeOfEntry);
+        log.appendFrom(byteBuffer);
+        nextOffset += sizeOfEntry;
+      }
+
+      @Override
+      public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+          List<byte[]> recoveryInfoList) {
+        class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
+          int count;
+          MessageReadSet readSet;
+          MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
+            this.readSet = readSet;
+            this.count = readSet.count();
+          }
+
+          @Override
+          public boolean hasNext() {
+            return count > 0;
+          }
+
+          @Override
+          public HardDeleteInfo next() {
+            if (!hasNext()) {
+              throw new NoSuchElementException();
+            }
+            -- count;
+            ByteBuffer buf = ByteBuffer.allocate((int)sizeOfEntry);
+            byte[] recoveryInfo = new byte[100];
+            Arrays.fill(recoveryInfo, (byte)0);
+            ByteBufferInputStream stream = new ByteBufferInputStream(buf);
+            ReadableByteChannel channel = Channels.newChannel(stream);
+            HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
+            return hardDeleteInfo;
+          }
+
+          @Override
+          public void remove() {
+            throw new UnsupportedOperationException();
+          }
+        };
+        return new MockMessageStoreHardDeleteIterator(readSet);
+      }
+
+      @Override
+      public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
+        return offsetMap.get(offset);
+      }
+    }
+
+    StoreFindToken token = new StoreFindToken();
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Properties props = new Properties();
+      // the test will set the tokens, so disable the index persistor.
+      props.setProperty("store.data.flush.interval.seconds", "3600");
+      props.setProperty("store.deleted.message.retention.days", "1");
+      props.setProperty("store.index.max.number.of.inmem.elements", "2");
+      // the following determines the number of entries that will be fetched at most. We need this to test the
+      // case where the endToken does not reach the journal.
+      props.setProperty("store.hard.delete.bytes.per.sec", "40");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
+
+      HardDeleteTestHelper helper = new HardDeleteTestHelper(0, 200);
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory, helper, time);
+      helper.setIndex(index, log);
+      // Setting this below will not enable the hard delete thread. This being a unit test, the methods
+      // are going to be called directly. We simply want to set the running flag to avoid those methods
+      // from bailing out prematurely.
+      index.setHardDeleteRunningStatus(true);
+
+
+      MockId blobId01 = new MockId("id01");
+      MockId blobId02 = new MockId("id02");
+      MockId blobId03 = new MockId("id03");
+      MockId blobId04 = new MockId("id04");
+      MockId blobId05 = new MockId("id05");
+      MockId blobId06 = new MockId("id06");
+      MockId blobId07 = new MockId("id07");
+      MockId blobId08 = new MockId("id08");
+      MockId blobId09 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
+      MockId blobId16 = new MockId("id16");
+      MockId blobId17 = new MockId("id17");
+      MockId blobId18 = new MockId("id18");
+      MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+
+      helper.add(blobId01);
+      helper.add(blobId02);
+      helper.add(blobId03);
+      helper.add(blobId04);
+
+      helper.delete(blobId03);
+
+      helper.add(blobId05);
+      helper.add(blobId06);
+      helper.add(blobId07);
+
+      helper.delete(blobId02);
+      helper.delete(blobId06);
+
+      // Let enough time to pass so that the above records become eligible for hard deletes.
+      time.currentMilliseconds = time.currentMilliseconds + 2 * Time.SecsPerDay * Time.MsPerSec;
+
+      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d]
+      // journal:                    [6 7 2d 6d]
+      boolean tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = endToken = 2.
+
+      // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
+      index.hardDeletePreLogFlush();
+      index.hardDeletePostLogFlush();
+
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = endToken = 4.
+    } catch (Exception e) {
+      e.printStackTrace();
+      org.junit.Assert.assertEquals(false, true);
     }
   }
 }
