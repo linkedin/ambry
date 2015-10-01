@@ -490,6 +490,7 @@ public class Selector implements Selectable {
       boolean readComplete = transmission.read();
       if (readComplete) {
         this.completedReceives.add(transmission.getNetworkReceive());
+        transmission.onReceiveComplete();
         transmission.clearReceive();
       }
     } finally {
