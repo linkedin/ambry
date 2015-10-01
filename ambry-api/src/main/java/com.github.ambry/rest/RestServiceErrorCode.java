@@ -79,9 +79,9 @@ public enum RestServiceErrorCode {
    */
   RequestHandlerUnavailable,
   /**
-   * Indicates that there is no reference of a {@link RestRequestMetadata} in the {@link RestRequestInfo}.
+   * Indicates that there is no reference of a {@link RestRequest} in the {@link RestRequestInfo}.
    */
-  RequestMetadataNull,
+  RequestNull,
   /**
    * Indicates that there was a problem building the response (usually happens when the response is JSON).
    */
@@ -138,7 +138,7 @@ public enum RestServiceErrorCode {
       case InternalObjectCreationError:
       case RequestHandlerSelectionError:
       case RequestHandlerUnavailable:
-      case RequestMetadataNull:
+      case RequestNull:
       case ResponseBuildingFailure:
       case ResponseChannelNull:
       case ResponseMetadataBuildingFailure:

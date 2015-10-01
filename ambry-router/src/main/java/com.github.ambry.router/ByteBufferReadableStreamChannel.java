@@ -32,13 +32,12 @@ class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
+    int bytesWritten = -1;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
     } else {
       try {
         bufferReadLock.lock();
-        bytesWritten = -1;
         if (buffer.hasRemaining()) {
           bytesWritten = channel.write(buffer);
         }

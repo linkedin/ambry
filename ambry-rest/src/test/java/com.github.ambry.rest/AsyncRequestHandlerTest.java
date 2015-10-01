@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -112,7 +113,7 @@ public class AsyncRequestHandlerTest {
   public void handleRequestWithBadInputTest()
       throws Exception {
     handleRequestInfoWithRestRequestInfoNull(asyncRequestHandler);
-    handleRequestInfoWithRestRequestMetadataNull(asyncRequestHandler);
+    handleRequestInfoWithRestRequestNull(asyncRequestHandler);
     handleRequestInfoWithRestResponseChannelNull(asyncRequestHandler);
   }
 
@@ -141,7 +142,7 @@ public class AsyncRequestHandlerTest {
   }
 
   /**
-   * Checks {@link AsyncRequestHandler#onRequestComplete(RestRequestMetadata)} functionality with good input.
+   * Checks {@link AsyncRequestHandler#onRequestComplete(RestRequest)} functionality with good input.
    * @throws IOException
    * @throws JSONException
    * @throws URISyntaxException
@@ -149,14 +150,14 @@ public class AsyncRequestHandlerTest {
   @Test
   public void onRequestCompleteWithRequestNotNullTest()
       throws IOException, JSONException, URISyntaxException {
-    RestRequestMetadata restRequestMetadata = createRestRequest(RestMethod.GET, "/", new JSONObject());
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
     // Does nothing for now so this is a dummy test. If functionality is introduced in onRequestComplete(),
     // this has to be updated with a check to verify state.
-    asyncRequestHandler.onRequestComplete(restRequestMetadata);
+    asyncRequestHandler.onRequestComplete(restRequest);
   }
 
   /**
-   * Checks {@link AsyncRequestHandler#onRequestComplete(RestRequestMetadata)} functionality with bad input.
+   * Checks {@link AsyncRequestHandler#onRequestComplete(RestRequest)} functionality with bad input.
    * @throws IOException
    * @throws JSONException
    */
@@ -170,19 +171,19 @@ public class AsyncRequestHandlerTest {
 
   // helpers
   // general
-  private RestRequestMetadata createRestRequest(RestMethod method, String uri, JSONObject headers)
-      throws JSONException, URISyntaxException {
+  private RestRequest createRestRequest(RestMethod method, String uri, JSONObject headers)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject data = new JSONObject();
-    data.put(MockRestRequestMetadata.REST_METHOD_KEY, method);
-    data.put(MockRestRequestMetadata.URI_KEY, uri);
+    data.put(MockRestRequest.REST_METHOD_KEY, method);
+    data.put(MockRestRequest.URI_KEY, uri);
     if (headers != null) {
-      data.put(MockRestRequestMetadata.HEADERS_KEY, headers);
+      data.put(MockRestRequest.HEADERS_KEY, headers);
     }
-    return new MockRestRequestMetadata(data);
+    return new MockRestRequest(data);
   }
 
   private RestRequestContent createRestContent(boolean isLast)
-      throws InstantiationException, JSONException {
+      throws JSONException {
     JSONObject data = new JSONObject();
     data.put(MockRestRequestContent.IS_LAST_KEY, isLast);
     data.put(MockRestRequestContent.CONTENT_KEY, "");
@@ -190,17 +191,16 @@ public class AsyncRequestHandlerTest {
   }
 
   private RestRequestInfo createRestRequestInfo(RestMethod method, String uri, JSONObject headers)
-      throws JSONException, URISyntaxException {
-    RestRequestMetadata restRequestMetadata = createRestRequest(method, uri, headers);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseChannel(), true);
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    RestRequest restRequest = createRestRequest(method, uri, headers);
+    return new RestRequestInfo(restRequest, null, new MockRestResponseChannel(), true);
   }
 
   private void finishRequest(RestRequestInfo restRequestInfo, RestRequestInfoEventListener resultListener,
       RestRequestHandler requestHandler)
-      throws InstantiationException, JSONException, RestServiceException {
-    RestRequestInfo lastRestRequestInfo =
-        new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), createRestContent(true),
-            restRequestInfo.getRestResponseChannel());
+      throws JSONException, RestServiceException {
+    RestRequestInfo lastRestRequestInfo = new RestRequestInfo(restRequestInfo.getRestRequest(), createRestContent(true),
+        restRequestInfo.getRestResponseChannel());
     lastRestRequestInfo.addListener(resultListener);
     requestHandler.handleRequest(lastRestRequestInfo);
   }
@@ -254,17 +254,17 @@ public class AsyncRequestHandlerTest {
     doHandleRequestFailureTest(null, RestServiceErrorCode.RestRequestInfoNull, requestHandler);
   }
 
-  private void handleRequestInfoWithRestRequestMetadataNull(RestRequestHandler requestHandler)
+  private void handleRequestInfoWithRestRequestNull(RestRequestHandler requestHandler)
       throws Exception {
     MockRestResponseChannel responseChannel = new MockRestResponseChannel();
     RestRequestInfo restRequestInfo = new RestRequestInfo(null, null, responseChannel, true);
-    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.RequestMetadataNull, requestHandler);
+    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.RequestNull, requestHandler);
   }
 
   private void handleRequestInfoWithRestResponseChannelNull(RestRequestHandler requestHandler)
       throws Exception {
-    RestRequestMetadata restRequestMetadata = createRestRequest(RestMethod.GET, "/", new JSONObject());
-    RestRequestInfo restRequestInfo = new RestRequestInfo(restRequestMetadata, null, null, true);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject());
+    RestRequestInfo restRequestInfo = new RestRequestInfo(restRequest, null, null, true);
     doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ResponseChannelNull, requestHandler);
   }
 

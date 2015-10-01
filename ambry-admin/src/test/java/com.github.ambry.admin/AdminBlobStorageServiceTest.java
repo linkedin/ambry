@@ -6,16 +6,17 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestRequestContent;
-import com.github.ambry.rest.MockRestRequestMetadata;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestContent;
 import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestRequestMetadata;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Properties;
@@ -90,14 +91,14 @@ public class AdminBlobStorageServiceTest {
    * This tests for exceptions thrown when an {@link AdminBlobStorageService} instance is used without calling
    * {@link AdminBlobStorageService#start()} first.
    * first.
-   * @throws InstantiationException
    * @throws JSONException
-   * @throws URISyntaxException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
    */
   @Test
   public void useServiceWithoutStartTest()
-      throws InstantiationException, JSONException, URISyntaxException, RestServiceException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     AdminBlobStorageService adminBlobStorageService = getAdminBlobStorageService(clusterMap);
     // fine to use without start.
     doEchoTest(adminBlobStorageService);
@@ -107,11 +108,12 @@ public class AdminBlobStorageServiceTest {
    * Tests blob GET operations.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleGetTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.GET, "/", new JSONObject());
     try {
       adminBlobStorageService.handleGet(restRequestInfo);
@@ -124,11 +126,12 @@ public class AdminBlobStorageServiceTest {
    * Tests blob POST operations.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handlePostTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.POST, "/", new JSONObject());
     try {
       adminBlobStorageService.handlePost(restRequestInfo);
@@ -141,11 +144,12 @@ public class AdminBlobStorageServiceTest {
    * Tests blob DELETE operations.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleDeleteTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.DELETE, "/", new JSONObject());
     try {
       adminBlobStorageService.handleDelete(restRequestInfo);
@@ -158,11 +162,12 @@ public class AdminBlobStorageServiceTest {
    * Tests blob HEAD operations.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleHeadTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.HEAD, "/", new JSONObject());
     try {
       adminBlobStorageService.handleHead(restRequestInfo);
@@ -173,14 +178,14 @@ public class AdminBlobStorageServiceTest {
 
   /**
    * Tests the {@link AdminOperationType#echo} admin operation. Checks to see that the echo matches input text.
-   * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleEchoTest()
-      throws InstantiationException, JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     doEchoTest(adminBlobStorageService);
   }
 
@@ -189,11 +194,12 @@ public class AdminBlobStorageServiceTest {
    * required parameters.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleEchoWithBadInputTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     try {
       // bad input - uri does not have text that needs to be echoed.
       RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.GET, AdminOperationType.echo.toString(), null);
@@ -210,14 +216,14 @@ public class AdminBlobStorageServiceTest {
    * For the each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created.
    * The string representation is sent to the {@link AdminBlobStorageService} as a part of getReplicasForBlobId request.
    * The returned replica list is checked for equality against a locally obtained replica list.
-   * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleGetReplicasForBlobIdTest()
-      throws InstantiationException, JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
@@ -238,11 +244,12 @@ public class AdminBlobStorageServiceTest {
    * do not include required parameters.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void handleGetReplicasForBlobIdWithBadInputTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     try {
       // bad input - uri missing the blob id whose replicas need to be returned.
       RestRequestInfo restRequestInfo =
@@ -277,11 +284,12 @@ public class AdminBlobStorageServiceTest {
    * Tests reaction of GET to operations that are unknown/not defined.
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void unknownCustomGetOperationTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     try {
       RestRequestInfo restRequestInfo =
           createRestRequestInfo(RestMethod.GET, "unknownOperation?dummyParam=dummyValue", null);
@@ -297,11 +305,12 @@ public class AdminBlobStorageServiceTest {
    * 1. No operation specified
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   @Test
   public void customGetWithBadUriTest()
-      throws JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     // No operation specified
     try {
       // bad input - no operation specified
@@ -324,18 +333,19 @@ public class AdminBlobStorageServiceTest {
    * @return A {@link RestRequestInfo} object that defines the operation required by the input along with a
    * {@link com.github.ambry.rest.RestResponseChannel}.
    * @throws JSONException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   private RestRequestInfo createRestRequestInfo(RestMethod restMethod, String uri, JSONObject headers)
-      throws JSONException, URISyntaxException {
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
-    request.put(MockRestRequestMetadata.REST_METHOD_KEY, restMethod);
-    request.put(MockRestRequestMetadata.URI_KEY, uri);
+    request.put(MockRestRequest.REST_METHOD_KEY, restMethod);
+    request.put(MockRestRequest.URI_KEY, uri);
     if (headers != null) {
-      request.put(MockRestRequestMetadata.HEADERS_KEY, headers);
+      request.put(MockRestRequest.HEADERS_KEY, headers);
     }
-    RestRequestMetadata restRequestMetadata = new MockRestRequestMetadata(request);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseChannel(), true);
+    RestRequest restRequest = new MockRestRequest(request);
+    return new RestRequestInfo(restRequest, null, new MockRestResponseChannel(), true);
   }
 
   /**
@@ -356,14 +366,13 @@ public class AdminBlobStorageServiceTest {
    * {@link AdminBlobStorageService} interprets it correctly.
    * @param adminBlobStorageService instance of {@link AdminBlobStorageService} to use.
    * @param restRequestInfo {@link RestRequestInfo} containing all the details about the request.
-   * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
    */
   private void finishGetRequest(AdminBlobStorageService adminBlobStorageService, RestRequestInfo restRequestInfo)
-      throws InstantiationException, JSONException, RestServiceException {
+      throws JSONException, RestServiceException {
     RestRequestContent restRequestContent = createRestContent(null, true);
-    adminBlobStorageService.handleGet(new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), restRequestContent,
+    adminBlobStorageService.handleGet(new RestRequestInfo(restRequestInfo.getRestRequest(), restRequestContent,
         restRequestInfo.getRestResponseChannel()));
     assertFalse("Channel is not closed", ((MockRestResponseChannel) restRequestInfo.getRestResponseChannel()).isOpen());
   }
@@ -373,11 +382,10 @@ public class AdminBlobStorageServiceTest {
    * @param content the actual content that forms the underlying data.
    * @param isLast true if this the last part of the content in a request.
    * @return A {@link RestRequestContent} object with the specified content and behaviour.
-   * @throws InstantiationException
    * @throws JSONException
    */
   private RestRequestContent createRestContent(String content, boolean isLast)
-      throws InstantiationException, JSONException {
+      throws JSONException {
     JSONObject data = new JSONObject();
     data.put(MockRestRequestContent.IS_LAST_KEY, isLast);
     if (content == null) {
@@ -391,13 +399,13 @@ public class AdminBlobStorageServiceTest {
    * Does the {@link AdminOperationType#echo} test by creating a {@link RestRequestInfo} specifying echo, sends it to
    * the {@link AdminBlobStorageService} instance and checks equality of response with input text.
    * @param adminBlobStorageService instance of {@link AdminBlobStorageService} that should be used for the echo.
-   * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
+   * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   private void doEchoTest(AdminBlobStorageService adminBlobStorageService)
-      throws InstantiationException, JSONException, RestServiceException, URISyntaxException {
+      throws JSONException, RestServiceException, UnsupportedEncodingException, URISyntaxException {
     String inputText = "textToBeEchoed";
     String uri = AdminOperationType.echo + "?" + EchoHandler.TEXT_KEY + "=" + inputText;
     RestRequestInfo restRequestInfo = createRestRequestInfo(RestMethod.GET, uri, null);
@@ -420,7 +428,7 @@ public class AdminBlobStorageServiceTest {
   // handleGetReplicasForBlobIdTest() helpers
   // handleGetReplicasForBlobIdWithBadInputTest() helpers
   private RestRequestInfo createGetReplicasForBlobIdRestRequestInfo(String blobId)
-      throws JSONException, URISyntaxException {
+      throws JSONException, URISyntaxException, UnsupportedEncodingException {
     String uri = AdminOperationType.getReplicasForBlobId + "?" + GetReplicasForBlobIdHandler.BLOB_ID_KEY + "=" + blobId;
     return createRestRequestInfo(RestMethod.GET, uri, null);
   }

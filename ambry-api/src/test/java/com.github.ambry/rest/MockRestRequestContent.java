@@ -1,5 +1,12 @@
 package com.github.ambry.rest;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -16,19 +23,60 @@ public class MockRestRequestContent implements RestRequestContent {
   public static String IS_LAST_KEY = "isLast";
 
   private final boolean isLast;
-  private final byte[] content;
+  private final ByteBuffer contentBuffer;
+
+  private final ReentrantLock bufferReadLock = new ReentrantLock();
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final ReentrantLock referenceCountLock = new ReentrantLock();
+  private final AtomicInteger referenceCount = new AtomicInteger(0);
 
   public MockRestRequestContent(JSONObject data)
-      throws InstantiationException {
-    try {
-      if (data.has(IS_LAST_KEY) && data.has(CONTENT_KEY)) {
-        isLast = data.getBoolean(IS_LAST_KEY);
-        content = data.get(CONTENT_KEY).toString().getBytes();
-      } else {
-        throw new InstantiationException("Given JSONObject cannot be converted to MockRestRequestContent");
+      throws JSONException {
+    contentBuffer = ByteBuffer.wrap(data.get(CONTENT_KEY).toString().getBytes());
+    isLast = data.getBoolean(IS_LAST_KEY);
+  }
+
+  @Override
+  public long getSize() {
+    return contentBuffer.capacity();
+  }
+
+  @Override
+  public int read(WritableByteChannel channel)
+      throws IOException {
+    int bytesWritten = -1;
+    if (!channelOpen.get()) {
+      throw new ClosedChannelException();
+    } else {
+      try {
+        bufferReadLock.lock();
+        if (contentBuffer.hasRemaining()) {
+          bytesWritten = channel.write(contentBuffer);
+        }
+      } finally {
+        bufferReadLock.unlock();
       }
-    } catch (JSONException e) {
-      throw new InstantiationException("Could not retrieve some keys from the JSONObject " + e);
+    }
+    return bytesWritten;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    if (channelOpen.compareAndSet(true, false)) {
+      try {
+        bufferReadLock.lock();
+        while (referenceCount.get() > 0) {
+          release();
+        }
+      } finally {
+        bufferReadLock.unlock();
+      }
     }
   }
 
@@ -38,22 +86,34 @@ public class MockRestRequestContent implements RestRequestContent {
   }
 
   @Override
-  public int getContentSize() {
-    return content.length;
-  }
-
-  @Override
-  public void getBytes(int srcIndex, byte[] dst, int dstIndex, int length) {
-    System.arraycopy(content, srcIndex, dst, dstIndex, length);
-  }
-
-  @Override
   public void retain() {
-    //nothing to do
+    try {
+      referenceCountLock.lock();
+      if (isOpen()) {
+        referenceCount.incrementAndGet();
+      } else {
+        // this is specifically in place so that we know when a piece of code retains after close. Real implementations
+        // might (or might not) quietly handle this but in tests we want to know when we retain after close.
+        throw new IllegalStateException("Trying to retain content after closing channel");
+      }
+    } finally {
+      referenceCountLock.unlock();
+    }
   }
 
   @Override
   public void release() {
-    //nothing to do
+    try {
+      referenceCountLock.lock();
+      if (referenceCount.get() <= 0) {
+        // this is specifically in place so that we know when a piece of code releases too much. Real implementations
+        // might (or might not) quietly handle this but in tests we want to know when we release too much.
+        throw new IllegalStateException("Content has been released more times than it has been retained");
+      } else {
+        referenceCount.decrementAndGet();
+      }
+    } finally {
+      referenceCountLock.unlock();
+    }
   }
 }

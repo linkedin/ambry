@@ -451,7 +451,7 @@ enum TestingUri {
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private ChannelHandlerContext ctx;
-  private RestRequestMetadata request;
+  private RestRequest request;
   private RestResponseChannel restResponseChannel;
 
   @Override
@@ -492,7 +492,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleRequest(HttpRequest httpRequest)
       throws RestServiceException, IOException {
     if (request == null) {
-      request = new NettyRequestMetadata(httpRequest);
+      request = new NettyRequest(httpRequest);
       restResponseChannel.setContentType("text/plain; charset=UTF-8");
       TestingUri uri = TestingUri.getTestingURI(request.getUri());
       switch (uri) {

@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * 1. To support ANY RESTful frontend service as long as it can provide an implementation of {@link BlobStorageService}.
  * 2. Make it easy to plug in any implementation of {@link NioServer} as long as it can provide implementations that
  * abstract framework specific objects and actions (like write/read from channel) into generic APIs through
- * {@link RestRequestMetadata}, {@link RestRequestContent},
+ * {@link RestRequest}, {@link RestRequestContent},
  * {@link RestResponseChannel} etc.
  * 3. Provide scaling capabilities independent of any other component through implementations of
  * {@link RestRequestHandlerController} and {@link RestRequestHandler}.

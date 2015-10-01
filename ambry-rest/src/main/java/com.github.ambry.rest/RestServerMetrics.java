@@ -48,7 +48,7 @@ class RestServerMetrics {
   public final Counter asyncRequestHandlerQueueOfferInterruptedError;
   public final Counter asyncRequestHandlerRestRequestInfoNullError;
   public final Counter asyncRequestHandlerRestResponseChannelNullError;
-  public final Counter asyncRequestHandlerRestRequestMetadataNullError;
+  public final Counter asyncRequestHandlerRestRequestNullError;
   public final Counter asyncRequestHandlerUnavailableError;
   public final Counter asyncRequestHandlerRequestAlreadyInFlightError;
   public final Counter asyncRequestHandlerShutdownError;
@@ -98,8 +98,8 @@ class RestServerMetrics {
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RestRequestInfoNullError"));
     asyncRequestHandlerRestResponseChannelNullError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ResponseChannelNullError"));
-    asyncRequestHandlerRestRequestMetadataNullError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RestRequestMetadataNullError"));
+    asyncRequestHandlerRestRequestNullError =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RestRequestNullError"));
     asyncRequestHandlerUnavailableError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "UnavailableError"));
     asyncRequestHandlerRequestAlreadyInFlightError =

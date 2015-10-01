@@ -29,7 +29,7 @@ public interface BlobStorageService {
   /**
    * Handles a GET operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
+   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
    * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
@@ -53,7 +53,7 @@ public interface BlobStorageService {
   /**
    * Handles a POST operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
+   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
    * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
@@ -77,7 +77,7 @@ public interface BlobStorageService {
   /**
    * Handles a DELETE operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
+   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
    * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
@@ -101,7 +101,7 @@ public interface BlobStorageService {
   /**
    * Handles a HEAD operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
+   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
    * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>

@@ -11,12 +11,12 @@ import static org.junit.Assert.fail;
 
 
 /**
- * Tests functionality of {@link NettyRequestMetadata}.
+ * Tests functionality of {@link NettyRequest}.
  */
-public class NettyRequestMetadataTest {
+public class NettyRequestTest {
 
   /**
-   * Tests conversion of {@link HttpRequest} to {@link NettyRequestMetadata} given good input.
+   * Tests conversion of {@link HttpRequest} to {@link NettyRequest} given good input.
    * @throws RestServiceException
    */
   @Test
@@ -25,29 +25,29 @@ public class NettyRequestMetadataTest {
     String key = "key";
     String value = "value";
     String uriAttachment = "?" + key + "=" + value;
-    NettyRequestMetadata nettyRequest;
+    NettyRequest nettyRequest;
     String uri;
 
     uri = "/GET" + uriAttachment;
-    nettyRequest = new NettyRequestMetadata(createRequest(HttpMethod.GET, uri, key, value));
+    nettyRequest = new NettyRequest(createRequest(HttpMethod.GET, uri, key, value));
     validateRequest(nettyRequest, RestMethod.GET, uri, key, value);
 
     uri = "/POST" + uriAttachment;
-    nettyRequest = new NettyRequestMetadata(createRequest(HttpMethod.POST, uri, key, value));
+    nettyRequest = new NettyRequest(createRequest(HttpMethod.POST, uri, key, value));
     validateRequest(nettyRequest, RestMethod.POST, uri, key, value);
 
     uri = "/DELETE" + uriAttachment;
-    nettyRequest = new NettyRequestMetadata(createRequest(HttpMethod.DELETE, uri, key, value));
+    nettyRequest = new NettyRequest(createRequest(HttpMethod.DELETE, uri, key, value));
     validateRequest(nettyRequest, RestMethod.DELETE, uri, key, value);
 
     uri = "/HEAD" + uriAttachment;
-    nettyRequest = new NettyRequestMetadata(createRequest(HttpMethod.HEAD, uri, key, value));
+    nettyRequest = new NettyRequest(createRequest(HttpMethod.HEAD, uri, key, value));
     validateRequest(nettyRequest, RestMethod.HEAD, uri, key, value);
   }
 
   /**
-   * Tests conversion of {@link HttpRequest} to {@link NettyRequestMetadata} given bad input (i.e. checks for the
-   * correct {@link RestServiceErrorCode})
+   * Tests conversion of {@link HttpRequest} to {@link NettyRequest} given bad input (i.e. checks for the correct
+   * exception and {@link RestServiceErrorCode} if any).
    * @throws RestServiceException
    */
   @Test
@@ -55,16 +55,16 @@ public class NettyRequestMetadataTest {
       throws RestServiceException {
     // null input.
     try {
-      new NettyRequestMetadata(null);
-      fail("Provided null input to NettyRequestMetadata, yet it did not fail");
+      new NettyRequest(null);
+      fail("Provided null input to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
 
     // unknown http method
     try {
-      new NettyRequestMetadata(createRequest(HttpMethod.TRACE, "/", null, null));
-      fail("Unknown http method was supplied to NettyRequestMetadata. It should have failed to construct");
+      new NettyRequest(createRequest(HttpMethod.TRACE, "/", null, null));
+      fail("Unknown http method was supplied to NettyRequest. It should have failed to construct");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", e.getErrorCode(), RestServiceErrorCode.UnsupportedHttpMethod);
     }
@@ -81,8 +81,7 @@ public class NettyRequestMetadataTest {
   }
 
   // conversionWithGoodInputTest() helpers
-  private void validateRequest(NettyRequestMetadata nettyRequest, RestMethod restMethod, String uri, String key,
-      String value) {
+  private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, String key, String value) {
     assertEquals("Mismatch in rest method", restMethod, nettyRequest.getRestMethod());
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());

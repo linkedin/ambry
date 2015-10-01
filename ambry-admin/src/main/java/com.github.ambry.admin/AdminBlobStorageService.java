@@ -2,8 +2,8 @@ package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestRequestMetadata;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import org.slf4j.Logger;
@@ -42,10 +42,10 @@ class AdminBlobStorageService implements BlobStorageService {
   @Override
   public void handleGet(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    RestRequestMetadata restRequestMetadata = restRequestInfo.getRestRequestMetadata();
-    logger.trace("Handling GET request - {}", restRequestMetadata.getUri());
+    RestRequest restRequest = restRequestInfo.getRestRequest();
+    logger.trace("Handling GET request - {}", restRequest.getUri());
     try {
-      String operationInUri = getOperationFromRequestUri(restRequestMetadata);
+      String operationInUri = getOperationFromRequestUri(restRequest);
       logger.trace("GET operation requested - {}", operationInUri);
       AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
       switch (operationType) {
@@ -102,11 +102,11 @@ class AdminBlobStorageService implements BlobStorageService {
 
   /**
    * Looks at the URI to determine the type of operation required.
-   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
    * @return extracted operation type from the uri.
    */
-  private String getOperationFromRequestUri(RestRequestMetadata restRequestMetadata) {
-    String path = restRequestMetadata.getPath();
+  private String getOperationFromRequestUri(RestRequest restRequest) {
+    String path = restRequest.getPath();
     return (path.startsWith("/") ? path.substring(1, path.length()) : path);
   }
 }

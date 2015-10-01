@@ -25,11 +25,11 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  * <p/>
  * It processes a request (in parts) by converting it from Netty specific objects ({@link HttpObject},
  * {@link HttpRequest}, {@link HttpContent}) into generic objects that all the RESTful layers can understand
- * ({@link RestRequestMetadata}, {@link RestRequestContent}) and passes it down the
+ * ({@link RestRequest}, {@link RestRequestContent}) and passes it down the
  * pipeline  to a {@link BlobStorageService} through a {@link RestRequestHandler}.
  * <p/>
  * It is also responsible for maintaining three critical pieces of state: -
- * 1. {@link RestRequestMetadata} of a request - The same reference of {@link RestRequestMetadata} has to be attached
+ * 1. {@link RestRequest} of a request - The same reference of {@link RestRequest} has to be attached
  * to each part of a single request to identify them as belonging to the same request. This is required by the
  * underlying layers.
  * 2. {@link RestRequestHandler} assigned to handle the request - All parts of a single request have to be assigned to
@@ -55,7 +55,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private ChannelHandlerContext ctx = null;
-  private RestRequestMetadata request = null;
+  private RestRequest request = null;
   private RestRequestHandler requestHandler = null;
   private RestResponseChannel responseChannel = null;
 
@@ -214,7 +214,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   /**
    * Handles a {@link HttpRequest}.
    * <p/>
-   * Does some state maintenance before passing a {@link RestRequestInfo} containing the {@link RestRequestMetadata}
+   * Does some state maintenance before passing a {@link RestRequestInfo} containing the {@link RestRequest}
    * wrapping this {@link HttpRequest} and an instance of {@link RestResponseChannel} to the {@link RestRequestHandler}.
    * @param httpRequest the {@link HttpRequest} that needs to be handled.
    * @throws RestServiceException if there is an error handling the current {@link HttpRequest}.
@@ -222,10 +222,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private void handleRequest(HttpRequest httpRequest)
       throws RestServiceException {
     // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
-    // attach the same instance of RestRequestMetadata to each part of the same request.
+    // attach the same instance of RestRequest to each part of the same request.
     if (request == null) {
       nettyMetrics.requestArrivalRate.mark();
-      request = new NettyRequestMetadata(httpRequest);
+      request = new NettyRequest(httpRequest);
       logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
       requestHandler.handleRequest(new RestRequestInfo(request, null, responseChannel, true));
     } else {
@@ -240,7 +240,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   /**
    * Handles a {@link HttpContent}.
    * <p/>
-   * Checks to see that a valid {@link RestRequestMetadata} is available for bundling with this part of the request and
+   * Checks to see that a valid {@link RestRequest} is available for bundling with this part of the request and
    * passes a {@link RestRequestInfo} containing a {@link RestRequestContent} wrapping this
    * {@link HttpContent} and an instance of {@link RestResponseChannel} to the {@link RestRequestHandler}.
    * @param httpContent the {@link HttpContent} that needs to be handled.

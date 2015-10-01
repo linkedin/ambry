@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
  * caller.
  * <p/>
  * It provides information to associate the piece (represented by {@link RestRequestContent} to the larger request of
- * which it is a part through the {@link RestRequestMetadata} and a reference to a {@link RestResponseChannel} through
+ * which it is a part through the {@link RestRequest} and a reference to a {@link RestResponseChannel} through
  * which response can be returned to the client.
  * <p/>
  * Typically this is the unit of communication between the {@link NioServer} and the {@link BlobStorageService}.
@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
 public class RestRequestInfo {
 
   private final boolean isFirstPart;
-  private final RestRequestMetadata restRequestMetadata;
+  private final RestRequest restRequest;
   private final RestRequestContent restRequestContent;
   private final RestResponseChannel restResponseChannel;
   private final AtomicBoolean operationComplete = new AtomicBoolean(false);
@@ -41,10 +41,10 @@ public class RestRequestInfo {
 
   /**
    * Metadata that is needed to process every piece (like RestMethod, URI etc).
-   * @return the {@link RestRequestMetadata} representing metadata about the request.
+   * @return the {@link RestRequest} representing metadata about the request.
    */
-  public RestRequestMetadata getRestRequestMetadata() {
-    return restRequestMetadata;
+  public RestRequest getRestRequest() {
+    return restRequest;
   }
 
   /**
@@ -52,7 +52,7 @@ public class RestRequestInfo {
    * <p/>
    * For the very first RestRequestInfo object of a request this will be null.
    * <p/>
-   * Pieces that belong to a single request are expected to have a reference to the same {@link RestRequestMetadata}.
+   * Pieces that belong to a single request are expected to have a reference to the same {@link RestRequest}.
    * @return the {@link RestRequestContent} containing content that might be a piece of a larger request.
    */
   public RestRequestContent getRestRequestContent() {
@@ -67,14 +67,14 @@ public class RestRequestInfo {
     return restResponseChannel;
   }
 
-  public RestRequestInfo(RestRequestMetadata restRequestMetadata, RestRequestContent restRequestContent,
+  public RestRequestInfo(RestRequest restRequest, RestRequestContent restRequestContent,
       RestResponseChannel restResponseChannel) {
-    this(restRequestMetadata, restRequestContent, restResponseChannel, false);
+    this(restRequest, restRequestContent, restResponseChannel, false);
   }
 
-  public RestRequestInfo(RestRequestMetadata restRequestMetadata, RestRequestContent restRequestContent,
+  public RestRequestInfo(RestRequest restRequest, RestRequestContent restRequestContent,
       RestResponseChannel restResponseChannel, boolean isFirstPart) {
-    this.restRequestMetadata = restRequestMetadata;
+    this.restRequest = restRequest;
     this.restRequestContent = restRequestContent;
     this.restResponseChannel = restResponseChannel;
     this.isFirstPart = isFirstPart;
@@ -128,7 +128,7 @@ public class RestRequestInfo {
 
   @Override
   public String toString() {
-    return "Request metadata: " + restRequestMetadata + " Request content: " + restRequestContent
-        + " Response channel: " + restResponseChannel;
+    return "Request metadata: " + restRequest + " Request content: " + restRequestContent + " Response channel: "
+        + restResponseChannel;
   }
 }

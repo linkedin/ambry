@@ -1,5 +1,9 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.router.ReadableStreamChannel;
+import java.io.IOException;
+
+
 /**
  * RestRequestContent represents piece of content in a request. It is meant to be a generic object that can be
  * understood by all the layers in a RESTful frontend. It will not contain any metadata about the request itself.
@@ -7,34 +11,16 @@ package com.github.ambry.rest;
  * It is possible that the underlying content is reference counted so it is important to retain content when processing
  * it async and to release it when done processing.
  * <p/>
- * Implementations are expected to be thread-safe (for {@link RestRequestContent#retain()} and
- * {@link RestRequestContent#release()}).
+ * Closing this channel also releases retained content.
+ * <p/>
+ * Implementations are expected to be thread-safe.
  */
-public interface RestRequestContent {
+public interface RestRequestContent extends ReadableStreamChannel {
   /**
    * Used to check if this is the last chunk of a particular request.
    * @return whether this is the last chunk.
    */
   public boolean isLast();
-
-  /**
-   * Gets the size of the content.
-   * @return size of content.
-   */
-  public int getContentSize();
-
-  /**
-   * Transfers the content of specified length in the form of bytes starting at the specified absolute srcIndex to the
-   * destination starting at the specified absolute dstIndex.
-   * <p/>
-   * Will throw exceptions if srcIndex < 0, dstIndex < 0, length < 0, src does not have enough data or if dst does not
-   * have enough space.
-   * @param srcIndex the index to start from in the underlying content.
-   * @param dst the destination for the bytes requested.
-   * @param dstIndex the index from which the copying has to start in {@code dst}.
-   * @param length the number of bytes to get.
-   */
-  public void getBytes(int srcIndex, byte[] dst, int dstIndex, int length);
 
   /**
    * If the underlying content is reference counted, increase the reference count so that the it is not lost to
@@ -44,7 +30,19 @@ public interface RestRequestContent {
 
   /**
    * If the underlying content is reference counted, decrease the reference count so that it can be recycled, clean up
-   * any resources and do work that needs to be done at the end of the lifecycle.
+   * any resources and do work that needs to be done at the end of the lifecycle if required.
    */
   public void release();
+
+  /**
+   * Closes the content channel and releases all of the resources associated with it. The reference count of the
+   * underlying content will be reset to the value it would have been if no {@link #retain()}s or {@link #release()}s
+   * had been executed through this class.
+   * <p/>
+   * {@inheritDoc}
+   * @throws IOException if there is an I/O error while closing the content channel.
+   */
+  @Override
+  public void close()
+      throws IOException;
 }

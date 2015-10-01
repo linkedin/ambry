@@ -37,7 +37,7 @@ public class MockRestRequestHandler implements RestRequestHandler {
   @Override
   public void handleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+    RestMethod restMethod = restRequestInfo.getRestRequest().getRestMethod();
     switch (restMethod) {
       case GET:
         blobStorageService.handleGet(restRequestInfo);
@@ -58,8 +58,8 @@ public class MockRestRequestHandler implements RestRequestHandler {
   }
 
   @Override
-  public void onRequestComplete(RestRequestMetadata restRequestMetadata) {
-    if (restRequestMetadata != null && THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI.equals(restRequestMetadata.getUri())) {
+  public void onRequestComplete(RestRequest restRequest) {
+    if (restRequest != null && THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI.equals(restRequest.getUri())) {
       throw new RuntimeException(THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI);
     }
   }

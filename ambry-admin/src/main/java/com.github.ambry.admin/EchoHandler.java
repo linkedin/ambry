@@ -1,7 +1,7 @@
 package com.github.ambry.admin;
 
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestRequestMetadata;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -25,10 +25,10 @@ class EchoHandler {
   /**
    * Handles {@link AdminOperationType#echo} operations.
    * <p/>
-   * Extracts the parameters from the {@link RestRequestMetadata}, performs an echo if possible and writes the response
+   * Extracts the parameters from the {@link RestRequest}, performs an echo if possible and writes the response
    * to the client via a {@link RestResponseChannel}.
    * <p/>
-   * Flushes the written data and closes the connection on receiving an end marker (the last part of
+   * Flushes the written data and closes the connection on receiving an end marker (the last
    * {@link com.github.ambry.rest.RestRequestContent} in the request). Any other content is ignored.
    * @param restRequestInfo {@link RestRequestInfo} containing details of the request.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
@@ -38,42 +38,42 @@ class EchoHandler {
       throws RestServiceException {
     RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
     if (restRequestInfo.isFirstPart()) {
-      logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("Handling echo - {}", restRequestInfo.getRestRequest().getUri());
       adminMetrics.echoRate.mark();
       long startTime = System.currentTimeMillis();
       try {
-        String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
+        String echoStr = echo(restRequestInfo.getRestRequest(), adminMetrics).toString();
         responseChannel.setContentType("application/json");
         responseChannel.write(ByteBuffer.wrap(echoStr.getBytes()));
         responseChannel.flush();
-        logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
+        logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequest().getUri());
       } catch (IOException e) {
         throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
       } finally {
         long processingTime = System.currentTimeMillis() - startTime;
-        logger.trace("Processing echo response for request {} took {} ms",
-            restRequestInfo.getRestRequestMetadata().getUri(), processingTime);
+        logger.trace("Processing echo response for request {} took {} ms", restRequestInfo.getRestRequest().getUri(),
+            processingTime);
         adminMetrics.echoProcessingTimeInMs.update(processingTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
       responseChannel.onRequestComplete(null, false);
-      logger.trace("Echo request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
+      logger.trace("Echo request {} complete", restRequestInfo.getRestRequest().getUri());
     }
   }
 
   /**
    * Refers to the text provided by the client in the URI and returns a {@link JSONObject} representation of the echo.
-   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @param restRequest {@link com.github.ambry.rest.RestRequest} containing metadata about the request.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
    * @return A {@link JSONObject} that wraps the echoed string.
    * @throws RestServiceException
    */
-  private static JSONObject echo(RestRequestMetadata restRequestMetadata, AdminMetrics adminMetrics)
+  private static JSONObject echo(RestRequest restRequest, AdminMetrics adminMetrics)
       throws RestServiceException {
-    Map<String, List<String>> parameters = restRequestMetadata.getArgs();
+    Map<String, List<String>> parameters = restRequest.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
       String text = parameters.get(TEXT_KEY).get(0);
-      logger.trace("Text to echo for request {} is {}", restRequestMetadata.getUri(), text);
+      logger.trace("Text to echo for request {} is {}", restRequest.getUri(), text);
       try {
         return packageResult(text);
       } catch (JSONException e) {

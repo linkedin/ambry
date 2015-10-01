@@ -1,6 +1,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -62,7 +63,7 @@ public class MockBlobStorageService implements BlobStorageService {
    */
   private void doHandleRequest(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    String operationType = getOperationType(restRequestInfo.getRestRequestMetadata());
+    String operationType = getOperationType(restRequestInfo.getRestRequest());
     if (OPERATION_THROW_HANDLING_RUNTIME_EXCEPTION.equals(operationType)) {
       // exception message is operationType so that it can be verified by the test.
       throw new RuntimeException(operationType);
@@ -70,40 +71,43 @@ public class MockBlobStorageService implements BlobStorageService {
       throw new RestServiceException(operationType, RestServiceErrorCode.InternalServerError);
     } else {
       // NOTE:  If you ever need to implement functionality that cannot go here -
-      // Check if RestRequestMetadata is an instance of MockRestRequestMetadata. If it is, you can support any kind of
-      // custom function as long as it is implemented in MockRestRequestMetadata or reachable through it as a callback.
-      echoRestMethod(restRequestInfo);
+      // Check if RestRequest is an instance of MockRestRequest. If it is, you can support any kind of
+      // custom function as long as it is implemented in MockRestRequest or reachable through it as a callback.
+      echo(restRequestInfo);
     }
   }
 
   /**
    * Determines the operation desired by the request.
-   * @param restRequestMetadata {@link RestRequestMetadata} metadata about the request.
+   * @param restRequest {@link RestRequest} metadata about the request.
    * @return the operation desired by the request.
    */
-  private String getOperationType(RestRequestMetadata restRequestMetadata) {
-    String path = restRequestMetadata.getPath();
+  private String getOperationType(RestRequest restRequest) {
+    String path = restRequest.getPath();
     return path.startsWith("/") ? path.substring(1, path.length()) : path;
   }
 
   /**
-   * Echoes the {@link RestMethod} defined in {@link RestRequestMetadata} and writes the response to the channel.
+   * Echoes the {@link RestMethod} defined in {@link RestRequest} when the first {@link RestRequestInfo} is received.
+   * If content is received, the content is echoed back.
    * @param restRequestInfo {@link RestRequestInfo } that defines a piece of the request that needs to be handled.
    * @throws RestServiceException
    */
-  private void echoRestMethod(RestRequestInfo restRequestInfo)
+  private void echo(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     RestResponseChannel restResponseChannel = restRequestInfo.getRestResponseChannel();
     RestRequestContent content = restRequestInfo.getRestRequestContent();
     try {
       if (restRequestInfo.isFirstPart()) {
-        RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+        RestMethod restMethod = restRequestInfo.getRestRequest().getRestMethod();
         restResponseChannel.setContentType("text/plain; charset=UTF-8");
+        // TODO: Change this to send it as part of a header.
         restResponseChannel.write(ByteBuffer.wrap(restMethod.toString().getBytes()));
       } else {
-        byte[] contentBytes = new byte[content.getContentSize()];
-        content.getBytes(0, contentBytes, 0, content.getContentSize());
-        restResponseChannel.write(ByteBuffer.wrap(contentBytes));
+        ByteBuffer contentBuffer = ByteBuffer.allocate((int) content.getSize());
+        content.read(new ByteBufferChannel(contentBuffer));
+        contentBuffer.flip();
+        restResponseChannel.write(contentBuffer);
         if (content.isLast()) {
           restResponseChannel.flush();
           restResponseChannel.onRequestComplete(null, false);

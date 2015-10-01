@@ -40,7 +40,7 @@ public interface RestRequestHandler {
    * Submit a request for handling.
    * <p/>
    * Every submitted {@link RestRequestInfo} may only be a part of a full request. All parts of the same request will be
-   * expected to have the same {@link RestRequestMetadata} in the {@link RestRequestInfo}s that are submitted.
+   * expected to have the same {@link RestRequest} in the {@link RestRequestInfo}s that are submitted.
    * <p/>
    * It is possible that the {@link RestRequestInfo} is not immediately handled but en-queued to be handled at a later
    * time. If this is the case, then the implementation will (is expected to) notify listeners that are registered to
@@ -65,9 +65,9 @@ public interface RestRequestHandler {
    * (e.g. connection interruption).
    * <p/>
    * This operation has to be idempotent.
-   * @param restRequestMetadata the metadata of the request that just completed.
+   * @param restRequest the metadata of the request that just completed.
    */
-  public void onRequestComplete(RestRequestMetadata restRequestMetadata);
+  public void onRequestComplete(RestRequest restRequest);
 
   /**
    * Used to query whether the RestRequestHandler is currently in a state to handle submitted requests.
