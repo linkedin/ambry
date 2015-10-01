@@ -72,7 +72,7 @@ public class BoundedByteBufferReceive implements Receive {
    * It will be initialized only after header is read.
    * @return the size of the data in bytes to receive after reading header, otherwise return 0
    */
-  long sizeInBytes() {
-    return sizeToRead;
+  long sizeRead() {
+    return sizeRead;
   }
 }

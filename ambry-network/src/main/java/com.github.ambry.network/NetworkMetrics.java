@@ -46,10 +46,14 @@ public class NetworkMetrics {
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // Plaintext metrics
-  public final Histogram plaintextReceiveBytesRate;     // the bytes rate to receive the entire request
-  public final Histogram plaintextSendBytesRate;        // the bytes rate to send the entire response
-  public final Histogram plaintextReceiveTimePerKB;     // the time to receive 1KB data in one read call
-  public final Histogram plaintextSendTime;             // the time to send data in one write call
+  // the bytes rate to receive the entire request
+  public final Histogram plaintextReceiveBytesRate;
+  // the bytes rate to send the entire response
+  public final Histogram plaintextSendBytesRate;
+  // the time to receive 1KB data in one read call
+  public final Histogram plaintextReceiveTimePerKB;
+  // the time to send data in one write call
+  public final Histogram plaintextSendTime;
 
   // SSL metrics
   public final Counter sslFactoryInitializationCount;
@@ -59,13 +63,18 @@ public class NetworkMetrics {
   public final Histogram sslHandshakeTime;
   public final Counter sslHandshakeCount;
   public final Counter sslHandshakeErrorCount;
-  public final Histogram sslReceiveBytesRate;     // the bytes rate to receive the entire request
-  public final Histogram sslSendBytesRate;        // the bytes rate to send the entire response
-  public final Histogram sslReceiveTimePerKB;     // the time to receive 1KB data in one read call
-  public final Histogram sslSendTime;             // the time to send data in one write call
+  // the bytes rate to receive the entire request
+  public final Histogram sslReceiveBytesRate;
+  // the bytes rate to send the entire response
+  public final Histogram sslSendBytesRate;
+  // the time to receive 1KB data in one read call
+  public final Histogram sslReceiveTimePerKB;
+  // the time to send data in one write call
+  public final Histogram sslSendTime;
   public final Histogram sslEncryptionTimePerKB;
   public final Histogram sslDecryptionTimePerKB;
-  public final Counter sslRenegotiationCount;     // the count of renegotiation after initial handshake done
+  // the count of renegotiation after initial handshake done
+  public final Counter sslRenegotiationCount;
 
   public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {
