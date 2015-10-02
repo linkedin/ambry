@@ -425,7 +425,7 @@ public class PersistentIndex {
   /**
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
-   * @param fileSpan The file range represented by this entry in the log
+   * @param fileSpan The file span represented by this entry in the log
    * @throws StoreException
    */
   public void markAsDeleted(StoreKey id, FileSpan fileSpan)
@@ -442,8 +442,7 @@ public class PersistentIndex {
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset() - fileSpan.getStartOffset());
-    indexes.lastEntry().getValue().addEntry(new IndexEntry(id, newValue), fileSpan.getEndOffset());
-    journal.addEntry(fileSpan.getStartOffset(), id);
+    addToIndex(new IndexEntry(id, newValue), fileSpan);
   }
 
   /**
@@ -1205,7 +1204,7 @@ public class PersistentIndex {
      *
      * @throws StoreException on version mismatch.
      */
-    private void performRecovery()
+    protected void performRecovery()
         throws StoreException {
       try {
         readCleanupTokenAndPopulateRecoveryRange();
@@ -1358,7 +1357,7 @@ public class PersistentIndex {
      * gets modified by the IndexPersistorThread while this operation is in progress, we save it off first and use the
      * saved off value subsequently.
      */
-    private void pruneHardDeleteRecoveryRange() {
+    protected void pruneHardDeleteRecoveryRange() {
       StoreFindToken logFlushedTillToken = (StoreFindToken) startTokenSafeToPersist;
       if (logFlushedTillToken != null && !logFlushedTillToken.isUninitialized()) {
         if (logFlushedTillToken.equals(endToken)) {

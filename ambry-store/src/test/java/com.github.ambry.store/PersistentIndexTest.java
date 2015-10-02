@@ -54,8 +54,8 @@ public class PersistentIndexTest {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreHardDelete messageStoreHardDelete, Time time)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
-          messageStoreHardDelete, new StoreMetrics(datadir, new MetricRegistry()), time);
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
+          new StoreMetrics(datadir, new MetricRegistry()), time);
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
@@ -72,12 +72,19 @@ public class PersistentIndexTest {
       return super.hardDeleter.hardDelete();
     }
 
-    public void hardDeletePreLogFlush() {
+    public void persistAndAdvanceStartTokenSafeToPersist() {
       super.hardDeleter.preLogFlush();
+      // no flushing to do.
+      super.hardDeleter.postLogFlush();
     }
 
-    public void hardDeletePostLogFlush() {
-      super.hardDeleter.postLogFlush();
+    public void pruneHardDeleteRecoveryRange() {
+      super.hardDeleter.pruneHardDeleteRecoveryRange();
+    }
+
+    public void performHardDeleteRecovery()
+        throws StoreException {
+      super.hardDeleter.performRecovery();
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
@@ -1782,7 +1789,7 @@ public class PersistentIndexTest {
           throws IOException, StoreException {
         index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, nextOffset, (byte) 0, 12345)),
             new FileSpan(nextOffset, nextOffset + sizeOfEntry));
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int)sizeOfEntry);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
         log.appendFrom(byteBuffer);
         offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
         nextOffset += sizeOfEntry;
@@ -1791,7 +1798,7 @@ public class PersistentIndexTest {
       void delete(MockId id)
           throws IOException, StoreException {
         index.markAsDeleted(id, new FileSpan(nextOffset, nextOffset + sizeOfEntry));
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int)sizeOfEntry);
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
         log.appendFrom(byteBuffer);
         nextOffset += sizeOfEntry;
       }
@@ -1802,6 +1809,7 @@ public class PersistentIndexTest {
         class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           int count;
           MessageReadSet readSet;
+
           MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
             this.readSet = readSet;
             this.count = readSet.count();
@@ -1817,10 +1825,10 @@ public class PersistentIndexTest {
             if (!hasNext()) {
               throw new NoSuchElementException();
             }
-            -- count;
-            ByteBuffer buf = ByteBuffer.allocate((int)sizeOfEntry);
+            --count;
+            ByteBuffer buf = ByteBuffer.allocate((int) sizeOfEntry);
             byte[] recoveryInfo = new byte[100];
-            Arrays.fill(recoveryInfo, (byte)0);
+            Arrays.fill(recoveryInfo, (byte) 0);
             ByteBufferInputStream stream = new ByteBufferInputStream(buf);
             ReadableByteChannel channel = Channels.newChannel(stream);
             HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
@@ -1831,7 +1839,8 @@ public class PersistentIndexTest {
           public void remove() {
             throw new UnsupportedOperationException();
           }
-        };
+        }
+        ;
         return new MockMessageStoreHardDeleteIterator(readSet);
       }
 
@@ -1872,7 +1881,6 @@ public class PersistentIndexTest {
       // from bailing out prematurely.
       index.setHardDeleteRunningStatus(true);
 
-
       MockId blobId01 = new MockId("id01");
       MockId blobId02 = new MockId("id02");
       MockId blobId03 = new MockId("id03");
@@ -1908,22 +1916,89 @@ public class PersistentIndexTest {
       helper.delete(blobId02);
       helper.delete(blobId06);
 
+      helper.add(blobId08);
+      helper.add(blobId09);
+      helper.add(blobId10);
+
+      helper.delete(blobId10);
+      helper.delete(blobId01);
+      helper.delete(blobId08);
+
       // Let enough time to pass so that the above records become eligible for hard deletes.
       time.currentMilliseconds = time.currentMilliseconds + 2 * Time.SecsPerDay * Time.MsPerSec;
 
-      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d]
-      // journal:                    [6 7 2d 6d]
+      // The first * shows where startTokenSafeToPersist is
+      // The second * shows where startToken/endToken are before the operations.
+      // Note since we are only depicting values before and after hardDelete() is done, startToken and endToken
+      // will be the same.
+
+      // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
       boolean tokenMovedForward = index.hardDelete();
       Assert.assertTrue(tokenMovedForward);
       // startToken = endToken = 2.
 
       // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
-      index.hardDeletePreLogFlush();
-      index.hardDeletePostLogFlush();
+      index.persistAndAdvanceStartTokenSafeToPersist();
 
+      // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
       tokenMovedForward = index.hardDelete();
       Assert.assertTrue(tokenMovedForward);
       // startToken = endToken = 4.
+
+      // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = 5, endToken = 5, startTokenSafeToPersist = 2
+
+      // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = 7, endToken = 7, starttokenSafeToPersist = 5
+      // 3d just got pruned.
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d* 1d 8]
+
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8*]
+      // All caught up, so token should not have moved forward.
+      tokenMovedForward = index.hardDelete();
+      Assert.assertFalse(tokenMovedForward);
+
+      index.persistAndAdvanceStartTokenSafeToPersist();
+
+      // directly prune the recovery range completely (which should happen since we flushed till the endToken).
+      index.pruneHardDeleteRecoveryRange(); //
+
+      // Test recovery - this tests reading from the persisted token, filling up the hard delete recovery range and
+      // then actually redoing the hard deletes on the range.
+      index.performHardDeleteRecovery();
+
+      index.close();
     } catch (Exception e) {
       e.printStackTrace();
       org.junit.Assert.assertEquals(false, true);
