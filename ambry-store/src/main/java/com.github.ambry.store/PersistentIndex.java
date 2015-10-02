@@ -330,23 +330,24 @@ public class PersistentIndex {
     IndexSegment lastSegment = indexes.lastEntry().getValue();
 
     if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
-      logger.info("Rolling over because the size written {} >= maxInMemoryIndexSizeInBytes {}",
+      logger.info("Index: {} Rolling over because the size written {} >= maxInMemoryIndexSizeInBytes {}", dataDir,
           lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
       return true;
     }
     if (lastSegment.getNumberOfItems() >= maxInMemoryNumElements) {
-      logger.info("Rolling over because the number of items in the last segment: {} >= maxInMemoryNumElements {}",
-          lastSegment.getNumberOfItems(), maxInMemoryNumElements);
+      logger.info("Index: {} Rolling over because the number of items in the last segment: {} >= "
+          + "maxInMemoryNumElements {}", dataDir, lastSegment.getNumberOfItems(), maxInMemoryNumElements);
       return true;
     }
     if (lastSegment.getKeySize() != entry.getKey().sizeInBytes()) {
-      logger.info("Rolling over because the segment keySize: {} != entry's keysize {}", lastSegment.getKeySize(),
-          entry.getKey().sizeInBytes());
+      logger.info("Index: {} Rolling over because the segment keySize: {} != entry's keysize {}", dataDir,
+          lastSegment.getKeySize(), entry.getKey().sizeInBytes());
       return true;
     }
     if (lastSegment.getValueSize() != IndexValue.Index_Value_Size_In_Bytes) {
-      logger.info("Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
-          IndexValue.Index_Value_Size_In_Bytes);
+      logger
+          .info("Index: {} Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
+              dataDir, IndexValue.Index_Value_Size_In_Bytes);
       return true;
     }
     return false;
