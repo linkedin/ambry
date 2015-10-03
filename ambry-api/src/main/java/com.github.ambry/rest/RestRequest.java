@@ -12,8 +12,7 @@ import java.util.Map;
  * <p/>
  * It contains metadata about the request including the {@link RestMethod} desired, the original URI and associated
  * arguments (in the form of parameters or headers). It also contains all the content associated with the request
- * (possibly in the form of a list of {@link RestRequestContent}). This content can be streamed out through the read
- * operations.
+ * and this content can be streamed out through the read operations.
  * <p/>
  * It is possible that the underlying request object is reference counted so it is important to retain it when
  * processing it async and to release it when done processing.
@@ -51,26 +50,14 @@ public interface RestRequest extends ReadableStreamChannel {
   public Map<String, List<String>> getArgs();
 
   /**
-   * Adds some content in the form of {@link RestRequestContent} to this RestRequest. This content will be available
-   * to read through the read operations.
-   * @throws IOException if there is I/O error while adding the content to the request channel.
-   */
-  public void addContent(RestRequestContent restRequestContent)
-      throws IOException;
-
-  /**
    * If the underlying request metadata is reference counted, increase the reference count so that the it is not lost to
    * recycling before async processing is complete.
-   * <p/>
-   * This does *not* retain any content.
    */
   public void retain();
 
   /**
    * If the underlying request metadata is reference counted, decrease the reference count so that it can be recycled,
    * clean up any resources and do work that needs to be done at the end of the lifecycle if required.
-   *  * <p/>
-   * This does *not* release any content.
    */
   public void release();
 
@@ -78,9 +65,6 @@ public interface RestRequest extends ReadableStreamChannel {
    * Closes this request channel and releases all of the resources associated with it. The reference count of the
    * request metadata will be reset to the value it would have been if no {@link #retain()}s or {@link #release()}s had
    * been executed through this class.
-   * <p/>
-   * If this class encapsulates any {@link RestRequestContent}, all of those content channels will be closed through
-   * calls to {@link RestRequestContent#close()}.
    * <p/>
    * {@inheritDoc}
    * @throws IOException if there is an I/O error while closing the request channel.

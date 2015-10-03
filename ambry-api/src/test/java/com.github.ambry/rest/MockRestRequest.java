@@ -5,6 +5,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
@@ -30,7 +31,7 @@ import org.json.JSONObject;
  * Headers:
  * 1. "contentLength" - the length of content accompanying this request. Defaults to 0.
  * <p/>
- * Also contains request content in the form of a list of {@link RestRequestContent}.
+ * This also contains the content of the request. This content can be streamed out through the read operations.
  */
 public class MockRestRequest implements RestRequest {
   // main fields
@@ -45,7 +46,7 @@ public class MockRestRequest implements RestRequest {
   private final URI uri;
   private final Map<String, List<String>> args = new HashMap<String, List<String>>();
   private final ReentrantLock contentLock = new ReentrantLock();
-  private final List<RestRequestContent> requestContents = new LinkedList<RestRequestContent>();
+  private final List<ByteBuffer> requestContents = new LinkedList<ByteBuffer>();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReentrantLock referenceCountLock = new ReentrantLock();
   private final AtomicInteger referenceCount = new AtomicInteger(0);
@@ -87,21 +88,6 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public void addContent(RestRequestContent restRequestContent)
-      throws IOException {
-    if (!isOpen()) {
-      throw new ClosedChannelException();
-    }
-    try {
-      contentLock.lock();
-      requestContents.add(restRequestContent);
-      restRequestContent.retain();
-    } finally {
-      contentLock.unlock();
-    }
-  }
-
-  @Override
   public void retain() {
     try {
       referenceCountLock.lock();
@@ -133,6 +119,14 @@ public class MockRestRequest implements RestRequest {
     }
   }
 
+  /**
+   * Returns length in the "content-length" header. If there is no such header, returns 0.
+   * <p/>
+   * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
+   * actually be different if the stream is buggy or the client made a mistake. Do *not* treat this as fully accurate.
+   * @return the size of content as defined in the "content-length" header. Might not be actual length of content if
+   *          the stream is buggy.
+   */
   @Override
   public long getSize() {
     return args.get(CONTENT_LENGTH) != null ? Long.parseLong(args.get(CONTENT_LENGTH).get(0)) : 0;
@@ -147,44 +141,46 @@ public class MockRestRequest implements RestRequest {
     } else if (!streamEnded.get()) {
       try {
         contentLock.lock();
-        // We read from the RestRequestContent at the head of the list until :-
+        // We read from the ByteBuffer at the head of the list until :-
         // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
         //      ends.
-        // 2. The RestRequestContent runs out of content - remove it from the head of the list and start reading from
-        //      new head if it is available.
+        // 2. The ByteBuffer runs out of content - remove it from the head of the list and start reading from new head
+        //      if it is available.
         // Content may be added at any time and it is not necessary that the list have any elements at the time of
-        // reading. Read returns -1 only when the a RestRequestContent with isLast() true is read. If stream has not
-        // ended and there is no content in the list, we return 0.
+        // reading. Read returns -1 only when a null is encountered in the content list. If stream has not ended and
+        // there is no content in the list, we return 0.
         // Cases to consider:
         // 1. Writable channel can consume no content (nothing to do. Should return 0).
-        // 2. Writable channel can consume data limited to one RestRequestContent (might rollover).
-        //      a. There is content available in the RestRequestContent at the head of the list (don't rollover).
-        //      b. Request content stream ended when we tried to read from the RestRequestContent at the head of the
-        //          list (end of stream).
-        //      b. There is no content available right now in the RestRequestContent at the head of the list but it has
-        //          not finished its content (don't rollover).
-        //      c. There is no content available in the RestRequestContent at the head of the list because it
-        //          just finished its content (rollover).
-        //            i. More RestRequestContent available in the list (continue read).
-        //            ii. No more RestRequestContent in the list currently (cannot continue read).
-        // 3. Writable channel can consume data across RestRequestContents (will rollover).
-        //      a. More RestRequestContent is available in the list (continue read).
-        //      b. Request content stream has not ended but more RestRequestContent is not available in the list (cannot
+        // 2. Writable channel can consume data limited to one ByteBuffer (might rollover).
+        //      a. There is content available in the ByteBuffer at the head of the list (don't rollover).
+        //      b. Request content stream ended when we tried to read from the ByteBuffer at the head of the list (end
+        //          of stream).
+        //      b. There is no content available right now in the ByteBuffer at the head of the list but it has not
+        //          finished its content (don't rollover).
+        //      c. There is no content available in the ByteBuffer at the head of the list because it just finished its
+        //          content (rollover).
+        //            i. More ByteBuffer available in the list (continue read).
+        //            ii. No more ByteBuffer in the list currently (cannot continue read).
+        // 3. Writable channel can consume data across ByteBuffers (will rollover).
+        //      a. More ByteBuffer is available in the list (continue read).
+        //      b. Request content stream has not ended but more ByteBuffer is not available in the list (cannot
         //          continue read).
         //      c. Request content stream has ended (end of stream).
-        int currentBytesWritten = requestContents.size() > 0 ? requestContents.get(0).read(channel) : 0;
+        int currentBytesWritten = requestContents.size() > 0 ? channel.write(requestContents.get(0)) : 0;
         while (currentBytesWritten != 0) {
           if (currentBytesWritten == -1) {
-            RestRequestContent restRequestContent = requestContents.remove(0);
-            restRequestContent.close();
-            streamEnded.set(restRequestContent.isLast());
+            requestContents.remove(0);
+            if (requestContents.get(0) == null) {
+              streamEnded.set(true);
+              requestContents.remove(0);
+            }
           } else {
             bytesWritten += currentBytesWritten;
           }
 
           currentBytesWritten = 0;
           if (!streamEnded.get() && requestContents.size() > 0) {
-            currentBytesWritten = requestContents.get(0).read(channel);
+            currentBytesWritten = channel.write(requestContents.get(0));
           }
         }
       } finally {
@@ -203,19 +199,27 @@ public class MockRestRequest implements RestRequest {
   public void close()
       throws IOException {
     if (channelOpen.compareAndSet(true, false)) {
-      try {
-        contentLock.lock();
-        Iterator<RestRequestContent> requestContentIterator = requestContents.iterator();
-        while (requestContentIterator.hasNext()) {
-          requestContentIterator.next().close();
-          requestContentIterator.remove();
-        }
-        while (referenceCount.get() > 0) {
-          release();
-        }
-      } finally {
-        contentLock.unlock();
+      while (referenceCount.get() > 0) {
+        release();
       }
+    }
+  }
+
+  /**
+   * Adds some content in the form of {@link ByteBuffer} to this RestRequest. This content will be available to read
+   * through the read operations. To indicate end of content, don't forget to add a null ByteBuffer.
+   * @throws ClosedChannelException if request channel has been closed.
+   */
+  public void addContent(ByteBuffer content)
+      throws IOException {
+    if (!isOpen()) {
+      throw new ClosedChannelException();
+    }
+    try {
+      contentLock.lock();
+      requestContents.add(content);
+    } finally {
+      contentLock.unlock();
     }
   }
 

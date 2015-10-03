@@ -46,26 +46,29 @@ class NettyRequestContent implements RestRequestContent {
     } else if (content.content().nioBufferCount() > 0) {
       // not a copy.
       contentBuffer = content.content().nioBuffer();
+      this.content = content;
     } else {
       // this usually will not happen, but if it does, we cannot avoid a copy.
       // or TODO: we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel.
       logger.warn("Http content had to be copied because ByteBuf did not have a backing ByteBuffer");
       contentBuffer = ByteBuffer.allocate(content.content().capacity());
       content.content().readBytes(contentBuffer);
+      // no need to retain content since we have a copy.
+      this.content = null;
     }
-    this.content = content;
+
     // LastHttpContent in the end marker in netty http world.
     isLast = content instanceof LastHttpContent;
   }
 
   @Override
   public String toString() {
-    return content.toString();
+    return contentBuffer.toString();
   }
 
   @Override
   public long getSize() {
-    return content.content().capacity();
+    return contentBuffer.capacity();
   }
 
   @Override
@@ -114,27 +117,31 @@ class NettyRequestContent implements RestRequestContent {
 
   @Override
   public void retain() {
-    try {
-      referenceCountLock.lock();
-      if (isOpen()) {
-        ReferenceCountUtil.retain(content);
-        referenceCount.incrementAndGet();
+    if (content != null) {
+      try {
+        referenceCountLock.lock();
+        if (isOpen()) {
+          ReferenceCountUtil.retain(content);
+          referenceCount.incrementAndGet();
+        }
+      } finally {
+        referenceCountLock.unlock();
       }
-    } finally {
-      referenceCountLock.unlock();
     }
   }
 
   @Override
   public void release() {
-    try {
-      referenceCountLock.lock();
-      if (referenceCount.get() > 0) {
-        ReferenceCountUtil.release(content);
-        referenceCount.decrementAndGet();
+    if (content != null) {
+      try {
+        referenceCountLock.lock();
+        if (referenceCount.get() > 0) {
+          ReferenceCountUtil.release(content);
+          referenceCount.decrementAndGet();
+        }
+      } finally {
+        referenceCountLock.unlock();
       }
-    } finally {
-      referenceCountLock.unlock();
     }
   }
 }
