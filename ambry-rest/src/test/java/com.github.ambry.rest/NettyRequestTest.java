@@ -15,6 +15,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -35,34 +39,53 @@ public class NettyRequestTest {
   @Test
   public void conversionWithGoodInputTest()
       throws IOException, RestServiceException {
+    // headers
     HttpHeaders headers = new DefaultHttpHeaders();
-    headers.add("headerKey", "headerValue");
+    headers.add("headerKey", "headerValue1");
+    headers.add("headerKey", "headerValue2");
+    headers.add("overLoadedKey", "headerOverloadedValue");
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
-    String PARAM_KEY = "paramKey";
-    String PARAM_VALUE = "paramValue";
-    String uriAttachment = "?" + PARAM_KEY + "=" + PARAM_VALUE;
+
+    // params
+    Map<String, List<String>> params = new HashMap<String, List<String>>();
+    List<String> values = new ArrayList<String>(2);
+    values.add("paramValue1");
+    values.add("paramValue2");
+    params.put("paramKey", values);
+    values = new ArrayList<String>(1);
+    values.add("paramOverloadedValue");
+    params.put("overLoadedKey", values);
+
+    StringBuilder uriAttachmentBuilder = new StringBuilder("?");
+    for (String key : params.keySet()) {
+      for (String value : params.get(key)) {
+        uriAttachmentBuilder.append(key).append("=").append(value).append("&");
+      }
+    }
+    uriAttachmentBuilder.deleteCharAt(uriAttachmentBuilder.length() - 1);
+    String uriAttachment = uriAttachmentBuilder.toString();
 
     NettyRequest nettyRequest;
     String uri;
 
     uri = "/GET" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers);
-    validateRequest(nettyRequest, RestMethod.GET, uri, headers, PARAM_KEY, PARAM_VALUE);
+    validateRequest(nettyRequest, RestMethod.GET, uri, headers, params);
     closeRequestAndValidate(nettyRequest);
 
     uri = "/POST" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers);
-    validateRequest(nettyRequest, RestMethod.POST, uri, headers, PARAM_KEY, PARAM_VALUE);
+    validateRequest(nettyRequest, RestMethod.POST, uri, headers, params);
     closeRequestAndValidate(nettyRequest);
 
     uri = "/DELETE" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.DELETE, uri, headers);
-    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, PARAM_KEY, PARAM_VALUE);
+    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params);
     closeRequestAndValidate(nettyRequest);
 
     uri = "/HEAD" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers);
-    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, PARAM_KEY, PARAM_VALUE);
+    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params);
     closeRequestAndValidate(nettyRequest);
   }
 
@@ -282,21 +305,31 @@ public class NettyRequestTest {
    * @param nettyRequest the {@link NettyRequest} that needs to be validated.
    * @param restMethod the expected {@link RestMethod} in {@code nettyRequest}.
    * @param uri the expected URI in {@code nettyRequest}.
-   * @param headers the expected {@link HttpHeaders} in {@code nettyRequest}.
-   * @param key the expected URI parameter key in {@code nettyRequest}.
-   * @param value the expected value of the parameter {@code key} in the URI in {@code nettyRequest}.
+   * @param headers the {@link HttpHeaders} passed with the request that need to be in {@link NettyRequest#getArgs()}.
+   * @param params the parameters passed with the request that need to be in {@link NettyRequest#getArgs()}.
    */
   private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, HttpHeaders headers,
-      String key, String value) {
-    assertTrue("Request channel is not open", nettyRequest.isOpen());
-    // TODO: need header check once headers are supported in NettyRequest.
+      Map<String, List<String>> params) {
     long contentLength = headers.contains(HttpHeaders.Names.CONTENT_LENGTH) ? Long
         .parseLong(headers.get(HttpHeaders.Names.CONTENT_LENGTH)) : 0;
+    assertTrue("Request channel is not open", nettyRequest.isOpen());
     assertEquals("Mismatch in content length", contentLength, nettyRequest.getSize());
     assertEquals("Mismatch in rest method", restMethod, nettyRequest.getRestMethod());
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
-    assertEquals("Mismatch in argument value", value, nettyRequest.getArgs().get(key).get(0));
+
+    Map<String, List<String>> args = nettyRequest.getArgs();
+    for (String paramKey : params.keySet()) {
+      assertTrue("Did not find key: " + paramKey, args.containsKey(paramKey));
+      boolean containsAllValues = args.get(paramKey).containsAll(params.get(paramKey));
+      assertTrue("Did not find all values expected for key: " + paramKey, containsAllValues);
+    }
+
+    for (Map.Entry<String, String> e : headers) {
+      assertTrue("Did not find key: " + e.getKey(), args.containsKey(e.getKey()));
+      boolean containsValue = args.get(e.getKey()).contains(e.getValue());
+      assertTrue("Did not find value '" + e.getValue() + "' expected for key: '" + e.getKey() + "'", containsValue);
+    }
   }
 
   // contentAddAndReadTest() helpers

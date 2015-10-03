@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -30,6 +32,7 @@ class NettyRequest implements RestRequest {
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
+  private final Map<String, List<String>> args;
 
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
@@ -64,6 +67,16 @@ class NettyRequest implements RestRequest {
       throw new RestServiceException("http method not supported: " + httpMethod,
           RestServiceErrorCode.UnsupportedHttpMethod);
     }
+
+    Map<String, List<String>> allArgs = new HashMap<String, List<String>>();
+    allArgs.putAll(query.parameters());
+    for (Map.Entry<String, String> e : request.headers()) {
+      if (!allArgs.containsKey(e.getKey())) {
+        allArgs.put(e.getKey(), new LinkedList<String>());
+      }
+      allArgs.get(e.getKey()).add(e.getValue());
+    }
+    args = Collections.unmodifiableMap(allArgs);
   }
 
   @Override
@@ -83,8 +96,7 @@ class NettyRequest implements RestRequest {
 
   @Override
   public Map<String, List<String>> getArgs() {
-    // TODO: return headers also.
-    return query.parameters();
+    return args;
   }
 
   @Override
