@@ -1,14 +1,16 @@
 package com.github.ambry.admin;
 
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.FutureResult;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import java.io.IOException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -25,48 +27,53 @@ class EchoHandler {
   /**
    * Handles {@link AdminOperationType#echo} operations.
    * <p/>
-   * Extracts the parameters from the {@link RestRequest}, performs an echo if possible and writes the response
-   * to the client via a {@link RestResponseChannel}.
+   * Extracts the echo text from the {@code restRequest}, performs an echo if possible, packages the echo response in
+   * a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}. Invokes the
+   * {@code callback} (if any) when operation is complete.
    * <p/>
-   * Flushes the written data and closes the connection on receiving an end marker (the last
-   * {@link com.github.ambry.rest.RestRequestContent} in the request). Any other content is ignored.
-   * @param restRequestInfo {@link RestRequestInfo} containing details of the request.
+   * Content sent via the {@code restRequest} is ignored.
+   * @param restRequest {@link RestRequest} containing details of the request.
+   * @param callback the {@link Callback} to invoke when operation is complete. Can be null.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
-   * @throws RestServiceException
+   * @return a {@link Future} that will eventually contain the echo response in the form of a
+   *          {@link ReadableStreamChannel}.
    */
-  public static void handleRequest(RestRequestInfo restRequestInfo, AdminMetrics adminMetrics)
-      throws RestServiceException {
-    RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
-    if (restRequestInfo.isFirstPart()) {
-      logger.trace("Handling echo - {}", restRequestInfo.getRestRequest().getUri());
-      adminMetrics.echoRate.mark();
-      long startTime = System.currentTimeMillis();
-      try {
-        String echoStr = echo(restRequestInfo.getRestRequest(), adminMetrics).toString();
-        responseChannel.setContentType("application/json");
-        responseChannel.write(ByteBuffer.wrap(echoStr.getBytes()));
-        responseChannel.flush();
-        logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequest().getUri());
-      } catch (IOException e) {
-        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
-      } finally {
-        long processingTime = System.currentTimeMillis() - startTime;
-        logger.trace("Processing echo response for request {} took {} ms", restRequestInfo.getRestRequest().getUri(),
-            processingTime);
-        adminMetrics.echoProcessingTimeInMs.update(processingTime);
+  public static Future<ReadableStreamChannel> handleGetRequest(RestRequest restRequest,
+      Callback<ReadableStreamChannel> callback, AdminMetrics adminMetrics) {
+    logger.trace("Handling echo - {}", restRequest.getUri());
+    adminMetrics.echoRate.mark();
+    long startTime = System.currentTimeMillis();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+    ReadableStreamChannel channel = null;
+    RestServiceException exception = null;
+    RuntimeException re = null;
+    try {
+      String echoStr = echo(restRequest, adminMetrics).toString();
+      // TODO: this needs to go into a handle head request.
+      // responseChannel.setContentType("application/json");
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
+    } catch (RestServiceException e) {
+      exception = e;
+      re = new RuntimeException(e);
+    } finally {
+      futureResult.done(channel, re);
+      if (callback != null) {
+        callback.onCompletion(channel, exception);
       }
-    } else if (restRequestInfo.getRestRequestContent().isLast()) {
-      responseChannel.onRequestComplete(null, false);
-      logger.trace("Echo request {} complete", restRequestInfo.getRestRequest().getUri());
+      long processingTime = System.currentTimeMillis() - startTime;
+      logger.trace("Processing echo response for request {} took {} ms", restRequest.getUri(), processingTime);
+      adminMetrics.echoProcessingTimeInMs.update(processingTime);
     }
+    return futureResult;
   }
 
   /**
    * Refers to the text provided by the client in the URI and returns a {@link JSONObject} representation of the echo.
-   * @param restRequest {@link com.github.ambry.rest.RestRequest} containing metadata about the request.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
    * @return A {@link JSONObject} that wraps the echoed string.
-   * @throws RestServiceException
+   * @throws RestServiceException if there were missing parameters or if there was a {@link JSONException} while
+   *                                building the response.
    */
   private static JSONObject echo(RestRequest restRequest, AdminMetrics adminMetrics)
       throws RestServiceException {
@@ -92,7 +99,7 @@ class EchoHandler {
    * Packages the echoed string into a {@link JSONObject}.
    * @param text the echoed text.
    * @return A {@link JSONObject} that wraps the text.
-   * @throws JSONException
+   * @throws JSONException if there was an error building the {@link JSONObject}.
    */
   private static JSONObject packageResult(String text)
       throws JSONException {

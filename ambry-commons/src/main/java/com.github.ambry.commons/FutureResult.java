@@ -1,4 +1,4 @@
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -10,14 +10,11 @@ import java.util.concurrent.TimeoutException;
 /**
  * A class that implements the future completion of a request.
  */
-final class FutureRouterResult<T> implements Future<T> {
+public class FutureResult<T> implements Future<T> {
 
   private final CountDownLatch latch = new CountDownLatch(1);
   private volatile RuntimeException error;
   private volatile T result;
-
-  public FutureRouterResult() {
-  }
 
   /**
    * Mark this request as complete and unblock any threads waiting on its completion.

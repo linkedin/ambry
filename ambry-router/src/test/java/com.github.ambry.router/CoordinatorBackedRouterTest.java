@@ -2,6 +2,8 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.FutureResult;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.messageformat.BlobInfo;
@@ -69,7 +71,7 @@ public class CoordinatorBackedRouterTest {
 
     // CoordinatorOperation instantiation test
     try {
-      new CoordinatorOperation(coordinator, new FutureRouterResult<String>(), "@@blobid@@", null,
+      new CoordinatorOperation(coordinator, new FutureResult<String>(), "@@blobid@@", null,
           CoordinatorOperationType.PutBlob);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.

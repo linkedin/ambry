@@ -184,7 +184,8 @@ project(':ambry-admin') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-router')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output

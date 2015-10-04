@@ -4,15 +4,18 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.FutureResult;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestRequestInfo;
-import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -30,51 +33,57 @@ class GetReplicasForBlobIdHandler {
   /**
    * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
    * <p/>
-   * Extracts the parameters from the {@link RestRequest}, infers replicas of the blobId if possible and writes
-   * the response to the client via a {@link RestResponseChannel}.
+   * Extracts the blob ID from the {@code restRequest}, infers replicas of the blob ID if possible, packages the replica
+   * list into a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}. Invokes the
+   * {@code callback} (if any) when operation is complete.
    * <p/>
-   * Flushes the written data and closes the connection on receiving an end marker (the last
-   * {@link com.github.ambry.rest.RestRequestContent} of the request). Any other content is ignored.
-   * @param restRequestInfo {@link RestRequestInfo} containing details of the request.
-   * @param clusterMap {@link ClusterMap} to use to find the replicas of the blob id.
+   * Content sent via the {@code restRequest} is ignored.
+   * @param restRequest {@link RestRequest} containing details of the request.
+   * @param clusterMap the {@link ClusterMap} to use to find the replicas for blob ID.
+   * @param callback the {@link Callback} to invoke when operation is complete. Can be null.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
-   * @throws RestServiceException
+   * @return a {@link Future} that will eventually contain the getReplicasForBlobId response in the form of a
+   *          {@link ReadableStreamChannel}.
    */
-  public static void handleRequest(RestRequestInfo restRequestInfo, ClusterMap clusterMap, AdminMetrics adminMetrics)
-      throws RestServiceException {
-    RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
-    if (restRequestInfo.isFirstPart()) {
-      logger.trace("Handling getReplicasForBlobId - {}", restRequestInfo.getRestRequest().getUri());
-      adminMetrics.getReplicasForBlobIdRate.mark();
-      long startTime = System.currentTimeMillis();
-      try {
-        String replicaStr = getReplicasForBlobId(restRequestInfo.getRestRequest(), clusterMap, adminMetrics).toString();
-        responseChannel.setContentType("application/json");
-        responseChannel.write(ByteBuffer.wrap(replicaStr.getBytes()));
-        responseChannel.flush();
-        logger.trace("Sent getReplicasForBlobId response for request {}", restRequestInfo.getRestRequest().getUri());
-      } catch (IOException e) {
-        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
-      } finally {
-        long processingTime = System.currentTimeMillis() - startTime;
-        logger.trace("Processing getReplicasForBlobId response for request {} took {} ms",
-            restRequestInfo.getRestRequest().getUri(), processingTime);
-        adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
+  public static Future<ReadableStreamChannel> handleGetRequest(RestRequest restRequest, ClusterMap clusterMap,
+      Callback<ReadableStreamChannel> callback, AdminMetrics adminMetrics) {
+    logger.trace("Handling getReplicasForBlobId - {}", restRequest.getUri());
+    adminMetrics.getReplicasForBlobIdRate.mark();
+    long startTime = System.currentTimeMillis();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+    ReadableStreamChannel channel = null;
+    RestServiceException exception = null;
+    RuntimeException re = null;
+    try {
+      String replicaStr = getReplicasForBlobId(restRequest, clusterMap, adminMetrics).toString();
+      // TODO: this needs to go into a handle head request.
+      // responseChannel.setContentType("application/json");
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
+    } catch (RestServiceException e) {
+      exception = e;
+      re = new RuntimeException(e);
+    } finally {
+      futureResult.done(channel, re);
+      if (callback != null) {
+        callback.onCompletion(channel, exception);
       }
-    } else if (restRequestInfo.getRestRequestContent().isLast()) {
-      responseChannel.onRequestComplete(null, false);
-      logger.trace("GetReplicasForBlobId request {} complete", restRequestInfo.getRestRequest().getUri());
+      long processingTime = System.currentTimeMillis() - startTime;
+      logger.trace("Processing getReplicasForBlobId response for request {} took {} ms", restRequest.getUri(),
+          processingTime);
+      adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
     }
+    return futureResult;
   }
 
   /**
-   * Extracts the blobid provided by the client and figures out the partition that the blobid would belong to
+   * Extracts the blob ID provided by the client and figures out the partition that the blob ID would belong to
    * based on the cluster map. Using the partition information, returns the list of replicas as a part of a JSONObject.
    * @param restRequest {@link RestRequest} containing metadata about the request.
    * @param clusterMap {@link ClusterMap} to use to find the replicas of the blob id.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
    * @return A {@link JSONObject} that wraps the replica list.
-   * @throws RestServiceException
+   * @throws RestServiceException if there were missing or invalid arguments or if there was a {@link JSONException}
+   *                                or any other while building the response
    */
   private static JSONObject getReplicasForBlobId(RestRequest restRequest, ClusterMap clusterMap,
       AdminMetrics adminMetrics)
@@ -117,7 +126,7 @@ class GetReplicasForBlobIdHandler {
    * Packages the list of replicas into a {@link JSONObject}.
    * @param replicaIds the list of {@link ReplicaId}s that need to packaged into a {@link JSONObject}.
    * @return A {@link JSONObject} that wraps the replica list.
-   * @throws JSONException
+   * @throws JSONException if there was an error building the {@link JSONObject}.
    */
   private static JSONObject packageResult(List<ReplicaId> replicaIds)
       throws JSONException {

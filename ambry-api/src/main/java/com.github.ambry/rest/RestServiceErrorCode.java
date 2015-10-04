@@ -15,6 +15,14 @@ package com.github.ambry.rest;
  */
 public enum RestServiceErrorCode {
   /**
+   * Blob has been deleted.
+   */
+  BlobDeleted,
+  /**
+   * Blob was not found.
+   */
+  BlobNotFound,
+  /**
    * Generic BadRequest error code when client provides a request that is not fit for processing.
    */
   BadRequest,
@@ -122,6 +130,10 @@ public enum RestServiceErrorCode {
    */
   public static RestServiceErrorCode getErrorCodeGroup(RestServiceErrorCode code) {
     switch (code) {
+      case BlobDeleted:
+        return BlobDeleted;
+      case BlobNotFound:
+        return BlobNotFound;
       case BadRequest:
       case InvalidArgs:
       case MalformedRequest:

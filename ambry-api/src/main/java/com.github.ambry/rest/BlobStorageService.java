@@ -1,14 +1,22 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
+import java.util.concurrent.Future;
+
+
 /**
- * BlobStorageService defines a service that forms the bridge b/w a RESTful frontend and a storage backend.
+ * BlobStorageService defines a service that forms the bridge b/w a RESTful frontend and a storage backend (or something
+ * that communicates with a storage backend).
  * <p/>
- * Typically, a BlobStorageService is expected to receive requests (maybe in parts) from the RESTful frontend,
- * process them as required and write the response back to the client. The information received from the frontend
- * should be enough to perform these functions.
+ * Typically, a BlobStorageService is expected to receive requests from the RESTful frontend, handle them as required
+ * and either make a callback with the handling results (if immediately available) or pass control to another
+ * component that do further handling and make callbacks. The information received from the frontend should be enough
+ * to perform these functions.
  * <p/>
- * It is possible that some operations are performed async and therefore a return from any of the functions does not
- * guarantee operation completion but the response to the client will be sent as soon as the operation is complete.
+ * Most operations are performed async and therefore a {@link Future} that will eventually contain the result of the
+ * operation is returned. On operation completion, the callback provided (if not null) is invoked.
  * <p/>
  * Implementations are expected to be thread-safe.
  */
@@ -29,96 +37,60 @@ public interface BlobStorageService {
   /**
    * Handles a GET operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
-   * back to the client.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request.
    * <p/>
-   * The received {@link RestRequestInfo} may only be a part of the whole request.
+   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
+   * {@code callback} provided (if not null) will be invoked when the operation is complete.
    * <p/>
-   * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
-   * sent. This is OK as long as a response is eventually sent to the client.
-   * <p/>
-   * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
-   * expected to be sent to the client as soon as an exception is detected since they have to be translated into
-   * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseChannel}.
-   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException on any exception related to handling of the request.
-   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
+   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
+   * @return a {@link Future} that will eventually contain the result of the operation.
    */
-  public void handleGet(RestRequestInfo restRequestInfo)
-      throws RestServiceException;
+  public Future<ReadableStreamChannel> handleGet(RestRequest restRequest, Callback<ReadableStreamChannel> callback);
 
   /**
    * Handles a POST operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
-   * back to the client.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request.
    * <p/>
-   * The received {@link RestRequestInfo} may only be a part of the whole request.
+   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
+   * {@code callback} provided (if not null) will be invoked when the operation is complete.
    * <p/>
-   * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
-   * sent. This is OK as long as a response is eventually sent to the client.
-   * <p/>
-   * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
-   * expected to be sent to the client as soon as an exception is detected since they have to be translated into
-   * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseChannel}.
-   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException on any exception related to handling of the request.
-   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
+   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
+   * @return a {@link Future} that will eventually contain the result of the operation.
    */
-  public void handlePost(RestRequestInfo restRequestInfo)
-      throws RestServiceException;
+  public Future<String> handlePost(RestRequest restRequest, Callback<String> callback);
 
   /**
    * Handles a DELETE operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
-   * back to the client.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request.
    * <p/>
-   * The received {@link RestRequestInfo} may only be a part of the whole request.
+   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
+   * {@code callback} provided (if not null) will be invoked when the operation is complete.
    * <p/>
-   * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
-   * sent. This is OK as long as a response is eventually sent to the client.
-   * <p/>
-   * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
-   * expected to be sent to the client as soon as an exception is detected since they have to be translated into
-   * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseChannel}.
-   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException on any exception related to handling of the request.
-   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
+   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
+   * @return a {@link Future} that will eventually contain the result of the operation.
    */
-  public void handleDelete(RestRequestInfo restRequestInfo)
-      throws RestServiceException;
+  public Future<Void> handleDelete(RestRequest restRequest, Callback<Void> callback);
 
   /**
    * Handles a HEAD operation.
    * <p/>
-   * The {@link RestRequestInfo} provided will have {@link RestRequest} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
-   * back to the client.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request.
    * <p/>
-   * The received {@link RestRequestInfo} may only be a part of the whole request.
+   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
+   * {@code callback} provided (if not null) will be invoked when the operation is complete.
    * <p/>
-   * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
-   * sent. This is OK as long as a response is eventually sent to the client.
-   * <p/>
-   * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
-   * expected to be sent to the client as soon as an exception is detected since they have to be translated into
-   * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseChannel}.
-   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException on any exception related to handling of the request.
-   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
+   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
+   * @return a {@link Future} that will eventually contain the result of the operation.
    */
-  public void handleHead(RestRequestInfo restRequestInfo)
-      throws RestServiceException;
+  public Future<BlobInfo> handleHead(RestRequest restRequest, Callback<BlobInfo> callback);
 }

@@ -21,6 +21,12 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final ClusterMap clusterMap;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  /**
+   * Instantiate AdminBlobStorageServiceFactory with properties, metrics registry and a cluster map.
+   * @param verifiableProperties the properties to use to create configs.
+   * @param metricRegistry the {@link MetricRegistry} for metrics.
+   * @param clusterMap the {@link ClusterMap} to use.
+   */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       ClusterMap clusterMap) {
     if (verifiableProperties != null && metricRegistry != null && clusterMap != null) {

@@ -40,16 +40,16 @@ public class MockRestRequestHandler implements RestRequestHandler {
     RestMethod restMethod = restRequestInfo.getRestRequest().getRestMethod();
     switch (restMethod) {
       case GET:
-        blobStorageService.handleGet(restRequestInfo);
+        //blobStorageService.handleGet(restRequestInfo);
         break;
       case POST:
-        blobStorageService.handlePost(restRequestInfo);
+        //blobStorageService.handlePost(restRequestInfo);
         break;
       case DELETE:
-        blobStorageService.handleDelete(restRequestInfo);
+        //blobStorageService.handleDelete(restRequestInfo);
         break;
       case HEAD:
-        blobStorageService.handleHead(restRequestInfo);
+        //blobStorageService.handleHead(restRequestInfo);
         break;
       default:
         throw new RestServiceException("Unknown rest method - " + restMethod,

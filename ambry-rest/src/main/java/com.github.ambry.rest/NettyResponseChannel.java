@@ -352,17 +352,30 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private HttpResponseStatus getHttpResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     RestServiceErrorCode errorCodeGroup = RestServiceErrorCode.getErrorCodeGroup(restServiceErrorCode);
+    HttpResponseStatus status;
     switch (errorCodeGroup) {
+      case BlobDeleted:
+        // TODO: metrics
+        status = HttpResponseStatus.GONE;
+        break;
+      case BlobNotFound:
+        // TODO: metrics
+        status = HttpResponseStatus.NOT_FOUND;
+        break;
       case BadRequest:
         nettyMetrics.badRequestError.inc();
-        return HttpResponseStatus.BAD_REQUEST;
+        status = HttpResponseStatus.BAD_REQUEST;
+        break;
       case InternalServerError:
         nettyMetrics.internalServerError.inc();
-        return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+        status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+        break;
       default:
         nettyMetrics.unknownRestServiceExceptionError.inc();
-        return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+        status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+        break;
     }
+    return status;
   }
 }
 

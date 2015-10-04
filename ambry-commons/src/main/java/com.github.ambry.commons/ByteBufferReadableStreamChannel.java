@@ -1,5 +1,6 @@
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
+import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -9,9 +10,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * Represents a {@link ByteBuffer} as a {@link ReadableStreamChannel}.
+ * Represents a {@link ByteBuffer} as a {@link com.github.ambry.router.ReadableStreamChannel}.
  */
-class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
+public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;

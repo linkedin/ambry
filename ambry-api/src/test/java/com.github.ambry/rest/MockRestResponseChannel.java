@@ -84,6 +84,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
       try {
         if (!responseMetadataFinalized.get() && cause != null) {
           setContentType("text/plain; charset=UTF-8");
+          // TODO: Write proper status.
           responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_ERROR);
           responseMetadata.put(ERROR_MESSAGE_KEY, cause.toString());
           responseMetadataFinalized.set(true);

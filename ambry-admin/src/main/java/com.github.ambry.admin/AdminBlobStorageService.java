@@ -1,11 +1,15 @@
 package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.FutureResult;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestRequestInfo;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
+import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +17,7 @@ import org.slf4j.LoggerFactory;
 /**
  * This is an Admin specific implementation of {@link BlobStorageService}.
  * <p/>
- * All the operations that need to be performed by the Admin have to be supported here.
+ * All the operations that need to be performed by the Admin are supported here.
  */
 class AdminBlobStorageService implements BlobStorageService {
   private final AdminConfig adminConfig;
@@ -21,6 +25,12 @@ class AdminBlobStorageService implements BlobStorageService {
   private final ClusterMap clusterMap;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  /**
+   * Create a new instance of AdminBlobStorageService by supplying it with config, metrics and a cluster map.
+   * @param adminConfig the configuration to use in the form of {@link AdminConfig}.
+   * @param adminMetrics the metrics instance to use in the form of {@link AdminMetrics}.
+   * @param clusterMap the {@link ClusterMap} to be used for operations.
+   */
   public AdminBlobStorageService(AdminConfig adminConfig, AdminMetrics adminMetrics, ClusterMap clusterMap) {
     this.adminConfig = adminConfig;
     this.clusterMap = clusterMap;
@@ -40,64 +50,76 @@ class AdminBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void handleGet(RestRequestInfo restRequestInfo)
-      throws RestServiceException {
-    RestRequest restRequest = restRequestInfo.getRestRequest();
+  public Future<ReadableStreamChannel> handleGet(RestRequest restRequest, Callback<ReadableStreamChannel> callback) {
     logger.trace("Handling GET request - {}", restRequest.getUri());
-    try {
-      String operationInUri = getOperationFromRequestUri(restRequest);
-      logger.trace("GET operation requested - {}", operationInUri);
-      AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
-      switch (operationType) {
-        case echo:
-          EchoHandler.handleRequest(restRequestInfo, adminMetrics);
-          break;
-        case getReplicasForBlobId:
-          GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap, adminMetrics);
-          break;
-        default:
-          adminMetrics.unsupportedGetOperationError.inc();
-          throw new RestServiceException("Unsupported operation during GET (" + operationInUri + ") for Admin service",
-              RestServiceErrorCode.UnsupportedOperation);
-      }
-    } finally {
-      if (restRequestInfo.isFirstPart()) {
-        adminMetrics.getOperationRate.mark();
-      }
+    adminMetrics.getOperationRate.mark();
+    Future<ReadableStreamChannel> future;
+    String operationInUri = getOperationFromRequestUri(restRequest);
+    logger.trace("GET operation requested - {}", operationInUri);
+    AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
+    switch (operationType) {
+      case echo:
+        future = EchoHandler.handleGetRequest(restRequest, callback, adminMetrics);
+        break;
+      case getReplicasForBlobId:
+        future = GetReplicasForBlobIdHandler.handleGetRequest(restRequest, clusterMap, callback, adminMetrics);
+        break;
+      default:
+        adminMetrics.unsupportedGetOperationError.inc();
+        // TODO: go to coordinator backed router.
+        future = new FutureResult<ReadableStreamChannel>();
+        RestServiceException e =
+            new RestServiceException("Unsupported operation during GET (" + operationInUri + ") for Admin service",
+                RestServiceErrorCode.UnsupportedOperation);
+        ((FutureResult<ReadableStreamChannel>) future).done(null, new RuntimeException(e));
+        if (callback != null) {
+          callback.onCompletion(null, e);
+        }
+        break;
     }
+    return future;
   }
 
   @Override
-  public void handlePost(RestRequestInfo restRequestInfo)
-      throws RestServiceException {
-    if (restRequestInfo.isFirstPart()) {
-      adminMetrics.postOperationRate.mark();
-    }
+  public Future<String> handlePost(RestRequest restRequest, Callback<String> callback) {
+    adminMetrics.postOperationRate.mark();
     adminMetrics.unsupportedPostOperationError.inc();
-    throw new RestServiceException("Unsupported operation for Admin service - POST",
+    FutureResult<String> future = new FutureResult<String>();
+    RestServiceException e = new RestServiceException("Unsupported operation for Admin service - POST",
         RestServiceErrorCode.UnsupportedOperation);
+    future.done(null, new RuntimeException(e));
+    if (callback != null) {
+      callback.onCompletion(null, e);
+    }
+    return future;
   }
 
   @Override
-  public void handleDelete(RestRequestInfo restRequestInfo)
-      throws RestServiceException {
-    if (restRequestInfo.isFirstPart()) {
-      adminMetrics.deleteOperationRate.mark();
-    }
+  public Future<Void> handleDelete(RestRequest restRequest, Callback<Void> callback) {
+    adminMetrics.deleteOperationRate.mark();
     adminMetrics.unsupportedDeleteOperationError.inc();
-    throw new RestServiceException("Unsupported operation for Admin service - DELETE",
+    FutureResult<Void> future = new FutureResult<Void>();
+    RestServiceException e = new RestServiceException("Unsupported operation for Admin service - DELETE",
         RestServiceErrorCode.UnsupportedOperation);
+    future.done(null, new RuntimeException(e));
+    if (callback != null) {
+      callback.onCompletion(null, e);
+    }
+    return future;
   }
 
   @Override
-  public void handleHead(RestRequestInfo restRequestInfo)
-      throws RestServiceException {
-    if (restRequestInfo.isFirstPart()) {
-      adminMetrics.headOperationRate.mark();
-    }
+  public Future<BlobInfo> handleHead(RestRequest restRequest, Callback<BlobInfo> callback) {
+    adminMetrics.headOperationRate.mark();
     adminMetrics.unsupportedHeadOperationError.inc();
-    throw new RestServiceException("Unsupported operation for Admin service - HEAD",
+    FutureResult<BlobInfo> future = new FutureResult<BlobInfo>();
+    RestServiceException e = new RestServiceException("Unsupported operation for Admin service - HEAD",
         RestServiceErrorCode.UnsupportedOperation);
+    future.done(null, new RuntimeException(e));
+    if (callback != null) {
+      callback.onCompletion(null, e);
+    }
+    return future;
   }
 
   /**
