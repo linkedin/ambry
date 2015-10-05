@@ -1,10 +1,12 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.HardDeleteInfo;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageStoreHardDelete;
 import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -29,7 +31,7 @@ public class BlobStoreHardDeleteTest {
         {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5")};
     long expectedExpirationTimeMs = 0;
 
-    public void initialize()
+    public ArrayList<Long> initialize()
         throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
@@ -39,6 +41,8 @@ public class BlobStoreHardDeleteTest {
       byte[] blob = new byte[BLOB_SIZE];
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(blob);
+
+      ArrayList<Long> msgOffsets = new ArrayList<Long>();
 
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =
@@ -72,6 +76,21 @@ public class BlobStoreHardDeleteTest {
           msg4.getSize() +
           msg5.getSize()));
 
+      Long offset = 0L;
+      msgOffsets.add(offset);
+      offset += msg0.getSize();
+      msgOffsets.add(offset);
+      offset += msg1.getSize();
+      msgOffsets.add(offset);
+      offset += msg2.getSize();
+      msgOffsets.add(offset);
+      offset += msg3d.getSize();
+      msgOffsets.add(offset);
+      offset += msg4.getSize();
+      msgOffsets.add(offset);
+      offset += msg5.getSize();
+      msgOffsets.add(offset);
+
       // msg0: A good message that will not be part of hard deletes.
       writeToBuffer(msg0, (int) msg0.getSize());
 
@@ -82,9 +101,10 @@ public class BlobStoreHardDeleteTest {
       // msg2: A good message that will be part of hard delete, with recoveryInfo.
       readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
-      HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
-          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
-          BLOB_SIZE, keys[2]);
+      HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
+          new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
+              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
+              BLOB_SIZE, keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
@@ -104,6 +124,7 @@ public class BlobStoreHardDeleteTest {
       readSet.addMessage(buffer.position(), keys[4], (int) msg5.getSize());
       writeToBufferAndCorruptBlobRecord(msg5, (int) msg5.getSize());
       buffer.position(0);
+      return msgOffsets;
     }
 
     private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite)
@@ -200,12 +221,33 @@ public class BlobStoreHardDeleteTest {
       throws MessageFormatException, IOException {
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
+    StoreKeyFactory keyFactory = new MockIdFactory();
     // create log and write to it
     ReadImp readImp = new ReadImp();
-    readImp.initialize();
+    ArrayList<Long> msgOffsets = readImp.initialize();
 
-    Iterator<HardDeleteInfo> iter = hardDelete
-        .getHardDeleteMessages(readImp.getMessageReadSet(), new MockIdFactory(), readImp.getRecoveryInfoList());
+    // read a put record.
+    MessageInfo info = hardDelete.getMessageInfo(readImp, msgOffsets.get(0), keyFactory);
+
+    // read a delete record.
+    hardDelete.getMessageInfo(readImp, msgOffsets.get(3), keyFactory);
+
+    // read from a random location.
+    try {
+      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1))/2, keyFactory);
+      Assert.assertTrue(false);
+    } catch (IOException e) {
+    }
+
+    // offset outside of valid range.
+    try {
+      hardDelete.getMessageInfo(readImp, (msgOffsets.get(msgOffsets.size() - 1) + 1), keyFactory);
+      Assert.assertTrue(false);
+    } catch (IOException e) {
+    }
+
+    Iterator<HardDeleteInfo> iter =
+        hardDelete.getHardDeleteMessages(readImp.getMessageReadSet(), keyFactory, readImp.getRecoveryInfoList());
 
     List<HardDeleteInfo> hardDeletedList = new ArrayList<HardDeleteInfo>();
 
