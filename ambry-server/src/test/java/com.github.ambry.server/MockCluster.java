@@ -5,12 +5,10 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
@@ -36,13 +34,13 @@ public class MockCluster {
   private NotificationSystem notificationSystem;
   private boolean serverInitialized = false;
 
-  public MockCluster(NotificationSystem notificationSystem)
+  public MockCluster(NotificationSystem notificationSystem, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "", new Properties(), true);
+    this(notificationSystem, false, "", new Properties(), true, time);
   }
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
-      boolean enableHardDeletes)
+      boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
@@ -56,7 +54,7 @@ public class MockCluster {
           String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
           sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
         }
-        initializeServer(dataNodeId, sslProps, enableHardDeletes);
+        initializeServer(dataNodeId, sslProps, enableHardDeletes, time);
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -73,20 +71,20 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes)
+  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
-    props.setProperty("store.deleted.message.retention.days", "0");
     props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
+    props.setProperty("store.deleted.message.retention.days", "1");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem);
+    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem, time);
     serverList.add(server);
   }
 
@@ -120,7 +118,7 @@ public class MockCluster {
    * @return the config value for sslEnabledDatacenters for the given datacenter
    */
   private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
-    ArrayList<String> localCopy = (ArrayList<String>)sslEnabledDataCenterList.clone();
+    ArrayList<String> localCopy = (ArrayList<String>) sslEnabledDataCenterList.clone();
     localCopy.remove(datacenter);
     String sslEnabledDatacenters = Utils.concatenateString(localCopy, ",");
     return sslEnabledDatacenters;

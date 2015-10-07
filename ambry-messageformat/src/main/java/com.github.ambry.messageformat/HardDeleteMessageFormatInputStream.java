@@ -1,15 +1,17 @@
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.ZeroBytesInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 
 /**
- * Represents a message that consist of the blob properties with the user metadata and blob
+ * Represents a message that consist of just the user metadata and blob content. Additionally, these fields are
  * zeroed out.
- * This format is used to replace a put record with a hard deleted blob into the store
+ * This format is used to replace a put record's user metadata and blob content part as part of hard deleting it.
  *
  *  - - - - - - - - - - - - - - - - - - -
  * |           Message Header            |
@@ -23,12 +25,77 @@ import java.nio.ByteBuffer;
  * |       Blob Record (Zeroed out)      |
  *  - - - - - - - - - - - - - - - - - - -
  */
-public class HardDeleteMessageFormatInputStream extends PutMessageFormatInputStream {
+public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream {
 
-  public HardDeleteMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, int userMetadataSize,
-      int blobStreamSize)
+  private int hardDeleteStreamRelativeOffset;
+
+  /**
+   * Creates a hard delete stream using the given parameters to replace the usermetadata and blob record fields. The
+   * method takes the blobProperties field as a parameter, but that is just used to generate the stream.
+   * @param userMetadataRelativeOffset the relative offset of userMetadata.
+   * @param userMetadataVersion the version of the userMetadata.
+   * @param userMetadataSize the size of the userMetadata field.
+   * @param blobRecordVersion the version of the blob record.
+   * @param blobStreamSize the size of the blob stream.
+   * @throws MessageFormatException
+   * @throws IOException
+   */
+  public HardDeleteMessageFormatInputStream(int userMetadataRelativeOffset, short userMetadataVersion,
+      int userMetadataSize, short blobRecordVersion, long blobStreamSize)
       throws MessageFormatException, IOException {
-    super(key, blobProperties, ByteBuffer.allocate(userMetadataSize),
-        new ZeroBytesInputStream(blobStreamSize), blobStreamSize);
+
+    ByteBuffer userMetadata = ByteBuffer.allocate(userMetadataSize);
+    InputStream blobStream = new ZeroBytesInputStream(blobStreamSize);
+
+    hardDeleteStreamRelativeOffset = userMetadataRelativeOffset;
+
+    int userMetadataRecordSize;
+    ByteBuffer serializedUserMetadata;
+    switch (userMetadataVersion) {
+      case MessageFormatRecord.UserMetadata_Version_V1:
+        userMetadataRecordSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+        serializedUserMetadata = ByteBuffer.allocate(userMetadataRecordSize);
+        MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(serializedUserMetadata, userMetadata);
+        serializedUserMetadata.flip();
+        break;
+      default:
+        throw new MessageFormatException("Unknown version encountered when creating hard delete stream",
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+
+    long blobRecordSize;
+    ByteBuffer serializedBlobPartialRecord;
+    switch (blobRecordVersion) {
+      case MessageFormatRecord.Blob_Version_V1:
+        blobRecordSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobStreamSize);
+        serializedBlobPartialRecord =
+            ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+        MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize);
+        serializedBlobPartialRecord.flip();
+        break;
+      default:
+        throw new MessageFormatException("Unknown version encountered when creating hard delete stream",
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+
+    buffer = ByteBuffer
+        .allocate(userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+
+    buffer.put(serializedUserMetadata);
+    int bufferBlobStart = buffer.position();
+    buffer.put(serializedBlobPartialRecord);
+    Crc32 crc = new Crc32();
+    crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
+    stream = new CrcInputStream(crc, blobStream);
+    streamLength = blobStreamSize;
+    messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
+    buffer.flip();
+  }
+
+  /**
+   * @return The relative offset of the original message that corresponds to this hard delete stream.
+   */
+  public int getHardDeleteStreamRelativeOffset() {
+    return hardDeleteStreamRelativeOffset;
   }
 }

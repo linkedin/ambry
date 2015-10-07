@@ -1,14 +1,14 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -39,10 +39,14 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.PersistentIndex;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -101,7 +105,8 @@ public class ServerTest {
         TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
 
     notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false);
+    sslCluster =
+        new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
 
     //client
     sslFactory = new SSLFactory(clientSSLConfig1);
@@ -156,7 +161,6 @@ public class ServerTest {
   private void endToEndTest(Port targetPort, String coordinatorDatacenter, String sslEnabledDatacenters,
       MockCluster cluster)
       throws InterruptedException, IOException, InstantiationException {
-
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
@@ -347,11 +351,34 @@ public class ServerTest {
     long endTime = SystemTime.getInstance().milliseconds() + TIMEOUT;
     do {
       if (cleanupTokenFile.exists()) {
+        /* The cleanup token format is as follows:
+           --
+           token_version
+           startTokenForRecovery
+           endTokenForRecovery
+           numBlobsInRange
+           --
+           blob1_blobReadOptions {version, offset, sz, ttl, key}
+           blob2_blobReadOptions
+           ....
+           blobN_blobReadOptions
+           --
+           length_of_blob1_messageStoreRecoveryInfo
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           length_of_blob2_messageStoreRecoveryInfo
+           blob2_messageStoreRecoveryInfo
+           ....
+           length_of_blobN_messageStoreRecoveryInfo
+           blobN_messageStoreRecoveryInfo
+           crc
+           ---
+         */
+
         CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();
-          Assert.assertEquals(version, 0);
+          Assert.assertEquals(version, PersistentIndex.Cleanup_Token_Version_V1);
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
@@ -363,6 +390,36 @@ public class ServerTest {
           int size = bytebufferToken.getInt();
           bytebufferToken.position(bytebufferToken.position() + size);
           parsedTokenValue = bytebufferToken.getLong();
+
+          int num = stream.readInt();
+          List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
+          for (int i = 0; i < num; i++) {
+            // Read BlobReadOptions
+            short blobReadOptionsVersion = stream.readShort();
+            switch (blobReadOptionsVersion) {
+              case 0:
+                long offset = stream.readLong();
+                long sz = stream.readLong();
+                long ttl = stream.readLong();
+                StoreKey key = storeKeyFactory.getStoreKey(stream);
+                storeKeyList.add(key);
+                break;
+              default:
+                Assert.assertFalse(true);
+            }
+          }
+
+          for (int i = 0; i < num; i++) {
+            int length = stream.readInt();
+            short headerVersion = stream.readShort();
+            short userMetadataVersion = stream.readShort();
+            int userMetadataSize = stream.readInt();
+            short blobRecordVersion = stream.readShort();
+            long blobStreamSize = stream.readLong();
+            StoreKey key = storeKeyFactory.getStoreKey(stream);
+            Assert.assertTrue(storeKeyList.get(i).equals(key));
+          }
+
           long crc = crcStream.getValue();
           Assert.assertEquals(crc, stream.readLong());
           Thread.sleep(1000);
@@ -377,7 +434,8 @@ public class ServerTest {
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, true);
+    MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
+    sslCluster = new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, true, time);
     sslCluster.startServers();
     MockClusterMap clusterMap = sslCluster.getClusterMap();
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
@@ -503,6 +561,7 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(1).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
+    time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
@@ -631,6 +690,7 @@ public class ServerTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
+    time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
     ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
