@@ -1837,8 +1837,7 @@ public class PersistentIndexTest {
           public void remove() {
             throw new UnsupportedOperationException();
           }
-        }
-        ;
+        };
         return new MockMessageStoreHardDeleteIterator(readSet);
       }
 
@@ -1889,16 +1888,6 @@ public class PersistentIndexTest {
       MockId blobId08 = new MockId("id08");
       MockId blobId09 = new MockId("id09");
       MockId blobId10 = new MockId("id10");
-      MockId blobId11 = new MockId("id11");
-      MockId blobId12 = new MockId("id12");
-      MockId blobId13 = new MockId("id13");
-      MockId blobId14 = new MockId("id14");
-      MockId blobId15 = new MockId("id15");
-      MockId blobId16 = new MockId("id16");
-      MockId blobId17 = new MockId("id17");
-      MockId blobId18 = new MockId("id18");
-      MockId blobId19 = new MockId("id19");
-      MockId blobId20 = new MockId("id20");
 
       helper.add(blobId01);
       helper.add(blobId02);

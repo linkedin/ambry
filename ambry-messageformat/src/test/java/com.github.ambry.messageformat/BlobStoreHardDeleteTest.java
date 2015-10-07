@@ -42,8 +42,6 @@ public class BlobStoreHardDeleteTest {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(blob);
 
-      ArrayList<Long> msgOffsets = new ArrayList<Long>();
-
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
@@ -76,6 +74,7 @@ public class BlobStoreHardDeleteTest {
           msg4.getSize() +
           msg5.getSize()));
 
+      ArrayList<Long> msgOffsets = new ArrayList<Long>();
       Long offset = 0L;
       msgOffsets.add(offset);
       offset += msg0.getSize();
