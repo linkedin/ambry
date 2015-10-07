@@ -8,9 +8,6 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class InMemoryIndexTest {

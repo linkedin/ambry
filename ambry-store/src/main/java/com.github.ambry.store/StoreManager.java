@@ -1,18 +1,18 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Scheduler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.codahale.metrics.MetricRegistry;
-
+import com.github.ambry.utils.Time;
 import java.io.File;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -29,9 +29,11 @@ public class StoreManager {
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
   private MessageStoreHardDelete hardDelete;
+  private Time time;
 
   public StoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete) {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time)
+      throws StoreException {
     this.config = config;
     this.scheduler = scheduler;
     this.registry = registry;
@@ -40,6 +42,19 @@ public class StoreManager {
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
+    this.time = time;
+    verifyConfigs();
+  }
+
+  private void verifyConfigs()
+      throws StoreException {
+    /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
+       We do this by making sure that the retention period for deleted messages (which determines the end point for hard
+       deletes) is always greater than the log flush period. */
+    if (config.storeDeletedMessageRetentionDays < config.storeDataFlushIntervalSeconds / Time.SecsPerDay + 1) {
+      throw new StoreException("Message retention days must be greater than the store flush interval period",
+          StoreErrorCodes.Initialization_Error);
+    }
   }
 
   public void start()
@@ -54,7 +69,7 @@ public class StoreManager {
       }
       Store store =
           new BlobStore(config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityInBytes(), factory,
-              recovery, hardDelete);
+              recovery, hardDelete, time);
       store.start();
       stores.put(replica.getPartitionId(), store);
     }

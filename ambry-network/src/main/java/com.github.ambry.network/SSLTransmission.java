@@ -619,7 +619,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   public void onReceiveComplete() {
     long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
     double receiveBytesRate =
-        networkReceive.getReceivedBytes().sizeInBytes() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
     metrics.sslReceiveBytesRate.update((long) receiveBytesRate);
   }
 }
