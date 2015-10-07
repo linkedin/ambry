@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * Responsible for accepting connections from clients, decoding HTTP data, passing them on the underlying
  * {@link BlobStorageService} and providing a Netty specific implementation of
- * {@link RestResponseHandler} ({@link NettyResponseHandler}) for writing responses to
+ * {@link RestResponseChannel} ({@link NettyResponseChannel}) for writing responses to
  * clients.
  * <p/>
  * This implementation creates a pipeline of handlers for every connection that it accepts and the last inbound handler,

@@ -12,4 +12,5 @@ include 'ambry-api',
         'ambry-metrics',
         'ambry-protocol',
         'ambry-rest',
-        'ambry-admin'
+        'ambry-admin',
+        'ambry-router'

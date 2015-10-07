@@ -1,6 +1,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterMap;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -91,20 +93,24 @@ public class MockBlobStorageService implements BlobStorageService {
    */
   private void echoRestMethod(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    RestResponseHandler restResponseHandler = restRequestInfo.getRestResponseHandler();
+    RestResponseChannel restResponseChannel = restRequestInfo.getRestResponseChannel();
     RestRequestContent content = restRequestInfo.getRestRequestContent();
-    if (restRequestInfo.isFirstPart()) {
-      RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      restResponseHandler.setContentType("text/plain; charset=UTF-8");
-      restResponseHandler.addToResponseBody(restMethod.toString().getBytes(), true);
-    } else {
-      byte[] contentBytes = new byte[content.getContentSize()];
-      content.getBytes(0, contentBytes, 0, content.getContentSize());
-      restResponseHandler.addToResponseBody(contentBytes, content.isLast());
-      if (content.isLast()) {
-        restResponseHandler.flush();
-        restResponseHandler.onRequestComplete(null, false);
+    try {
+      if (restRequestInfo.isFirstPart()) {
+        RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+        restResponseChannel.setContentType("text/plain; charset=UTF-8");
+        restResponseChannel.write(ByteBuffer.wrap(restMethod.toString().getBytes()));
+      } else {
+        byte[] contentBytes = new byte[content.getContentSize()];
+        content.getBytes(0, contentBytes, 0, content.getContentSize());
+        restResponseChannel.write(ByteBuffer.wrap(contentBytes));
+        if (content.isLast()) {
+          restResponseChannel.flush();
+          restResponseChannel.onRequestComplete(null, false);
+        }
       }
+    } catch (IOException e) {
+      throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
     }
   }
 }

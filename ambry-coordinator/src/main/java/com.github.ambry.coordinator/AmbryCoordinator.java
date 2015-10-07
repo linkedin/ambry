@@ -146,8 +146,10 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
+    OperationContext oc = new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
         coordinatorMetrics, responseHandler, sslEnabledDatacenters);
+    logger.trace("Operation context " + oc);
+    return oc;
   }
 
   private PartitionId getPartitionForPut()
@@ -169,6 +171,7 @@ public class AmbryCoordinator implements Coordinator {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);
+      logger.trace("BlobId created " + blobId + " with partition " + blobId.getPartition());
     } catch (Exception e) {
       logger.error("Caller passed in invalid BlobId " + blobIdString);
       throw new CoordinatorException("BlobId is invalid " + blobIdString, CoordinatorError.InvalidBlobId);
