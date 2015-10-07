@@ -1,5 +1,6 @@
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
@@ -8,21 +9,20 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.util.EnumSet;
-import java.util.HashMap;
-import org.junit.Test;
-import org.junit.Assert;
-import com.codahale.metrics.MetricRegistry;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class BlobStoreTest {
@@ -77,7 +77,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete());
+          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -152,7 +152,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete());
+          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -214,7 +214,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete());
+          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -322,7 +322,7 @@ public class BlobStoreTest {
 
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(dummyMap));
+          new DummyMessageStoreHardDelete(dummyMap), SystemTime.getInstance());
       store.start();
 
       // put blobs
@@ -437,7 +437,7 @@ public class BlobStoreTest {
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
           replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete());
+          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);

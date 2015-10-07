@@ -6,25 +6,33 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 public class PersistentIndexTest {
@@ -43,17 +51,47 @@ public class PersistentIndexTest {
   }
 
   class MockIndex extends PersistentIndex {
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        MessageStoreHardDelete messageStoreHardDelete, Time time)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
+          new StoreMetrics(datadir, new MetricRegistry()), time);
+    }
+
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()));
+      this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+    }
+
+    public void setHardDeleteRunningStatus(boolean status) {
+      super.hardDeleter.running.set(status);
+    }
+
+    public boolean hardDelete()
+        throws StoreException {
+      return super.hardDeleter.hardDelete();
+    }
+
+    public void persistAndAdvanceStartTokenSafeToPersist() {
+      super.hardDeleter.preLogFlush();
+      // no flushing to do.
+      super.hardDeleter.postLogFlush();
+    }
+
+    public void pruneHardDeleteRecoveryRange() {
+      super.hardDeleter.pruneHardDeleteRecoveryRange();
+    }
+
+    public void performHardDeleteRecovery()
+        throws StoreException {
+      super.hardDeleter.performRecovery();
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, recovery, cleanup,
-          new StoreMetrics(datadir, new MetricRegistry()));
+          new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
     }
 
     IndexValue getValue(StoreKey key)
@@ -1450,7 +1488,7 @@ public class PersistentIndexTest {
     }
   }
 
-  //@Test
+  @Test
   public void testFindDeletedEntries() {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
@@ -1500,7 +1538,7 @@ public class PersistentIndexTest {
       IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, 100, flags, 12567));
       IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, 200, flags, 12567));
       IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, 300, flags, 12567));
-      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, 400, flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, 500, flags, 12567));
       IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, 600, flags, 12567));
       IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, 700, flags, 12567));
       IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, 800, flags, 12567));
@@ -1514,16 +1552,15 @@ public class PersistentIndexTest {
       IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, 2300, flags, 12567));
       IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, 2400, flags, 12567));
       IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, 2500, flags, 12567));
-      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 2600, flags, 12567));
-      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValue(100, 2700, flags, 12567));
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, 2800, flags, 12567));
 
       //segment 1
       index.addToIndex(entry1, new FileSpan(0, 100));
       index.addToIndex(entry2, new FileSpan(100, 200));
       index.addToIndex(entry3, new FileSpan(200, 300));
       index.addToIndex(entry4, new FileSpan(300, 400));
-      index.addToIndex(entry5, new FileSpan(400, 500));
-      index.markAsDeleted(blobId2, new FileSpan(500, 600));
+      index.markAsDeleted(blobId2, new FileSpan(400, 500));
+      index.addToIndex(entry5, new FileSpan(500, 600));
       //Segment 1: [1 2d 3 4 5]
 
       //segment 2
@@ -1548,31 +1585,30 @@ public class PersistentIndexTest {
       index.markAsDeleted(blobId4, new FileSpan(1800, 1900)); // <- earliest journal entry.
       index.addToIndex(entry15, new FileSpan(1900, 2000));
       index.markAsDeleted(blobId12, new FileSpan(2000, 2100));
-      index.markAsDeleted(blobId7, new FileSpan(2100, 2200));
-      index.markAsDeleted(blobId15, new FileSpan(2200, 2300));
+      index.markAsDeleted(blobId15, new FileSpan(2100, 2200));
+      index.markAsDeleted(blobId7, new FileSpan(2200, 2300));
       //Segment 4: [4d 7d 12d 14 15d]
 
       //segment 5
       index.addToIndex(entry16, new FileSpan(2300, 2400));
       index.addToIndex(entry17, new FileSpan(2400, 2500));
       index.addToIndex(entry18, new FileSpan(2500, 2600));
-      index.addToIndex(entry19, new FileSpan(2600, 2700));
-      index.addToIndex(entry20, new FileSpan(2700, 2800));
-      index.markAsDeleted(blobId20, new FileSpan(2800, 2900));
-      index.markAsDeleted(blobId19, new FileSpan(2900, 3000));
-      //segment 5: [16 17 18 19d 20d]
+      index.markAsDeleted(blobId18, new FileSpan(2600, 2700));
+      index.markAsDeleted(blobId17, new FileSpan(2700, 2800));
+      index.addToIndex(entry19, new FileSpan(2800, 2900));
+      //segment 5: [16 17d 18d 19]
 
       IndexValue value1 = index.getValue(blobId1);
       IndexValue value2 = index.getValue(blobId2);
       IndexValue value3 = index.getValue(blobId3);
       Assert.assertEquals(value1.getOffset(), 1000);
       Assert.assertEquals(value1.getOriginalMessageOffset(), 0);
-      Assert.assertEquals(value2.getOffset(), 500);
+      Assert.assertEquals(value2.getOffset(), 400);
       Assert.assertEquals(value2.getOriginalMessageOffset(), 100);
       Assert.assertEquals(value3.getOffset(), 200);
       Assert.assertEquals(value3.getOriginalMessageOffset(), 200);
 
-      ByteBuffer buffer = ByteBuffer.allocate(3000);
+      ByteBuffer buffer = ByteBuffer.allocate(2900);
       log.appendFrom(buffer);
       index.close();
       index = new MockIndex(logFile, scheduler, log, config, factory);
@@ -1581,7 +1617,7 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d]
+      //segment 5: [16 17d 18d 19]
       FindInfo info = index.findDeletedEntriesSince(token, 500, SystemTime.getInstance().milliseconds() / 1000);
       List<MessageInfo> messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 1);
@@ -1595,7 +1631,7 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d]
+      //segment 5: [16 17d 18d 19]
       info = index.findDeletedEntriesSince(info.getFindToken(), 200, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 1);
@@ -1609,7 +1645,7 @@ public class PersistentIndexTest {
       //Segment 2: [1d *6* 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d]
+      //segment 5: [16 17d 18d 19]
       info = index.findDeletedEntriesSince(info.getFindToken(), 300, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);
@@ -1619,7 +1655,7 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 *9*]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d]
+      //segment 5: [16 17d 18d 19]
       info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 4);
@@ -1635,16 +1671,31 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d *7d* 12d 14 15d]
-      //segment 5: [16 17 18 19d 20d] : in the journal 20d comes before 19d. In messageEntries, 19 comes before 20
-      // as we would have ...19 20 20d 20... from the journal, and then we lookup keys in that order when filtering
-      // out non-delete entries.
-      info = index.findDeletedEntriesSince(info.getFindToken(), 800, SystemTime.getInstance().milliseconds() / 1000);
+      //segment 5: [16 17d 18d 19] : in the journal 18d comes before 17d. In messageEntries, 17 comes before 18
+      // as we would have had ...17 18 18d 17d... from the journal, and then we lookup and update delete status of
+      // keys in that order when filtering out non-delete entries.
+      info = index.findDeletedEntriesSince(info.getFindToken(), 500, SystemTime.getInstance().milliseconds() / 1000);
       messageEntries = info.getMessageEntries();
-      Assert.assertEquals(messageEntries.size(), 4);
+      Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId12);
       Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId15);
-      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId19);
-      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId20);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId17);
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getStoreKey(), null);
+      // journal based token with offset of blobid17
+      Assert.assertEquals(((StoreFindToken) info.getFindToken()).getOffset(), 2400);
+
+      //Segment 1: [1 2d 3 4 5]
+      //Segment 2: [1d 6 7 8 9]
+      //Segment 3: [6d 10d 11 12 13]
+      //Segment 4: [4d 7d 12d 14 15d]
+      //segment 5: [16 17d 18d 19] : in the journal 18d comes before 17d.
+      //journal: .... 17 18 18d 17d
+      //this time we read from the journal, so 18d will come before 17d.
+      info = index.findDeletedEntriesSince(info.getFindToken(), 700, SystemTime.getInstance().milliseconds() / 1000);
+      messageEntries = info.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 2);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId18);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId17);
 
       //Test end time
 
@@ -1656,8 +1707,8 @@ public class PersistentIndexTest {
       // should mock time to do this in a cleaner way.
       Thread.sleep(1000);
 
-      index.markAsDeleted(blobId17, new FileSpan(3000, 3100));
-      index.markAsDeleted(blobId5, new FileSpan(3100, 3200));
+      index.markAsDeleted(blobId16, new FileSpan(2900, 3000));
+      index.markAsDeleted(blobId5, new FileSpan(3000, 3100));
       buffer = ByteBuffer.allocate(200);
       log.appendFrom(buffer);
       index.close();
@@ -1666,7 +1717,7 @@ public class PersistentIndexTest {
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d] // lastmodified time < beforeSegment5LastModification
-      //segment 5: [5d 16 17d 18 19d 20d] //lastmodified time > beforeSegment5LastModification
+      //segment 5: [5d 16d 17d 18 19d] //lastmodified time > beforeSegment5LastModification
       info = index.findDeletedEntriesSince(new StoreFindToken(), 4000, beforeSegment5LastModification.get());
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 8);
@@ -1696,6 +1747,248 @@ public class PersistentIndexTest {
       if (map != null) {
         map.cleanup();
       }
+    }
+  }
+
+  @Test
+  public void testHardDelete() {
+    // Create a mock index with regular log.
+    // perform puts to the index.
+    // perform deletes to the index.
+    // call hardDelete() explicitly (set the thread frequency time to a large number if required) -
+    // that will do findDeleted, prune and performHardDelete()
+    // perform will need a messageStoreHardDelete implementation that just returns something
+    // that will be written back. - need to implement that.
+    // disable index persistor if that can be done.
+    // call persist cleanup token and close the index. Reopen it to execute recovery path.
+    // perform hard deletes upto some point.
+    // perform more deletes.
+    // do recovery.
+
+    class HardDeleteTestHelper implements MessageStoreHardDelete {
+      private long nextOffset;
+      private long sizeOfEntry;
+      private MockIndex index;
+      private Log log;
+      HashMap<Long, MessageInfo> offsetMap;
+
+      HardDeleteTestHelper(long offset, long size) {
+        nextOffset = offset;
+        sizeOfEntry = size;
+        offsetMap = new HashMap<Long, MessageInfo>();
+      }
+
+      void setIndex(MockIndex index, Log log) {
+        this.index = index;
+        this.log = log;
+      }
+
+      void add(MockId id)
+          throws IOException, StoreException {
+        index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, nextOffset, (byte) 0, 12345)),
+            new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+        log.appendFrom(byteBuffer);
+        offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
+        nextOffset += sizeOfEntry;
+      }
+
+      void delete(MockId id)
+          throws IOException, StoreException {
+        index.markAsDeleted(id, new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+        log.appendFrom(byteBuffer);
+        nextOffset += sizeOfEntry;
+      }
+
+      @Override
+      public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+          List<byte[]> recoveryInfoList) {
+        class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
+          int count;
+          MessageReadSet readSet;
+
+          MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
+            this.readSet = readSet;
+            this.count = readSet.count();
+          }
+
+          @Override
+          public boolean hasNext() {
+            return count > 0;
+          }
+
+          @Override
+          public HardDeleteInfo next() {
+            if (!hasNext()) {
+              throw new NoSuchElementException();
+            }
+            --count;
+            ByteBuffer buf = ByteBuffer.allocate((int) sizeOfEntry);
+            byte[] recoveryInfo = new byte[100];
+            Arrays.fill(recoveryInfo, (byte) 0);
+            ByteBufferInputStream stream = new ByteBufferInputStream(buf);
+            ReadableByteChannel channel = Channels.newChannel(stream);
+            HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
+            return hardDeleteInfo;
+          }
+
+          @Override
+          public void remove() {
+            throw new UnsupportedOperationException();
+          }
+        };
+        return new MockMessageStoreHardDeleteIterator(readSet);
+      }
+
+      @Override
+      public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
+        return offsetMap.get(offset);
+      }
+    }
+
+    StoreFindToken token = new StoreFindToken();
+    MockClusterMap map = null;
+    try {
+      String logFile = tempFile().getParent();
+      File indexFile = new File(logFile);
+      for (File c : indexFile.listFiles()) {
+        c.delete();
+      }
+      Scheduler scheduler = new Scheduler(1, false);
+      scheduler.startup();
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Properties props = new Properties();
+      // the test will set the tokens, so disable the index persistor.
+      props.setProperty("store.data.flush.interval.seconds", "3600");
+      props.setProperty("store.deleted.message.retention.days", "1");
+      props.setProperty("store.index.max.number.of.inmem.elements", "2");
+      // the following determines the number of entries that will be fetched at most. We need this to test the
+      // case where the endToken does not reach the journal.
+      props.setProperty("store.hard.delete.bytes.per.sec", "40");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
+
+      HardDeleteTestHelper helper = new HardDeleteTestHelper(0, 200);
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory, helper, time);
+      helper.setIndex(index, log);
+      // Setting this below will not enable the hard delete thread. This being a unit test, the methods
+      // are going to be called directly. We simply want to set the running flag to avoid those methods
+      // from bailing out prematurely.
+      index.setHardDeleteRunningStatus(true);
+
+      MockId blobId01 = new MockId("id01");
+      MockId blobId02 = new MockId("id02");
+      MockId blobId03 = new MockId("id03");
+      MockId blobId04 = new MockId("id04");
+      MockId blobId05 = new MockId("id05");
+      MockId blobId06 = new MockId("id06");
+      MockId blobId07 = new MockId("id07");
+      MockId blobId08 = new MockId("id08");
+      MockId blobId09 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+
+      helper.add(blobId01);
+      helper.add(blobId02);
+      helper.add(blobId03);
+      helper.add(blobId04);
+
+      helper.delete(blobId03);
+
+      helper.add(blobId05);
+      helper.add(blobId06);
+      helper.add(blobId07);
+
+      helper.delete(blobId02);
+      helper.delete(blobId06);
+
+      helper.add(blobId08);
+      helper.add(blobId09);
+      helper.add(blobId10);
+
+      helper.delete(blobId10);
+      helper.delete(blobId01);
+      helper.delete(blobId08);
+
+      // Let enough time to pass so that the above records become eligible for hard deletes.
+      time.currentMilliseconds = time.currentMilliseconds + 2 * Time.SecsPerDay * Time.MsPerSec;
+
+      // The first * shows where startTokenSafeToPersist is
+      // The second * shows where startToken/endToken are before the operations.
+      // Note since we are only depicting values before and after hardDelete() is done, startToken and endToken
+      // will be the same.
+
+      // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      boolean tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = endToken = 2.
+
+      // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
+      index.persistAndAdvanceStartTokenSafeToPersist();
+
+      // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = endToken = 4.
+
+      // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = 5, endToken = 5, startTokenSafeToPersist = 2
+
+      // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+      // startToken = 7, endToken = 7, starttokenSafeToPersist = 5
+      // 3d just got pruned.
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8]
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d* 1d 8]
+
+      tokenMovedForward = index.hardDelete();
+      Assert.assertTrue(tokenMovedForward);
+
+      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // journal:                                       [10 10d 1d 8*]
+      // All caught up, so token should not have moved forward.
+      tokenMovedForward = index.hardDelete();
+      Assert.assertFalse(tokenMovedForward);
+
+      index.persistAndAdvanceStartTokenSafeToPersist();
+
+      // directly prune the recovery range completely (which should happen since we flushed till the endToken).
+      index.pruneHardDeleteRecoveryRange(); //
+
+      // Test recovery - this tests reading from the persisted token, filling up the hard delete recovery range and
+      // then actually redoing the hard deletes on the range.
+      index.performHardDeleteRecovery();
+
+      index.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+      org.junit.Assert.assertEquals(false, true);
     }
   }
 }
