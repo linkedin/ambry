@@ -1,6 +1,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterMap;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -55,7 +57,7 @@ public class MockBlobStorageService implements BlobStorageService {
    * Performs any custom operations required by the request (usually tests use this).
    * <p/>
    * All other requests are handled by echoing the {@link RestMethod} back to the client.
-   * @param restRequestInfo - a piece of the request that needs to be handled.
+   * @param restRequestInfo {@link RestRequestInfo } that defines a piece of the request that needs to be handled.
    * @throws RestServiceException
    */
   private void doHandleRequest(RestRequestInfo restRequestInfo)
@@ -76,7 +78,7 @@ public class MockBlobStorageService implements BlobStorageService {
 
   /**
    * Determines the operation desired by the request.
-   * @param restRequestMetadata - metadata about the request.
+   * @param restRequestMetadata {@link RestRequestMetadata} metadata about the request.
    * @return the operation desired by the request.
    */
   private String getOperationType(RestRequestMetadata restRequestMetadata) {
@@ -86,25 +88,29 @@ public class MockBlobStorageService implements BlobStorageService {
 
   /**
    * Echoes the {@link RestMethod} defined in {@link RestRequestMetadata} and writes the response to the channel.
-   * @param restRequestInfo - a piece of the request that needs to be handled.
+   * @param restRequestInfo {@link RestRequestInfo } that defines a piece of the request that needs to be handled.
    * @throws RestServiceException
    */
   private void echoRestMethod(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    RestResponseHandler restResponseHandler = restRequestInfo.getRestResponseHandler();
+    RestResponseChannel restResponseChannel = restRequestInfo.getRestResponseChannel();
     RestRequestContent content = restRequestInfo.getRestRequestContent();
-    if (content == null) {
-      RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
-      restResponseHandler.setContentType("text/plain; charset=UTF-8");
-      restResponseHandler.addToResponseBody(restMethod.toString().getBytes(), true);
-    } else {
-      byte[] contentBytes = new byte[content.getContentSize()];
-      content.getBytes(0, contentBytes, 0, content.getContentSize());
-      restResponseHandler.addToResponseBody(contentBytes, content.isLast());
-      if (content.isLast()) {
-        restResponseHandler.flush();
-        restResponseHandler.onRequestComplete(null, false);
+    try {
+      if (restRequestInfo.isFirstPart()) {
+        RestMethod restMethod = restRequestInfo.getRestRequestMetadata().getRestMethod();
+        restResponseChannel.setContentType("text/plain; charset=UTF-8");
+        restResponseChannel.write(ByteBuffer.wrap(restMethod.toString().getBytes()));
+      } else {
+        byte[] contentBytes = new byte[content.getContentSize()];
+        content.getBytes(0, contentBytes, 0, content.getContentSize());
+        restResponseChannel.write(ByteBuffer.wrap(contentBytes));
+        if (content.isLast()) {
+          restResponseChannel.flush();
+          restResponseChannel.onRequestComplete(null, false);
+        }
       }
+    } catch (IOException e) {
+      throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
     }
   }
 }

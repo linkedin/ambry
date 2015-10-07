@@ -3,11 +3,6 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.MockBlobStorageService;
-import com.github.ambry.rest.NioServer;
-import com.github.ambry.rest.RestMethod;
-import com.github.ambry.rest.RestRequestHandlerController;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
@@ -36,12 +31,11 @@ import static org.junit.Assert.fail;
 
 /**
  * Some end to end tests that exercise {@link NettyServer}, {@link NettyMessageProcessor} and
- * {@link NettyResponseHandler}.
+ * {@link NettyResponseChannel}.
  */
 public class NettyEndToEndTest {
-  private static String NETTY_SERVER_PORT = "8088";
-  private static String NETTY_SERVER_ALTERNATE_PORT = "8089";
-  // magic number.
+  private static String NETTY_SERVER_PORT = "16503";
+  private static String NETTY_SERVER_ALTERNATE_PORT = "16501";
   private static int RESPONSE_QUEUE_POLL_TIMEOUT_SECS = 30;
 
   private static RestRequestHandlerController requestHandlerController;
@@ -97,7 +91,7 @@ public class NettyEndToEndTest {
   }
 
   /**
-   * Exercises some internals (mostly error handling) of {@link NettyMessageProcessor} and {@link NettyResponseHandler}
+   * Exercises some internals (mostly error handling) of {@link NettyMessageProcessor} and {@link NettyResponseChannel}
    * by wilfully introducing exceptions through {@link MockBlobStorageService}.
    * @throws Exception
    */

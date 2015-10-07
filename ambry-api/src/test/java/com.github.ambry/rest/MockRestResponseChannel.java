@@ -1,13 +1,16 @@
 package com.github.ambry.rest;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 
 /**
- * Implementation of {@link RestResponseHandler} that can be used by tests.
+ * Implementation of {@link RestResponseChannel} that can be used by tests.
  * <p/>
  * The responseMetadata is stored in-memory and data is "flushed" by moving it to a different data structure. The
  * responseMetadata and responseBody (flushed or non-flushed) can be obtained through APIs to check correctness.
@@ -21,15 +24,14 @@ import org.json.JSONObject;
  * List of possible responseHeaders: -
  * 1. "contentType" - String - the content type of the data in the response.
  * <p/>
- * When {@link MockRestResponseHandler#addToResponseBody(byte[], boolean)} is called, the input bytes are added to a
- * {@link ByteArrayOutputStream}. This represents the unflushed responseBody. On
- * {@link MockRestResponseHandler#flush()}, the {@link ByteArrayOutputStream} is emptied into a {@link StringBuilder}
- * and reset. The {@link StringBuilder} represents the flushed responseBody.
+ * When {@link #write(ByteBuffer)} is called, the input bytes are added to a {@link ByteArrayOutputStream}. This
+ * represents the unflushed responseBody. On {@link #flush()}, the {@link ByteArrayOutputStream} is emptied into a
+ * {@link StringBuilder} and reset. The {@link StringBuilder} represents the flushed responseBody.
  * <p/>
  * All functions are synchronized because this is expected to be thread safe (very coarse grained but this is not
- * expected to be performant, just .
+ * expected to be performant, just usable).
  */
-public class MockRestResponseHandler implements RestResponseHandler {
+public class MockRestResponseChannel implements RestResponseChannel {
   public static String RESPONSE_STATUS_KEY = "responseStatus";
   public static String RESPONSE_HEADERS_KEY = "responseHeaders";
   public static String CONTENT_TYPE_HEADER_KEY = "contentType";
@@ -37,7 +39,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
   public static String STATUS_OK = "OK";
   public static String STATUS_ERROR = "Error";
 
-  private AtomicBoolean channelActive = new AtomicBoolean(true);
+  private AtomicBoolean channelOpen = new AtomicBoolean(true);
   private AtomicBoolean requestComplete = new AtomicBoolean(false);
   private AtomicBoolean responseMetadataFinalized = new AtomicBoolean(false);
   private AtomicBoolean responseMetadataFlushed = new AtomicBoolean(false);
@@ -45,23 +47,31 @@ public class MockRestResponseHandler implements RestResponseHandler {
   private final ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
   private final StringBuilder bodyStringBuilder = new StringBuilder();
 
-  public MockRestResponseHandler()
+  public MockRestResponseChannel()
       throws JSONException {
     responseMetadata.put(RESPONSE_STATUS_KEY, STATUS_OK);
   }
 
   @Override
-  public synchronized void addToResponseBody(byte[] data, boolean isLast)
-      throws RestServiceException {
-    verifyChannelActive();
+  public synchronized int write(ByteBuffer src)
+      throws IOException {
+    if (!isOpen()) {
+      throw new ClosedChannelException();
+    }
     responseMetadataFinalized.set(true);
-    bodyBytes.write(data, 0, data.length);
+    int bytesWritten = src.remaining();
+    for (int i = 0; i < bytesWritten; i++) {
+      bodyBytes.write(src.get());
+    }
+    return bytesWritten;
   }
 
   @Override
   public synchronized void flush()
       throws RestServiceException {
-    verifyChannelActive();
+    if (!isOpen()) {
+      throw new IllegalStateException("Flush did not succeed because channel is already closed");
+    }
     responseMetadataFinalized.set(true);
     responseMetadataFlushed.set(true);
     bodyStringBuilder.append(bodyBytes.toString());
@@ -114,27 +124,21 @@ public class MockRestResponseHandler implements RestResponseHandler {
     }
   }
 
-  private void close()
-      throws RestServiceException {
-    channelActive.set(false);
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
   }
 
-  /**
-   * Verify that channel is still active.
-   */
-  private void verifyChannelActive()
-      throws RestServiceException {
-    if (!channelActive.get()) {
-      throw new RestServiceException("Channel has already been closed before write",
-          RestServiceErrorCode.ChannelAlreadyClosed);
-    }
+  @Override
+  public void close() {
+    channelOpen.set(false);
   }
 
-  // MockRestResponseHandler specific functions (for testing)
+  // MockRestResponseChannel specific functions (for testing)
 
   /**
    * Gets the current responseMetadata whether it has been flushed or not (Might not be the final response metadata).
-   * @return - get response metadata.
+   * @return the response metadata as a {@link JSONObject}.
    */
   public synchronized JSONObject getResponseMetadata() {
     return responseMetadata;
@@ -142,7 +146,7 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the responseMetadata if it has been flushed.
-   * @return  - get response metadata if flushed.
+   * @return the response metadata as a {@link JSONObject} if it has been flushed.
    */
   public synchronized JSONObject getFlushedResponseMetadata() {
     if (responseMetadataFlushed.get()) {
@@ -153,29 +157,17 @@ public class MockRestResponseHandler implements RestResponseHandler {
 
   /**
    * Gets the responseMetadata body including both flushed and un-flushed data.
-   * @return - flushed and un-flushed response body.
-   * @throws RestServiceException
+   * @return both the flushed and un-flushed response body as a {@link String}.
    */
-  public synchronized String getResponseBody()
-      throws RestServiceException {
+  public synchronized String getResponseBody() {
     return getFlushedResponseBody() + bodyBytes.toString();
   }
 
   /**
    * Gets the responseMetadata body that has already been flushed.
-   * @return - flushed response body.
-   * @throws RestServiceException
+   * @return flushed response body as a {@link String}.
    */
-  public synchronized String getFlushedResponseBody()
-      throws RestServiceException {
+  public synchronized String getFlushedResponseBody() {
     return bodyStringBuilder.toString();
-  }
-
-  /**
-   * Gets the active state of the channel.
-   * @return - true if active, false if not
-   */
-  public synchronized boolean getChannelActive() {
-    return channelActive.get();
   }
 }

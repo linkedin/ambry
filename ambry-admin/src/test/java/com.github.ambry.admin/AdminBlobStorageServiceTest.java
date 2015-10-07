@@ -8,7 +8,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequestContent;
 import com.github.ambry.rest.MockRestRequestMetadata;
-import com.github.ambry.rest.MockRestResponseHandler;
+import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequestContent;
 import com.github.ambry.rest.RestRequestInfo;
@@ -261,6 +261,16 @@ public class AdminBlobStorageServiceTest {
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
+
+    try {
+      // bad input - invalid blob id for this cluster map.
+      String blobId = "AAEAAQAAAAAAAADFAAAAJDMyYWZiOTJmLTBkNDYtNDQyNS1iYzU0LWEwMWQ1Yzg3OTJkZQ.gif";
+      RestRequestInfo restRequestInfo = createGetReplicasForBlobIdRestRequestInfo(blobId);
+      adminBlobStorageService.handleGet(restRequestInfo);
+      fail("Exception should have been thrown because the blobid is invalid");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
   }
 
   /**
@@ -308,11 +318,11 @@ public class AdminBlobStorageServiceTest {
 
   /**
    * Method to easily create RestRequestInfo objects containing a specific request.
-   * @param restMethod - the {@link RestMethod} desired.
-   * @param uri - string representation of the desired URI.
-   * @param headers - any associated headers as a {@link JSONObject}.
+   * @param restMethod the {@link RestMethod} desired.
+   * @param uri string representation of the desired URI.
+   * @param headers any associated headers as a {@link JSONObject}.
    * @return A {@link RestRequestInfo} object that defines the operation required by the input along with a
-   * {@link com.github.ambry.rest.RestResponseHandler}.
+   * {@link com.github.ambry.rest.RestResponseChannel}.
    * @throws JSONException
    * @throws URISyntaxException
    */
@@ -325,27 +335,27 @@ public class AdminBlobStorageServiceTest {
       request.put(MockRestRequestMetadata.HEADERS_KEY, headers);
     }
     RestRequestMetadata restRequestMetadata = new MockRestRequestMetadata(request);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseHandler());
+    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseChannel(), true);
   }
 
   /**
    * Extracts the response received from the {@link AdminBlobStorageService} and decodes it into a {@link JSONObject}.
    * @param restRequestInfo - the {@link RestRequestInfo} that was sent to {@link AdminBlobStorageService}.
-   * @return - the response decoded into a {@link JSONObject}.
+   * @return the response decoded into a {@link JSONObject}.
    * @throws JSONException
    * @throws RestServiceException
    */
   private JSONObject getJsonizedResponseBody(RestRequestInfo restRequestInfo)
       throws JSONException, RestServiceException {
-    MockRestResponseHandler restResponseHandler = (MockRestResponseHandler) restRequestInfo.getRestResponseHandler();
-    return new JSONObject(restResponseHandler.getFlushedResponseBody());
+    MockRestResponseChannel restResponseChannel = (MockRestResponseChannel) restRequestInfo.getRestResponseChannel();
+    return new JSONObject(restResponseChannel.getFlushedResponseBody());
   }
 
   /**
    * Concludes a test by putting in the end marker (last {@link RestRequestContent}) and checks that the
    * {@link AdminBlobStorageService} interprets it correctly.
-   * @param adminBlobStorageService
-   * @param restRequestInfo
+   * @param adminBlobStorageService instance of {@link AdminBlobStorageService} to use.
+   * @param restRequestInfo {@link RestRequestInfo} containing all the details about the request.
    * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException
@@ -354,16 +364,15 @@ public class AdminBlobStorageServiceTest {
       throws InstantiationException, JSONException, RestServiceException {
     RestRequestContent restRequestContent = createRestContent(null, true);
     adminBlobStorageService.handleGet(new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), restRequestContent,
-        restRequestInfo.getRestResponseHandler()));
-    assertFalse("Channel is not closed",
-        ((MockRestResponseHandler) restRequestInfo.getRestResponseHandler()).getChannelActive());
+        restRequestInfo.getRestResponseChannel()));
+    assertFalse("Channel is not closed", ((MockRestResponseChannel) restRequestInfo.getRestResponseChannel()).isOpen());
   }
 
   /**
    * Method to easily create {@link RestRequestContent}.
-   * @param content - the actual content that forms the underlying data.
-   * @param isLast - true if this the last part of the content in a request.
-   * @return - A {@link RestRequestContent} object with the specified content and behaviour.
+   * @param content the actual content that forms the underlying data.
+   * @param isLast true if this the last part of the content in a request.
+   * @return A {@link RestRequestContent} object with the specified content and behaviour.
    * @throws InstantiationException
    * @throws JSONException
    */
@@ -381,7 +390,7 @@ public class AdminBlobStorageServiceTest {
   /**
    * Does the {@link AdminOperationType#echo} test by creating a {@link RestRequestInfo} specifying echo, sends it to
    * the {@link AdminBlobStorageService} instance and checks equality of response with input text.
-   * @param adminBlobStorageService
+   * @param adminBlobStorageService instance of {@link AdminBlobStorageService} that should be used for the echo.
    * @throws InstantiationException
    * @throws JSONException
    * @throws RestServiceException

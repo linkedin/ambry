@@ -7,31 +7,31 @@ import com.github.ambry.config.VerifiableProperties;
 
 /**
  * Configuration parameters required by {@link RestServer} and Rest infrastructure
- * ({@link com.github.ambry.rest.RestRequestHandlerController},
- * {@link com.github.ambry.rest.RestRequestHandler}).
+ * ({@link RestRequestHandlerController},
+ * {@link RestRequestHandler}).
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for {@link RestServer} and presents them for retrieval through defined APIs.
  */
 class RestServerConfig {
   /**
-   * The {@link com.github.ambry.rest.BlobStorageServiceFactory} that needs to be used by the {@link RestServer}
-   * for bootstrapping the {@link com.github.ambry.rest.BlobStorageService}.
+   * The {@link BlobStorageServiceFactory} that needs to be used by the {@link RestServer}
+   * for bootstrapping the {@link BlobStorageService}.
    */
   @Config("rest.blob.storage.service.factory")
   public final String restBlobStorageServiceFactory;
 
   /**
-   * The {@link com.github.ambry.rest.NioServerFactory} that needs to be used by the {@link RestServer} for
-   * bootstrapping the {@link com.github.ambry.rest.NioServer}.
+   * The {@link NioServerFactory} that needs to be used by the {@link RestServer} for
+   * bootstrapping the {@link NioServer}.
    */
   @Config("rest.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyServerFactory")
+  @Default("NettyServerFactory")
   public final String restNioServerFactory;
 
   /**
-   * The number of {@link com.github.ambry.rest.RestRequestHandler} instances that need to be started by the
-   * {@link com.github.ambry.rest.RestRequestHandlerController} to handle requests.
+   * The number of {@link RestRequestHandler} instances that need to be started by the
+   * {@link RestRequestHandlerController} to handle requests.
    */
   @Config("rest.request.handler.count")
   @Default("5")

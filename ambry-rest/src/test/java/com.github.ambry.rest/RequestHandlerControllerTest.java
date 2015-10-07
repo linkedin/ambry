@@ -2,11 +2,6 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.MockBlobStorageService;
-import com.github.ambry.rest.RestRequestHandler;
-import com.github.ambry.rest.RestRequestHandlerController;
-import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
 import org.junit.Test;
 
@@ -36,7 +31,7 @@ public class RequestHandlerControllerTest {
    * Tests that an exception is thrown when trying to instantiate a {@link RequestHandlerController} with 0 handlers.
    * @throws Exception
    */
-  @Test(expected = InstantiationException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void startWithHandlerCountZeroTest()
       throws Exception {
     createRestRequestHandlerController(0);
@@ -68,9 +63,8 @@ public class RequestHandlerControllerTest {
       throws InstantiationException, IOException, RestServiceException {
     RestRequestHandlerController requestHandlerController = createRestRequestHandlerController(1);
     try {
-      RestRequestHandler requestHandler = requestHandlerController.getRequestHandler();
       // fine to use without start.
-      assertNotNull("Request handler is null", requestHandler);
+      assertNotNull("Request handler is null", requestHandlerController.getRequestHandler());
     } finally {
       requestHandlerController.shutdown();
     }
@@ -85,13 +79,11 @@ public class RequestHandlerControllerTest {
   @Test
   public void restRequestHandlerGetTest()
       throws InstantiationException, IOException, RestServiceException {
-    int maxIterations = 1000;
     RestRequestHandlerController requestHandlerController = createRestRequestHandlerController(5);
     requestHandlerController.start();
     try {
-      for (int i = 0; i < maxIterations; i++) {
-        RestRequestHandler requestHandler = requestHandlerController.getRequestHandler();
-        assertNotNull("Obtained RestRequestHandler is null", requestHandler);
+      for (int i = 0; i < 1000; i++) {
+        assertNotNull("Obtained RestRequestHandler is null", requestHandlerController.getRequestHandler());
       }
     } finally {
       requestHandlerController.shutdown();

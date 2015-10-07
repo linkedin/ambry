@@ -531,11 +531,9 @@ public class Utils {
    * @return byte[] which has the data that is read from the stream
    * @throws IOException
    */
-  public static byte[] readBytesFromStream(DataInputStream stream, int size)
+  public static byte[] readBytesFromStream(InputStream stream, int size)
       throws IOException {
-    byte[] outputBytes = new byte[size];
-    readBytesFromStream(stream, outputBytes, 0, size);
-    return outputBytes;
+    return readBytesFromStream(stream, new byte[size], 0, size);
   }
 
   /**
@@ -546,9 +544,10 @@ public class Utils {
    * @param data byte[] into which the data has to be written
    * @param offset starting offset in the byte[] at which the data has to be written to
    * @param size length of bytes to be read from the stream
+   * @return byte[] which has the data that is read from the stream. Same as @param data
    * @throws IOException
    */
-  public static void readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
+  public static byte[] readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
       throws IOException {
     int read = 0;
     while (read < size) {
@@ -559,6 +558,7 @@ public class Utils {
       read += sizeRead;
       offset += sizeRead;
     }
+    return data;
   }
 
   /**
@@ -575,5 +575,42 @@ public class Utils {
     String[] slices = data.split(delimiter);
     toReturn.addAll(Arrays.asList(slices));
     return toReturn;
+  }
+
+  /**
+   * Merge/Concatenate the input list of strings using the delimiter and return the new string
+   * @param data List of strings to be merged/concatenated
+   * @param delimiter using which the list of strings need to be merged/concatenated
+   * @return the obtained string after merging/concatenating
+   */
+  public static String concatenateString(ArrayList<String> data, String delimiter) {
+    if (data == null) {
+      throw new IllegalArgumentException("Passed in List is null ");
+    }
+    StringBuilder sb = new StringBuilder();
+    if (data.size() > 1) {
+      for (int i = 0; i < data.size() - 1; i++) {
+        sb.append(data.get(i)).append(delimiter);
+      }
+      sb.append(data.get(data.size() - 1));
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Make sure that the ByteBuffer capacity is equal to or greater than the expected length.
+   * If not, create a new ByteBuffer of expected length and copy contents from previous ByteBuffer to the new one
+   * @param existingBuffer ByteBuffer capacity to check
+   * @param newLength new length for the ByteBuffer.
+   * returns ByteBuffer with a minimum capacity of new length
+   */
+  public static ByteBuffer ensureCapacity(ByteBuffer existingBuffer, int newLength) {
+    if (newLength > existingBuffer.capacity()) {
+      ByteBuffer newBuffer = ByteBuffer.allocate(newLength);
+      existingBuffer.flip();
+      newBuffer.put(existingBuffer);
+      return newBuffer;
+    }
+    return existingBuffer;
   }
 }
