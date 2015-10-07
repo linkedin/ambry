@@ -4,7 +4,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,12 +30,8 @@ public class NetworkMetrics {
   public Gauge<Integer> numberOfProcessorThreads;
 
   // Selector metrics
-  public final Counter selectorBytesSentCount;
-  public final Counter selectorBytesReceivedCount;
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
-  public final Histogram selectorBytesSent;
-  public final Histogram selectorBytesReceived;
   public final Counter selectorSelectRate;
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
@@ -50,7 +45,13 @@ public class NetworkMetrics {
   public Gauge<Long> selectorActiveConnections;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
-  // ssl metrics
+  // Plaintext metrics
+  public final Histogram plaintextReceiveBytesRate;     // the bytes rate to receive the entire request
+  public final Histogram plaintextSendBytesRate;        // the bytes rate to send the entire response
+  public final Histogram plaintextReceiveTimePerKB;     // the time to receive 1KB data in one read call
+  public final Histogram plaintextSendTime;             // the time to send data in one write call
+
+  // SSL metrics
   public final Counter sslFactoryInitializationCount;
   public final Counter sslTransmissionInitializationCount;
   public final Counter sslFactoryInitializationErrorCount;
@@ -58,6 +59,13 @@ public class NetworkMetrics {
   public final Histogram sslHandshakeTime;
   public final Counter sslHandshakeCount;
   public final Counter sslHandshakeErrorCount;
+  public final Histogram sslReceiveBytesRate;     // the bytes rate to receive the entire request
+  public final Histogram sslSendBytesRate;        // the bytes rate to send the entire response
+  public final Histogram sslReceiveTimePerKB;     // the time to receive 1KB data in one read call
+  public final Histogram sslSendTime;             // the time to send data in one write call
+  public final Histogram sslEncryptionTimePerKB;
+  public final Histogram sslDecryptionTimePerKB;
+  public final Counter sslRenegotiationCount;     // the count of renegotiation after initial handshake done
 
   public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {
@@ -89,8 +97,6 @@ public class NetworkMetrics {
     selectorIORate = registry.counter(MetricRegistry.name(Selector.class, "SelectorIORate"));
     selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
-    selectorBytesReceived = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesReceived"));
-    selectorBytesSent = registry.histogram(MetricRegistry.name(Selector.class, "SelectorBytesSent"));
     selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
     selectorDisconnectedErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorDisconnectedErrorCount"));
@@ -100,8 +106,16 @@ public class NetworkMetrics {
     selectorCloseKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseKeyErrorCount"));
     selectorCloseSocketErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
-    selectorBytesSentCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesSentCount"));
-    selectorBytesReceivedCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorBytesReceivedCount"));
+    plaintextReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
+    plaintextSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
+    plaintextReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimePerKB"));
+    plaintextSendTime = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTime"));
+    sslReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
+    sslSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
+    sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
+    sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
+    sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
+    sslSendTime = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTime"));
     sslFactoryInitializationCount =
         registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationCount"));
     sslFactoryInitializationErrorCount =
@@ -113,6 +127,7 @@ public class NetworkMetrics {
     sslHandshakeTime = registry.histogram(MetricRegistry.name(Selector.class, "SslHandshakeTime"));
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
+    sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
 
     numberOfProcessorThreads = new Gauge<Integer>() {
       @Override

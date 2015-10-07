@@ -35,14 +35,14 @@ public enum RestServiceErrorCode {
    */
   NoRequest,
   /**
-   * Client is requesting a HTTP method that is not supported.
-   */
-  UnsupportedHttpMethod,
-  /**
    * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
    * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
    */
   UnknownHttpObject,
+  /**
+   * Client is requesting a HTTP method that is not supported.
+   */
+  UnsupportedHttpMethod,
   /**
    * Client has requested for an operation that is not supported by the {@link BlobStorageService}.
    */
@@ -58,55 +58,51 @@ public enum RestServiceErrorCode {
    */
   ChannelActiveTasksFailure,
   /**
-   * Indicates that an operation is being performed upon a channel that has been closed already.
+   * Indicates that an error occurred while data was being written to a channel.
    */
-  ChannelAlreadyClosed,
+  ChannelWriteError,
   /**
    * Indicates that a state transition while generating response metadata is invalid.
    */
   IllegalResponseMetadataStateTransition,
   /**
-   * Indicates that there was a {@link InterruptedException} while trying to perform the operation.
+   * Indicates that an object that is needed for the request could not be created due to an internal server error.
    */
-  OperationInterrupted,
+  InternalObjectCreationError,
   /**
    * Indicates failure of the {@link RestRequestHandlerController} to select and provide a {@link RestRequestHandler}.
    */
   RequestHandlerSelectionError,
-  /**
-   * Indicates failure of the {@link RestRequestHandler} to handle a submitted request.
-   */
-  RequestHandleFailure,
   /**
    * Indicates that the {@link RestRequestHandler} is unavailable for request handling. Thrown when the
    * {@link RestRequestHandler} is not started up or has died.
    */
   RequestHandlerUnavailable,
   /**
-   * Indicates that the submitted {@link RestRequestInfo} could not be queued for handling in the
-   * {@link RestRequestHandler}.
+   * Indicates that there is no reference of a {@link RestRequestMetadata} in the {@link RestRequestInfo}.
    */
-  RestRequestInfoQueueingFailure,
-  /**
-   * Indicates that the submitted {@link RestRequestInfo} is null.
-   */
-  RestRequestInfoNull,
+  RequestMetadataNull,
   /**
    * Indicates that there was a problem building the response (usually happens when the response is JSON).
    */
   ResponseBuildingFailure,
   /**
-   * Indicates that there is no reference of a {@link RestResponseHandler} in the {@link RestRequestInfo}.
+   * Indicates that there is no reference of a {@link RestResponseChannel} in the {@link RestRequestInfo}.
    */
-  ResponseHandlerNull,
+  ResponseChannelNull,
   /**
-   * Indicates that there is no reference of a {@link RestRequestMetadata} in the {@link RestRequestInfo}.
+   * Indicates that there was an error while trying to build response metadata that needs to be sent to the client.
    */
-  RequestMetadataNull,
+  ResponseMetadataBuildingFailure,
   /**
-   * Indicates that an object that is needed for the request could not be created due to an internal server error.
+   * Indicates that the submitted {@link RestRequestInfo} is null.
    */
-  InternalObjectCreationError,
+  RestRequestInfoNull,
+  /**
+   * Indicates that the submitted {@link RestRequestInfo} could not be queued for handling in the
+   * {@link RestRequestHandler}.
+   */
+  RestRequestInfoQueueingFailure,
   /**
    * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
@@ -132,23 +128,22 @@ public enum RestServiceErrorCode {
       case MissingArgs:
       case NoRequest:
       case UnknownHttpObject:
-      case UnsupportedOperation:
       case UnsupportedHttpMethod:
+      case UnsupportedOperation:
         return BadRequest;
       case InternalServerError:
       case ChannelActiveTasksFailure:
-      case ChannelAlreadyClosed:
+      case ChannelWriteError:
       case IllegalResponseMetadataStateTransition:
-      case OperationInterrupted:
-      case RequestHandlerSelectionError:
-      case RequestHandleFailure:
-      case RequestHandlerUnavailable:
-      case RestRequestInfoQueueingFailure:
-      case RestRequestInfoNull:
-      case ResponseBuildingFailure:
-      case ResponseHandlerNull:
-      case RequestMetadataNull:
       case InternalObjectCreationError:
+      case RequestHandlerSelectionError:
+      case RequestHandlerUnavailable:
+      case RequestMetadataNull:
+      case ResponseBuildingFailure:
+      case ResponseChannelNull:
+      case ResponseMetadataBuildingFailure:
+      case RestRequestInfoNull:
+      case RestRequestInfoQueueingFailure:
       case UnsupportedRestMethod:
         return InternalServerError;
       default:
