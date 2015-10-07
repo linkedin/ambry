@@ -19,8 +19,10 @@ public class BlobStatus {
     } else {
       deletedOrExpired.add(replica);
     }
-    unavailable.addAll(replicaList);
-    unavailable.remove(replica);
+    if(replicaList != null && replicaList.size() > 0){
+      unavailable.addAll(replicaList);
+      unavailable.remove(replica);
+    }
   }
 
   ArrayList<String> getAvailable() {
@@ -28,10 +30,8 @@ public class BlobStatus {
   }
 
   void addAvailable(String replica) {
-    if (!deletedOrExpired.contains(replica)) {
       this.available.add(replica);
       this.unavailable.remove(replica);
-    }
   }
 
   ArrayList<String> getDeletedOrExpired() {
@@ -46,6 +46,7 @@ public class BlobStatus {
     this.deletedOrExpired.add(replica);
     this.isDeletedOrExpired = true;
     this.unavailable.remove(replica);
+    this.available.remove(replica);
   }
 
   boolean getIsDeletedOrExpired() {
@@ -56,8 +57,8 @@ public class BlobStatus {
     int totalReplicas = available.size() + deletedOrExpired.size() + unavailable.size();
     String msg =
         "Available size: " + available.size() + " Available :: " + available
-            + "\nDeleted/Expired size: " + deletedOrExpired.size() + "Deleted/Expired :: " + deletedOrExpired
-            + "\nUnavailable size: " + unavailable.size() + "Unavailable :: " + unavailable
+            + "\nDeleted/Expired size: " + deletedOrExpired.size() + " Deleted/Expired :: " + deletedOrExpired
+            + "\nUnavailable size: " + unavailable.size() + " Unavailable :: " + unavailable
             + "\nTotal Replica count: " + totalReplicas;
     return msg;
   }

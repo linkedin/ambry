@@ -11,33 +11,42 @@ public class NetworkSend {
   /**
    * The Id of the connection to which the bytes need to be sent
    */
-  private final long connectionId;
+  private final String connectionId;
 
   /**
    * The bytes to be sent over the connection
    */
-  private final BoundedByteBufferSend bytesToSend;
+  private final Send payload;
 
   /**
    * The start time of this send
    */
-  private final long sendStartTimeInNanos;
+  private final long sendStartTimeInMs;
 
-  public NetworkSend(long connectionId, BoundedByteBufferSend bytesToSend, Time time) {
+  private final NetworkRequestMetrics metrics;
+
+  public NetworkSend(String connectionId, Send payload, NetworkRequestMetrics metrics, Time time) {
     this.connectionId = connectionId;
-    this.bytesToSend = bytesToSend;
-    this.sendStartTimeInNanos = time.nanoseconds();
+    this.payload = payload;
+    this.sendStartTimeInMs = time.milliseconds();
+    this.metrics = metrics;
   }
 
-  public long getSendStartTimeInNanos() {
-    return sendStartTimeInNanos;
+  public long getSendStartTimeInMs() {
+    return sendStartTimeInMs;
   }
 
-  public long getConnectionId() {
+  public String getConnectionId() {
     return connectionId;
   }
 
-  public BoundedByteBufferSend getBytesToSend() {
-    return bytesToSend;
+  public Send getPayload() {
+    return payload;
+  }
+
+  public void onSendComplete() {
+    if (metrics != null) {
+      metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - sendStartTimeInMs);
+    }
   }
 }

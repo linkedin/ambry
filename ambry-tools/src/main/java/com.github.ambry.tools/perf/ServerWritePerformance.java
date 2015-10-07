@@ -1,6 +1,7 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ClusterMap;
@@ -8,16 +9,19 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -77,6 +81,10 @@ public class ServerWritePerformance {
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
               .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
 
+      ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
+          parser.accepts("sslEnabledDatacenters", "Enables SSL for the listed dataceneters").withOptionalArg()
+              .describedAs("Enable SSL of the listed datacenters").ofType(String.class).defaultsTo("");
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -109,6 +117,9 @@ public class ServerWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
+      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
+      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
+
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
       // attach shutdown handler to catch control-c
@@ -130,13 +141,14 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new MetricRegistry());
+      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
       connectionPool.start();
 
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
             new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, writer, totalTimeTaken,
-                totalWrites, enableVerboseLogging, map, connectionPool));
+                totalWrites, enableVerboseLogging, map, connectionPool, sslEnabledDatacentersList));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -173,10 +185,12 @@ public class ServerWritePerformance {
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
+    private ArrayList<String> sslEnabledDatacenters;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter writer, AtomicLong totalTimeTaken, AtomicLong totalWrites,
-        boolean enableVerboseLogging, ClusterMap clusterMap, ConnectionPool connectionPool) {
+        boolean enableVerboseLogging, ClusterMap clusterMap, ConnectionPool connectionPool,
+        ArrayList<String> sslEnabledDatacenters) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -189,6 +203,7 @@ public class ServerWritePerformance {
       this.totalWrites = totalWrites;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
+      this.sslEnabledDatacenters = sslEnabledDatacenters;
     }
 
     public void run() {
@@ -214,9 +229,9 @@ public class ServerWritePerformance {
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
                 new ByteBufferInputStream(ByteBuffer.wrap(blob)));
-            channel = connectionPool
-                .checkOutConnection(partitionId.getReplicaIds().get(0).getDataNodeId().getHostname(),
-                    partitionId.getReplicaIds().get(0).getDataNodeId().getPort(), 10000);
+            ReplicaId replicaId = partitionId.getReplicaIds().get(0);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
+            channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);
             PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));

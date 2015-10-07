@@ -21,7 +21,7 @@ public class Throttler {
   private double observedSoFar;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private Time time;
-  private AtomicBoolean enabled;
+  private boolean enabled;
 
   /**
    * @param desiredRatePerSec: The rate we want to hit in units/sec
@@ -36,7 +36,7 @@ public class Throttler {
     this.time = time;
     this.observedSoFar = 0.0;
     this.periodStartNs = time.nanoseconds();
-    this.enabled = new AtomicBoolean(true);
+    this.enabled = true;
   }
 
   /**
@@ -64,8 +64,7 @@ public class Throttler {
             logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",
                 rateInSecs, desiredRatePerSec, sleepTime);
             synchronized (waitGuard) {
-              // If an awake has already been called, do not wait.
-              if (enabled.get()) {
+              if (enabled) {
                 time.wait(waitGuard, sleepTime);
               }
             }
@@ -78,25 +77,12 @@ public class Throttler {
   }
 
   /**
-   * Awake the throttler if it is in the midst of throttling.
+   * Disable the throttler for good.
    */
-  public void awake() {
+  public void close() {
     synchronized (waitGuard) {
+      enabled = false;
       waitGuard.notify();
     }
-  }
-
-  /**
-   * Enable the throttler. Note that this is the default state at creation time.
-   */
-  public void enable() {
-    enabled.set(true);
-  }
-
-  /**
-   * Disable the throttler. No throttling will be done in the calls to maybeThrottle() unless a call to enable() is made.
-   */
-  public void disable() {
-    enabled.set(false);
   }
 }

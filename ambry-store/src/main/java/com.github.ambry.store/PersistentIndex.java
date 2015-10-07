@@ -1064,9 +1064,11 @@ public class PersistentIndex {
 
     //how long to sleep if token does not advance.
     private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * SystemTime.getInstance().MsPerSec;
+    private final long throttlerCheckIntervalMs = 10;
 
     HardDeleteThread() {
-      this.throttler = new Throttler(config.storeHardDeleteBytesPerSec, 10, true, SystemTime.getInstance());
+      this.throttler = new Throttler(config.storeHardDeleteBytesPerSec, throttlerCheckIntervalMs, true,
+          SystemTime.getInstance());
     }
 
     /**
@@ -1225,9 +1227,7 @@ public class PersistentIndex {
                 throttler.maybeThrottle(hardDeleteInfo.getSize());
               }
           } else {
-            if (running.get()) {
-              metrics.hardDeleteFailedCount.inc(1);
-            }
+            metrics.hardDeleteFailedCount.inc(1);
           }
         }
       } catch (InterruptedException e) {
@@ -1362,8 +1362,7 @@ public class PersistentIndex {
         synchronized (hardDeleteThread) {
           hardDeleteThread.notify();
         }
-        throttler.disable();
-        throttler.awake();
+        throttler.close();
         shutdownLatch.await();
         persistCleanupToken();
       }
