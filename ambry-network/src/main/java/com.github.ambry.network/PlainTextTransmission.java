@@ -119,7 +119,7 @@ public class PlainTextTransmission extends Transmission {
   public void onReceiveComplete() {
     long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
     double receiveBytesRate =
-        networkReceive.getReceivedBytes().sizeInBytes() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
     metrics.plaintextReceiveBytesRate.update((long) receiveBytesRate);
   }
 }
