@@ -16,7 +16,7 @@ public interface BlobStorageService {
 
   /**
    * Does startup tasks for the BlobStorageService. When the function returns, startup is FULLY complete.
-   * @throws InstantiationException
+   * @throws InstantiationException if BlobStorageService is unable to start.
    */
   public void start()
       throws InstantiationException;
@@ -30,21 +30,22 @@ public interface BlobStorageService {
    * Handles a GET operation.
    * <p/>
    * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseHandler} to send a response
+   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
    * The received {@link RestRequestInfo} may only be a part of the whole request.
    * <p/>
    * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseHandler}. It is possible that multiple parts have to be accumulated before a response can be
+   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
    * sent. This is OK as long as a response is eventually sent to the client.
    * <p/>
    * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
    * expected to be sent to the client as soon as an exception is detected since they have to be translated into
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseHandler}.
-   * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * {@link RestResponseChannel}.
+   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
+   * @throws RestServiceException on any exception related to handling of the request.
+   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleGet(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -53,21 +54,22 @@ public interface BlobStorageService {
    * Handles a POST operation.
    * <p/>
    * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseHandler} to send a response
+   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
    * The received {@link RestRequestInfo} may only be a part of the whole request.
    * <p/>
    * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseHandler}. It is possible that multiple parts have to be accumulated before a response can be
+   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
    * sent. This is OK as long as a response is eventually sent to the client.
    * <p/>
    * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
    * expected to be sent to the client as soon as an exception is detected since they have to be translated into
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseHandler}.
-   * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * {@link RestResponseChannel}.
+   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
+   * @throws RestServiceException on any exception related to handling of the request.
+   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handlePost(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -76,21 +78,22 @@ public interface BlobStorageService {
    * Handles a DELETE operation.
    * <p/>
    * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseHandler} to send a response
+   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
    * The received {@link RestRequestInfo} may only be a part of the whole request.
    * <p/>
    * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseHandler}. It is possible that multiple parts have to be accumulated before a response can be
+   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
    * sent. This is OK as long as a response is eventually sent to the client.
    * <p/>
    * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
    * expected to be sent to the client as soon as an exception is detected since they have to be translated into
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseHandler}.
-   * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * {@link RestResponseChannel}.
+   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
+   * @throws RestServiceException on any exception related to handling of the request.
+   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleDelete(RestRequestInfo restRequestInfo)
       throws RestServiceException;
@@ -99,21 +102,22 @@ public interface BlobStorageService {
    * Handles a HEAD operation.
    * <p/>
    * The {@link RestRequestInfo} provided will have {@link RestRequestMetadata} that provides metadata about the
-   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseHandler} to send a response
+   * request, optionally some content as {@link RestRequestContent} and a {@link RestResponseChannel} to send a response
    * back to the client.
    * <p/>
    * The received {@link RestRequestInfo} may only be a part of the whole request.
    * <p/>
    * It is expected that the request will be handled and an appropriate response returned to the client via the provided
-   * {@link RestResponseHandler}. It is possible that multiple parts have to be accumulated before a response can be
+   * {@link RestResponseChannel}. It is possible that multiple parts have to be accumulated before a response can be
    * sent. This is OK as long as a response is eventually sent to the client.
    * <p/>
    * Any exceptions should be bubbled up with the appropriate {@link RestServiceErrorCode}. Error messages are not
    * expected to be sent to the client as soon as an exception is detected since they have to be translated into
    * protocol specific codes that the client can understand (like HTTP error codes). This is the responsibility of the
-   * {@link RestResponseHandler}.
-   * @param restRequestInfo - a {@link RestRequestInfo} object representing a part of the request.
-   * @throws RestServiceException
+   * {@link RestResponseChannel}.
+   * @param restRequestInfo a {@link RestRequestInfo} object representing a part of the request.
+   * @throws RestServiceException on any exception related to handling of the request.
+   * @throws NullPointerException if the provided {@link RestRequestInfo} or any of its components are null.
    */
   public void handleHead(RestRequestInfo restRequestInfo)
       throws RestServiceException;

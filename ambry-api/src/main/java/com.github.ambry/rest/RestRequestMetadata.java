@@ -20,13 +20,13 @@ import java.util.Map;
 public interface RestRequestMetadata {
   /**
    * Gets the generic {@link RestMethod} that this request desires.
-   * @return RestMethod - the {@link RestMethod} defined by the request.
+   * @return RestMethod the {@link RestMethod} defined by the request.
    */
   public RestMethod getRestMethod();
 
   /**
    * Return the path (the parts of the URI after the domain excluding query parameters).
-   * @return path - String that represents part of the uri excluding domain and query parameters.
+   * @return path String that represents part of the uri excluding domain and query parameters.
    */
   public String getPath();
 

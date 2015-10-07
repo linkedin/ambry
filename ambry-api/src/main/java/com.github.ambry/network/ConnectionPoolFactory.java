@@ -9,5 +9,6 @@ public interface ConnectionPoolFactory {
    * Gets a connection pool
    * @return The connection pool that was created
    */
-  public ConnectionPool getConnectionPool();
+  public ConnectionPool getConnectionPool()
+      throws Exception;
 }

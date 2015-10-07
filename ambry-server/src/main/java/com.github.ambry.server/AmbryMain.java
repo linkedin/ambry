@@ -15,8 +15,8 @@ import java.util.Properties;
 public class AmbryMain {
   public static void main(String args[]) {
     if (args.length != 3) {
-      System.out.println("USAGE: java [options] %s server.properties hardwarelayout partitionlayout"
-          .format(AmbryServer.class.getSimpleName()));
+      System.out.println("USAGE: java [options] " + AmbryMain.class.getCanonicalName() +
+          " server.properties hardwarelayout partitionlayout");
       System.exit(1);
     }
 

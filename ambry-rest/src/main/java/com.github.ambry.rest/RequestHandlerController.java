@@ -1,10 +1,5 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.RestRequestHandler;
-import com.github.ambry.rest.RestRequestHandlerController;
-import com.github.ambry.rest.RestServiceErrorCode;
-import com.github.ambry.rest.RestServiceException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -26,20 +21,22 @@ class RequestHandlerController implements RestRequestHandlerController {
   private final AtomicInteger currIndex = new AtomicInteger(0);
 
   public RequestHandlerController(int handlerCount, RestServerMetrics restServerMetrics,
-      BlobStorageService blobStorageService)
-      throws InstantiationException {
+      BlobStorageService blobStorageService) {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
       createRequestHandlers(handlerCount, blobStorageService);
+      restServerMetrics.trackRequestHandlerHealth(requestHandlers);
     } else {
-      throw new InstantiationException("Handlers to be created has to be > 0 - (is " + handlerCount + ")");
+      restServerMetrics.requestHandlerControllerInstantiationError.inc();
+      throw new IllegalArgumentException("Handlers to be created has to be > 0. Is " + handlerCount);
     }
+    logger.trace("Instantiated RequestHandlerController");
   }
 
   @Override
   public void start()
       throws InstantiationException {
-    logger.info("Starting RequestHandlerController..");
+    logger.info("Starting RequestHandlerController with {} request handler(s)", requestHandlers.size());
     for (int i = 0; i < requestHandlers.size(); i++) {
       requestHandlers.get(i).start();
     }
@@ -49,21 +46,24 @@ class RequestHandlerController implements RestRequestHandlerController {
   @Override
   public RestRequestHandler getRequestHandler()
       throws RestServiceException {
+    RestRequestHandler requestHandler;
+    int index = currIndex.getAndIncrement();
     try {
-      int index = currIndex.getAndIncrement();
-      RestRequestHandler requestHandler = requestHandlers.get(index % requestHandlers.size());
-      return requestHandler;
+      requestHandler = requestHandlers.get(index % requestHandlers.size());
+      logger.trace("Monotonically increasing value {} was used to pick request handler at index {}", index,
+          index % requestHandlers.size());
     } catch (Exception e) {
-      restServerMetrics.handlerControllerHandlerSelectionErrorCount.inc();
-      throw new RestServiceException("Error while trying to pick a handler to return", e,
+      restServerMetrics.requestHandlerSelectionError.inc();
+      throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
           RestServiceErrorCode.RequestHandlerSelectionError);
     }
+    return requestHandler;
   }
 
   @Override
   public void shutdown() {
     if (requestHandlers.size() > 0) {
-      logger.info("Shutting down RequestHandlerController..");
+      logger.info("Shutting down RequestHandlerController");
       Iterator<RestRequestHandler> asyncRequestHandlerIterator = requestHandlers.iterator();
       while (asyncRequestHandlerIterator.hasNext()) {
         RestRequestHandler requestHandler = asyncRequestHandlerIterator.next();
@@ -76,10 +76,11 @@ class RequestHandlerController implements RestRequestHandlerController {
 
   /**
    * Creates handlerCount instances of {@link AsyncRequestHandler}. They are not started.
-   * @param handlerCount - The number of instances of {@link AsyncRequestHandler} to be created.
-   * @param blobStorageService - The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
+   * @param handlerCount The number of instances of {@link AsyncRequestHandler} to be created.
+   * @param blobStorageService The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
+    logger.trace("Creating {} instances of AsyncRequestHandler", handlerCount);
     for (int i = 0; i < handlerCount; i++) {
       // This can change if there is ever a RequestHandlerFactory.
       requestHandlers.add(new AsyncRequestHandler(blobStorageService, restServerMetrics));

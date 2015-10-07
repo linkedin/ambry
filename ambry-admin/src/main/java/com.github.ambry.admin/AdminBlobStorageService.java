@@ -25,6 +25,7 @@ class AdminBlobStorageService implements BlobStorageService {
     this.adminConfig = adminConfig;
     this.clusterMap = clusterMap;
     this.adminMetrics = adminMetrics;
+    logger.trace("Instantiated AdminBlobStorageService");
   }
 
   @Override
@@ -42,54 +43,70 @@ class AdminBlobStorageService implements BlobStorageService {
   public void handleGet(RestRequestInfo restRequestInfo)
       throws RestServiceException {
     RestRequestMetadata restRequestMetadata = restRequestInfo.getRestRequestMetadata();
-    logger.trace("Handling get restRequestMetadata - " + restRequestMetadata.getUri());
-    AdminOperationType operationType = getOperationType(restRequestMetadata);
-    switch (operationType) {
-      case echo:
-        EchoHandler.handleRequest(restRequestInfo);
-        break;
-      case getReplicasForBlobId:
-        GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap);
-        break;
-      default:
-        throw new RestServiceException("Unsupported operation for Admin service",
-            RestServiceErrorCode.UnsupportedOperation);
+    logger.trace("Handling GET request - {}", restRequestMetadata.getUri());
+    try {
+      String operationInUri = getOperationFromRequestUri(restRequestMetadata);
+      logger.trace("GET operation requested - {}", operationInUri);
+      AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationInUri);
+      switch (operationType) {
+        case echo:
+          EchoHandler.handleRequest(restRequestInfo, adminMetrics);
+          break;
+        case getReplicasForBlobId:
+          GetReplicasForBlobIdHandler.handleRequest(restRequestInfo, clusterMap, adminMetrics);
+          break;
+        default:
+          adminMetrics.unsupportedGetOperationError.inc();
+          throw new RestServiceException("Unsupported operation during GET (" + operationInUri + ") for Admin service",
+              RestServiceErrorCode.UnsupportedOperation);
+      }
+    } finally {
+      if (restRequestInfo.isFirstPart()) {
+        adminMetrics.getOperationRate.mark();
+      }
     }
   }
 
   @Override
   public void handlePost(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    throw new RestServiceException("Unsupported operation for Admin service",
+    if (restRequestInfo.isFirstPart()) {
+      adminMetrics.postOperationRate.mark();
+    }
+    adminMetrics.unsupportedPostOperationError.inc();
+    throw new RestServiceException("Unsupported operation for Admin service - POST",
         RestServiceErrorCode.UnsupportedOperation);
   }
 
   @Override
   public void handleDelete(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    throw new RestServiceException("Unsupported operation for Admin service",
+    if (restRequestInfo.isFirstPart()) {
+      adminMetrics.deleteOperationRate.mark();
+    }
+    adminMetrics.unsupportedDeleteOperationError.inc();
+    throw new RestServiceException("Unsupported operation for Admin service - DELETE",
         RestServiceErrorCode.UnsupportedOperation);
   }
 
   @Override
   public void handleHead(RestRequestInfo restRequestInfo)
       throws RestServiceException {
-    throw new RestServiceException("Unsupported operation for Admin service",
+    if (restRequestInfo.isFirstPart()) {
+      adminMetrics.headOperationRate.mark();
+    }
+    adminMetrics.unsupportedHeadOperationError.inc();
+    throw new RestServiceException("Unsupported operation for Admin service - HEAD",
         RestServiceErrorCode.UnsupportedOperation);
   }
 
   /**
    * Looks at the URI to determine the type of operation required.
-   * @param restRequestMetadata
-   * @return
+   * @param restRequestMetadata {@link RestRequestMetadata} containing metadata about the request.
+   * @return extracted operation type from the uri.
    */
-  private AdminOperationType getOperationType(RestRequestMetadata restRequestMetadata) {
+  private String getOperationFromRequestUri(RestRequestMetadata restRequestMetadata) {
     String path = restRequestMetadata.getPath();
-    path = path.startsWith("/") ? path.substring(1, path.length()) : path;
-    try {
-      return AdminOperationType.valueOf(path);
-    } catch (IllegalArgumentException e) {
-      return AdminOperationType.unknown;
-    }
+    return (path.startsWith("/") ? path.substring(1, path.length()) : path);
   }
 }

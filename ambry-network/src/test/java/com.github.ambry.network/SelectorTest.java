@@ -35,13 +35,13 @@ public class SelectorTest {
   @Before
   public void setup()
       throws Exception {
-    this.server = new EchoServer();
+    this.server = new EchoServer(18283);
     this.server.start();
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
     List<Processor> processorThreads = new ArrayList<Processor>();
     this.selector =
         new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
-            SystemTime.getInstance());
+            SystemTime.getInstance(), null);
   }
 
   @After
@@ -113,7 +113,7 @@ public class SelectorTest {
   @Test(expected = IOException.class)
   public void testNoRouteToHost()
       throws Exception {
-    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
   }
 
   /**
@@ -122,7 +122,8 @@ public class SelectorTest {
   @Test
   public void testConnectionRefused()
       throws Exception {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -142,7 +143,7 @@ public class SelectorTest {
     InetSocketAddress addr = new InetSocketAddress("localhost", server.port);
     ArrayList<String> connectionIds = new ArrayList<String>();
     for (int i = 0; i < conns; i++) {
-      String connectionId = selector.connect(addr, BUFFER_SIZE, BUFFER_SIZE);
+      String connectionId = selector.connect(addr, BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
       connectionIds.add(connectionId);
     }
 
@@ -227,14 +228,15 @@ public class SelectorTest {
   /* connect and wait for the connection to complete */
   private String blockingConnect()
       throws IOException {
-    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE);
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }
     return connectionId;
   }
 
-  private NetworkSend createSend(String connectionId, String s) {
+  static NetworkSend createSend(String connectionId, String s) {
     ByteBuffer buf = ByteBuffer.allocate(8 + s.getBytes().length);
     buf.putLong(s.getBytes().length + 8);
     buf.put(s.getBytes());
@@ -242,7 +244,7 @@ public class SelectorTest {
     return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), null, SystemTime.getInstance());
   }
 
-  private String asString(NetworkReceive receive) {
+ static String asString(NetworkReceive receive) {
     return new String(receive.getReceivedBytes().getPayload().array());
   }
 
@@ -252,7 +254,7 @@ public class SelectorTest {
    * @param len The length of the string
    * @return The random string
    */
-  public static String randomString(int len, Random random) {
+  static String randomString(int len, Random random) {
     String LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     String DIGITS = "0123456789";
     String LETTERS_AND_DIGITS = LETTERS + DIGITS;
@@ -262,77 +264,5 @@ public class SelectorTest {
       b.append(LETTERS_AND_DIGITS.charAt(random.nextInt(LETTERS_AND_DIGITS.length())));
     }
     return b.toString();
-  }
-
-  /**
-   * A simple server that takes size delimited byte arrays and just echos them back to the sender.
-   */
-  static class EchoServer extends Thread {
-    public final int port;
-    private final ServerSocket serverSocket;
-    private final List<Thread> threads;
-    private final List<Socket> sockets;
-
-    public EchoServer()
-        throws Exception {
-      this.port = 18283;
-      this.serverSocket = new ServerSocket(port);
-      this.threads = Collections.synchronizedList(new ArrayList<Thread>());
-      this.sockets = Collections.synchronizedList(new ArrayList<Socket>());
-    }
-
-    public void run() {
-      try {
-        while (true) {
-          final Socket socket = serverSocket.accept();
-          sockets.add(socket);
-          Thread thread = new Thread() {
-            public void run() {
-              try {
-                DataInputStream input = new DataInputStream(socket.getInputStream());
-                DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-                while (socket.isConnected() && !socket.isClosed()) {
-                  long size = input.readLong();
-                  byte[] bytes = new byte[(int) size - 8];
-                  input.readFully(bytes);
-                  output.writeLong(size);
-                  output.write(bytes);
-                  output.flush();
-                }
-              } catch (IOException e) {
-                // ignore
-              } finally {
-                try {
-                  socket.close();
-                } catch (IOException e) {
-                  // ignore
-                }
-              }
-            }
-          };
-          thread.start();
-          threads.add(thread);
-        }
-      } catch (IOException e) {
-        // ignore
-      }
-    }
-
-    public void closeConnections()
-        throws IOException {
-      for (Socket socket : sockets) {
-        socket.close();
-      }
-    }
-
-    public void close()
-        throws IOException, InterruptedException {
-      this.serverSocket.close();
-      closeConnections();
-      for (Thread t : threads) {
-        t.join();
-      }
-      join();
-    }
   }
 }

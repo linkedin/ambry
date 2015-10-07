@@ -8,8 +8,12 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,22 +32,34 @@ public class MockCluster {
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
+  private boolean serverInitialized = false;
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String sslEnabledDatacentersForDC1,
-      String sslEnabledDatacentersForDC2, String sslEnabledDatacentersForDC3, Time time)
-      throws IOException, InstantiationException {
+  public MockCluster(NotificationSystem notificationSystem, Time time)
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+    this(notificationSystem, false, "", new Properties(), true, time);
+  }
+
+  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
+      boolean enableHardDeletes, Time time)
+      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+    // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
     clusterMap = new MockClusterMap(enableSSL);
     serverList = new ArrayList<AmbryServer>();
+    ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
-    for (MockDataNodeId dataNodeId : dataNodes) {
-      if (dataNodeId.getDatacenterName() == "DC1") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC1, time);
-      } else if (dataNodeId.getDatacenterName() == "DC2") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC2, time);
-      } else if (dataNodeId.getDatacenterName() == "DC3") {
-        startServer(dataNodeId, sslEnabledDatacentersForDC3, time);
+    try {
+      for (MockDataNodeId dataNodeId : dataNodes) {
+        if (enableSSL) {
+          String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
+          sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
+        }
+        initializeServer(dataNodeId, sslProps, enableHardDeletes, time);
       }
+    } catch (InstantiationException e) {
+      // clean up other servers which was started already
+      cleanup();
+      throw e;
     }
   }
 
@@ -55,37 +71,71 @@ public class MockCluster {
     return clusterMap;
   }
 
-  private void startServer(DataNodeId dataNodeId, String sslEnabledDatacenters, Time time)
-      throws IOException, InstantiationException {
+  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes, Time time)
+      throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
+    props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
     props.setProperty("store.deleted.message.retention.days", "1");
-    props.setProperty("store.enable.hard.delete", "true");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
-    props.setProperty("replication.ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem, time);
-    server.startup();
     serverList.add(server);
   }
 
-  public void cleanup() {
-    CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
+  public void startServers()
+      throws InstantiationException {
+    serverInitialized = true;
     for (AmbryServer server : serverList) {
-
-      new Thread(new ServerShutdown(shutdownLatch, server)).start();
+      server.startup();
     }
-    try {
-      shutdownLatch.await();
-    } catch (Exception e) {
-      assertTrue(false);
-    }
+  }
 
-    clusterMap.cleanup();
+  public void cleanup() {
+    if (serverInitialized) {
+      CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
+      for (AmbryServer server : serverList) {
+        new Thread(new ServerShutdown(shutdownLatch, server)).start();
+      }
+      try {
+        shutdownLatch.await();
+      } catch (Exception e) {
+        assertTrue(false);
+      }
+      clusterMap.cleanup();
+    }
+  }
+
+  /**
+   * Find the value for sslEnabledDatacenter config for the given datacenter
+   * @param datacenter for which sslEnabledDatacenter config value has to be determinded
+   * @param sslEnabledDataCenterList list of datacenters upon which ssl should be enabled
+   * @return the config value for sslEnabledDatacenters for the given datacenter
+   */
+  private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
+    ArrayList<String> localCopy = (ArrayList<String>) sslEnabledDataCenterList.clone();
+    localCopy.remove(datacenter);
+    String sslEnabledDatacenters = Utils.concatenateString(localCopy, ",");
+    return sslEnabledDatacenters;
+  }
+
+  public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
+    HashSet<String> datacenters = new HashSet<String>();
+    List<DataNodeId> toReturn = new ArrayList<DataNodeId>();
+    for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
+      if (datacenterList.contains(dataNodeId.getDatacenterName())) {
+        if (!datacenters.contains(dataNodeId.getDatacenterName())) {
+          datacenters.add(dataNodeId.getDatacenterName());
+          toReturn.add(dataNodeId);
+        }
+      }
+    }
+    return toReturn;
   }
 }
 

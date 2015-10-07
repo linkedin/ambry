@@ -11,9 +11,9 @@ public interface RestRequestInfoEventListener {
    * Called when the handling of a particular {@link RestRequestInfo} is complete.
    * <p/>
    * If e is non-null, then the handling has failed and e contains the {@link Exception} that caused handling to fail.
-   * @param restRequestInfo - the {@link RestRequestInfo} whose handling is now complete.
-   * @param e - any {@link Exception} that was encountered while handling this {@link RestRequestInfo}. If non-null,
+   * @param restRequestInfo the {@link RestRequestInfo} whose handling is now complete.
+   * @param e any {@link Exception} that was encountered while handling this {@link RestRequestInfo}. If non-null,
    *          handling failed.
    */
-  public void onCompleted(RestRequestInfo restRequestInfo, Exception e);
+  public void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e);
 }

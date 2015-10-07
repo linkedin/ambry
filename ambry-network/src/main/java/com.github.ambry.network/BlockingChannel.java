@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.InputStream;
@@ -8,7 +9,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.SocketChannel;
 
 
@@ -16,18 +16,18 @@ import java.nio.channels.SocketChannel;
  * A blocking channel that is used to communicate with a server
  */
 public class BlockingChannel implements ConnectedChannel {
-  private final String host;
-  private final int port;
-  private final int readBufferSize;
-  private final int writeBufferSize;
-  private final int readTimeoutMs;
-  private final int connectTimeoutMs;
-  private boolean connected = false;
+  protected final String host;
+  protected final int port;
+  protected final int readBufferSize;
+  protected final int writeBufferSize;
+  protected final int readTimeoutMs;
+  protected final int connectTimeoutMs;
+  protected boolean connected = false;
+  protected InputStream readChannel = null;
+  protected WritableByteChannel writeChannel = null;
+  protected Object lock = new Object();
+  protected Logger logger = LoggerFactory.getLogger(getClass());
   private SocketChannel channel = null;
-  public InputStream readChannel = null;
-  private GatheringByteChannel writeChannel = null;
-  private Object lock = new Object();
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
       int connectTimeoutMs) {

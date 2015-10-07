@@ -16,8 +16,8 @@ public class BoundedByteBufferReceive implements Receive {
 
   private ByteBuffer buffer = null;
   private ByteBuffer sizeBuffer;
-  private int sizeToRead;        // need to change to long
-  private int sizeRead;
+  private long sizeToRead;
+  private long sizeRead;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public BoundedByteBufferReceive() {
@@ -42,11 +42,10 @@ public class BoundedByteBufferReceive implements Receive {
       }
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
-        // for now we support only intmax size. We need to extend it to streaming
-        sizeToRead = (int) sizeBuffer.getLong();
+        sizeToRead = sizeBuffer.getLong();
         sizeRead += 8;
         bytesRead += 8;
-        buffer = ByteBuffer.allocate(sizeToRead - 8);
+        buffer = ByteBuffer.allocate((int) sizeToRead - 8);
       }
     }
     if (buffer != null && sizeRead < sizeToRead) {
@@ -66,5 +65,14 @@ public class BoundedByteBufferReceive implements Receive {
 
   public ByteBuffer getPayload() {
     return buffer;
+  }
+
+  /**
+   * The total size in bytes that needs to receive from the channel
+   * It will be initialized only after header is read.
+   * @return the size of the data in bytes to receive after reading header, otherwise return 0
+   */
+  long sizeInBytes() {
+    return sizeToRead;
   }
 }

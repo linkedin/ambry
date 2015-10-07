@@ -11,6 +11,7 @@ public class MockRestRequestHandler implements RestRequestHandler {
   public static String THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI = "requestHandlerThrowExceptionOnRequestComplete";
 
   private final BlobStorageService blobStorageService;
+  private boolean isRunning = false;
 
   public MockRestRequestHandler(BlobStorageService blobStorageService) {
     this.blobStorageService = blobStorageService;
@@ -19,18 +20,18 @@ public class MockRestRequestHandler implements RestRequestHandler {
   @Override
   public void start()
       throws InstantiationException {
-    // nothing to do.
+    isRunning = true;
   }
 
   @Override
   public void shutdown() {
-    // nothing to do.
+    isRunning = false;
   }
 
   /**
    * Calls the appropriate method in the {@link BlobStorageService}. Non-blocking nature depends on the implementation
    * of the underlying {@link BlobStorageService}.
-   * @param restRequestInfo - the {@link RestRequestInfo} that needs to be handled.
+   * @param restRequestInfo the {@link RestRequestInfo} that needs to be handled.
    * @throws RestServiceException
    */
   @Override
@@ -61,5 +62,10 @@ public class MockRestRequestHandler implements RestRequestHandler {
     if (restRequestMetadata != null && THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI.equals(restRequestMetadata.getUri())) {
       throw new RuntimeException(THROW_EXCEPTION_ON_REQUEST_COMPLETE_URI);
     }
+  }
+
+  @Override
+  public boolean isRunning() {
+    return isRunning;
   }
 }
