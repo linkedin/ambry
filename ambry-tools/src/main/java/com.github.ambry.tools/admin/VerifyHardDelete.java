@@ -39,12 +39,13 @@ import joptsimple.OptionSpec;
 
 
 class HardDeleteVerifier {
-  ClusterMap map;
-  String outFile;
-  String dataDir;
-  String oldDataDir;
-  HashMap<BlobId, IndexValue> rangeMap;
-  HashMap<BlobId, IndexValue> offRangeMap;
+  private final ClusterMap map;
+  private final String outFile;
+  private final String dataDir;
+  private final String oldDataDir;
+  private HashMap<BlobId, IndexValue> rangeMap;
+  private HashMap<BlobId, IndexValue> offRangeMap;
+  private final short HARD_DELETE_TOKEN_V0 = 0;
 
   public HardDeleteVerifier(ClusterMap map, String dataDir, String oldDataDir, String outFile) {
     this.map = map;
@@ -70,7 +71,7 @@ class HardDeleteVerifier {
 
       ArgumentAcceptingOptionSpec<String> oldDataDirOpt = parser.accepts("oldDataDir",
           "[Optional] The data directory of the partition/replica before hard deletes are run for comparison")
-          .withRequiredArg().describedAs("old_data_dir").ofType(String.class);
+          .withOptionalArg().describedAs("old_data_dir").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> outFileOpt =
           parser.accepts("outFile", "Output file to redirect to ").withRequiredArg().describedAs("outFile")
@@ -78,15 +79,14 @@ class HardDeleteVerifier {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
-      listOpt.add(hardwareLayoutOpt);
-      listOpt.add(partitionLayoutOpt);
-      listOpt.add(dataDirOpt);
-      listOpt.add(oldDataDirOpt);
-      listOpt.add(outFileOpt);
+      ArrayList<OptionSpec<?>> requiredOpts = new ArrayList<OptionSpec<?>>();
+      requiredOpts.add(hardwareLayoutOpt);
+      requiredOpts.add(partitionLayoutOpt);
+      requiredOpts.add(dataDirOpt);
+      requiredOpts.add(outFileOpt);
 
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt) && !opt.equals(oldDataDirOpt)) {
+      for (OptionSpec opt : requiredOpts) {
+        if (!options.has(opt)) {
           System.err.println("Missing required argument \"" + opt + "\"");
           parser.printHelpOn(System.err);
           System.exit(1);
@@ -104,7 +104,7 @@ class HardDeleteVerifier {
       HardDeleteVerifier hardDeleteVerifier = new HardDeleteVerifier(map, dataDir, oldDataDir, outFile);
       hardDeleteVerifier.verifyHardDeletes();
     } catch (Exception e) {
-      System.out.println("Closed with error " + e);
+      e.printStackTrace();
     }
   }
 
@@ -118,7 +118,7 @@ class HardDeleteVerifier {
       DataInputStream stream = new DataInputStream(crcStream);
       try {
         short version = stream.readShort();
-        if (version != 0) {
+        if (version != HARD_DELETE_TOKEN_V0) {
           throw new IllegalStateException("Unknown version encountered while parsing cleanup token");
         }
         StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
