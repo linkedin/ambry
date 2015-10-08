@@ -490,12 +490,12 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
     }
     long startTimeMs = SystemTime.getInstance().milliseconds();
-    long written = send.writeTo(this);
+    long bytesWritten = send.writeTo(this);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
     logger.trace("Bytes written {} to {} using key {} Time: {}",
-        written, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
-    if (written > 0) {
-      metrics.sslSendTimePerKB.update(writeTimeMs * 1024 / written);
+        bytesWritten, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    if (bytesWritten > 0) {
+      metrics.sslSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
     }
     return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }

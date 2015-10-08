@@ -17,8 +17,7 @@ public final class ToolUtils {
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
-      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt,
-      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt)
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
       throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
@@ -29,7 +28,6 @@ public final class ToolUtils {
       listOpt.add(sslKeyPasswordOpt);
       listOpt.add(sslTruststorePathOpt);
       listOpt.add(sslTruststorePasswordOpt);
-      listOpt.add(sslCipherSuitesOpt);
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
           System.err.println("If sslEnabledDatacenters is not empty, missing required argument \"" + opt + "\"");

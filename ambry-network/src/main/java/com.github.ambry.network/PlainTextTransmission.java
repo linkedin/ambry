@@ -75,12 +75,12 @@ public class PlainTextTransmission extends Transmission {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     }
     long startTimeMs = SystemTime.getInstance().milliseconds();
-    long written = send.writeTo(socketChannel);
+    long bytesWritten = send.writeTo(socketChannel);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
     logger.trace("Bytes written {} to {} using key {} Time: {}",
-        written, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
-    if (written > 0) {
-      metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024 / written);
+        bytesWritten, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    if (bytesWritten > 0) {
+      metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
     }
     return send.isSendComplete();
   }

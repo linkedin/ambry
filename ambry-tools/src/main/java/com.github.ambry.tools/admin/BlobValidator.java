@@ -132,7 +132,7 @@ public class BlobValidator {
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
           parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
+              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> verboseOpt =
           parser.accepts("verbose", "Verbosity").withRequiredArg().describedAs("Verbosity").defaultsTo("false")
@@ -155,7 +155,7 @@ public class BlobValidator {
 
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
           sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
-          sslTruststorePasswordOpt, sslCipherSuitesOpt);
+          sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
