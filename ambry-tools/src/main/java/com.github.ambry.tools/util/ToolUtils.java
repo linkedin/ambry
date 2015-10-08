@@ -17,7 +17,8 @@ public final class ToolUtils {
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
-      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt,
+      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt)
       throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
@@ -28,6 +29,7 @@ public final class ToolUtils {
       listOpt.add(sslKeyPasswordOpt);
       listOpt.add(sslTruststorePathOpt);
       listOpt.add(sslTruststorePasswordOpt);
+      listOpt.add(sslCipherSuitesOpt);
       for (OptionSpec opt : listOpt) {
         if (!options.has(opt)) {
           System.err.println("If sslEnabledDatacenters is not empty, missing required argument \"" + opt + "\"");
@@ -40,7 +42,7 @@ public final class ToolUtils {
 
   public static Properties createSSLProperties(String sslEnabledDatacenters, String sslKeystorePath,
       String sslKeyStoreType, String sslKeystorePassword, String keyPassword, String sslTruststorePath,
-      String sslTruststorePassword) {
+      String sslTruststorePassword, String sslCipherSuites) {
     Properties props = new Properties();
     props.put("ssl.context.protocol", "TLS");
     props.put("ssl.context.provider", "SunJSSE");
@@ -56,7 +58,7 @@ public final class ToolUtils {
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", sslTruststorePath);
     props.put("ssl.truststore.password", sslTruststorePassword);
-    props.put("ssl.cipher.suites", "TLS_RSA_WITH_AES_128_CBC_SHA");
+    props.put("ssl.cipher.suites", sslCipherSuites);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }

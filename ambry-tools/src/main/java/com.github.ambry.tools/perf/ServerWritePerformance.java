@@ -116,6 +116,10 @@ public class ServerWritePerformance {
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
               .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
+              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -131,8 +135,9 @@ public class ServerWritePerformance {
       }
 
       long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
-          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
+          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
+          sslTruststorePasswordOpt, sslCipherSuitesOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
@@ -140,7 +145,7 @@ public class ServerWritePerformance {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
             options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
             options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
-            options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslTruststorePasswordOpt), options.valueOf(sslCipherSuitesOpt));
       } else {
         sslProperties = new Properties();
       }
