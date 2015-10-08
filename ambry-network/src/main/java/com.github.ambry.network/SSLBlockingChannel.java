@@ -1,5 +1,7 @@
 package com.github.ambry.network;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -18,15 +20,18 @@ public class SSLBlockingChannel extends BlockingChannel {
   private SSLSocket sslSocket = null;
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
+  public final Counter sslClientHandshakeCount;
 
-  public SSLBlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
-      int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+  public SSLBlockingChannel(String host, int port, MetricRegistry registry, int readBufferSize, int writeBufferSize,
+      int readTimeoutMs, int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
     if (sslSocketFactory == null) {
       throw new IllegalArgumentException("sslSocketFactory is null when creating SSLBlockingChannel");
     }
     this.sslSocketFactory = sslSocketFactory;
     this.sslConfig = sslConfig;
+    sslClientHandshakeCount =
+        registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeCount"));
   }
 
   @Override
@@ -61,7 +66,12 @@ public class SSLBlockingChannel extends BlockingChannel {
         }
 
         // handshake in a blocking way
-        sslSocket.startHandshake();
+        try {
+          sslSocket.startHandshake();
+        } catch (IOException e) {
+          sslClientHandshakeCount.inc();
+          throw e;
+        }
         writeChannel = Channels.newChannel(sslSocket.getOutputStream());
         readChannel = sslSocket.getInputStream();
         connected = true;
