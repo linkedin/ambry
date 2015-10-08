@@ -82,8 +82,9 @@ public class PutRequest extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long totalWritten = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate(sizeExcludingData());
       writeHeader();
@@ -97,6 +98,7 @@ public class PutRequest extends RequestOrResponse {
       if (bufferToSend.remaining() > 0) {
         int toWrite = bufferToSend.remaining();
         int written = channel.write(bufferToSend);
+        totalWritten += written;
         sentBytes += written;
         if (toWrite != written || sentBytes == sizeInBytes()) {
           break;
@@ -108,6 +110,7 @@ public class PutRequest extends RequestOrResponse {
           data.read(bufferToSend.array(), 0, (int) Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
       bufferToSend.limit(dataRead);
     }
+    return totalWritten;
   }
 
   @Override

@@ -12,9 +12,10 @@ public interface Send {
   /**
    * Writes content into the provided channel
    * @param channel The channel into which data needs to be written to
+   * @return Number of bytes written
    * @throws IOException
    */
-  void writeTo(WritableByteChannel channel)
+  long writeTo(WritableByteChannel channel)
       throws IOException;
 
   /**

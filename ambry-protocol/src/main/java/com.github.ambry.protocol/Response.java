@@ -30,16 +30,18 @@ public abstract class Response extends RequestOrResponse {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
-      channel.write(bufferToSend);
+      written = channel.write(bufferToSend);
     }
+    return written;
   }
 
   @Override

@@ -20,11 +20,13 @@ class ByteBufferSend implements Send {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long written = 0;
     if (!isSendComplete()) {
-      channel.write(buffer);
+      written = channel.write(buffer);
     }
+    return written;
   }
 
   @Override

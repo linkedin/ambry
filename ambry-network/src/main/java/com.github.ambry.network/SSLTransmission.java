@@ -380,10 +380,10 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
     long readTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
+    logger.trace("Bytes read {} from {} using key {} Time: {}", bytesRead,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
-      metrics.plaintextReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
+      metrics.sslReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
     }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
@@ -490,11 +490,13 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
     }
     long startTimeMs = SystemTime.getInstance().milliseconds();
-    send.writeTo(this);
+    long written = send.writeTo(this);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    metrics.sslSendTime.update(writeTimeMs);
-    logger.trace("Bytes written to {} using key {} Time: {}", socketChannel.socket().getRemoteSocketAddress(),
-        getConnectionId(), writeTimeMs);
+    logger.trace("Bytes written {} to {} using key {} Time: {}",
+        written, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    if (written > 0) {
+      metrics.sslSendTimePerKB.update(writeTimeMs * 1024 / written);
+    }
     return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }
 

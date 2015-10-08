@@ -23,14 +23,16 @@ public class CompositeSend implements Send {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long written = 0;
     if (currentIndexInProgress < compositSendList.size()) {
-      compositSendList.get(currentIndexInProgress).writeTo(channel);
+      written = compositSendList.get(currentIndexInProgress).writeTo(channel);
       if (compositSendList.get(currentIndexInProgress).isSendComplete()) {
         currentIndexInProgress++;
       }
     }
+    return written;
   }
 
   @Override

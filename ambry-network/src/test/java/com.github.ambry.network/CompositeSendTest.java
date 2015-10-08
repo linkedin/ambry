@@ -21,9 +21,9 @@ class ByteArraySend implements Send {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
-    channel.write(bytesToSend);
+    return channel.write(bytesToSend);
   }
 
   @Override
