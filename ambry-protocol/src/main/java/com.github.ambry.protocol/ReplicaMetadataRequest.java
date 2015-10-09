@@ -67,7 +67,6 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   @Override
   public long writeTo(WritableByteChannel channel)
       throws IOException {
-    long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
@@ -78,10 +77,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
       bufferToSend.putLong(maxTotalSizeOfEntriesInBytes);
       bufferToSend.flip();
     }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-    }
-    return written;
+    return bufferToSend.remaining() > 0 ? channel.write(bufferToSend) : 0;
   }
 
   @Override

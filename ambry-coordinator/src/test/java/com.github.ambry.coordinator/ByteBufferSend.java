@@ -22,11 +22,7 @@ class ByteBufferSend implements Send {
   @Override
   public long writeTo(WritableByteChannel channel)
       throws IOException {
-    long written = 0;
-    if (!isSendComplete()) {
-      written = channel.write(buffer);
-    }
-    return written;
+    return isSendComplete() ? 0 : channel.write(buffer);
   }
 
   @Override
