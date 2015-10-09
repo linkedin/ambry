@@ -130,6 +130,10 @@ public class BlobValidator {
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
               .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
+              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+
       ArgumentAcceptingOptionSpec<String> verboseOpt =
           parser.accepts("verbose", "Verbosity").withRequiredArg().describedAs("Verbosity").defaultsTo("false")
               .ofType(String.class);
@@ -149,15 +153,16 @@ public class BlobValidator {
         }
       }
 
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
-          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
+          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
+          sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
             options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
             options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
-            options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslTruststorePasswordOpt), options.valueOf(sslCipherSuitesOpt));
       } else {
         sslProperties = new Properties();
       }

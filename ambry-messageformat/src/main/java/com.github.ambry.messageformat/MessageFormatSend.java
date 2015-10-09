@@ -184,10 +184,11 @@ public class MessageFormatSend implements Send {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long written = 0;
     if (!isSendComplete()) {
-      long written = readSet.writeTo(currentWriteIndex, channel,
+      written = readSet.writeTo(currentWriteIndex, channel,
           infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
           infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
       logger.trace("writeindex {} relativeOffset {} maxSize {} written {}", currentWriteIndex,
@@ -201,6 +202,7 @@ public class MessageFormatSend implements Send {
         sizeWrittenFromCurrentIndex = 0;
       }
     }
+    return written;
   }
 
   @Override

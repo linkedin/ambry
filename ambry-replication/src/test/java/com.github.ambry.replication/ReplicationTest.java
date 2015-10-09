@@ -339,10 +339,11 @@ public class ReplicationTest {
       }
 
       @Override
-      public void writeTo(WritableByteChannel channel)
+      public long writeTo(WritableByteChannel channel)
           throws IOException {
-        channel.write(bufferList.get(index));
+        long written = channel.write(bufferList.get(index));
         index++;
+        return written;
       }
 
       @Override

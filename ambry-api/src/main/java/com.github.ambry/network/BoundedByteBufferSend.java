@@ -40,11 +40,9 @@ public class BoundedByteBufferSend implements Send {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
-    if (!isSendComplete()) {
-      channel.write(buffer);
-    }
+    return isSendComplete() ? 0 : channel.write(buffer);
   }
 
   @Override

@@ -26,9 +26,10 @@ public class SocketRequestResponseChannelTest {
     public int sendcall = 1;
 
     @Override
-    public void writeTo(WritableByteChannel channel)
+    public long writeTo(WritableByteChannel channel)
         throws IOException {
       // no implementation
+      return 0;
     }
 
     @Override
