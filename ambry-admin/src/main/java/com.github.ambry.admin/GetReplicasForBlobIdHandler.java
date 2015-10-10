@@ -5,17 +5,15 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.FutureResult;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Future;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -34,45 +32,34 @@ class GetReplicasForBlobIdHandler {
    * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
    * <p/>
    * Extracts the blob ID from the {@code restRequest}, infers replicas of the blob ID if possible, packages the replica
-   * list into a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}. Invokes the
-   * {@code callback} (if any) when operation is complete.
+   * list into a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}.
    * <p/>
    * Content sent via the {@code restRequest} is ignored.
    * @param restRequest {@link RestRequest} containing details of the request.
+   * @param restResponseChannel the {@link RestResponseChannel} to set headers in.
    * @param clusterMap the {@link ClusterMap} to use to find the replicas for blob ID.
-   * @param callback the {@link Callback} to invoke when operation is complete. Can be null.
    * @param adminMetrics {@link AdminMetrics} instance to track errors and latencies.
-   * @return a {@link Future} that will eventually contain the getReplicasForBlobId response in the form of a
-   *          {@link ReadableStreamChannel}.
+   * @return a {@link ReadableStreamChannel} that contains the getReplicasForBlobId response.
+   * @throws RestServiceException if there was any problem constructing the response.
    */
-  public static Future<ReadableStreamChannel> handleGetRequest(RestRequest restRequest, ClusterMap clusterMap,
-      Callback<ReadableStreamChannel> callback, AdminMetrics adminMetrics) {
+  public static ReadableStreamChannel handleGetRequest(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      ClusterMap clusterMap, AdminMetrics adminMetrics)
+      throws RestServiceException {
     logger.trace("Handling getReplicasForBlobId - {}", restRequest.getUri());
     adminMetrics.getReplicasForBlobIdRate.mark();
     long startTime = System.currentTimeMillis();
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     ReadableStreamChannel channel = null;
-    RestServiceException exception = null;
-    RuntimeException re = null;
     try {
       String replicaStr = getReplicasForBlobId(restRequest, clusterMap, adminMetrics).toString();
-      // TODO: this needs to go into a handle head request.
-      // responseChannel.setContentType("application/json");
+      restResponseChannel.setContentType("application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
-    } catch (RestServiceException e) {
-      exception = e;
-      re = new RuntimeException(e);
     } finally {
-      futureResult.done(channel, re);
-      if (callback != null) {
-        callback.onCompletion(channel, exception);
-      }
       long processingTime = System.currentTimeMillis() - startTime;
       logger.trace("Processing getReplicasForBlobId response for request {} took {} ms", restRequest.getUri(),
           processingTime);
       adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
     }
-    return futureResult;
+    return channel;
   }
 
   /**
@@ -98,13 +85,13 @@ class GetReplicasForBlobIdHandler {
           logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobIdStr);
           adminMetrics.getReplicasForBlobIdPartitionNullError.inc();
           throw new RestServiceException("Partition for blob id " + blobIdStr + " is null. The id might be invalid",
-              RestServiceErrorCode.InvalidArgs);
+              RestServiceErrorCode.NotFound);
         }
         return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
         adminMetrics.getReplicasForBlobIdInvalidBlobIdError.inc();
         throw new RestServiceException("Invalid blob id received for getReplicasForBlob request - " + blobIdStr, e,
-            RestServiceErrorCode.InvalidArgs);
+            RestServiceErrorCode.NotFound);
       } catch (IOException e) {
         adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
         throw new RestServiceException(

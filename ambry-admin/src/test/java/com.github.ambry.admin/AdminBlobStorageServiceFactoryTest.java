@@ -5,6 +5,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.Router;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -32,7 +34,8 @@ public class AdminBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AdminBlobStorageServiceFactory adminBlobStorageServiceFactory =
-        new AdminBlobStorageServiceFactory(verifiableProperties, new MetricRegistry(), new MockClusterMap());
+        new AdminBlobStorageServiceFactory(verifiableProperties, new MetricRegistry(), new MockClusterMap(),
+            new InMemoryRouter(verifiableProperties));
     BlobStorageService adminBlobStorageService = adminBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", adminBlobStorageService);
     assertEquals("Did not receive an AdminBlobStorageService instance",
@@ -51,24 +54,32 @@ public class AdminBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
+    Router router = new InMemoryRouter(verifiableProperties);
 
     // VerifiableProperties null.
     try {
-      new AdminBlobStorageServiceFactory(null, metricRegistry, clusterMap);
+      new AdminBlobStorageServiceFactory(null, metricRegistry, clusterMap, router);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // MetricRegistry null.
     try {
-      new AdminBlobStorageServiceFactory(verifiableProperties, null, clusterMap);
+      new AdminBlobStorageServiceFactory(verifiableProperties, null, clusterMap, router);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // ClusterMap null.
     try {
-      new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, null);
+      new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, null, router);
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // Router null.
+    try {
+      new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, clusterMap, null);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }

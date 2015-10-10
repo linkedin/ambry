@@ -5,6 +5,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
+import com.github.ambry.router.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,20 +20,23 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
+  private final Router router;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Instantiate AdminBlobStorageServiceFactory with properties, metrics registry and a cluster map.
+   * Instantiate AdminBlobStorageServiceFactory with properties, metrics registry, a cluster map and a router.
    * @param verifiableProperties the properties to use to create configs.
    * @param metricRegistry the {@link MetricRegistry} for metrics.
    * @param clusterMap the {@link ClusterMap} to use.
+   * @param router the {@link Router} to use.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap) {
-    if (verifiableProperties != null && metricRegistry != null && clusterMap != null) {
+      ClusterMap clusterMap, Router router) {
+    if (verifiableProperties != null && metricRegistry != null && clusterMap != null & router != null) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(metricRegistry);
       this.clusterMap = clusterMap;
+      this.router = router;
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
@@ -45,6 +49,9 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
+      if (router == null) {
+        errorMessage.append(" [Router] ");
+      }
       throw new IllegalArgumentException(errorMessage.toString());
     }
     logger.trace("Instantiated AdminBlobStorageServiceFactory");
@@ -56,6 +63,6 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap);
+    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap, router);
   }
 }
