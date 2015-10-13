@@ -73,6 +73,8 @@ public class NetworkMetrics {
   public final Histogram sslSendTimePerKB;
   public final Histogram sslEncryptionTimePerKB;
   public final Histogram sslDecryptionTimePerKB;
+  public final Histogram sslEncryptionBytes;
+  public final Histogram sslDecryptionBytes;
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
 
@@ -123,6 +125,8 @@ public class NetworkMetrics {
     sslSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
     sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
     sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
+    sslEncryptionBytes = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionBytes"));
+    sslDecryptionBytes = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionBytes"));
     sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
     sslSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimePerKB"));
     sslFactoryInitializationCount =

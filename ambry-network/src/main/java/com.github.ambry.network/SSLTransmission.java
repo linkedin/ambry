@@ -429,6 +429,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         SSLEngineResult unwrapResult = sslEngine.unwrap(netReadBuffer, appReadBuffer);
         long decryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
         logger.trace("SSL decryption time: {} ms for {} bytes", decryptionTimeMs, unwrapResult.bytesProduced());
+        metrics.sslDecryptionBytes.update(unwrapResult.bytesProduced());
         if (unwrapResult.bytesProduced() > 0) {
           metrics.sslDecryptionTimePerKB.update(decryptionTimeMs * 1024 / unwrapResult.bytesProduced());
         }
@@ -529,6 +530,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
     long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
     logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
+    metrics.sslEncryptionBytes.update(wrapResult.bytesConsumed());
     if (wrapResult.bytesConsumed() > 0) {
       metrics.sslEncryptionTimePerKB.update(encryptionTimeMs * 1024 / wrapResult.bytesConsumed());
     }
