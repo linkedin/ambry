@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Starts a fixed number of {@link AsyncRequestHandler} instances and hands them out as required.
+ * Starts a fixed number of {@link AsyncRequestResponseHandler} instances and hands them out as required.
  * <p/>
  * Only one instance of this is expected to be alive and that instance lives through the lifetime of the
  * {@link RestServer}.
@@ -55,7 +55,7 @@ class RequestHandlerController implements RestRequestHandlerController {
     } catch (Exception e) {
       restServerMetrics.requestHandlerSelectionError.inc();
       throw new RestServiceException("Exception during selection of a RestRequestHandler to return", e,
-          RestServiceErrorCode.RequestHandlerSelectionError);
+          RestServiceErrorCode.RequestResponseHandlerSelectionError);
     }
     return requestHandler;
   }
@@ -75,15 +75,15 @@ class RequestHandlerController implements RestRequestHandlerController {
   }
 
   /**
-   * Creates handlerCount instances of {@link AsyncRequestHandler}. They are not started.
-   * @param handlerCount The number of instances of {@link AsyncRequestHandler} to be created.
-   * @param blobStorageService The {@link BlobStorageService} to be used by the {@link AsyncRequestHandler} instances.
+   * Creates handlerCount instances of {@link AsyncRequestResponseHandler}. They are not started.
+   * @param handlerCount The number of instances of {@link AsyncRequestResponseHandler} to be created.
+   * @param blobStorageService The {@link BlobStorageService} to be used by the {@link AsyncRequestResponseHandler} instances.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
-    logger.trace("Creating {} instances of AsyncRequestHandler", handlerCount);
+    logger.trace("Creating {} instances of AsyncRequestResponseHandler", handlerCount);
     for (int i = 0; i < handlerCount; i++) {
       // This can change if there is ever a RequestHandlerFactory.
-      requestHandlers.add(new AsyncRequestHandler(blobStorageService, restServerMetrics));
+      requestHandlers.add(new AsyncRequestResponseHandler(blobStorageService, restServerMetrics));
     }
   }
 }

@@ -1,5 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.router.RouterErrorCode;
+
+
 /**
  * All the error codes that accompany a {@link RestServiceException}. Each of these error codes are expected to go
  * into certain "groups" that map to HTTP error codes.
@@ -15,21 +18,19 @@ package com.github.ambry.rest;
  */
 public enum RestServiceErrorCode {
   /**
-   * Blob has been deleted.
+   * Resource has been deleted.
    */
-  BlobDeleted,
+  Deleted,
+
   /**
-   * Blob was not found.
+   * Resource was not found.
    */
-  BlobNotFound,
+  NotFound,
+
   /**
    * Generic BadRequest error code when client provides a request that is not fit for processing.
    */
   BadRequest,
-  /**
-   * Client has supplied arguments that are not valid.
-   */
-  InvalidArgs,
   /**
    * Client has sent a request that is cannot be decoded using the REST protocol (usually HTTP).
    */
@@ -64,7 +65,7 @@ public enum RestServiceErrorCode {
   /**
    * Indicates failure of tasks that needed to be done when a new channel with a client became active.
    */
-  ChannelActiveTasksFailure,
+  ChannelCreationTasksFailure,
   /**
    * Indicates that an error occurred while data was being written to a channel.
    */
@@ -78,39 +79,25 @@ public enum RestServiceErrorCode {
    */
   InternalObjectCreationError,
   /**
+   * Indicates that a {@link RestRequest} has been closed and an operation could not be performed on it.
+   */
+  RequestChannelClosed,
+  /**
    * Indicates failure of the {@link RestRequestHandlerController} to select and provide a {@link RestRequestHandler}.
    */
-  RequestHandlerSelectionError,
+  RequestResponseHandlerSelectionError,
   /**
-   * Indicates that the {@link RestRequestHandler} is unavailable for request handling. Thrown when the
-   * {@link RestRequestHandler} is not started up or has died.
+   * Indicates that the submitted request or response could not be queued in the {@link RestRequestHandler}.
    */
-  RequestHandlerUnavailable,
-  /**
-   * Indicates that there is no reference of a {@link RestRequest} in the {@link RestRequestInfo}.
-   */
-  RequestNull,
+  RequestResponseQueueingFailure,
   /**
    * Indicates that there was a problem building the response (usually happens when the response is JSON).
    */
   ResponseBuildingFailure,
   /**
-   * Indicates that there is no reference of a {@link RestResponseChannel} in the {@link RestRequestInfo}.
+   * Indicates that an internal service is unavailable either because it is not started, is shutdown or has crashed.
    */
-  ResponseChannelNull,
-  /**
-   * Indicates that there was an error while trying to build response metadata that needs to be sent to the client.
-   */
-  ResponseMetadataBuildingFailure,
-  /**
-   * Indicates that the submitted {@link RestRequestInfo} is null.
-   */
-  RestRequestInfoNull,
-  /**
-   * Indicates that the submitted {@link RestRequestInfo} could not be queued for handling in the
-   * {@link RestRequestHandler}.
-   */
-  RestRequestInfoQueueingFailure,
+  ServiceUnavailable,
   /**
    * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
    * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
@@ -123,43 +110,28 @@ public enum RestServiceErrorCode {
   UnknownErrorCode;
 
   /**
-   * Gets the error code group that a certain RestServiceErrorCode belongs to (mostly used for http error reporting
-   * purposes).
-   * @param code - the input RestServiceErrorCode.
-   * @return - the group that the RestServiceErrorCode belongs to.
+   * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.
+   * @param routerErrorCode input {@link RouterErrorCode}.
+   * @return the RestServiceErrorCode that the {@code routerErrorCode} belongs to.
    */
-  public static RestServiceErrorCode getErrorCodeGroup(RestServiceErrorCode code) {
-    switch (code) {
-      case BlobDeleted:
-        return BlobDeleted;
-      case BlobNotFound:
-        return BlobNotFound;
-      case BadRequest:
-      case InvalidArgs:
-      case MalformedRequest:
-      case MissingArgs:
-      case NoRequest:
-      case UnknownHttpObject:
-      case UnsupportedHttpMethod:
-      case UnsupportedOperation:
+  public static RestServiceErrorCode getRestServiceErrorCode(RouterErrorCode routerErrorCode) {
+    switch (routerErrorCode) {
+      case BlobTooLarge:
+      case InvalidBlobId:
+      case InvalidPutArgument:
         return BadRequest;
-      case InternalServerError:
-      case ChannelActiveTasksFailure:
-      case ChannelWriteError:
-      case IllegalResponseMetadataStateTransition:
-      case InternalObjectCreationError:
-      case RequestHandlerSelectionError:
-      case RequestHandlerUnavailable:
-      case RequestNull:
-      case ResponseBuildingFailure:
-      case ResponseChannelNull:
-      case ResponseMetadataBuildingFailure:
-      case RestRequestInfoNull:
-      case RestRequestInfoQueueingFailure:
-      case UnsupportedRestMethod:
-        return InternalServerError;
+      case BlobDeleted:
+      case BlobExpired:
+        return Deleted;
+      case BlobDoesNotExist:
+        return NotFound;
+      case AmbryUnavailable:
+      case InsufficientCapacity:
+      case OperationTimedOut:
+      case RouterClosed:
+      case UnexpectedInternalError:
       default:
-        return UnknownErrorCode;
+        return InternalServerError;
     }
   }
 }

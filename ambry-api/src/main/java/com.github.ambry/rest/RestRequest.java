@@ -50,21 +50,7 @@ public interface RestRequest extends ReadableStreamChannel {
   public Map<String, List<String>> getArgs();
 
   /**
-   * If the underlying request metadata is reference counted, increase the reference count so that the it is not lost to
-   * recycling before async processing is complete.
-   */
-  public void retain();
-
-  /**
-   * If the underlying request metadata is reference counted, decrease the reference count so that it can be recycled,
-   * clean up any resources and do work that needs to be done at the end of the lifecycle if required.
-   */
-  public void release();
-
-  /**
-   * Closes this request channel and releases all of the resources associated with it. The reference count of the
-   * request metadata will be reset to the value it would have been if no {@link #retain()}s or {@link #release()}s had
-   * been executed through this class.
+   * Closes this request channel and releases all of the resources associated with it.
    * <p/>
    * {@inheritDoc}
    * @throws IOException if there is an I/O error while closing the request channel.

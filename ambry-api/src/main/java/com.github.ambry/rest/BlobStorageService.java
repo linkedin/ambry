@@ -1,22 +1,15 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.router.Callback;
-import com.github.ambry.router.ReadableStreamChannel;
-import java.util.concurrent.Future;
-
-
 /**
  * BlobStorageService defines a service that forms the bridge b/w a RESTful frontend and a storage backend (or something
  * that communicates with a storage backend).
  * <p/>
  * Typically, a BlobStorageService is expected to receive requests from the RESTful frontend, handle them as required
- * and either make a callback with the handling results (if immediately available) or pass control to another
- * component that do further handling and make callbacks. The information received from the frontend should be enough
- * to perform these functions.
+ * and either send a response (if immediately available) or pass control to another component that do further handling
+ * and generate a response. The information received from the scaling layer should be enough to perform these functions.
  * <p/>
- * Most operations are performed async and therefore a {@link Future} that will eventually contain the result of the
- * operation is returned. On operation completion, the callback provided (if not null) is invoked.
+ * Most operations are performed async and responses are therefore queued asynchronously instead of being available at
+ * the end of the function call.
  * <p/>
  * Implementations are expected to be thread-safe.
  */
@@ -37,60 +30,52 @@ public interface BlobStorageService {
   /**
    * Handles a GET operation.
    * <p/>
-   * The {@code restRequest} provided will have both metadata and any content associated with the request.
-   * <p/>
-   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
-   * {@code callback} provided (if not null) will be invoked when the operation is complete.
-   * <p/>
-   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
-   * @param restRequest the {@link RestRequest} that needs to be handled.
-   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
-   * @return a {@link Future} that will eventually contain the result of the operation.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
+   * to submit a response that needs to be sent to the client.
+   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public Future<ReadableStreamChannel> handleGet(RestRequest restRequest, Callback<ReadableStreamChannel> callback);
+  public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      RestResponseHandler restResponseHandler);
 
   /**
    * Handles a POST operation.
    * <p/>
-   * The {@code restRequest} provided will have both metadata and any content associated with the request.
-   * <p/>
-   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
-   * {@code callback} provided (if not null) will be invoked when the operation is complete.
-   * <p/>
-   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
-   * @param restRequest the {@link RestRequest} that needs to be handled.
-   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
-   * @return a {@link Future} that will eventually contain the result of the operation.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
+   * to submit a response that needs to be sent to the client.
+   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public Future<String> handlePost(RestRequest restRequest, Callback<String> callback);
+  public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      RestResponseHandler restResponseHandler);
 
   /**
    * Handles a DELETE operation.
    * <p/>
-   * The {@code restRequest} provided will have both metadata and any content associated with the request.
-   * <p/>
-   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
-   * {@code callback} provided (if not null) will be invoked when the operation is complete.
-   * <p/>
-   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
-   * @param restRequest the {@link RestRequest} that needs to be handled.
-   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
-   * @return a {@link Future} that will eventually contain the result of the operation.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
+   * to submit a response that needs to be sent to the client.
+   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public Future<Void> handleDelete(RestRequest restRequest, Callback<Void> callback);
+  public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      RestResponseHandler restResponseHandler);
 
   /**
    * Handles a HEAD operation.
    * <p/>
-   * The {@code restRequest} provided will have both metadata and any content associated with the request.
-   * <p/>
-   * It is expected that the returned {@link Future} will eventually contain the result of the operation and the
-   * {@code callback} provided (if not null) will be invoked when the operation is complete.
-   * <p/>
-   * Any exception is communicated through the {@link Future} and {@code callback} (if not not null).
-   * @param restRequest the {@link RestRequest} that needs to be handled.
-   * @param callback the {@link Callback} that needs to be invoked on operation completion (can be null).
-   * @return a {@link Future} that will eventually contain the result of the operation.
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
+   * to submit a response that needs to be sent to the client.
+   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public Future<BlobInfo> handleHead(RestRequest restRequest, Callback<BlobInfo> callback);
+  public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      RestResponseHandler restResponseHandler);
 }

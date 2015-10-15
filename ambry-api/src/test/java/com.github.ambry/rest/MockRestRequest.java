@@ -8,13 +8,13 @@ import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,89 +34,99 @@ import org.json.JSONObject;
  * This also contains the content of the request. This content can be streamed out through the read operations.
  */
 public class MockRestRequest implements RestRequest {
+  /**
+   * List of "events" (function calls) that can occur inside MockRestRequest.
+   */
+  public static enum Event {
+    GetRestMethod,
+    GetPath,
+    GetUri,
+    GetArgs,
+    GetSize,
+    Read,
+    IsOpen,
+    Close
+  }
+
+  /**
+   * Callback that can be used to listen to events that happen inside MockRestRequest.
+   * <p/>
+   * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
+   * in the function that triggers the event or inside the function that notifies listeners.
+   */
+  public interface EventListener {
+
+    /**
+     * Called when an event (function call) finishes successfully in {@link MockRestRequest}. Does *not* trigger
+     * if the event (function) fails.
+     * @param mockRestRequest the {@link MockRestRequest} where the event occurred.
+     * @param event the {@link MockRestRequest.Event} that occurred.
+     */
+    public void onEventComplete(MockRestRequest mockRestRequest, MockRestRequest.Event event);
+  }
+
   // main fields
   public static String REST_METHOD_KEY = "restMethod";
   public static String URI_KEY = "uri";
   public static String HEADERS_KEY = "headers";
 
   // header fields
-  public static String CONTENT_LENGTH = "contentLength";
+  public static String CONTENT_LENGTH_HEADER_KEY = "Content-Length";
 
   private final RestMethod restMethod;
   private final URI uri;
   private final Map<String, List<String>> args = new HashMap<String, List<String>>();
   private final ReentrantLock contentLock = new ReentrantLock();
-  private final List<ByteBuffer> requestContents = new LinkedList<ByteBuffer>();
+  private final List<ByteBuffer> requestContents;
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final ReentrantLock referenceCountLock = new ReentrantLock();
-  private final AtomicInteger referenceCount = new AtomicInteger(0);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
+  private final List<EventListener> listeners = new ArrayList<EventListener>();
 
   /**
    * Create a MockRestRequest.
    * @param data the request metadata with the fields required.
+   * @param requestContents contents of the request, if any. Can be null and can be added later via
+   *                          {@link #addContent(ByteBuffer)}. Add a null {@link ByteBuffer} at the end to signify end
+   *                          of content.
    * @throws JSONException if there is an exception retrieving required fields.
    * @throws UnsupportedEncodingException if some parts of the URI are not in a format that can be decoded.
    * @throws URISyntaxException if there is a syntax error in the URI.
    */
-  public MockRestRequest(JSONObject data)
+  public MockRestRequest(JSONObject data, List<ByteBuffer> requestContents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     this.restMethod = RestMethod.valueOf(data.getString(REST_METHOD_KEY));
     this.uri = new URI(data.getString(URI_KEY));
     JSONObject headers = data.has(HEADERS_KEY) ? data.getJSONObject(HEADERS_KEY) : null;
     populateArgs(headers);
+    if (requestContents != null) {
+      this.requestContents = requestContents;
+    } else {
+      this.requestContents = new LinkedList<ByteBuffer>();
+    }
   }
 
   @Override
   public RestMethod getRestMethod() {
+    onEventComplete(Event.GetRestMethod);
     return restMethod;
   }
 
   @Override
   public String getPath() {
+    onEventComplete(Event.GetPath);
     return uri.getPath();
   }
 
   @Override
   public String getUri() {
+    onEventComplete(Event.GetUri);
     return uri.toString();
   }
 
   @Override
   public Map<String, List<String>> getArgs() {
+    onEventComplete(Event.GetArgs);
     return args;
-  }
-
-  @Override
-  public void retain() {
-    try {
-      referenceCountLock.lock();
-      if (isOpen()) {
-        referenceCount.incrementAndGet();
-      } else {
-        // this is specifically in place so that we know when a piece of code retains after close. Real implementations
-        // might (or might not) quietly handle this but in tests we want to know when we retain after close.
-        throw new IllegalStateException("Trying to retain request metadata after closing channel");
-      }
-    } finally {
-      referenceCountLock.unlock();
-    }
-  }
-
-  @Override
-  public void release() {
-    try {
-      referenceCountLock.lock();
-      if (referenceCount.get() <= 0) {
-        // this is specifically in place so that we know when a piece of code releases too much. Real implementations
-        // might (or might not) quietly handle this but in tests we want to know when we release too much.
-        throw new IllegalStateException("Request metadata has been released more times than it has been retained");
-      } else {
-        referenceCount.decrementAndGet();
-      }
-    } finally {
-      referenceCountLock.unlock();
-    }
   }
 
   /**
@@ -129,7 +139,15 @@ public class MockRestRequest implements RestRequest {
    */
   @Override
   public long getSize() {
-    return args.get(CONTENT_LENGTH) != null ? Long.parseLong(args.get(CONTENT_LENGTH).get(0)) : 0;
+    long contentLength;
+    if (args.get(RestConstants.Headers.Blob_Size) != null) {
+      contentLength = Long.parseLong(args.get(RestConstants.Headers.Blob_Size).get(0));
+    } else {
+      contentLength =
+          args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).get(0)) : 0;
+    }
+    onEventComplete(Event.GetSize);
+    return contentLength;
   }
 
   @Override
@@ -187,36 +205,48 @@ public class MockRestRequest implements RestRequest {
         contentLock.unlock();
       }
     }
+    onEventComplete(Event.Read);
     return bytesWritten;
   }
 
   @Override
   public boolean isOpen() {
+    onEventComplete(Event.IsOpen);
     return channelOpen.get();
   }
 
   @Override
   public void close()
       throws IOException {
-    if (channelOpen.compareAndSet(true, false)) {
-      while (referenceCount.get() > 0) {
-        release();
+    channelOpen.set(false);
+    onEventComplete(Event.Close);
+  }
+
+  /**
+   * Register to be notified about events that occur in this MockRestRequest.
+   * @param listener the listener that needs to be notified of events.
+   */
+  public MockRestRequest addListener(EventListener listener) {
+    if (listener != null) {
+      synchronized (listeners) {
+        listeners.add(listener);
       }
     }
+    return this;
   }
 
   /**
    * Adds some content in the form of {@link ByteBuffer} to this RestRequest. This content will be available to read
-   * through the read operations. To indicate end of content, don't forget to add a null ByteBuffer.
+   * through the read operations. To indicate end of content, add a null ByteBuffer.
    * @throws ClosedChannelException if request channel has been closed.
    */
   public void addContent(ByteBuffer content)
       throws IOException {
-    if (!isOpen()) {
-      throw new ClosedChannelException();
-    }
     try {
       contentLock.lock();
+      if (!isOpen()) {
+        throw new ClosedChannelException();
+      }
       requestContents.add(content);
     } finally {
       contentLock.unlock();
@@ -266,5 +296,24 @@ public class MockRestRequest implements RestRequest {
       args.put(key, new LinkedList<String>());
     }
     args.get(key).add(value);
+  }
+
+  /**
+   * Notify listeners of events.
+   * <p/>
+   * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
+   * in the function that triggers the event or inside this function.
+   * @param event the {@link MockRestRequest.Event} that just occurred.
+   */
+  private void onEventComplete(MockRestRequest.Event event) {
+    synchronized (listeners) {
+      for (EventListener listener : listeners) {
+        try {
+          listener.onEventComplete(this, event);
+        } catch (Exception ee) {
+          // too bad.
+        }
+      }
+    }
   }
 }

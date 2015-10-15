@@ -26,6 +26,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+// TODO: some extra tests for addContent needed.
 
 /**
  * Tests functionality of {@link NettyRequest}.
@@ -57,9 +58,9 @@ public class NettyRequestTest {
     params.put("overLoadedKey", values);
 
     StringBuilder uriAttachmentBuilder = new StringBuilder("?");
-    for (String key : params.keySet()) {
-      for (String value : params.get(key)) {
-        uriAttachmentBuilder.append(key).append("=").append(value).append("&");
+    for (Map.Entry<String, List<String>> param : params.entrySet()) {
+      for (String value : param.getValue()) {
+        uriAttachmentBuilder.append(param.getKey()).append("=").append(value).append("&");
       }
     }
     uriAttachmentBuilder.deleteCharAt(uriAttachmentBuilder.length() - 1);
@@ -122,13 +123,11 @@ public class NettyRequestTest {
   @Test
   public void operationsAfterCloseTest()
       throws RestServiceException, IOException {
-    NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     closeRequestAndValidate(nettyRequest);
 
     // operations that should be ok to do (does not include all operations).
     nettyRequest.close();
-    nettyRequest.retain();
-    nettyRequest.release();
 
     // operations that will throw exceptions.
     try {
@@ -161,7 +160,7 @@ public class NettyRequestTest {
     final int CONTENT_LENGTH = 1024;
     int addedContentCount = 0;
     int bytesRead = 0;
-    NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     Queue<ByteBuffer> contents = new LinkedBlockingQueue<ByteBuffer>();
     Queue<HttpContent> httpContents = new LinkedBlockingQueue<HttpContent>();
 
@@ -179,12 +178,12 @@ public class NettyRequestTest {
 
     // read nothing
     readAndVerify(0, 0, nettyRequest, contents, httpContents);
-    // read CONTENT_LENGTH size bytes.
+    // read Content-Length size bytes.
     readAndVerify(CONTENT_LENGTH, CONTENT_LENGTH, nettyRequest, contents, httpContents);
     bytesRead += CONTENT_LENGTH;
-    // read [0, CONTENT_LENGTH] bytes until we run out of data.
+    // read [0, Content-Length] bytes until we run out of data.
     while (bytesRead < addedContentCount * CONTENT_LENGTH) {
-      // make sure to include CONTENT_LENGTH too - rand.nextInt(n) is [0,n)
+      // make sure to include Content-Length too - rand.nextInt(n) is [0,n)
       int readLengthDesired = randLength.nextInt(CONTENT_LENGTH + 1);
       // we might read lesser than expected because we are out of content.
       int readLengthExpected = Math.min(readLengthDesired, addedContentCount * CONTENT_LENGTH - bytesRead);
@@ -202,9 +201,9 @@ public class NettyRequestTest {
     }
     // add an end marker
     nettyRequest.addContent(new DefaultLastHttpContent());
-    // read [CONTENT_LENGTH + 1, 4 * CONTENT_LENGTH] bytes until we run out of data.
+    // read [Content-Length + 1, 4 * Content-Length] bytes until we run out of data.
     while (bytesRead < addedContentCount * CONTENT_LENGTH) {
-      // make sure to exclude CONTENT_LENGTH but include 4 * CONTENT_LENGTH.
+      // make sure to exclude Content-Length but include 4 * Content-Length.
       int readLengthDesired = CONTENT_LENGTH + 1 + randLength.nextInt(3 * CONTENT_LENGTH);
       // we might read lesser than expected because we are out of content.
       int readLengthExpected = Math.min(readLengthDesired, addedContentCount * CONTENT_LENGTH - bytesRead);
@@ -229,7 +228,7 @@ public class NettyRequestTest {
   @Test
   public void closeTest()
       throws IOException, RestServiceException {
-    NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     Queue<HttpContent> httpContents = new LinkedBlockingQueue<HttpContent>();
     for (int i = 0; i < 5; i++) {
       ByteBuffer content = ByteBuffer.wrap(getRandomBytes(1024));
@@ -241,6 +240,84 @@ public class NettyRequestTest {
     while (httpContents.peek() != null) {
       assertEquals("Reference count of http content has changed", 1, httpContents.poll().refCnt());
     }
+  }
+
+  /**
+   * Tests different state transitions that can happen with {@link NettyRequest#addContent(HttpContent)} for GET
+   * requests. Some transitions are valid and some should necessarily throw exceptions.
+   * @throws IOException
+   * @throws RestServiceException
+   */
+  @Test
+  public void addContentForGetTest()
+      throws IOException, RestServiceException {
+    byte[] content = getRandomBytes(16);
+    // adding non LastHttpContent to nettyRequest
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    try {
+      nettyRequest.addContent(new DefaultHttpContent(Unpooled.wrappedBuffer(content)));
+      fail("GET requests should not accept non-LastHTTPContent");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+
+    // adding LastHttpContent with some content to nettyRequest
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    try {
+      nettyRequest.addContent(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content)));
+      fail("GET requests should not accept actual content in LastHTTPContent");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+
+    // should accept LastHttpContent just fine.
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    nettyRequest.addContent(new DefaultLastHttpContent());
+
+    // should not accept LastHttpContent after close
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    nettyRequest.close();
+    try {
+      nettyRequest.addContent(new DefaultLastHttpContent());
+      fail("Request channel has been closed, so addContent() should have thrown ClosedChannelException");
+    } catch (ClosedChannelException e) {
+      // expected. nothing to do.
+    }
+  }
+
+  /**
+   * Tests the {@link NettyRequest#getSize()} function to see that it respects priorities.
+   * @throws RestServiceException
+   */
+  @Test
+  public void sizeTest()
+      throws RestServiceException {
+    // no length headers provided.
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
+    assertEquals("Size not as expected", 0, nettyRequest.getSize());
+
+    // deliberate mismatch to check priorities.
+    int xAmbryBlobSize = 20;
+    int contentLength = 10;
+
+    // Content-Length header set
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(HttpHeaders.Names.CONTENT_LENGTH, contentLength);
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
+    assertEquals("Size not as expected", contentLength, nettyRequest.getSize());
+
+    // xAmbryBlobSize set
+    headers = new DefaultHttpHeaders();
+    headers.add(RestConstants.Headers.Blob_Size, xAmbryBlobSize);
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
+    assertEquals("Size not as expected", xAmbryBlobSize, nettyRequest.getSize());
+
+    // both set
+    headers = new DefaultHttpHeaders();
+    headers.add(RestConstants.Headers.Blob_Size, xAmbryBlobSize);
+    headers.add(HttpHeaders.Names.CONTENT_LENGTH, contentLength);
+    nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
+    assertEquals("Size not as expected", xAmbryBlobSize, nettyRequest.getSize());
   }
 
   /**
@@ -319,10 +396,10 @@ public class NettyRequestTest {
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
 
     Map<String, List<String>> args = nettyRequest.getArgs();
-    for (String paramKey : params.keySet()) {
-      assertTrue("Did not find key: " + paramKey, args.containsKey(paramKey));
-      boolean containsAllValues = args.get(paramKey).containsAll(params.get(paramKey));
-      assertTrue("Did not find all values expected for key: " + paramKey, containsAllValues);
+    for (Map.Entry<String, List<String>> param : params.entrySet()) {
+      assertTrue("Did not find key: " + param.getKey(), args.containsKey(param.getKey()));
+      boolean containsAllValues = args.get(param.getKey()).containsAll(param.getValue());
+      assertTrue("Did not find all values expected for key: " + param.getKey(), containsAllValues);
     }
 
     for (Map.Entry<String, String> e : headers) {

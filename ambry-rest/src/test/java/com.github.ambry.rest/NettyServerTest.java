@@ -1,8 +1,8 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.InMemoryRouter;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -86,7 +86,9 @@ public class NettyServerTest {
   private RestRequestHandlerController getRestRequestHandlerController(Properties properties)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    BlobStorageService blobStorageService =
+        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
     return new RequestHandlerController(1, restServerMetrics, blobStorageService);
   }
 

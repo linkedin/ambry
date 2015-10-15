@@ -2,7 +2,6 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.FutureResult;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;

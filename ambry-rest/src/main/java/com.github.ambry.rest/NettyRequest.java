@@ -100,16 +100,6 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public void retain() {
-    //nothing to do
-  }
-
-  @Override
-  public void release() {
-    //nothing to do
-  }
-
-  @Override
   public boolean isOpen() {
     return channelOpen.get();
   }
@@ -142,17 +132,23 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Returns length in the "content-length" header. If there is no such header, tries to infer content size. If that
-   * cannot be done, returns 0.
+   * Returns the ambry specific content length header ({@link RestConstants.Headers#Blob_Size}. If there is no such
+   * header, returns length in the "Content-Length" header. If there is no such header, tries to infer content size. If
+   * that cannot be done, returns 0.
    * <p/>
    * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
    * actually be different if the stream is buggy or the client made a mistake. Do *not* treat this as fully accurate.
-   * @return the size of content as defined in the "content-length" header. Might not be actual length of content if
-   *          the stream is buggy.
+   * @return the size of content as defined in headers. Might not be actual length of content if the stream is buggy.
    */
   @Override
   public long getSize() {
-    return HttpHeaders.getContentLength(request, 0);
+    long contentLength;
+    if (HttpHeaders.getHeader(request, RestConstants.Headers.Blob_Size, null) != null) {
+      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestConstants.Headers.Blob_Size));
+    } else {
+      contentLength = HttpHeaders.getContentLength(request, 0);
+    }
+    return contentLength;
   }
 
   @Override
@@ -214,21 +210,27 @@ class NettyRequest implements RestRequest {
   /**
    * Adds some content in the form of {@link HttpContent} to this RestRequest. This content will be available to read
    * through the read operations.
+   * @throws IllegalStateException if content is being added when it is not expected (GET, DELETE, HEAD).
    * @throws ClosedChannelException if request channel has been closed.
    * @throws IllegalArgumentException if {@code httpContent} is null.
    */
   public void addContent(HttpContent httpContent)
       throws ClosedChannelException {
-    if (!isOpen()) {
-      throw new ClosedChannelException();
-    }
-    NettyContent nettyContent = new NettyContent(httpContent);
-    try {
-      contentLock.lock();
-      requestContents.add(nettyContent);
-      nettyContent.retain();
-    } finally {
-      contentLock.unlock();
+    if (!RestMethod.POST.equals(getRestMethod()) && (!(httpContent instanceof LastHttpContent)
+        || httpContent.content().readableBytes() > 0)) {
+      throw new IllegalStateException("There is no content expected for " + getRestMethod());
+    } else {
+      NettyContent nettyContent = new NettyContent(httpContent);
+      try {
+        contentLock.lock();
+        if (!isOpen()) {
+          throw new ClosedChannelException();
+        }
+        requestContents.add(nettyContent);
+        nettyContent.retain();
+      } finally {
+        contentLock.unlock();
+      }
     }
   }
 }

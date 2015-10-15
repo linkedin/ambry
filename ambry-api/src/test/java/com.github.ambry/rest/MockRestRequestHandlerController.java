@@ -9,14 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Implementation of {@link RestRequestHandlerController} that can be used in tests.
  * <p/>
- * Starts a fixed (but configurable) number of {@link MockRestRequestHandler} instances and hands them out when
+ * Starts a fixed (but configurable) number of {@link MockRestRequestResponseHandler} instances and hands them out when
  * requested.
  */
 public class MockRestRequestHandlerController implements RestRequestHandlerController {
   public static String RETURN_NULL_ON_GET_REQUEST_HANDLER = "return.null.on.get.request.handler";
 
   private final AtomicInteger currIndex = new AtomicInteger(0);
-  private final List<RestRequestHandler> restRequestHandlers = new ArrayList<RestRequestHandler>();
+  private final List<RestRequestHandler> restRequestResponseHandlers = new ArrayList<RestRequestHandler>();
   private boolean isFaulty = false;
   private VerifiableProperties failureProperties = null;
 
@@ -33,8 +33,8 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
   public void start()
       throws InstantiationException {
     if (!isFaulty) {
-      for (int i = 0; i < restRequestHandlers.size(); i++) {
-        restRequestHandlers.get(i).start();
+      for (int i = 0; i < restRequestResponseHandlers.size(); i++) {
+        restRequestResponseHandlers.get(i).start();
       }
     } else {
       throw new InstantiationException("This MockRequestHandlerController is faulty");
@@ -43,10 +43,10 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
 
   @Override
   public void shutdown() {
-    if (!isFaulty && restRequestHandlers.size() > 0) {
-      for (int i = 0; i < restRequestHandlers.size(); i++) {
-        restRequestHandlers.get(i).shutdown();
-        restRequestHandlers.remove(i);
+    if (!isFaulty && restRequestResponseHandlers.size() > 0) {
+      for (int i = 0; i < restRequestResponseHandlers.size(); i++) {
+        restRequestResponseHandlers.get(i).shutdown();
+        restRequestResponseHandlers.remove(i);
       }
     }
   }
@@ -57,17 +57,18 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
     if (!isFaulty) {
       try {
         int index = currIndex.getAndIncrement();
-        return restRequestHandlers.get(index % restRequestHandlers.size());
+        return restRequestResponseHandlers.get(index % restRequestResponseHandlers.size());
       } catch (Exception e) {
         throw new RestServiceException("Error while trying to pick a handler to return", e,
-            RestServiceErrorCode.RequestHandlerSelectionError);
+            RestServiceErrorCode.RequestResponseHandlerSelectionError);
       }
     } else {
       if (failureProperties != null && failureProperties.containsKey(RETURN_NULL_ON_GET_REQUEST_HANDLER)
           && failureProperties.getBoolean(RETURN_NULL_ON_GET_REQUEST_HANDLER)) {
         return null;
       }
-      throw new RestServiceException("Requested handler error", RestServiceErrorCode.RequestHandlerSelectionError);
+      throw new RestServiceException("Requested handler error",
+          RestServiceErrorCode.RequestResponseHandlerSelectionError);
     }
   }
 
@@ -88,14 +89,14 @@ public class MockRestRequestHandlerController implements RestRequestHandlerContr
   }
 
   /**
-   * Creates handlerCount instances of {@link MockRestRequestHandler}.
-   * @param handlerCount the number of instances of {@link MockRestRequestHandler} to be created.
+   * Creates handlerCount instances of {@link MockRestRequestResponseHandler}.
+   * @param handlerCount the number of instances of {@link MockRestRequestResponseHandler} to be created.
    * @param blobStorageService the {@link BlobStorageService} implementation to be used.
    */
   private void createRequestHandlers(int handlerCount, BlobStorageService blobStorageService) {
     for (int i = 0; i < handlerCount; i++) {
       // This can change if there is ever a RestRequestHandlerFactory.
-      restRequestHandlers.add(new MockRestRequestHandler(blobStorageService));
+      restRequestResponseHandlers.add(new MockRestRequestResponseHandler(blobStorageService));
     }
   }
 }

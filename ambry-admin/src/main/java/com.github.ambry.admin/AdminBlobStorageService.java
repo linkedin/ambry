@@ -178,7 +178,7 @@ class AdminBlobStorageService implements BlobStorageService {
     try {
       restResponseHandler.handleResponse(restRequest, restResponseChannel, response, exception);
     } catch (RestServiceException e) {
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       releaseResources(restRequest, response);
     }
   }
@@ -266,7 +266,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       }
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       AdminBlobStorageService.releaseResources(restRequest, null);
     }
   }
@@ -329,14 +329,16 @@ class GetCallback implements Callback<ReadableStreamChannel> {
   @Override
   public void onCompletion(ReadableStreamChannel result, Exception exception) {
     try {
-      if (exception != null && exception instanceof RouterException) {
+      if (exception == null) {
+        restResponseChannel.setStatus(ResponseStatus.Ok);
+      } else if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
       restResponseHandler.handleResponse(restRequest, restResponseChannel, result, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       AdminBlobStorageService.releaseResources(restRequest, result);
     }
   }
@@ -386,7 +388,7 @@ class PostCallback implements Callback<String> {
       restResponseHandler.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       AdminBlobStorageService.releaseResources(restRequest, null);
     }
   }
@@ -447,7 +449,7 @@ class DeleteCallback implements Callback<Void> {
       restResponseHandler.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       AdminBlobStorageService.releaseResources(restRequest, null);
     }
   }
@@ -494,7 +496,7 @@ class HeadCallback implements Callback<BlobInfo> {
       restResponseHandler.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       AdminBlobStorageService.releaseResources(restRequest, null);
     }
   }
@@ -507,6 +509,7 @@ class HeadCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
+    restResponseChannel.setStatus(ResponseStatus.Ok);
     restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setContentLength(blobProperties.getBlobSize());
 

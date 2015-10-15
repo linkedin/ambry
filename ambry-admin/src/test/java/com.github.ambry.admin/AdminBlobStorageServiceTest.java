@@ -1247,7 +1247,7 @@ class AdminTestResponseHandler implements RestResponseHandler {
     if (serviceRunning) {
       this.response = response;
       this.exception = exception;
-      restResponseChannel.onRequestComplete(exception, false);
+      restResponseChannel.onResponseComplete(exception);
       responseSubmitted.countDown();
     } else {
       throw new RestServiceException("Response handler inactive", RestServiceErrorCode.RequestResponseQueueingFailure);
