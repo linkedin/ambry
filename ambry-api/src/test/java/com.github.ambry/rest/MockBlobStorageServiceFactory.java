@@ -1,6 +1,5 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
@@ -16,8 +15,8 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
   private final VerifiableProperties verifiableProperties;
   private final Router router;
 
-  public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap, Router router) {
+  public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      Router router) {
     this.verifiableProperties = verifiableProperties;
     this.router = router;
   }

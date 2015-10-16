@@ -467,13 +467,9 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param forceClose if {@code true}, closes channel despite keep-alive or any other concerns.
    */
   private void maybeCloseNetworkChannel(boolean forceClose) {
-    try {
-      // TODO: handle keep-alive here and also take forceClose into account.
-      lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
-      logger.trace("Requested closing of channel {}", ctx.channel());
-    } catch (Exception e) {
-      // TODO: log and metrics.
-    }
+    // TODO: handle keep-alive here and also take forceClose into account.
+    lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
+    logger.trace("Requested closing of channel {}", ctx.channel());
   }
 }
 

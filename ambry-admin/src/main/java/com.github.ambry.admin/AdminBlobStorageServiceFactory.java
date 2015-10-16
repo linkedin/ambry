@@ -1,6 +1,5 @@
 package com.github.ambry.admin;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -26,15 +25,14 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   /**
    * Instantiate AdminBlobStorageServiceFactory with properties, metrics registry, a cluster map and a router.
    * @param verifiableProperties the properties to use to create configs.
-   * @param metricRegistry the {@link MetricRegistry} for metrics.
    * @param clusterMap the {@link ClusterMap} to use.
    * @param router the {@link Router} to use.
    */
-  public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap, Router router) {
-    if (verifiableProperties != null && metricRegistry != null && clusterMap != null & router != null) {
+  public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      Router router) {
+    if (verifiableProperties != null && clusterMap != null & router != null) {
       adminConfig = new AdminConfig(verifiableProperties);
-      adminMetrics = new AdminMetrics(metricRegistry);
+      adminMetrics = new AdminMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;
       this.router = router;
     } else {
@@ -42,9 +40,6 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
           new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
       if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (metricRegistry == null) {
-        errorMessage.append(" [MetricRegistry] ");
       }
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");

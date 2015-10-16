@@ -37,10 +37,20 @@ class RestServerConfig {
   @Default("5")
   public final int restRequestHandlerCount;
 
+  /**
+   * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
+   * for bootstrapping the {@link com.github.ambry.router.Router}.
+   */
+  @Config("rest.router.factory")
+  @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")
+  public final String restRouterFactory;
+
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restBlobStorageServiceFactory = verifiableProperties.getString("rest.blob.storage.service.factory");
     restNioServerFactory =
         verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
     restRequestHandlerCount = verifiableProperties.getInt("rest.request.handler.count", 5);
+    restRouterFactory =
+        verifiableProperties.getString("rest.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
   }
 }

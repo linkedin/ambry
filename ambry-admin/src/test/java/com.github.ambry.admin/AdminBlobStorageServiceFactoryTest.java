@@ -34,7 +34,7 @@ public class AdminBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AdminBlobStorageServiceFactory adminBlobStorageServiceFactory =
-        new AdminBlobStorageServiceFactory(verifiableProperties, new MetricRegistry(), new MockClusterMap(),
+        new AdminBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(),
             new InMemoryRouter(verifiableProperties));
     BlobStorageService adminBlobStorageService = adminBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", adminBlobStorageService);
@@ -58,28 +58,21 @@ public class AdminBlobStorageServiceFactoryTest {
 
     // VerifiableProperties null.
     try {
-      new AdminBlobStorageServiceFactory(null, metricRegistry, clusterMap, router);
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // MetricRegistry null.
-    try {
-      new AdminBlobStorageServiceFactory(verifiableProperties, null, clusterMap, router);
+      new AdminBlobStorageServiceFactory(null, clusterMap, router);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // ClusterMap null.
     try {
-      new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, null, router);
+      new AdminBlobStorageServiceFactory(verifiableProperties, null, router);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // Router null.
     try {
-      new AdminBlobStorageServiceFactory(verifiableProperties, metricRegistry, clusterMap, null);
+      new AdminBlobStorageServiceFactory(verifiableProperties, clusterMap, null);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }

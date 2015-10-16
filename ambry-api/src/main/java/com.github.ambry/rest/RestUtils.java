@@ -5,6 +5,7 @@ import com.github.ambry.utils.Utils;
 import java.util.List;
 import java.util.Map;
 
+// TODO: Need RestExceptions here
 // TODO: need a RestUtils test.
 
 /**
@@ -68,7 +69,7 @@ public class RestUtils {
    */
   public static byte[] buildUsermetadata(RestRequest restRequest) {
     // TODO: after discussion.
-    return null;
+    return new byte[0];
   }
 
   /**

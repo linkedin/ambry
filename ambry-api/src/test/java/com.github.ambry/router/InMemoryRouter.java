@@ -349,6 +349,6 @@ class InMemoryBlob {
   }
 
   public ByteBuffer getBlob() {
-    return blob;
+    return ByteBuffer.wrap(blob.array());
   }
 }

@@ -1,8 +1,8 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -31,12 +31,11 @@ public class RestServerMain {
       PropertyConfigurator.configure(options.logPropsFile);
       final Properties properties = Utils.loadProps(options.serverPropsFilePath);
       final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      final MetricRegistry metricRegistry = new MetricRegistry();
       final ClusterMap clusterMap =
           new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
               new ClusterMapConfig(verifiableProperties));
       logger.info("Bootstrapping RestServer");
-      restServer = new RestServer(verifiableProperties, metricRegistry, clusterMap);
+      restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

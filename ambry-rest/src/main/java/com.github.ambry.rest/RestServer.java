@@ -1,10 +1,13 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,37 +44,41 @@ public class RestServer {
   private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
+  private final Router router;
   private final BlobStorageService blobStorageService;
   private final RestRequestHandlerController requestHandlerController;
   private final NioServer nioServer;
 
-  public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+  public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem)
       throws InstantiationException {
-    if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
+    if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       StringBuilder errorMessage = new StringBuilder("Null arg(s) received during instantiation of RestServer -");
       if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if (metricRegistry == null) {
-        errorMessage.append(" [MetricRegistry] ");
-      }
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
+      if (notificationSystem == null) {
+        errorMessage.append(" [NotificationSystem] ");
+      }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-
     restServerConfig = new RestServerConfig(verifiableProperties);
-    restServerMetrics = new RestServerMetrics(metricRegistry);
-    reporter = JmxReporter.forRegistry(metricRegistry).build();
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
+    reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     try {
-      BlobStorageServiceFactory blobStorageServiceFactory = Utils
-          .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, metricRegistry, clusterMap);
+      RouterFactory routerFactory =
+          Utils.getObj(restServerConfig.restRouterFactory, verifiableProperties, clusterMap, notificationSystem);
+      router = routerFactory.getRouter();
+      BlobStorageServiceFactory blobStorageServiceFactory =
+          Utils.getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, clusterMap, router);
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
       requestHandlerController =
           new RequestHandlerController(restServerConfig.restRequestHandlerCount, restServerMetrics, blobStorageService);
       NioServerFactory nioServerFactory = Utils
-          .getObj(restServerConfig.restNioServerFactory, verifiableProperties, metricRegistry,
+          .getObj(restServerConfig.restNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               requestHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
@@ -80,8 +87,11 @@ public class RestServer {
       throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
 
-    if (blobStorageService == null || nioServer == null) {
+    if (router == null || blobStorageService == null || nioServer == null) {
       StringBuilder errorMessage = new StringBuilder("Failed to instantiate some components of RestServer -");
+      if (router == null) {
+        errorMessage.append(" [Router] ");
+      }
       if (blobStorageService == null) {
         errorMessage.append(" [BlobStorageService] ");
       }
@@ -126,7 +136,10 @@ public class RestServer {
       nioServer.shutdown();
       requestHandlerController.shutdown();
       blobStorageService.shutdown();
+      router.close();
       reporter.stop();
+    } catch (IOException e) {
+      logger.error("Exception during shutdown", e);
     } finally {
       long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
       logger.info("RestServer shutdown took {} ms", shutdownTime);

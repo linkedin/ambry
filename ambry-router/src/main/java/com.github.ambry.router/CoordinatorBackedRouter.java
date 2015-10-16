@@ -3,7 +3,6 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobInfo;
@@ -24,7 +23,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A {@link Router} that uses a {@link Coordinator} in the background to perform its operations.
  * <p/>
- * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerCoordinatorBackedRouterOperationPoolSize} on
+ * The CoordinatorBackedRouter allocates a thread pool of size {@link RouterConfig#routerScalingUnitCount} on
  * instantiation. This thread pool is used to provide non-blocking behavior by executing the blocking operations of the
  * {@link Coordinator} in the background.
  * <p/>
@@ -38,24 +37,22 @@ public class CoordinatorBackedRouter implements Router {
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
   private final Coordinator coordinator;
   private final ExecutorService operationPool;
-  private final RouterConfig routerConfig;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Create a CoordinatorBackedRouter instance.
-   * @param verifiableProperties the properties map to refer to.
+   * @param routerConfig the {@link RouterConfig} to refer to.
    * @param metricRegistry the {@link MetricRegistry} to use for metrics.
    * @param coordinator the {@link Coordinator} that will back this router.
    * @throws IllegalArgumentException if any of the arguments received are null or if
-   * {@link RouterConfig#routerCoordinatorBackedRouterOperationPoolSize} is less than or equal to 0.
+   * {@link RouterConfig#routerScalingUnitCount} is less than or equal to 0.
    */
-  public CoordinatorBackedRouter(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Coordinator coordinator) {
-    if (verifiableProperties == null || metricRegistry == null || coordinator == null) {
+  public CoordinatorBackedRouter(RouterConfig routerConfig, MetricRegistry metricRegistry, Coordinator coordinator) {
+    if (routerConfig == null || metricRegistry == null || coordinator == null) {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouter -");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
+      if (routerConfig == null) {
+        errorMessage.append(" [RouterConfig] ");
       }
       if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
@@ -65,12 +62,11 @@ public class CoordinatorBackedRouter implements Router {
       }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-    this.routerConfig = new RouterConfig(verifiableProperties);
-    if (routerConfig.routerCoordinatorBackedRouterOperationPoolSize > 0) {
-      this.operationPool = Executors.newFixedThreadPool(routerConfig.routerCoordinatorBackedRouterOperationPoolSize);
+    if (routerConfig.routerScalingUnitCount > 0) {
+      this.operationPool = Executors.newFixedThreadPool(routerConfig.routerScalingUnitCount);
     } else {
-      throw new IllegalArgumentException("Router operation pool size defined in config should be > 0 (is "
-          + routerConfig.routerCoordinatorBackedRouterOperationPoolSize + ")");
+      throw new IllegalArgumentException(
+          "Router scaling unit count defined in config should be > 0 (is " + routerConfig.routerScalingUnitCount + ")");
     }
     this.coordinator = coordinator;
   }
@@ -83,8 +79,8 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
     FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    CoordinatorOperation operation = new CoordinatorOperation(coordinator, futureResult, blobId, callback,
-        CoordinatorOperationType.GetBlobInfo);
+    CoordinatorOperation operation =
+        new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.GetBlobInfo);
     submitOperation(operation, futureResult, callback);
     return futureResult;
   }
@@ -126,8 +122,8 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<Void>();
-    CoordinatorOperation operation = new CoordinatorOperation(coordinator, futureResult, blobId, callback,
-        CoordinatorOperationType.DeleteBlob);
+    CoordinatorOperation operation =
+        new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.DeleteBlob);
     submitOperation(operation, futureResult, callback);
     return futureResult;
   }
@@ -178,8 +174,8 @@ public class CoordinatorBackedRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  protected static void completeOperation(FutureResult futureResult, Callback callback,
-      Object operationResult, Exception exception) {
+  protected static void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
+      Exception exception) {
     RuntimeException runtimeException = null;
     if (exception != null) {
       runtimeException = new RuntimeException(exception);
@@ -231,8 +227,8 @@ class CoordinatorOperation implements Runnable {
    *                {@link CoordinatorOperationType#DeleteBlob}.
    * @throws IllegalArgumentException if {@code opType} is {@link CoordinatorOperationType#PutBlob}.
    */
-  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, String blobId,
-      Callback callback, CoordinatorOperationType opType) {
+  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, String blobId, Callback callback,
+      CoordinatorOperationType opType) {
     this(coordinator, futureResult, callback, opType);
     if (CoordinatorOperationType.PutBlob.equals(opType)) {
       throw new IllegalArgumentException("This constructor cannot be used for the putBlob operation");
@@ -250,8 +246,8 @@ class CoordinatorOperation implements Runnable {
    * @param channel the {@link ReadableStreamChannel} to read the blob data from.
    * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
    */
-  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult,
-      BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel, Callback callback) {
+  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, BlobProperties blobProperties,
+      byte[] usermetadata, ReadableStreamChannel channel, Callback callback) {
     this(coordinator, futureResult, callback, CoordinatorOperationType.PutBlob);
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
