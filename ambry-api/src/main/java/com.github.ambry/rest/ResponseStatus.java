@@ -64,7 +64,7 @@ public enum ResponseStatus {
       case IllegalResponseMetadataStateTransition:
       case InternalObjectCreationError:
       case RequestChannelClosed:
-      case RequestResponseHandlerSelectionError:
+      case RequestHandlerSelectionError:
       case RequestResponseQueueingFailure:
       case ResponseBuildingFailure:
       case ServiceUnavailable:

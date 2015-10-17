@@ -308,6 +308,37 @@ public class Utils {
   }
 
   /**
+   * Instantiate a class instance from a given className with variable number of args
+   * @param className
+   * @param objects
+   * @param <T>
+   * @return
+   * @throws ClassNotFoundException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
+   * @throws NoSuchMethodException
+   * @throws InvocationTargetException
+   */
+  public static <T> T getObj(String className, Object... objects)
+      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
+             InvocationTargetException {
+    for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
+      if(ctor.getParameterTypes().length == objects.length){
+        int i = 0;
+        for(; i < objects.length; i++) {
+          if(!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
+            break;
+          }
+        }
+        if(i == objects.length) {
+          return (T)ctor.newInstance(objects);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Compute the hash code for the given items
    * @param items
    * @return

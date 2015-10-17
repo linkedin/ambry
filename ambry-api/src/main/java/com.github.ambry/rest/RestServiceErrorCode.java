@@ -89,11 +89,11 @@ public enum RestServiceErrorCode {
    */
   RequestChannelClosed,
   /**
-   * Indicates failure of the {@link RestRequestHandlerController} to select and provide a {@link RestRequestHandler}.
+   * Indicates failure of the RequestController to select and provide an instance of AsyncRequestResponseHandler.
    */
-  RequestResponseHandlerSelectionError,
+  RequestHandlerSelectionError,
   /**
-   * Indicates that the submitted request or response could not be queued in the {@link RestRequestHandler}.
+   * Indicates that the submitted request or response could not be queued in the AsyncRequestResponseHandler.
    */
   RequestResponseQueueingFailure,
   /**
@@ -105,8 +105,8 @@ public enum RestServiceErrorCode {
    */
   ServiceUnavailable,
   /**
-   * Indicates a {@link RestMethod} is not supported by an implementation of {@link RestRequestHandler} (May
-   * also indicate a bug where behaviour for a new {@link RestMethod} has not been defined in the implementation).
+   * Indicates a {@link RestMethod} is not supported (May also indicate a bug where behaviour for a new
+   * {@link RestMethod} has not been defined in the implementation).
    */
   UnsupportedRestMethod,
 

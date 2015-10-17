@@ -17,7 +17,7 @@ public class MockNioServerFactory implements NioServerFactory {
   private final boolean isFaulty;
 
   public MockNioServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandlerController restRequestHandlerController) {
+      Object requestResponseHandlerController) {
     isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 

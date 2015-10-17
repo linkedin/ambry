@@ -1,12 +1,13 @@
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 
 
 /**
- * Implementation of {@link RestRequestHandler} and {@link RestResponseHandler} that can be used in tests.
+ * Mock of {@link AsyncRequestResponseHandler} that can be used in tests.
  * <p/>
  * This implementation simply calls the appropriate method (based on the {@link RestMethod} in the request) in the
  * underlying {@link BlobStorageService} on being asked to handle a request. If the implementation of
@@ -15,30 +16,37 @@ import java.io.IOException;
  * Submitted responses also will be sent out immediately so response handling will block until the response has been
  * sent out completely.
  * <p/>
- * Be advised that this may not work if your test code *needs* the RestRequestHandler and RestResponseHandler to be
- * non blocking. Test code with such assumptions may run into infinite loops.
+ * Be advised that this may not work if your test code *needs* the AsyncRequestResponseHandler to be non blocking. Test
+ * code with such assumptions may run into infinite loops.
  */
-public class MockRestRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
-  private final BlobStorageService blobStorageService;
-  private boolean isRunning = false;
-  private VerifiableProperties failureProperties = null;
-
+public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler {
   public static String RUNTIME_EXCEPTION_ON_HANDLE = "runtime.exception.on.handle";
   public static String REST_EXCEPTION_ON_HANDLE = "rest.exception.on.handle";
 
-  public MockRestRequestResponseHandler(BlobStorageService blobStorageService) {
-    this.blobStorageService = blobStorageService;
+  private boolean isRunning = false;
+  private VerifiableProperties failureProperties = null;
+
+  private BlobStorageService blobStorageService = null;
+
+  public MockRestRequestResponseHandler() {
+    // dud call to super. Not going to start it.
+    super(new RestServerMetrics(new MetricRegistry()));
   }
 
   @Override
   public void start()
       throws InstantiationException {
+    if (blobStorageService == null) {
+      throw new InstantiationException("BlobStorageService not set");
+    }
     isRunning = true;
   }
 
   @Override
   public void shutdown() {
     isRunning = false;
+    // just in case.
+    super.shutdown();
   }
 
   /**
@@ -62,16 +70,16 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       RestMethod restMethod = restRequest.getRestMethod();
       switch (restMethod) {
         case GET:
-          blobStorageService.handleGet(restRequest, restResponseChannel, this);
+          blobStorageService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          blobStorageService.handlePost(restRequest, restResponseChannel, this);
+          blobStorageService.handlePost(restRequest, restResponseChannel);
           break;
         case DELETE:
-          blobStorageService.handleDelete(restRequest, restResponseChannel, this);
+          blobStorageService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          blobStorageService.handleHead(restRequest, restResponseChannel, this);
+          blobStorageService.handleHead(restRequest, restResponseChannel);
           break;
         default:
           throw new RestServiceException("Unknown rest method - " + restMethod,
@@ -120,11 +128,6 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
     }
   }
 
-  @Override
-  public boolean isRunning() {
-    return isRunning;
-  }
-
   /**
    * Makes the MockRestRequestResponseHandler faulty.
    * @param props failure properties. Defines the faulty behaviour. If null, there is no breakdown.
@@ -138,6 +141,20 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    */
   public void fix() {
     failureProperties = null;
+  }
+
+  @Override
+  protected boolean isRunning() {
+    return isRunning;
+  }
+
+  /**
+   * Sets the {@link BlobStorageService} that will be used.
+   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   */
+  @Override
+  protected void setBlobStorageService(BlobStorageService blobStorageService) {
+    this.blobStorageService = blobStorageService;
   }
 
   /**

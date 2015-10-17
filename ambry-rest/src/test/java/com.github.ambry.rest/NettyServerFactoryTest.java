@@ -27,10 +27,10 @@ public class NettyServerFactoryTest {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController();
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
 
     NioServerFactory nioServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), requestHandlerController);
+        new NettyServerFactory(verifiableProperties, new MetricRegistry(), requestResponseHandlerController);
     NioServer nioServer = nioServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
@@ -49,23 +49,23 @@ public class NettyServerFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController();
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
 
     // VerifiableProperties null.
     try {
-      new NettyServerFactory(null, metricRegistry, requestHandlerController);
+      new NettyServerFactory(null, metricRegistry, requestResponseHandlerController);
     } catch (InstantiationException e) {
       // expected. Nothing to do.
     }
 
     // MetricRegistry null.
     try {
-      new NettyServerFactory(verifiableProperties, null, requestHandlerController);
+      new NettyServerFactory(verifiableProperties, null, requestResponseHandlerController);
     } catch (InstantiationException e) {
       // expected. Nothing to do.
     }
 
-    // RestRequestHandlerController null.
+    // RequestResponseHandlerController null.
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, null);
     } catch (InstantiationException e) {
@@ -75,12 +75,14 @@ public class NettyServerFactoryTest {
 
   // helpers
   // general
-  private RestRequestHandlerController getRestRequestHandlerController()
+  private RequestResponseHandlerController getRequestHandlerController()
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     BlobStorageService blobStorageService =
         new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
-    return new RequestHandlerController(1, restServerMetrics, blobStorageService);
+    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
+    controller.setBlobStorageService(blobStorageService);
+    return controller;
   }
 }

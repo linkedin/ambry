@@ -83,13 +83,15 @@ public class NettyServerTest {
 
   // helpers
   // general
-  private RestRequestHandlerController getRestRequestHandlerController(Properties properties)
+  private RequestResponseHandlerController getRequestHandlerController(Properties properties)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     BlobStorageService blobStorageService =
         new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
-    return new RequestHandlerController(1, restServerMetrics, blobStorageService);
+    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
+    controller.setBlobStorageService(blobStorageService);
+    return controller;
   }
 
   private NettyServer getNettyServer(Properties properties)
@@ -101,7 +103,7 @@ public class NettyServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController(properties);
-    return new NettyServer(nettyConfig, nettyMetrics, requestHandlerController);
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController(properties);
+    return new NettyServer(nettyConfig, nettyMetrics, requestResponseHandlerController);
   }
 }

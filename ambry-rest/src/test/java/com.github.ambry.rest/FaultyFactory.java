@@ -17,7 +17,7 @@ public class FaultyFactory implements BlobStorageServiceFactory, NioServerFactor
 
   // for NioServerFactory
   public FaultyFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandlerController restRequestHandlerController) {
+      RequestResponseHandlerController requestResponseHandlerController) {
     // don't care.
   }
 

@@ -15,14 +15,13 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Implementation of {@link RestRequestHandler} and {@link RestResponseHandler} that asynchronously handles requests and
- * responses submitted.
+ * Asynchronously handles requests and responses that are submitted.
  * <p/>
  * Requests are submitted by a {@link NioServer} and asynchronously routed to a {@link BlobStorageService}. Responses
  * are usually submitted through {@link Callback}s from beyond the {@link BlobStorageService} layer and asynchronously
- * sent to the client.
+ * sent to the client. In both pathways, this class enables the non-blocking paradigm.
  * <p/>
- * Multiple instances are created by the {@link RestRequestHandlerController} and each instance runs continuously to
+ * Multiple instances are created by the {@link RequestResponseHandlerController} and each instance runs continuously to
  * handle submitted request.
  * <p/>
  * Requests are queued on submission and handed off to the {@link BlobStorageService} when they are dequeued. Responses
@@ -33,8 +32,10 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * These are the scaling units of the {@link RestServer} and can be scaled up and down independently of any other
  * component of the {@link RestServer}.
+ * <p/>
+ * Thread safe.
  */
-class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+public class AsyncRequestResponseHandler {
   private final Thread workerThread;
   private final AsyncHandlerWorker asyncHandlerWorker;
   private final RestServerMetrics restServerMetrics;
@@ -42,28 +43,40 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
 
   /**
    * Builds a AsyncRequestResponseHandler by creating a worker thread for handling queued requests and responses.
-   * @param blobStorageService the {@link BlobStorageService} instance to use for all operations.
    * @param restServerMetrics the {@link RestServerMetrics} instance to use to track metrics.
    */
-  public AsyncRequestResponseHandler(BlobStorageService blobStorageService, RestServerMetrics restServerMetrics) {
+  public AsyncRequestResponseHandler(RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
-    asyncHandlerWorker = new AsyncHandlerWorker(blobStorageService, this, restServerMetrics);
+    asyncHandlerWorker = new AsyncHandlerWorker(restServerMetrics);
     workerThread = new Thread(asyncHandlerWorker);
     restServerMetrics.registerAsyncRequestResponseHandler(this);
     logger.trace("Instantiated AsyncRequestResponseHandler");
   }
 
-  @Override
+  /**
+   * Does startup tasks for the AsyncRequestResponseHandler. When the function returns, startup is FULLY complete.
+   * @throws InstantiationException if the AsyncRequestResponseHandler is unable to start.
+   */
   public void start()
       throws InstantiationException {
     if (!isRunning()) {
-      logger.info("Starting AsyncRequestResponseHandler");
-      workerThread.start();
-      logger.info("AsyncRequestResponseHandler has started");
+      if (asyncHandlerWorker.isReadyToStart()) {
+        logger.info("Starting AsyncRequestResponseHandler");
+        workerThread.start();
+        logger.info("AsyncRequestResponseHandler has started");
+      } else {
+        throw new InstantiationException("BlobStorageService has not been set");
+      }
     }
   }
 
-  @Override
+  /**
+   * Does shutdown tasks for the AsyncRequestResponseHandler. When the function returns, shutdown is FULLY complete.
+   * <p/>
+   * Any requests/responses queued after shutdown is called might be dropped.
+   * <p/>
+   * The {@link NioServer} is expected to have stopped queueing new requests before this function is called.
+   */
   public void shutdown() {
     if (isRunning()) {
       logger.info("Shutting down AsyncRequestResponseHandler with {} requests and {} responses still in queue",
@@ -87,13 +100,13 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   }
 
   /**
-   * Queues the {@code restRequest} to be handled async. When this function returns, it may not be handled yet.
+   * Queues the {@code restRequest} to be handled async. When this function returns, it may not be handled yet. When
+   * the response is ready, {@link RestResponseChannel} will be used ot send the response.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} on which a response to the request may be sent.
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
    * @throws RestServiceException if there is a problem queueing the request.
    */
-  @Override
   public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     if (isRunning()) {
@@ -107,7 +120,15 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   }
 
   /**
-   * Queues the response to be handled async. When this function returns, it may not be sent yet.
+   * Submit a response for a request along with a channel over which the response can be sent. If the response building
+   * was unsuccessful for any reason, the details are included in the {@code exception}.
+   * <p/>
+   * The bytes consumed from the {@code response} are streamed out (unmodified) through the {@code restResponseChannel}
+   * asynchronously.
+   * <p/>
+   * Assumed that at least one of {@code response} or {@code exception} is null.
+   * <p/>
+   * When this function returns, the response may not be sent yet.
    * @param restRequest the {@link RestRequest} for which the response has been constructed.
    * @param restResponseChannel the {@link RestResponseChannel} to be used to send the response.
    * @param response a {@link ReadableStreamChannel} that represents the response to the
@@ -116,7 +137,6 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
    * @throws RestServiceException if there is any error while queueing the response.
    */
-  @Override
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel response, Exception exception)
       throws RestServiceException {
@@ -130,8 +150,20 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
     }
   }
 
-  @Override
-  public boolean isRunning() {
+  /**
+   * Sets the {@link BlobStorageService} that will be used in {@link AsyncHandlerWorker}.
+   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   */
+  protected void setBlobStorageService(BlobStorageService blobStorageService) {
+    asyncHandlerWorker.setBlobStorageService(blobStorageService);
+  }
+
+  /**
+   * Used to query whether the AsyncRequestResponseHandler is currently in a state to handle submitted
+   * requests/responses.
+   * @return {@code true} if in a state to handle submitted requests. {@code false} otherwise.
+   */
+  protected boolean isRunning() {
     return asyncHandlerWorker.isRunning() && workerThread.isAlive();
   }
 
@@ -139,7 +171,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * Gets number of requests waiting to be processed.
    * @return size of request queue.
    */
-  public int getRequestQueueSize() {
+  protected int getRequestQueueSize() {
     return asyncHandlerWorker.getRequestQueueSize();
   }
 
@@ -147,7 +179,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * Gets number of responses being (or waiting to be) sent.
    * @return size of response map/set.
    */
-  public int getResponseSetSize() {
+  protected int getResponseSetSize() {
     return asyncHandlerWorker.getResponseSetSize();
   }
 }
@@ -159,8 +191,6 @@ class AsyncHandlerWorker implements Runnable {
   private final static long OFFER_TIMEOUT_MS = 1;
   private final static long POLL_TIMEOUT_MS = 1;
 
-  private final BlobStorageService blobStorageService;
-  private final RestResponseHandler restResponseHandler;
   private final RestServerMetrics restServerMetrics;
 
   private final LinkedBlockingQueue<AsyncRequestInfo> requests = new LinkedBlockingQueue<AsyncRequestInfo>();
@@ -171,16 +201,21 @@ class AsyncHandlerWorker implements Runnable {
   private final AtomicBoolean running = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  private BlobStorageService blobStorageService = null;
+
+  /**
+   * Sets the {@link BlobStorageService} that will be used.
+   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   */
+  protected void setBlobStorageService(BlobStorageService blobStorageService) {
+    this.blobStorageService = blobStorageService;
+  }
+
   /**
    * Creates a worker that can process requests and responses.
-   * @param blobStorageService the {@link BlobStorageService} to use to process requests.
-   * @param restResponseHandler the {@link RestResponseHandler} to use to submit responses.
    * @param restServerMetrics the {@link RestServerMetrics} instance to use to track metrics.
    */
-  protected AsyncHandlerWorker(BlobStorageService blobStorageService, RestResponseHandler restResponseHandler,
-      RestServerMetrics restServerMetrics) {
-    this.blobStorageService = blobStorageService;
-    this.restResponseHandler = restResponseHandler;
+  protected AsyncHandlerWorker(RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
     logger.trace("Instantiated AsyncHandlerWorker");
   }
@@ -202,6 +237,10 @@ class AsyncHandlerWorker implements Runnable {
     discardRequestsResponses();
     logger.trace("AsyncHandlerWorker stopped");
     shutdownLatch.countDown();
+  }
+
+  protected boolean isReadyToStart() {
+    return blobStorageService != null;
   }
 
   /**
@@ -395,16 +434,16 @@ class AsyncHandlerWorker implements Runnable {
     logger.trace("RestMethod is {} for request {}", restMethod, restRequest.getUri());
     switch (restMethod) {
       case GET:
-        blobStorageService.handleGet(restRequest, restResponseChannel, restResponseHandler);
+        blobStorageService.handleGet(restRequest, restResponseChannel);
         break;
       case POST:
-        blobStorageService.handlePost(restRequest, restResponseChannel, restResponseHandler);
+        blobStorageService.handlePost(restRequest, restResponseChannel);
         break;
       case DELETE:
-        blobStorageService.handleDelete(restRequest, restResponseChannel, restResponseHandler);
+        blobStorageService.handleDelete(restRequest, restResponseChannel);
         break;
       case HEAD:
-        blobStorageService.handleHead(restRequest, restResponseChannel, restResponseHandler);
+        blobStorageService.handleHead(restRequest, restResponseChannel);
         break;
       default:
         logger.debug("Unknown REST method [{}] in request {}", restMethod, restRequest.getUri());

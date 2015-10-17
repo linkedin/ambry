@@ -76,7 +76,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void startShutdownTest()
       throws InstantiationException, IOException {
-    RestRequestHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
     assertFalse("IsRunning should be false", handler.isRunning());
     handler.start();
     assertTrue("IsRunning should be true", handler.isRunning());
@@ -93,7 +93,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void shutdownWithoutStart()
       throws IOException {
-    RestRequestHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
     handler.shutdown();
   }
 
@@ -431,7 +431,7 @@ public class AsyncRequestResponseHandlerTest {
    * @throws InterruptedException
    * @throws RestServiceException
    */
-  private void sendRequestAwaitResponse(RestRequestHandler requestHandler, RestRequest restRequest,
+  private void sendRequestAwaitResponse(AsyncRequestResponseHandler requestHandler, RestRequest restRequest,
       MockRestResponseChannel restResponseChannel)
       throws InterruptedException, RestServiceException {
     EventMonitor<MockRestResponseChannel.Event> eventMonitor =
@@ -445,7 +445,7 @@ public class AsyncRequestResponseHandlerTest {
 
   /**
    * Queues a response and waits while the response is completely sent out.
-   * @param responseHandler the {@link RestResponseHandler} instance to use.
+   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to use.
    * @param restRequest the {@link RestRequest} to send to the {@code requestHandler}.
    * @param restResponseChannel the {@link RestResponseChannel} for responses.
    * @param response the response to send as a {@link ReadableStreamChannel}.
@@ -453,7 +453,7 @@ public class AsyncRequestResponseHandlerTest {
    * @throws InterruptedException
    * @throws RestServiceException
    */
-  private void awaitResponse(RestResponseHandler responseHandler, RestRequest restRequest,
+  private void awaitResponse(AsyncRequestResponseHandler responseHandler, RestRequest restRequest,
       MockRestResponseChannel restResponseChannel, ReadableStreamChannel response, Exception exception)
       throws InterruptedException, RestServiceException {
     EventMonitor<MockRestResponseChannel.Event> eventMonitor =
@@ -476,7 +476,9 @@ public class AsyncRequestResponseHandlerTest {
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(BlobStorageService blobStorageService)
       throws IOException {
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
-    return new AsyncRequestResponseHandler(blobStorageService, serverMetrics);
+    AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
+    handler.setBlobStorageService(blobStorageService);
+    return handler;
   }
 
   // handleRequestTest() helpers
@@ -485,10 +487,10 @@ public class AsyncRequestResponseHandlerTest {
    * Sends a {@link RestRequest} to the {@code requestHandler} with the specified {@code restMethod} and checks the
    * response to see that the {@code restMethod} has been echoed.
    * @param restMethod the {@link RestMethod} required.
-   * @param requestHandler the {@link RestRequestHandler} instance to use.
+   * @param requestHandler the {@link AsyncRequestResponseHandler} instance to use.
    * @throws Exception
    */
-  private void doHandleRequestSuccessTest(RestMethod restMethod, RestRequestHandler requestHandler)
+  private void doHandleRequestSuccessTest(RestMethod restMethod, AsyncRequestResponseHandler requestHandler)
       throws Exception {
     RestRequest restRequest = createRestRequest(restMethod, MockBlobStorageService.ECHO_REST_METHOD, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -510,7 +512,7 @@ public class AsyncRequestResponseHandlerTest {
    * @param requestResponseHandler The {@link AsyncRequestResponseHandler} instance to use.
    * @throws Exception
    */
-  private void unknownRestMethodTest(RestRequestHandler requestResponseHandler)
+  private void unknownRestMethodTest(AsyncRequestResponseHandler requestResponseHandler)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.UNKNOWN, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -532,7 +534,7 @@ public class AsyncRequestResponseHandlerTest {
    * @param requestResponseHandler The {@link AsyncRequestResponseHandler} instance to use.
    * @throws Exception
    */
-  private void delayedHandleRequestThatThrowsRestException(RestRequestHandler requestResponseHandler)
+  private void delayedHandleRequestThatThrowsRestException(AsyncRequestResponseHandler requestResponseHandler)
       throws Exception {
     RestRequest restRequest =
         createRestRequest(RestMethod.GET, MockBlobStorageService.SEND_RESPONSE_REST_SERVICE_EXCEPTION, null, null);
@@ -555,7 +557,7 @@ public class AsyncRequestResponseHandlerTest {
    * @param requestResponseHandler The {@link AsyncRequestResponseHandler} instance to use.
    * @throws Exception
    */
-  private void delayedHandleRequestThatThrowsRuntimeException(RestRequestHandler requestResponseHandler)
+  private void delayedHandleRequestThatThrowsRuntimeException(AsyncRequestResponseHandler requestResponseHandler)
       throws Exception {
     RestRequest restRequest =
         createRestRequest(RestMethod.GET, MockBlobStorageService.THROW_RUNTIME_EXCEPTION, null, null);

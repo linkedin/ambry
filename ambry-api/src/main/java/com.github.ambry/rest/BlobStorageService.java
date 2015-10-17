@@ -31,51 +31,39 @@ public interface BlobStorageService {
    * Handles a GET operation.
    * <p/>
    * The {@code restRequest} provided will have both metadata and any content associated with the request. The
-   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
-   * to submit a response that needs to be sent to the client.
-   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest  the {@link .RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      RestResponseHandler restResponseHandler);
+  public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a POST operation.
    * <p/>
    * The {@code restRequest} provided will have both metadata and any content associated with the request. The
-   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
-   * to submit a response that needs to be sent to the client.
-   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest  the {@link .RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      RestResponseHandler restResponseHandler);
+  public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a DELETE operation.
    * <p/>
    * The {@code restRequest} provided will have both metadata and any content associated with the request. The
-   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
-   * to submit a response that needs to be sent to the client.
-   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest  the {@link .RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      RestResponseHandler restResponseHandler);
+  public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
    * Handles a HEAD operation.
    * <p/>
    * The {@code restRequest} provided will have both metadata and any content associated with the request. The
-   * {@code restResponseChannel} can be used to set any required headers and the {@code restResponseHandler} can be used
-   * to submit a response that needs to be sent to the client.
-   * @param restRequest  the {@link RestRequest} that needs to be handled.
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest  the {@link .RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param restResponseHandler the {@link RestResponseHandler} that can be used to submit responses.
    */
-  public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      RestResponseHandler restResponseHandler);
+  public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel);
 }

@@ -16,16 +16,16 @@ public class NettyServerFactory implements NioServerFactory {
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final RestRequestHandlerController restRequestHandlerController;
+  private final RequestResponseHandlerController requestResponseHandlerController;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandlerController restRequestHandlerController)
+      RequestResponseHandlerController requestResponseHandlerController)
       throws InstantiationException {
-    if (verifiableProperties != null && metricRegistry != null && restRequestHandlerController != null) {
+    if (verifiableProperties != null && metricRegistry != null && requestResponseHandlerController != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
-      this.restRequestHandlerController = restRequestHandlerController;
+      this.requestResponseHandlerController = requestResponseHandlerController;
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
@@ -35,8 +35,8 @@ public class NettyServerFactory implements NioServerFactory {
       if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
       }
-      if (restRequestHandlerController == null) {
-        errorMessage.append(" [RestRequestHandlerController] ");
+      if (requestResponseHandlerController == null) {
+        errorMessage.append(" [RequestResponseHandlerController] ");
       }
       throw new InstantiationException(errorMessage.toString());
     }
@@ -48,6 +48,6 @@ public class NettyServerFactory implements NioServerFactory {
    * @return a new instance of {@link NettyServer}.
    */
   public NioServer getNioServer() {
-    return new NettyServer(nettyConfig, nettyMetrics, restRequestHandlerController);
+    return new NettyServer(nettyConfig, nettyMetrics, requestResponseHandlerController);
   }
 }

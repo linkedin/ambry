@@ -12,12 +12,12 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link RestServer} and Rest infrastructure ({@link RestRequestHandlerController},
- * {@link RestRequestHandler}) specific metrics tracking.
+ * {@link RestServer} and Rest infrastructure ({@link RequestResponseHandlerController}, {@link AsyncRequestResponseHandler})
+ * specific metrics tracking.
  * <p/>
  * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
-class RestServerMetrics {
+public class RestServerMetrics {
   private final MetricRegistry metricRegistry;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final Object asyncRequestResponseHandlerRegister = new Object();
@@ -26,7 +26,7 @@ class RestServerMetrics {
   // AsyncRequestResponseHandler
   private final List<Gauge<Integer>> asyncRequestQueueOccupancyGauges;
   private final List<Gauge<Integer>> asyncResponseListOccupancyGauges;
-  private Gauge<Integer> requestHandlersAlive;
+  private Gauge<Integer> requestResponseHandlersAlive;
 
   // Rates
   // AsyncRequestResponseHandler
@@ -40,7 +40,7 @@ class RestServerMetrics {
 
   // Errors
   private final Counter metricAdditionError;
-  // RequestHandlerController
+  // RequestResponseHandlerController
   public final Counter requestHandlerControllerInstantiationError;
   public final Counter requestHandlerSelectionError;
   // AsyncRequestResponseHandler
@@ -87,9 +87,9 @@ class RestServerMetrics {
 
     metricAdditionError = metricRegistry.counter(MetricRegistry.name(getClass(), "MetricAdditionError"));
     requestHandlerControllerInstantiationError =
-        metricRegistry.counter(MetricRegistry.name(RequestHandlerController.class, "InstantiationError"));
+        metricRegistry.counter(MetricRegistry.name(RequestResponseHandlerController.class, "InstantiationError"));
     requestHandlerSelectionError = metricRegistry
-        .counter(MetricRegistry.name(RequestHandlerController.class, "RequestResponseHandlerSelectionError"));
+        .counter(MetricRegistry.name(RequestResponseHandlerController.class, "RequestHandlerSelectionError"));
     asyncRequestHandlerQueueOfferTooLongError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueOfferTooLongError"));
     asyncRequestHandlerQueueOfferInterruptedError =
@@ -168,24 +168,24 @@ class RestServerMetrics {
   }
 
   /**
-   * Tracks the state of the {@link RestRequestHandler}s provided as input and periodically reports how many of them are
-   * alive and well.
-   * @param requestHandlers the list of {@link RestRequestHandler}s whose state needs to be reported.
+   * Tracks the state of the {@link AsyncRequestResponseHandler}s provided as input and periodically reports how many of
+   * them are alive and well.
+   * @param requestResponseHandlers the list of {@link AsyncRequestResponseHandler}s whose state needs to be reported.
    */
-  public void trackRequestHandlerHealth(final List<RestRequestHandler> requestHandlers) {
-    requestHandlersAlive = new Gauge<Integer>() {
+  public void trackRequestHandlerHealth(final List<AsyncRequestResponseHandler> requestResponseHandlers) {
+    requestResponseHandlersAlive = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
         int count = 0;
-        for (RestRequestHandler requestHandler : requestHandlers) {
-          if (requestHandler.isRunning()) {
+        for (AsyncRequestResponseHandler requestResponseHandler : requestResponseHandlers) {
+          if (requestResponseHandler.isRunning()) {
             count++;
           }
         }
         return count;
       }
     };
-    metricRegistry
-        .register(MetricRegistry.name(RequestHandlerController.class, "RequestHandlersAlive"), requestHandlersAlive);
+    metricRegistry.register(MetricRegistry.name(RequestResponseHandlerController.class, "RequestResponseHandlersAlive"),
+        requestResponseHandlersAlive);
   }
 }

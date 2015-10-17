@@ -7,8 +7,8 @@ import com.github.ambry.config.VerifiableProperties;
 
 /**
  * Configuration parameters required by {@link RestServer} and Rest infrastructure
- * ({@link RestRequestHandlerController},
- * {@link RestRequestHandler}).
+ * ({@link RequestResponseHandlerController},
+ * {@link AsyncRequestResponseHandler}).
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for {@link RestServer} and presents them for retrieval through defined APIs.
@@ -30,8 +30,8 @@ class RestServerConfig {
   public final String restNioServerFactory;
 
   /**
-   * The number of {@link RestRequestHandler} instances that need to be started by the
-   * {@link RestRequestHandlerController} to handle requests.
+   * The number of {@link AsyncRequestResponseHandler} instances that need to be started by the
+   * {@link RequestResponseHandlerController} to handle requests.
    */
   @Config("rest.request.handler.count")
   @Default("5")

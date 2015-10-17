@@ -31,11 +31,11 @@ import static org.junit.Assert.assertFalse;
  */
 public class NettyMessageProcessorTest {
   private static BlobStorageService blobStorageService;
-  private static MockRestRequestHandlerController requestHandlerController;
+  private static MockRequestResponseHandlerController requestHandlerController;
   private static MockRestRequestResponseHandler requestHandler;
 
   /**
-   * Sets up the {@link MockRestRequestHandlerController} that {@link NettyMessageProcessor} can use.
+   * Sets up the {@link MockRequestResponseHandlerController} that {@link NettyMessageProcessor} can use.
    * @throws InstantiationException
    * @throws IOException
    */
@@ -44,15 +44,16 @@ public class NettyMessageProcessorTest {
       throws InstantiationException, IOException, RestServiceException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     blobStorageService = new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
-    requestHandlerController = new MockRestRequestHandlerController(1, blobStorageService);
+    requestHandlerController = new MockRequestResponseHandlerController(1);
+    requestHandlerController.setBlobStorageService(blobStorageService);
     blobStorageService.start();
     requestHandlerController.start();
     // since we start it up with one handler only and it will be a MockRestRequestResponseHandler, get it.
-    requestHandler = (MockRestRequestResponseHandler) requestHandlerController.getRequestHandler();
+    requestHandler = (MockRestRequestResponseHandler) requestHandlerController.getHandler();
   }
 
   /**
-   * Shuts down the {@link MockRestRequestHandlerController}.
+   * Shuts down the {@link MockRequestResponseHandlerController}.
    */
   @AfterClass
   public static void shutdownRequestHandlerController() {
@@ -82,19 +83,28 @@ public class NettyMessageProcessorTest {
    */
   @Test
   public void channelActiveTasksFailureTest()
-      throws JSONException {
+      throws JSONException, RestServiceException {
     try {
       Properties properties = new Properties();
-      properties.setProperty(MockRestRequestHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "true");
+      properties.setProperty(MockRequestResponseHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "true");
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      // RestRequestHandler returned is null.
+      // AsyncRequestResponseHandler returned is null.
       requestHandlerController.breakdown(verifiableProperties);
-      doChannelCreationFailureTest(RestServiceErrorCode.ChannelCreationTasksFailure);
-      properties.setProperty(MockRestRequestHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "false");
+      try {
+        createChannel();
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ChannelCreationTasksFailure,
+            e.getErrorCode());
+      }
+      properties.setProperty(MockRequestResponseHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "false");
       verifiableProperties = new VerifiableProperties(properties);
-      // RestException is thrown when a call is made to getRequestHandler().
+      // Runtime is thrown when a call is made to getHandler().
       requestHandlerController.breakdown(verifiableProperties);
-      doChannelCreationFailureTest(RestServiceErrorCode.RequestResponseHandlerSelectionError);
+      try {
+        createChannel();
+      } catch (RuntimeException e) {
+        // expected. nothing to do.
+      }
     } finally {
       requestHandlerController.fix();
     }
@@ -122,7 +132,7 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Tests for error handling flow when the {@link RestRequestHandler} throws exceptions.
+   * Tests for error handling flow when the {@link AsyncRequestResponseHandler} throws exceptions.
    * @throws JSONException
    * @throws RestServiceException
    */
@@ -195,11 +205,7 @@ public class NettyMessageProcessorTest {
 
   // channelActiveTasksFailureTest() helpers.
   private void doChannelCreationFailureTest(RestServiceErrorCode expectedErrorCode) {
-    try {
-      createChannel();
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", expectedErrorCode, e.getErrorCode());
-    }
+
   }
 
   // requestHandlerExceptionTest() helpers.
