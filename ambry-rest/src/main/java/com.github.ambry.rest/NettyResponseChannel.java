@@ -262,6 +262,14 @@ class NettyResponseChannel implements RestResponseChannel {
     try {
       responseMetadataChangeLock.lock();
       verifyResponseAlive();
+      // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
+      // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
+      // Transfer-Encoding:chunked. Note that sending HttpContent chunks data anyway - we are just explicitly specifying
+      // this in the header.
+      if (!HttpHeaders.isContentLengthSet(responseMetadata)) {
+        // This makes sure that we don't stomp on any existing transfer-encoding.
+        HttpHeaders.setTransferEncodingChunked(responseMetadata);
+      }
       logger
           .trace("Sending response metadata with status {} on channel {}", responseMetadata.getStatus(), ctx.channel());
       responseMetadataWritten.set(true);
