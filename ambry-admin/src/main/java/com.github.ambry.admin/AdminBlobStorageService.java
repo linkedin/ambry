@@ -31,10 +31,10 @@ import org.slf4j.LoggerFactory;
  * All the operations that need to be performed by the Admin are supported here.
  */
 class AdminBlobStorageService implements BlobStorageService {
-  private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
   private final Router router;
+  private final long cacheValidityInSecs;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -46,10 +46,10 @@ class AdminBlobStorageService implements BlobStorageService {
    */
   public AdminBlobStorageService(AdminConfig adminConfig, AdminMetrics adminMetrics, ClusterMap clusterMap,
       Router router) {
-    this.adminConfig = adminConfig;
     this.adminMetrics = adminMetrics;
     this.clusterMap = clusterMap;
     this.router = router;
+    cacheValidityInSecs = adminConfig.adminCacheValiditySeconds;
     logger.trace("Instantiated AdminBlobStorageService");
   }
 
@@ -87,7 +87,8 @@ class AdminBlobStorageService implements BlobStorageService {
           break;
         default:
           HeadForGetCallback callback =
-              new HeadForGetCallback(restRequest, restResponseChannel, restResponseHandler, router);
+              new HeadForGetCallback(restRequest, restResponseChannel, restResponseHandler, router,
+                  cacheValidityInSecs);
           router.getBlobInfo(operationOrBlobId, callback);
       }
     } catch (Exception e) {
@@ -192,14 +193,14 @@ class AdminBlobStorageService implements BlobStorageService {
     try {
       restRequest.close();
     } catch (IOException e) {
-      // TODO: log and metrics
+      // log and metrics
     }
 
     if (readableStreamChannel != null) {
       try {
         readableStreamChannel.close();
       } catch (IOException e) {
-        // TODO: log and metrics
+        // log and metrics
       }
     }
   }
@@ -220,13 +221,11 @@ class AdminBlobStorageService implements BlobStorageService {
  * Callback for HEAD that precedes GET operations. Updates headers and invokes GET with a new callback.
  */
 class HeadForGetCallback implements Callback<BlobInfo> {
-  // TODO: this should be a config
-  private static final long CACHE_VALIDITY_IN_SECONDS = 3600;
-
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
   private final RestResponseHandler restResponseHandler;
   private final Router router;
+  private final long cacheValidityInSecs;
 
   /**
    * Create a HEAD before GET callback.
@@ -235,13 +234,16 @@ class HeadForGetCallback implements Callback<BlobInfo> {
    * @param restResponseHandler the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    * @param router the {@link Router} instance to use to make the GET call.
    *                      {@link BlobStorageService#handleGet(RestRequest, RestResponseChannel, RestResponseHandler)}.
+   * @param cacheValidityInSecs the period of validity of cache that needs to be sent to the client (in case of non
+   *                            private blobs).
    */
   public HeadForGetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      RestResponseHandler restResponseHandler, Router router) {
+      RestResponseHandler restResponseHandler, Router router, long cacheValidityInSecs) {
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
     this.restResponseHandler = restResponseHandler;
     this.router = router;
+    this.cacheValidityInSecs = cacheValidityInSecs;
   }
 
   /**
@@ -284,7 +286,6 @@ class HeadForGetCallback implements Callback<BlobInfo> {
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setContentType(blobProperties.getContentType());
       // Ensure browsers do not execute html with embedded exploits.
-      // TODO: do we need a MIME types class?
       if (blobProperties.getContentType().equals("text/html")) {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
@@ -294,8 +295,8 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       restResponseChannel.setCacheControl("private, no-cache, no-store, proxy-revalidate");
       restResponseChannel.setPragma("no-cache");
     } else {
-      restResponseChannel.setExpires(new Date(System.currentTimeMillis() + CACHE_VALIDITY_IN_SECONDS * Time.MsPerSec));
-      restResponseChannel.setCacheControl("max-age=" + CACHE_VALIDITY_IN_SECONDS);
+      restResponseChannel.setExpires(new Date(System.currentTimeMillis() + cacheValidityInSecs * Time.MsPerSec));
+      restResponseChannel.setCacheControl("max-age=" + cacheValidityInSecs);
     }
   }
 }
