@@ -77,10 +77,19 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel,
       RestResponseHandler restResponseHandler) {
     if (shouldProceed(restRequest, restResponseChannel, restResponseHandler)) {
-      BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
-      byte[] usermetadata = RestUtils.buildUsermetadata(restRequest);
-      router.putBlob(blobProperties, usermetadata, restRequest,
-          new MockPostCallback(restRequest, restResponseChannel, restResponseHandler, blobProperties));
+      try {
+        BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
+        byte[] usermetadata = RestUtils.buildUsermetadata(restRequest);
+        router.putBlob(blobProperties, usermetadata, restRequest,
+            new MockPostCallback(restRequest, restResponseChannel, restResponseHandler, blobProperties));
+      } catch (RestServiceException e) {
+        try {
+          restResponseHandler.handleResponse(restRequest, restResponseChannel, null, e);
+        } catch (RestServiceException ie) {
+          releaseResources(restRequest, null);
+          throw new IllegalStateException(ie);
+        }
+      }
     }
   }
 

@@ -30,7 +30,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       Router router) {
-    if (verifiableProperties != null && clusterMap != null & router != null) {
+    if (verifiableProperties != null && clusterMap != null && router != null) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;

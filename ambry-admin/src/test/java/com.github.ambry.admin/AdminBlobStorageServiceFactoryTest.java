@@ -1,6 +1,5 @@
 package com.github.ambry.admin;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
@@ -47,12 +46,11 @@ public class AdminBlobStorageServiceFactoryTest {
    * @throws IOException
    */
   @Test
-  public void getAdminBlobStorageServiceWithBadInputTest()
+  public void getAdminBlobStorageServiceFactoryWithBadInputTest()
       throws IOException {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    MetricRegistry metricRegistry = new MetricRegistry();
     ClusterMap clusterMap = new MockClusterMap();
     Router router = new InMemoryRouter(verifiableProperties);
 

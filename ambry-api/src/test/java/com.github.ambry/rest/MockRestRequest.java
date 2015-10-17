@@ -265,7 +265,7 @@ public class MockRestRequest implements RestRequest {
       Iterator<String> headerKeys = headers.keys();
       while (headerKeys.hasNext()) {
         String headerKey = headerKeys.next();
-        String headerValue = headers.getString(headerKey);
+        String headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.getString(headerKey);
         addOrUpdateArg(headerKey, headerValue);
       }
     }
@@ -291,7 +291,9 @@ public class MockRestRequest implements RestRequest {
   private void addOrUpdateArg(String key, String value)
       throws UnsupportedEncodingException {
     key = URLDecoder.decode(key, "UTF-8");
-    value = URLDecoder.decode(value, "UTF-8");
+    if (value != null) {
+      value = URLDecoder.decode(value, "UTF-8");
+    }
     if (!args.containsKey(key)) {
       args.put(key, new LinkedList<String>());
     }

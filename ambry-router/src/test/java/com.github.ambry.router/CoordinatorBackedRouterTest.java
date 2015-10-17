@@ -62,7 +62,7 @@ public class CoordinatorBackedRouterTest {
     }
 
     Properties properties = new Properties();
-    properties.setProperty("router.coordinator.backed.router.operation.pool.size", "0");
+    properties.setProperty("router.scaling.unit.count", "0");
     verifiableProperties = getVProps(properties);
     routerConfig = new RouterConfig(verifiableProperties);
     try {

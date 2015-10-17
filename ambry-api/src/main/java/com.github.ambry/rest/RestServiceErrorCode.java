@@ -32,11 +32,17 @@ public enum RestServiceErrorCode {
    */
   BadRequest,
   /**
+   * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
+   * the number of arguments expected does not match.
+   */
+  InvalidArgs,
+  /**
    * Client has sent a request that is cannot be decoded using the REST protocol (usually HTTP).
    */
   MalformedRequest,
   /**
-   * Client has sent a request that is missing some arguments necessary to service the request.
+   * Client has sent a request that is missing some arguments (whether in the URI or in the headers) necessary to
+   * service the request.
    */
   MissingArgs,
   /**
