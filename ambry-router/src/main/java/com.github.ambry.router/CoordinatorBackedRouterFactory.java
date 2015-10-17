@@ -10,7 +10,6 @@ import com.github.ambry.notification.NotificationSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// TODO: null checks etc.
 
 /**
  * {@link CoordinatorBackedRouter} specific implementation of {@link RouterFactory}.

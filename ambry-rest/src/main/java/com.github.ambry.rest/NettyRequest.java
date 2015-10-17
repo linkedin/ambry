@@ -260,7 +260,7 @@ class NettyContent {
       this.content = content;
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
-      // a copy or TODO: we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel.
+      // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
       logger.warn("Http content had to be copied because ByteBuf did not have a backing ByteBuffer");
       contentBuffer = ByteBuffer.allocate(content.content().capacity());
       content.content().readBytes(contentBuffer);

@@ -5,16 +5,15 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
@@ -25,8 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 
 /**
@@ -47,8 +44,6 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  * will be accepted.
  */
 class NettyResponseChannel implements RestResponseChannel {
-  // TODO: error response has to use the same object as normal response since header setting might have to be respected
-
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
   private final ChannelWriteResultListener channelWriteResultListener;
@@ -118,7 +113,7 @@ class NettyResponseChannel implements RestResponseChannel {
     }
 
     if (!responseMetadataWritten.get()) {
-      maybeWriteResponseMetadata(responseMetadata);
+      maybeWriteResponseMetadata();
     }
     verifyChannelActive();
     int bytesWritten = 0;
@@ -170,18 +165,16 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.requestCompletionRate.mark();
         if (cause == null) {
           if (!responseMetadataWritten.get()) {
-            maybeWriteResponseMetadata(responseMetadata);
+            maybeWriteResponseMetadata();
           }
           writeToChannel(new DefaultLastHttpContent(), ChannelWriteType.Unsafe);
         } else {
           nettyMetrics.requestHandlingError.inc();
-          logger.trace("Sending error response to client on channel {}", ctx.channel());
-          ChannelFuture errorResponseWrite = maybeWriteResponseMetadata(generateErrorResponse(cause));
-          if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
-            logger.error("Swallowing write exception encountered while sending error response to client on channel {}",
-                ctx.channel(), errorResponseWrite.cause());
-            nettyMetrics.responseSendingError.inc();
-            // close the connection anyway so that the client knows something went wrong.
+          if (isOpen() && !responseMetadataWritten.get()) {
+            sendErrorResponse(cause);
+          } else {
+            logger.debug(
+                "Cannot send error response to the client - channel is closed or response metadata already sent");
           }
         }
         flush();
@@ -262,11 +255,10 @@ class NettyResponseChannel implements RestResponseChannel {
    * 1. Response metadata has already been written - results in a {@link RestServiceException}.
    * 2. Channel is inactive - results in a {@link ClosedChannelException}.
    * In both cases, a failed {@link ChannelFuture} wrapping the exact exception is returned.
-   * @param responseMetadata The response metadata to be written.
    * @return A {@link ChannelFuture} that tracks the write operation if sanity checks succeeded. Else, a failed
    * {@link ChannelFuture} wrapping the exact exception.
    */
-  private ChannelFuture maybeWriteResponseMetadata(HttpResponse responseMetadata) {
+  private ChannelFuture maybeWriteResponseMetadata() {
     try {
       responseMetadataChangeLock.lock();
       verifyResponseAlive();
@@ -375,31 +367,49 @@ class NettyResponseChannel implements RestResponseChannel {
     }
   }
 
+  private void sendErrorResponse(Throwable cause) {
+    try {
+      logger.trace("Sending error response to client on channel {}", ctx.channel());
+      LastHttpContent errorMessageContent = prepareErrorResponse(cause);
+      maybeWriteResponseMetadata();
+      ChannelFuture errorResponseWrite = writeToChannel(errorMessageContent, ChannelWriteType.Unsafe);
+      if (errorResponseWrite.isDone() && !errorResponseWrite.isSuccess()) {
+        logger.error("Swallowing write exception encountered while sending error response to client on channel {}",
+            ctx.channel(), errorResponseWrite.cause());
+        nettyMetrics.responseSendingError.inc();
+        // close the connection anyway so that the client knows something went wrong.
+      }
+    } catch (Exception e) {
+      logger.debug("Could not send error response", e);
+    }
+  }
+
   /**
    * Provided a cause, returns an error response with the right status and error message.
    * @param cause the cause of the error.
-   * @return a {@link HttpResponse} that includes the right status and message.
+   * @return a {@link LastHttpContent} with the error message that can be sent to the client.
+   * @throws RestServiceException if there was any error while constructing the response.
    */
-  private HttpResponse generateErrorResponse(Throwable cause) {
-    HttpResponseStatus status;
+  private LastHttpContent prepareErrorResponse(Throwable cause)
+      throws RestServiceException {
+    ResponseStatus status;
     StringBuilder errReason = new StringBuilder();
-    if (cause != null && cause instanceof RestServiceException) {
+    if (cause instanceof RestServiceException) {
       RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
-      status = getHttpResponseStatus(ResponseStatus.getResponseStatus(restServiceErrorCode));
-      if (status == HttpResponseStatus.BAD_REQUEST) {
-        errReason.append(" (Reason - ").append(cause.getMessage()).append(")");
+      status = ResponseStatus.getResponseStatus(restServiceErrorCode);
+      if (status == ResponseStatus.BadRequest) {
+        errReason.append(" [Reason - ").append(cause.getMessage()).append("]");
       }
     } else {
-      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      status = ResponseStatus.InternalServerError;
       nettyMetrics.unknownExceptionError.inc();
     }
-    String fullMsg = "Failure: " + status + errReason;
+    String fullMsg = "Failure: " + getHttpResponseStatus(status) + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
-    FullHttpResponse response =
-        new DefaultFullHttpResponse(HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, fullMsg.length());
-    return response;
+    setStatus(status);
+    setContentType("text/plain; charset=UTF-8");
+    setContentLength(fullMsg.length());
+    return new DefaultLastHttpContent(Unpooled.wrappedBuffer(fullMsg.getBytes()));
   }
 
   /**
@@ -411,15 +421,12 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpResponseStatus status;
     switch (responseStatus) {
       case Ok:
-        // TODO: metrics
         status = HttpResponseStatus.OK;
         break;
       case Created:
-        // TODO: metrics
         status = HttpResponseStatus.CREATED;
         break;
       case Accepted:
-        // TODO: metrics
         status = HttpResponseStatus.ACCEPTED;
         break;
       case BadRequest:
@@ -427,11 +434,9 @@ class NettyResponseChannel implements RestResponseChannel {
         status = HttpResponseStatus.BAD_REQUEST;
         break;
       case NotFound:
-        // TODO: metrics
         status = HttpResponseStatus.NOT_FOUND;
         break;
       case Gone:
-        // TODO: metrics
         status = HttpResponseStatus.GONE;
         break;
       case InternalServerError:
@@ -467,7 +472,6 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param forceClose if {@code true}, closes channel despite keep-alive or any other concerns.
    */
   private void maybeCloseNetworkChannel(boolean forceClose) {
-    // TODO: handle keep-alive here and also take forceClose into account.
     lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
     logger.trace("Requested closing of channel {}", ctx.channel());
   }
@@ -520,7 +524,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
         logger.error("Write on channel {} failed due to exception. Closed channel", future.channel(), future.cause());
         nettyMetrics.channelWriteError.inc();
       } else {
-        // TODO: track small, medium, large and huge writes.
+
         nettyMetrics.channelWriteLatencyInMs.update(System.currentTimeMillis() - writeStartTime);
       }
     } else {

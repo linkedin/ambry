@@ -243,7 +243,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     } else {
       // We have received a duplicate request. This shouldn't happen and there is no good way to deal with it. So
       // just update a metric and log an error.
-      // TODO: rethink this during keep-alive - this probably calls for a close.
       logger.warn("Discarding duplicate request on channel {}. Current request - {}. Duplicate request - {}",
           ctx.channel(), request.getUri(), httpRequest.getUri());
       nettyMetrics.duplicateRequestError.inc();

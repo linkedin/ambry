@@ -26,7 +26,6 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-// TODO: some extra tests for addContent needed.
 
 /**
  * Tests functionality of {@link NettyRequest}.

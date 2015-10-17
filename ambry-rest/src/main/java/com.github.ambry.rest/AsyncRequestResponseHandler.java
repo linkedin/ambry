@@ -13,7 +13,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// TODO: logging and metrics
 
 /**
  * Implementation of {@link RestRequestHandler} and {@link RestResponseHandler} that asynchronously handles requests and
@@ -364,8 +363,6 @@ class AsyncHandlerWorker implements Runnable {
     String uri = null;
     while (true) {
       try {
-        // TODO: optimization - if no requests but there are responses, break out fast.
-        // TODO: break out if there are at least n responses to send out?
         requestInfo = requests.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         if (requestInfo != null) {
           uri = requestInfo.getRestRequest().getUri();
@@ -457,14 +454,14 @@ class AsyncHandlerWorker implements Runnable {
     try {
       restRequest.close();
     } catch (IOException e) {
-      // TODO: log and metrics
+      // log and metrics
     }
 
     if (readableStreamChannel != null) {
       try {
         readableStreamChannel.close();
       } catch (IOException e) {
-        // TODO: log and metrics
+        // log and metrics
       }
     }
   }
