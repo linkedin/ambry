@@ -130,6 +130,26 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
+   * This tests for exceptions thrown when a {@link AsyncRequestResponseHandler} is started without setting a
+   * {@link BlobStorageService}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  @Test
+  public void startWithoutBlobStorageServiceTest()
+      throws InstantiationException, IOException {
+    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(null);
+    try {
+      requestResponseHandler.start();
+      fail("Start should have failed because no BlobStorageService was set.");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    } finally {
+      requestResponseHandler.shutdown();
+    }
+  }
+
+  /**
    * Tests handling of all {@link RestMethod}s. The {@link MockBlobStorageService} instance being used is
    * asked to only echo the method.
    * @throws Exception

@@ -55,6 +55,7 @@ public class AsyncRequestResponseHandler {
 
   /**
    * Does startup tasks for the AsyncRequestResponseHandler. When the function returns, startup is FULLY complete.
+   * @throws IllegalStateException if a {@link BlobStorageService} has not been set before starting.
    * @throws InstantiationException if the AsyncRequestResponseHandler is unable to start.
    */
   public void start()
@@ -65,7 +66,7 @@ public class AsyncRequestResponseHandler {
         workerThread.start();
         logger.info("AsyncRequestResponseHandler has started");
       } else {
-        throw new InstantiationException("BlobStorageService has not been set");
+        throw new IllegalStateException("BlobStorageService has not been set");
       }
     }
   }

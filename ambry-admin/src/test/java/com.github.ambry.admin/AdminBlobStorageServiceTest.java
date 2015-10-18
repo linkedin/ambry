@@ -49,7 +49,6 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-// TODO: tests if either of controller or response handler not running
 
 /**
  * Unit tests for {@link AdminBlobStorageService}.
@@ -166,6 +165,22 @@ public class AdminBlobStorageServiceTest {
     doRuntimeExceptionRouterTest(RestMethod.POST);
     doRuntimeExceptionRouterTest(RestMethod.DELETE);
     doRuntimeExceptionRouterTest(RestMethod.HEAD);
+  }
+
+  /**
+   * Tests reactions of various methods of {@link AdminBlobStorageService} to a {@link RequestResponseHandlerController}
+   * that throws {@link RuntimeException}.
+   * <p/>
+   * In reality, nothing can be done if this happens - the call will fail with an exception.
+   * @throws Exception
+   */
+  @Test
+  public void badControllerTest()
+      throws Exception {
+    doBadControllerTest("handleGet");
+    doBadControllerTest("handlePost");
+    doBadControllerTest("handleDelete");
+    doBadControllerTest("handleHead");
   }
 
   /**
@@ -293,8 +308,7 @@ public class AdminBlobStorageServiceTest {
   public void echoTest()
       throws Exception {
     String inputText = "textToBeEchoed";
-    String uri = AdminOperationType.echo + "?" + EchoHandler.TEXT_KEY + "=" + inputText;
-    RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
+    RestRequest restRequest = createEchoGetRestRequest(inputText);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
@@ -1039,6 +1053,36 @@ public class AdminBlobStorageServiceTest {
     }
   }
 
+  // badControllerTest() helpers.
+
+  /**
+   * Tests reactions of various methods of {@link AdminBlobStorageService} to a {@link RequestResponseHandlerController}
+   * that throws {@link RuntimeException}.
+   * <p/>
+   * In reality, nothing can be done if this happens - the call will fail with an exception.
+   * @param methodName the name of the method to invoke.
+   * @throws Exception
+   */
+  private void doBadControllerTest(String methodName)
+      throws Exception {
+    Method method =
+        AdminBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
+    RestRequest restRequest = createEchoGetRestRequest("echoText");
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+
+    try {
+      adminResponseHandlerController.exceptionToThrow = new RuntimeException();
+      try {
+        method.invoke(adminBlobStorageService, restRequest, restResponseChannel);
+        fail("Method [" + methodName + "] should have failed because getHandler() would have thrown RuntimeException");
+      } catch (InvocationTargetException e) {
+        assertEquals("Unexpected exception class", RuntimeException.class, e.getTargetException().getClass());
+      }
+    } finally {
+      adminResponseHandlerController.exceptionToThrow = null;
+    }
+  }
+
   // postGetHeadDeleteTest() helpers
 
   /**
@@ -1169,6 +1213,22 @@ public class AdminBlobStorageServiceTest {
         restResponseChannel.getHeader(RestConstants.Headers.Blob_Size, MockRestResponseChannel.DataStatus.Flushed));
   }
 
+  // echoTest() helpers
+
+  /**
+   * Creates a request that can be used to test {@link AdminOperationType#echo}.
+   * @param echoText the text that needs to be echoed.
+   * @return a {@link RestRequest} for {@link AdminOperationType#echo} with echo text as specified.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  private RestRequest createEchoGetRestRequest(String echoText)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    String uri = AdminOperationType.echo + "?" + EchoHandler.TEXT_KEY + "=" + echoText;
+    return createRestRequest(RestMethod.GET, uri, null, null);
+  }
+
   // handleGetReplicasForBlobIdWithBadInputTest() helpers
 
   /**
@@ -1191,7 +1251,9 @@ public class AdminBlobStorageServiceTest {
  * {@link AdminTestResponseHandler} on any call to {@link #getHandler()}.
  */
 class AdminResponseHandlerController extends RequestResponseHandlerController {
-  private AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
+  public RuntimeException exceptionToThrow = null;
+
+  private final AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
 
   public AdminResponseHandlerController()
       throws InstantiationException {
@@ -1213,6 +1275,9 @@ class AdminResponseHandlerController extends RequestResponseHandlerController {
 
   @Override
   public AdminTestResponseHandler getHandler() {
+    if (exceptionToThrow != null) {
+      throw exceptionToThrow;
+    }
     return adminTestResponseHandler;
   }
 }

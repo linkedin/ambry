@@ -8,8 +8,8 @@ import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
-// TODO: need setBlobStorageService tests. Here and in Async...
 
 /**
  * Tests functionality of {@link RequestResponseHandlerController}.
@@ -33,12 +33,20 @@ public class RequestResponseHandlerControllerTest {
   /**
    * Tests that an exception is thrown when trying to instantiate a {@link RequestResponseHandlerController} with 0
    * handlers.
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void startWithHandlerCountZeroTest()
-      throws Exception {
-    createHandlerController(0);
+      throws InstantiationException, IOException {
+    RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    try {
+      new RequestResponseHandlerController(0, restServerMetrics);
+      fail("RequestResponseHandlerController instantiation should have failed because handlerCount is 0");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
   }
 
   /**
@@ -60,11 +68,10 @@ public class RequestResponseHandlerControllerTest {
    * {@link RequestResponseHandlerController#start()} first.
    * @throws InstantiationException
    * @throws IOException
-   * @throws RestServiceException
    */
   @Test
   public void useServiceWithoutStartTest()
-      throws InstantiationException, IOException, RestServiceException {
+      throws InstantiationException, IOException {
     RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1);
     try {
       // fine to use without start.
@@ -75,14 +82,34 @@ public class RequestResponseHandlerControllerTest {
   }
 
   /**
+   * This tests for exceptions thrown when a {@link RequestResponseHandlerController} is started without setting a
+   * {@link BlobStorageService}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  @Test
+  public void startWithoutBlobStorageServiceTest()
+      throws InstantiationException, IOException {
+    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1);
+    requestResponseHandlerController.setBlobStorageService(null);
+    try {
+      requestResponseHandlerController.start();
+      fail("Start should have failed because no BlobStorageService was set.");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    } finally {
+      requestResponseHandlerController.shutdown();
+    }
+  }
+
+  /**
    * Tests getting of a {@link AsyncRequestResponseHandler} instance.
    * @throws InstantiationException
    * @throws IOException
-   * @throws RestServiceException
    */
   @Test
   public void requestHandlerGetTest()
-      throws InstantiationException, IOException, RestServiceException {
+      throws InstantiationException, IOException {
     RequestResponseHandlerController requestResponseHandlerController = createHandlerController(5);
     requestResponseHandlerController.start();
     try {
