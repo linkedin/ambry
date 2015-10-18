@@ -130,7 +130,7 @@ public class InMemoryRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<String>();
     handlePrechecks(futureResult, callback);
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
-    operationPool.submit(new InMemoryBlobPoster(postData, blobs, deletedBlobs));
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs));
     return futureResult;
   }
 
@@ -232,19 +232,15 @@ public class InMemoryRouter implements Router {
 class InMemoryBlobPoster implements Runnable {
   private final PostData postData;
   private final ConcurrentHashMap<String, InMemoryBlob> blobs;
-  private final ConcurrentSkipListSet<String> deletedBlobs;
 
   /**
    * Create a new instance.
    * @param postData the data that came with the POST request as {@link PostData}.
    * @param blobs the list of blobs in memory.
-   * @param deletedBlobs the IDs of deleted blobs.
    */
-  public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryBlob> blobs,
-      ConcurrentSkipListSet<String> deletedBlobs) {
+  public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryBlob> blobs) {
     this.postData = postData;
     this.blobs = blobs;
-    this.deletedBlobs = deletedBlobs;
   }
 
   @Override

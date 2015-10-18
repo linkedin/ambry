@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
  * {@link CoordinatorBackedRouter} specific implementation of {@link RouterFactory}.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link CoordinatorBackedRouter} and returns a new
- * instance on {@link CoordinatorBackedRouterFactory#getRouter()}.
+ * instance on {@link #getRouter()}.
  */
 public class CoordinatorBackedRouterFactory implements RouterFactory {
   private final RouterConfig routerConfig;
@@ -23,6 +23,13 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
   private final Coordinator coordinator;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  /**
+   * Creates an instance of CoordinatorBackedRouterFactory with the given {@code verifiableProperties},
+   * {@code clusterMap} and {@code notificationSystem}.
+   * @param verifiableProperties the in-memory properties to use to construct configurations.
+   * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
+   * @param notificationSystem the {@link NotificationSystem} to use to log operations.
+   */
   public CoordinatorBackedRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {

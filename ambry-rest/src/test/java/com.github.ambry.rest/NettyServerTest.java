@@ -83,10 +83,18 @@ public class NettyServerTest {
 
   // helpers
   // general
+
+  /**
+   * Gets an instance of {@link RequestResponseHandlerController}.
+   * @param properties the in-memory {@link Properties} to use.
+   * @return an instance of {@link RequestResponseHandlerController}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   private RequestResponseHandlerController getRequestHandlerController(Properties properties)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     BlobStorageService blobStorageService =
         new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
     RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
@@ -94,6 +102,13 @@ public class NettyServerTest {
     return controller;
   }
 
+  /**
+   * Gets an instance of {@link NettyServer}.
+   * @param properties the in-memory {@link Properties} to use.
+   * @return an instance of {@link NettyServer}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   private NettyServer getNettyServer(Properties properties)
       throws InstantiationException, IOException {
     if (properties == null) {

@@ -43,7 +43,7 @@ public class RestUtils {
       try {
         ttl = Long.parseLong(ttlStr);
         if (ttl < -1) {
-          throw new RestServiceException(RestConstants.Headers.TTL + "[" + ttl + "] is not valid (has to be >=-1)",
+          throw new RestServiceException(RestConstants.Headers.TTL + "[" + ttl + "] is not valid (has to be >= -1)",
               RestServiceErrorCode.InvalidArgs);
         }
       } catch (NumberFormatException e) {
@@ -101,7 +101,7 @@ public class RestUtils {
       if (values.size() == 1) {
         value = values.get(0);
         if (value == null && required) {
-          throw new RestServiceException("Request has null valu for header: " + header,
+          throw new RestServiceException("Request has null value for header: " + header,
               RestServiceErrorCode.InvalidArgs);
         }
       } else {

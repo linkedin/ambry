@@ -7,8 +7,7 @@ import com.github.ambry.config.VerifiableProperties;
 
 /**
  * Configuration parameters required by {@link RestServer} and Rest infrastructure
- * ({@link RequestResponseHandlerController},
- * {@link AsyncRequestResponseHandler}).
+ * ({@link RequestResponseHandlerController}, {@link AsyncRequestResponseHandler}).
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for {@link RestServer} and presents them for retrieval through defined APIs.
@@ -31,11 +30,11 @@ class RestServerConfig {
 
   /**
    * The number of {@link AsyncRequestResponseHandler} instances that need to be started by the
-   * {@link RequestResponseHandlerController} to handle requests.
+   * {@link RequestResponseHandlerController} to handle requests and responses.
    */
-  @Config("rest.request.handler.count")
+  @Config("rest.scaling.unit.count")
   @Default("5")
-  public final int restRequestHandlerCount;
+  public final int restScalingUnitCount;
 
   /**
    * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
@@ -49,7 +48,7 @@ class RestServerConfig {
     restBlobStorageServiceFactory = verifiableProperties.getString("rest.blob.storage.service.factory");
     restNioServerFactory =
         verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
-    restRequestHandlerCount = verifiableProperties.getInt("rest.request.handler.count", 5);
+    restScalingUnitCount = verifiableProperties.getInt("rest.scaling.unit.count", 5);
     restRouterFactory =
         verifiableProperties.getString("rest.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
   }

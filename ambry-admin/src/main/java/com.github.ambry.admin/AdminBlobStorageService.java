@@ -40,12 +40,14 @@ class AdminBlobStorageService implements BlobStorageService {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Create a new instance of AdminBlobStorageService by supplying it with config, metrics and a cluster map.
+   * Create a new instance of AdminBlobStorageService by supplying it with config, metrics, cluster map, a
+   * response handler controller and a router.
    * @param adminConfig the configuration to use in the form of {@link AdminConfig}.
    * @param adminMetrics the metrics instance to use in the form of {@link AdminMetrics}.
    * @param clusterMap the {@link ClusterMap} to be used for operations.
-   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to request
-   *                                         {@link AsyncRequestResponseHandler}.
+   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to obtain
+   *                                         an instance of {@link AsyncRequestResponseHandler}. This will send out
+   *                                         responses async.
    * @param router the {@link Router} instance to use to perform blob operations.
    */
   public AdminBlobStorageService(AdminConfig adminConfig, AdminMetrics adminMetrics, ClusterMap clusterMap,
@@ -232,7 +234,6 @@ class HeadForGetCallback implements Callback<BlobInfo> {
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @param responseHandler the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    * @param router the {@link Router} instance to use to make the GET call.
-   *                      {@link BlobStorageService#handleGet(RestRequest, RestResponseChannel)}.
    * @param cacheValidityInSecs the period of validity of cache that needs to be sent to the client (in case of non
    *                            private blobs).
    */
@@ -247,7 +248,8 @@ class HeadForGetCallback implements Callback<BlobInfo> {
 
   /**
    * Sets headers and makes a GET call if the result was not null. Otherwise bails out.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request i.e a {@link BlobInfo} object with the properties of the blob that is going
+   *               to be scheduled for GET. This is non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -323,7 +325,8 @@ class GetCallback implements Callback<ReadableStreamChannel> {
 
   /**
    * Submits the GET response to {@link AsyncRequestResponseHandler} so that it can be sent (or the exception handled).
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is the actual blob data as a {@link ReadableStreamChannel}.
+   *               This is non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -331,7 +334,7 @@ class GetCallback implements Callback<ReadableStreamChannel> {
     try {
       if (exception == null) {
         restResponseChannel.setStatus(ResponseStatus.Ok);
-      } else if (exception != null && exception instanceof RouterException) {
+      } else if (exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
@@ -372,7 +375,8 @@ class PostCallback implements Callback<String> {
   /**
    * If there was no exception, updates the header with the location of the object. Submits the response either for
    * exception handling or for cleanup.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is the blob ID of the blob. This is non null if the request executed
+   *               successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -432,7 +436,7 @@ class DeleteCallback implements Callback<Void> {
   /**
    * If there was no exception, updates the header with the acceptance of the request. Submits the response either for
    * exception handling or for cleanup.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is always null.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -480,7 +484,8 @@ class HeadCallback implements Callback<BlobInfo> {
   /**
    * If there was no exception, updates the header with the properties. Exceptions, if any, will be handled upon
    * submission.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request i.e a {@link BlobInfo} object with the properties of the blob. This is
+   *               non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override

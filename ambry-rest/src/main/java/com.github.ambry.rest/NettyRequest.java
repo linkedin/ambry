@@ -1,5 +1,7 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -26,7 +28,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Netty specific implementation of {@link RestRequest}.
  * <p/>
- * Just a wrapper over {@link HttpRequest}.
+ * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 class NettyRequest implements RestRequest {
   private final QueryStringDecoder query;
@@ -115,7 +117,6 @@ class NettyRequest implements RestRequest {
           nettyContentIterator.next().release();
           nettyContentIterator.remove();
         }
-        // no need to call release() because Netty request objects are not reference counted.
       } finally {
         contentLock.unlock();
       }
@@ -132,9 +133,9 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Returns the ambry specific content length header ({@link RestConstants.Headers#Blob_Size}. If there is no such
-   * header, returns length in the "Content-Length" header. If there is no such header, tries to infer content size. If
-   * that cannot be done, returns 0.
+   * Returns the value of the ambry specific content length header ({@link RestConstants.Headers#Blob_Size}. If there is
+   * no such header, returns length in the "Content-Length" header. If there is no such header, tries to infer content
+   * size. If that cannot be done, returns 0.
    * <p/>
    * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
    * actually be different if the stream is buggy or the client made a mistake. Do *not* treat this as fully accurate.
@@ -242,7 +243,7 @@ class NettyRequest implements RestRequest {
 class NettyContent {
 
   private final HttpContent content;
-  private final ByteBuffer contentBuffer;
+  private final ReadableStreamChannel contentChannel;
   private final boolean isLast;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -256,14 +257,15 @@ class NettyContent {
       throw new IllegalArgumentException("Received null HttpContent");
     } else if (content.content().nioBufferCount() > 0) {
       // not a copy.
-      contentBuffer = content.content().nioBuffer();
+      contentChannel = new ByteBufferReadableStreamChannel(content.content().nioBuffer());
       this.content = content;
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
       logger.warn("Http content had to be copied because ByteBuf did not have a backing ByteBuffer");
-      contentBuffer = ByteBuffer.allocate(content.content().capacity());
+      ByteBuffer contentBuffer = ByteBuffer.allocate(content.content().capacity());
       content.content().readBytes(contentBuffer);
+      contentChannel = new ByteBufferReadableStreamChannel(contentBuffer);
       // no need to retain content since we have a copy.
       this.content = null;
     }
@@ -288,11 +290,7 @@ class NettyContent {
    */
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten = -1;
-    if (contentBuffer.hasRemaining()) {
-      bytesWritten = channel.write(contentBuffer);
-    }
-    return bytesWritten;
+    return contentChannel.read(channel);
   }
 
   /**

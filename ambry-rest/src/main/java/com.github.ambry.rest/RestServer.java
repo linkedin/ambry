@@ -20,11 +20,13 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * The RestServer is responsible for starting up (and shutting down) multiple services required to handle requests from
  * clients. Currently it starts/shuts down the following: -
- * 1. A {@link BlobStorageService} - A service that understands the operations supported by Ambry (including those
+ * 1. A {@link Router} - A service that is used to contact the Ambry storage backend.
+ * 2. A {@link BlobStorageService} - A service that understands the operations supported by Ambry (including those
  * through the storage backend) and can handle requests from clients for such operations.
- * 2. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
- * 3. A {@link RequestResponseHandlerController} - To start the scaling units (instances of {@link AsyncRequestResponseHandler})
- * that are responsible for interfacing between the {@link NioServer} and the {@link BlobStorageService}.
+ * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
+ * 4. A {@link RequestResponseHandlerController} - To start the scaling units (instances of
+ * {@link AsyncRequestResponseHandler}) that are responsible for interfacing between the {@link NioServer} and the
+ * {@link BlobStorageService}.
  * <p/>
  * Depending upon what is specified in the configuration file, the RestServer can start different implementations of
  * {@link NioServer} and {@link BlobStorageService} and behave accordingly.
@@ -34,13 +36,12 @@ import org.slf4j.LoggerFactory;
  * 2. Make it easy to plug in any implementation of {@link NioServer} as long as it can provide implementations that
  * abstract framework specific objects and actions (like write/read from channel) into generic APIs through
  * {@link RestRequest}, {@link RestResponseChannel} etc.
- * 3. Provide scaling capabilities independent of any other component through implementations of
- * {@link RequestResponseHandlerController} and {@link AsyncRequestResponseHandler}.
+ * 3. Provide scaling capabilities independent of any other component through {@link RequestResponseHandlerController}
+ * and {@link AsyncRequestResponseHandler}.
  */
 public class RestServer {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
   private final Router router;
@@ -64,12 +65,12 @@ public class RestServer {
       }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-    restServerConfig = new RestServerConfig(verifiableProperties);
+    RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     try {
       requestResponseHandlerController =
-          new RequestResponseHandlerController(restServerConfig.restRequestHandlerCount, restServerMetrics);
+          new RequestResponseHandlerController(restServerConfig.restScalingUnitCount, restServerMetrics);
       RouterFactory routerFactory =
           Utils.getObj(restServerConfig.restRouterFactory, verifiableProperties, clusterMap, notificationSystem);
       router = routerFactory.getRouter();

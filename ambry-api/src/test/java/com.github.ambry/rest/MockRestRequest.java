@@ -57,12 +57,12 @@ public class MockRestRequest implements RestRequest {
   public interface EventListener {
 
     /**
-     * Called when an event (function call) finishes successfully in {@link MockRestRequest}. Does *not* trigger
-     * if the event (function) fails.
+     * Called when an event (function call) finishes successfully in MockRestRequest. Does *not* trigger if the event
+     * (function) fails.
      * @param mockRestRequest the {@link MockRestRequest} where the event occurred.
-     * @param event the {@link MockRestRequest.Event} that occurred.
+     * @param event the {@link Event} that occurred.
      */
-    public void onEventComplete(MockRestRequest mockRestRequest, MockRestRequest.Event event);
+    public void onEventComplete(MockRestRequest mockRestRequest, Event event);
   }
 
   // main fields
@@ -88,6 +88,7 @@ public class MockRestRequest implements RestRequest {
    * @param requestContents contents of the request, if any. Can be null and can be added later via
    *                          {@link #addContent(ByteBuffer)}. Add a null {@link ByteBuffer} at the end to signify end
    *                          of content.
+   * @throws IllegalArgumentException if the {@link RestMethod} required is not recognized.
    * @throws JSONException if there is an exception retrieving required fields.
    * @throws UnsupportedEncodingException if some parts of the URI are not in a format that can be decoded.
    * @throws URISyntaxException if there is a syntax error in the URI.
@@ -130,12 +131,12 @@ public class MockRestRequest implements RestRequest {
   }
 
   /**
-   * Returns length in the "content-length" header. If there is no such header, returns 0.
+   * Returns the value of the ambry specific content length header ({@link RestConstants.Headers#Blob_Size}. If there is
+   * no such header, returns length in the "Content-Length" header. If there is no such header, returns 0.
    * <p/>
    * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
    * actually be different if the stream is buggy or the client made a mistake. Do *not* treat this as fully accurate.
-   * @return the size of content as defined in the "content-length" header. Might not be actual length of content if
-   *          the stream is buggy.
+   * @return the size of content as defined in headers. Might not be actual length of content if the stream is buggy.
    */
   @Override
   public long getSize() {
@@ -242,14 +243,18 @@ public class MockRestRequest implements RestRequest {
    */
   public void addContent(ByteBuffer content)
       throws IOException {
-    try {
-      contentLock.lock();
-      if (!isOpen()) {
-        throw new ClosedChannelException();
+    if (!RestMethod.POST.equals(getRestMethod()) && content != null) {
+      throw new IllegalStateException("There is no content expected for " + getRestMethod());
+    } else {
+      try {
+        contentLock.lock();
+        if (!isOpen()) {
+          throw new ClosedChannelException();
+        }
+        requestContents.add(content);
+      } finally {
+        contentLock.unlock();
       }
-      requestContents.add(content);
-    } finally {
-      contentLock.unlock();
     }
   }
 
@@ -261,7 +266,7 @@ public class MockRestRequest implements RestRequest {
   private void populateArgs(JSONObject headers)
       throws JSONException, UnsupportedEncodingException {
     if (headers != null) {
-      // add headers.
+      // add headers. Handles headers with multiple values.
       Iterator<String> headerKeys = headers.keys();
       while (headerKeys.hasNext()) {
         String headerKey = headerKeys.next();
@@ -270,7 +275,7 @@ public class MockRestRequest implements RestRequest {
       }
     }
 
-    // decode parameters in the URI. Handle parameters without values and multiple values for the same parameter.
+    // decode parameters in the URI. Handles parameters without values and multiple values for the same parameter.
     if (uri.getQuery() != null) {
       for (String parameterValue : uri.getQuery().split("&")) {
         int idx = parameterValue.indexOf("=");
@@ -305,9 +310,9 @@ public class MockRestRequest implements RestRequest {
    * <p/>
    * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
    * in the function that triggers the event or inside this function.
-   * @param event the {@link MockRestRequest.Event} that just occurred.
+   * @param event the {@link Event} that just occurred.
    */
-  private void onEventComplete(MockRestRequest.Event event) {
+  private void onEventComplete(Event event) {
     synchronized (listeners) {
       for (EventListener listener : listeners) {
         try {

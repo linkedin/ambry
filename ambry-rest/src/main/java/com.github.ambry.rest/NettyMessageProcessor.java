@@ -62,6 +62,15 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private volatile NettyRequest request = null;
   private volatile NettyResponseChannel responseChannel = null;
 
+  /**
+   * Creates a new NettyMessageProcessor instance with a metrics tracking object, a configuration object and a
+   * {@code requestResponseHandlerController}.
+   * @param nettyMetrics the metrics object to use.
+   * @param nettyConfig the configuration object to use.
+   * @param requestResponseHandlerController a {@link RequestResponseHandlerController} that can be used to obtain an
+   *                                         instance of {@link AsyncRequestResponseHandler}.
+   * @throws RestServiceException if the channel creation tasks failed for any reason.
+   */
   public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig,
       RequestResponseHandlerController requestResponseHandlerController)
       throws RestServiceException {
@@ -70,7 +79,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     requestHandler = requestResponseHandlerController.getHandler();
     if (requestHandler == null) {
       nettyMetrics.channelActiveTasksError.inc();
-      throw new RestServiceException("AsyncRequestResponseHandler received during channel bootstrap was null",
+      throw new RestServiceException("Request handler received during channel bootstrap was null",
           RestServiceErrorCode.ChannelCreationTasksFailure);
     }
     logger.trace("Instantiated NettyMessageProcessor");

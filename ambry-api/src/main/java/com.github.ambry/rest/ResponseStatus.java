@@ -6,7 +6,7 @@ package com.github.ambry.rest;
 public enum ResponseStatus {
   // 2xx
   /**
-   * 200 OK - resource found and all good.
+   * 200 OK - Resource found and all good.
    */
   Ok,
   /**
@@ -24,11 +24,11 @@ public enum ResponseStatus {
    */
   BadRequest,
   /**
-   * 404 Not Found - resource was not found.
+   * 404 Not Found - Resource was not found.
    */
   NotFound,
   /**
-   * 410 Gone - resource has been deleted.
+   * 410 Gone - Resource has been deleted or has expired.
    */
   Gone,
 
@@ -64,7 +64,6 @@ public enum ResponseStatus {
       case IllegalResponseMetadataStateTransition:
       case InternalObjectCreationError:
       case RequestChannelClosed:
-      case RequestHandlerSelectionError:
       case RequestResponseQueueingFailure:
       case ResponseBuildingFailure:
       case ServiceUnavailable:

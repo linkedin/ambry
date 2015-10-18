@@ -21,7 +21,9 @@ public class RestServerTest {
 
   /**
    * Tests {@link RestServer#start()} and {@link RestServer#shutdown()}.
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws InterruptedException
+   * @throws IOException
    */
   @Test
   public void startShutdownTest()
@@ -59,6 +61,7 @@ public class RestServerTest {
 
   /**
    * Tests for correct exceptions thrown on {@link RestServer} instantiation/{@link RestServer#start()} with bad input.
+   * @throws InstantiationException
    * @throws IOException
    */
   @Test
@@ -73,11 +76,12 @@ public class RestServerTest {
   /**
    * Tests for correct exceptions thrown on {@link RestServer#start()}/{@link RestServer#shutdown()} with bad
    * components.
-   * @throws Exception
+   * @throws InstantiationException
+   * @throws IOException
    */
   @Test
   public void startShutdownTestWithBadComponent()
-      throws Exception {
+      throws InstantiationException, IOException {
     Properties properties = new Properties();
     properties.setProperty("rest.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     // makes MockNioServer throw exceptions.
@@ -103,6 +107,12 @@ public class RestServerTest {
 
   // helpers
   // general
+
+  /**
+   * Gets {@link VerifiableProperties} with some mandatory values set.
+   * @param properties the {@link Properties} file to use to build the {@link VerifiableProperties}.
+   * @return an instance of {@link VerifiableProperties}.
+   */
   private VerifiableProperties getVProps(Properties properties) {
     properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
     properties.setProperty("rest.router.factory", InMemoryRouterFactory.class.getCanonicalName());
@@ -113,6 +123,7 @@ public class RestServerTest {
 
   /**
    * Tests {@link RestServer} instantiation attempts with bad input.
+   * @throws InstantiationException
    * @throws IOException
    */
   private void badArgumentsTest()

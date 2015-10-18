@@ -20,10 +20,10 @@ import java.util.GregorianCalendar;
  */
 public class MockBlobStorageService implements BlobStorageService {
 
-  public final static String ECHO_REST_METHOD = "echoRestMethod";
-  public final static String THROW_RUNTIME_EXCEPTION = "MBSSRuntimeException";
-  public final static String SEND_RESPONSE_RUNTIME_EXCEPTION = "MBSSResponseRuntimeException";
-  public final static String SEND_RESPONSE_REST_SERVICE_EXCEPTION = "MBSSRestServiceException";
+  public final static String ECHO_REST_METHOD = "mbssEchoRestMethod";
+  public final static String THROW_RUNTIME_EXCEPTION = "mbssRuntimeException";
+  public final static String SEND_RESPONSE_RUNTIME_EXCEPTION = "mbssResponseRuntimeException";
+  public final static String SEND_RESPONSE_REST_SERVICE_EXCEPTION = "mbssRestServiceException";
   public final static String REST_ERROR_CODE = "mock.blob.storage.service.rest.error.code";
 
   private final Router router;
@@ -80,12 +80,7 @@ public class MockBlobStorageService implements BlobStorageService {
         router.putBlob(blobProperties, usermetadata, restRequest,
             new MockPostCallback(restRequest, restResponseChannel, blobProperties));
       } catch (RestServiceException e) {
-        try {
-          handleResponse(restRequest, restResponseChannel, null, e);
-        } catch (RestServiceException ie) {
-          releaseResources(restRequest, null);
-          throw new IllegalStateException(ie);
-        }
+        handleResponse(restRequest, restResponseChannel, null, e);
       }
     }
   }
@@ -141,9 +136,10 @@ public class MockBlobStorageService implements BlobStorageService {
         if (exception == null) {
           restResponseChannel.setStatus(ResponseStatus.Ok);
         }
-        handleResponse(restRequest, restResponseChannel, response, exception);
       } catch (RestServiceException e) {
-        releaseResources(restRequest, null);
+        throw new IllegalStateException(e);
+      } finally {
+        handleResponse(restRequest, restResponseChannel, response, exception);
       }
     }
     return shouldProceed;
@@ -161,12 +157,8 @@ public class MockBlobStorageService implements BlobStorageService {
     if (restRequest == null || restResponseChannel == null) {
       throw new IllegalArgumentException("One of the arguments was null");
     } else if (!serviceRunning) {
-      try {
-        handleResponse(restRequest, restResponseChannel, null,
-            new RestServiceException("BlobStorageService not running", RestServiceErrorCode.ServiceUnavailable));
-      } catch (RestServiceException e) {
-        releaseResources(restRequest, null);
-      }
+      handleResponse(restRequest, restResponseChannel, null,
+          new RestServiceException("BlobStorageService not running", RestServiceErrorCode.ServiceUnavailable));
     }
     return serviceRunning;
   }
@@ -192,32 +184,23 @@ public class MockBlobStorageService implements BlobStorageService {
    * Assumed that at least one of {@code response} or {@code exception} is null.
    * @param restRequest the {@link RestRequest} for which the response has been constructed.
    * @param restResponseChannel the {@link RestResponseChannel} to be used to send the response.
-   * @param response a {@link ReadableStreamChannel} that represents the response to the
-   *                                {@code restRequest}.
+   * @param response a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
    * @param exception if the response could not be constructed, the reason for the failure.
-   * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
-   * @throws RestServiceException if there is any error while processing the request.
    */
   protected static void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) {
     try {
-      if (restRequest == null) {
-        throw new IllegalArgumentException("RestRequest is null");
-      } else if (restResponseChannel == null) {
-        throw new IllegalArgumentException("RestResponseChannel is null");
-      }
-
       if (exception == null && response != null) {
         // BEWARE: test code with assumptions of non blocking behaviour in this class may run into an infinite loop.
         while (response.read(restResponseChannel) != -1) {
           ;
         }
       }
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    } finally {
       restResponseChannel.onResponseComplete(exception);
       releaseResources(restRequest, response);
-    } catch (IOException e) {
-      throw new RestServiceException(e, RestServiceErrorCode.InternalServerError);
     }
   }
 
@@ -226,7 +209,7 @@ public class MockBlobStorageService implements BlobStorageService {
    * @param restRequest the {@link RestRequest} that needs to be cleaned up.
    * @param response the {@link ReadableStreamChannel} that needs to be cleaned up. Can be null.
    */
-  protected static void releaseResources(RestRequest restRequest, ReadableStreamChannel response) {
+  private static void releaseResources(RestRequest restRequest, ReadableStreamChannel response) {
     try {
       restRequest.close();
       if (response != null) {
@@ -251,7 +234,6 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @param router the {@link Router} instance to use to make the GET call.
-   *                      {@link BlobStorageService#handleGet(RestRequest, RestResponseChannel)}.
    */
   public MockHeadForGetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, Router router) {
     this.restRequest = restRequest;
@@ -261,7 +243,9 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
 
   /**
    * Sets headers and makes a GET call if the result was not null. Otherwise bails out.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request - a {@link BlobInfo} object with the blob properties and other headers of
+   *               the blob that is going to be scheduled for GET. This is non null if the request executed
+   *               successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -281,8 +265,7 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
       }
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onResponseComplete(exception);
-      MockBlobStorageService.releaseResources(restRequest, null);
+      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 
@@ -324,7 +307,8 @@ class MockGetCallback implements Callback<ReadableStreamChannel> {
 
   /**
    * Sends the GET response to the client (or sends an appropriate error).
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is the actual blob data as a {@link ReadableStreamChannel}.
+   *               This is non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -334,11 +318,10 @@ class MockGetCallback implements Callback<ReadableStreamChannel> {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
-      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, result, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onResponseComplete(exception);
-      MockBlobStorageService.releaseResources(restRequest, result);
+    } finally {
+      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, result, exception);
     }
   }
 }
@@ -366,7 +349,8 @@ class MockPostCallback implements Callback<String> {
 
   /**
    * If there was no exception, updates the header with the location of the object.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is the blob ID of the blob. This is non null if the request executed
+   *               successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -379,11 +363,10 @@ class MockPostCallback implements Callback<String> {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
-      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onResponseComplete(exception);
-      MockBlobStorageService.releaseResources(restRequest, null);
+    } finally {
+      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 
@@ -420,7 +403,7 @@ class MockDeleteCallback implements Callback<Void> {
 
   /**
    * If there was no exception, updates the header with the acceptance of the request.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request. This is always null.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -434,11 +417,10 @@ class MockDeleteCallback implements Callback<Void> {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
-      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onResponseComplete(exception);
-      MockBlobStorageService.releaseResources(restRequest, null);
+    } finally {
+      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 }
@@ -463,7 +445,8 @@ class MockHeadCallback implements Callback<BlobInfo> {
   /**
    * If there was no exception, updates the header with the properties. Exceptions, if any, will be handled upon
    * submission.
-   * @param result The result of the request. This would be non null when the request executed successfully.
+   * @param result The result of the request i.e a {@link BlobInfo} object with the properties of the blob. This is
+   *               non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
    */
   @Override
@@ -476,11 +459,10 @@ class MockHeadCallback implements Callback<BlobInfo> {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
-      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      restResponseChannel.onResponseComplete(exception);
-      MockBlobStorageService.releaseResources(restRequest, null);
+    } finally {
+      MockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 

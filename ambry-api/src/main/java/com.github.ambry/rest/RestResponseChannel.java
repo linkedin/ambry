@@ -14,8 +14,8 @@ import java.util.Date;
  * This functionality is mostly required by implementations of {@link BlobStorageService} since they are agnostic to
  * both the REST protocol being used and the framework used for the implementation of {@link NioServer}.
  * <p/>
- * Typically, the RestResponseChannel wraps the underlying network channel andAPIs provided by the framework used for an implementation of
- * {@link NioServer} to return responses to clients.
+ * Typically, the RestResponseChannel wraps the underlying network channel and the APIs of the NIO framework to return
+ * responses to clients.
  * <p/>
  * Implementations are expected to be thread-safe but use with care across different threads since there are neither
  * ordering guarantees nor operation success guarantees (e.g. if an external thread closes the channel while a write
@@ -98,7 +98,7 @@ public interface RestResponseChannel extends WritableByteChannel {
   // Header helper functions.
   //
   // We will add more as we discover uses for them.
-  // 1. Haven't added one for http version because that is going to be 1.1 for now.
+  // -> Haven't added one for http version because that is going to be 1.1 for now.
   //
   // For the exception case, we directly convert the exception error code to a response code.
   //
@@ -115,7 +115,7 @@ public interface RestResponseChannel extends WritableByteChannel {
 
   /**
    * Sets the Content-Type of the response. Expected to be MIME types.
-   * @param type the content-type of the data in the response.
+   * @param type the type of the content in the response.
    * @throws RestServiceException if there is an error setting the header.
    */
   public void setContentType(String type)

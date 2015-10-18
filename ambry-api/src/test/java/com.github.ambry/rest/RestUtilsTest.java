@@ -198,24 +198,12 @@ public class RestUtilsTest {
   private void setAmbryHeaders(JSONObject headers, String contentLength, String ttlInSecs, String isPrivate,
       String serviceId, String contentType, String ownerId)
       throws JSONException {
-    if (contentLength != null) {
-      headers.put(RestConstants.Headers.Blob_Size, contentLength);
-    }
-    if (ttlInSecs != null) {
-      headers.put(RestConstants.Headers.TTL, ttlInSecs);
-    }
-    if (isPrivate != null) {
-      headers.put(RestConstants.Headers.Private, isPrivate);
-    }
-    if (serviceId != null) {
-      headers.put(RestConstants.Headers.Service_Id, serviceId);
-    }
-    if (contentType != null) {
-      headers.put(RestConstants.Headers.Content_Type, contentType);
-    }
-    if (ownerId != null) {
-      headers.put(RestConstants.Headers.Owner_Id, ownerId);
-    }
+    headers.putOpt(RestConstants.Headers.Blob_Size, contentLength);
+    headers.putOpt(RestConstants.Headers.TTL, ttlInSecs);
+    headers.putOpt(RestConstants.Headers.Private, isPrivate);
+    headers.putOpt(RestConstants.Headers.Service_Id, serviceId);
+    headers.putOpt(RestConstants.Headers.Content_Type, contentType);
+    headers.putOpt(RestConstants.Headers.Owner_Id, ownerId);
   }
 
   /**
@@ -258,10 +246,12 @@ public class RestUtilsTest {
    * Verifies that {@link RestUtils#buildBlobProperties(RestRequest)} fails if given a request with bad headers.
    * @param headers the headers that were provided to the request.
    * @param expectedCode the expected {@link RestServiceErrorCode} because of the failure.
-   * @throws Exception
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
    */
   private void verifyBlobPropertiesConstructionFailure(JSONObject headers, RestServiceErrorCode expectedCode)
-      throws Exception {
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
       RestUtils.buildBlobProperties(restRequest);
@@ -275,15 +265,15 @@ public class RestUtilsTest {
    * Adds extra values for the header {@code extraValueHeader} and tests that the right exception is thrown.
    * @param headers the headers that need to go with the request that is used to construct {@link BlobProperties}.
    * @param extraValueHeader the header for which extra values will be added.
-   * @throws Exception
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
    */
   private void tooManyValuesTest(JSONObject headers, String extraValueHeader)
-      throws Exception {
-    StringBuilder uriBuilder =
-        new StringBuilder("?").append(extraValueHeader).append("=").append("extraVal1").append("&")
-            .append(extraValueHeader).append("=").append("extraVal2");
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    String uri = "?" + extraValueHeader + "=extraVal1&" + extraValueHeader + "=extraVal2";
     try {
-      RestRequest restRequest = createRestRequest(RestMethod.POST, uriBuilder.toString(), headers);
+      RestRequest restRequest = createRestRequest(RestMethod.POST, uri, headers);
       RestUtils.buildBlobProperties(restRequest);
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {

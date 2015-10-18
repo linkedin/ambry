@@ -121,10 +121,6 @@ public class NettyResponseChannelTest {
     doOnResponseCompleteWithExceptionTest(TestingUri.OnResponseCompleteWithInternalServerError,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
-    // Throws Unknown RestServiceException. There should be a INTERNAL_SERVER_ERROR HTTP response.
-    doOnResponseCompleteWithExceptionTest(TestingUri.OnResponseCompleteWithUnknownErrorCode,
-        HttpResponseStatus.INTERNAL_SERVER_ERROR);
-
     // Throws RuntimeException. There should be a INTERNAL_SERVER_ERROR HTTP response.
     doOnResponseCompleteWithExceptionTest(TestingUri.OnResponseCompleteWithRuntimeException,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
@@ -502,12 +498,6 @@ enum TestingUri {
   OnResponseCompleteWithInternalServerError,
   /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
-   * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
-   * error code is {@link RestServiceErrorCode#UnknownErrorCode}.
-   */
-  OnResponseCompleteWithUnknownErrorCode,
-  /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
   OnResponseCompleteWithRuntimeException,
@@ -633,11 +623,6 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           restResponseChannel.onResponseComplete(
               new RestServiceException(TestingUri.OnResponseCompleteWithInternalServerError.toString(),
                   RestServiceErrorCode.InternalServerError));
-          break;
-        case OnResponseCompleteWithUnknownErrorCode:
-          restResponseChannel.onResponseComplete(
-              new RestServiceException(TestingUri.OnResponseCompleteWithUnknownErrorCode.toString(),
-                  RestServiceErrorCode.UnknownErrorCode));
           break;
         case OnResponseCompleteWithRuntimeException:
           restResponseChannel

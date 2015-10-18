@@ -36,9 +36,9 @@ public class ByteBufferRSC implements ReadableStreamChannel {
      * Called when an event (function call) finishes successfully in ByteBufferRSC. Does *not* trigger if the event
      * (function) fails.
      * @param byteBufferRSC the {@link ByteBufferRSC} where the event occurred.
-     * @param event the {@link ByteBufferRSC.Event} that occurred.
+     * @param event the {@link Event} that occurred.
      */
-    public void onEventComplete(ByteBufferRSC byteBufferRSC, ByteBufferRSC.Event event);
+    public void onEventComplete(ByteBufferRSC byteBufferRSC, Event event);
   }
 
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
@@ -111,9 +111,9 @@ public class ByteBufferRSC implements ReadableStreamChannel {
    * <p/>
    * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
    * in the function that triggers the event or inside this function.
-   * @param event the {@link ByteBufferRSC.Event} that just occurred.
+   * @param event the {@link Event} that just occurred.
    */
-  private void onEventComplete(ByteBufferRSC.Event event) {
+  private void onEventComplete(Event event) {
     synchronized (listeners) {
       for (EventListener listener : listeners) {
         try {

@@ -19,13 +19,11 @@ import org.json.JSONObject;
  * responseMetadata and responseBody (flushed or non-flushed) can be obtained through APIs to check correctness.
  * <p/>
  * The responseMetadata in constructed as a {@link JSONObject} that contains the following fields: -
- * 1. "responseStatus" - String - the response status, "OK" or "Error".
+ * 1. "responseStatus" - {@link ResponseStatus} as String - the response status.
  * 2. "responseHeaders" - {@link JSONObject} - the response headers as key value pairs.
- * In case of error it contains an additional field
- * 3. "errorMessage" - String - description of the error.
  * <p/>
  * List of possible responseHeaders: -
- * 1. "Content-Type" - String - the content type of the data in the response.
+ * 1. "Content-Type" - String - the type of the content in the response.
  * 2. "Content-Length" - Long - the length of content in the response.
  * 3. "Location" - String - The location of a newly created resource.
  * 4. "Last-Modified" - Date - The last modified time of the resource.
@@ -35,8 +33,8 @@ import org.json.JSONObject;
  * 8. "Date" - Date - The date of the response.
  * <p/>
  * When {@link #write(ByteBuffer)} is called, the input bytes are added to a {@link ByteArrayOutputStream}. This
- * represents the unflushed responseBody. On {@link #flush()}, the {@link ByteArrayOutputStream} is emptied into a
- * {@link StringBuilder} and reset. The {@link StringBuilder} represents the flushed responseBody.
+ * represents the unflushed responseBody. On {@link #flush()}, the {@link ByteArrayOutputStream} is emptied into another
+ * {@link ByteArrayOutputStream} and reset. The other {@link ByteArrayOutputStream} represents the flushed responseBody.
  * <p/>
  * All functions are synchronized because this is expected to be thread safe (very coarse grained but this is not
  * expected to be performant, just usable).
@@ -64,7 +62,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Callback that can be used to listen to events that happen inside {@link MockRestResponseChannel}.
+   * Callback that can be used to listen to events that happen inside MockRestResponseChannel.
    * <p/>
    * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
    * in the function that triggers the event or inside the function that notifies listeners.
@@ -75,9 +73,9 @@ public class MockRestResponseChannel implements RestResponseChannel {
      * Called when an event (function call) finishes successfully in MockRestResponseChannel. Does *not* trigger if the
      * event (function) fails.
      * @param mockRestResponseChannel the {@link MockRestResponseChannel} where the event occurred.
-     * @param event the {@link MockRestResponseChannel.Event} that occurred.
+     * @param event the {@link Event} that occurred.
      */
-    public void onEventComplete(MockRestResponseChannel mockRestResponseChannel, MockRestResponseChannel.Event event);
+    public void onEventComplete(MockRestResponseChannel mockRestResponseChannel, Event event);
   }
 
   // main fields
@@ -148,6 +146,8 @@ public class MockRestResponseChannel implements RestResponseChannel {
       this.cause = cause;
       try {
         if (!responseMetadataFinalized.get() && cause != null) {
+          // clear headers
+          responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
           setContentType("text/plain; charset=UTF-8");
           ResponseStatus status = ResponseStatus.InternalServerError;
           if (cause instanceof RestServiceException) {
@@ -204,37 +204,37 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setLastModified(Date lastModified)
+  public synchronized void setLastModified(Date lastModified)
       throws RestServiceException {
     setHeader(LAST_MODIFIED_KEY, lastModified, Event.SetLastModified);
   }
 
   @Override
-  public void setExpires(Date expireTime)
+  public synchronized void setExpires(Date expireTime)
       throws RestServiceException {
     setHeader(EXPIRES_KEY, expireTime, Event.SetExpires);
   }
 
   @Override
-  public void setCacheControl(String cacheControl)
+  public synchronized void setCacheControl(String cacheControl)
       throws RestServiceException {
     setHeader(CACHE_CONTROL_KEY, cacheControl, Event.SetCacheControl);
   }
 
   @Override
-  public void setPragma(String pragma)
+  public synchronized void setPragma(String pragma)
       throws RestServiceException {
     setHeader(PRAGMA_KEY, pragma, Event.SetPragma);
   }
 
   @Override
-  public void setDate(Date date)
+  public synchronized void setDate(Date date)
       throws RestServiceException {
     setHeader(DATE_KEY, date, Event.SetDate);
   }
 
   @Override
-  public void setHeader(String headerName, Object headerValue)
+  public synchronized void setHeader(String headerName, Object headerValue)
       throws RestServiceException {
     setHeader(headerName, headerValue, Event.SetHeader);
   }
@@ -294,10 +294,6 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Gets the responseMetadata if it has been flushed.
-   * @return the response metadata as a {@link JSONObject} if it has been flushed.
-   */
-  /**
    * Gets the response metadata based on {@code status}. Unflushed response metadata can change.
    * @param status the {@link DataStatus} of the data being returned.
    * @return the response metadata.
@@ -311,16 +307,18 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Gets the response body based on {@code dataStatus}.
+   * Gets the response body based on {@code dataStatus}. Unflushed response body can change.
    * @param status the {@link DataStatus} of the data being returned.
    * @return the response body.
    */
   public synchronized byte[] getResponseBody(DataStatus status) {
-    int size = flushedBodyBytes.size();
-    size += DataStatus.Unflushed.equals(status) ? unflushedBodyBytes.size() : 0;
-    byte[] content = new byte[size];
-    System.arraycopy(flushedBodyBytes.toByteArray(), 0, content, 0, flushedBodyBytes.size());
-    if (DataStatus.Unflushed.equals(status)) {
+    byte[] content;
+    if (DataStatus.Flushed.equals(status)) {
+      content = flushedBodyBytes.toByteArray();
+    } else {
+      int size = flushedBodyBytes.size() + unflushedBodyBytes.size();
+      content = new byte[size];
+      System.arraycopy(flushedBodyBytes.toByteArray(), 0, content, 0, flushedBodyBytes.size());
       System
           .arraycopy(unflushedBodyBytes.toByteArray(), 0, content, flushedBodyBytes.size(), unflushedBodyBytes.size());
     }
@@ -366,8 +364,8 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Gets the Throwable that was passed to {@link RestResponseChannel#onResponseComplete(Throwable)}, if any.
-   * @return the {@link Throwable} passed to {@link RestResponseChannel#onResponseComplete(Throwable)}.
+   * Gets the Throwable that was passed to {@link #onResponseComplete(Throwable)}, if any.
+   * @return the {@link Throwable} passed to {@link #onResponseComplete(Throwable)}.
    */
   public Throwable getCause() {
     return cause;
@@ -391,9 +389,9 @@ public class MockRestResponseChannel implements RestResponseChannel {
    * <p/>
    * Please *do not* write tests that check for events *not* arriving. Events will not arrive if there was an exception
    * in the function that triggers the event or inside this function.
-   * @param event the {@link MockRestResponseChannel.Event} that just occurred.
+   * @param event the {@link Event} that just occurred.
    */
-  private void onEventComplete(MockRestResponseChannel.Event event) {
+  private void onEventComplete(Event event) {
     synchronized (listeners) {
       for (EventListener listener : listeners) {
         try {

@@ -14,12 +14,11 @@ import java.util.Map;
  * arguments (in the form of parameters or headers). It also contains all the content associated with the request
  * and this content can be streamed out through the read operations.
  * <p/>
- * It is possible that the underlying request object is reference counted so it is important to retain it when
- * processing it async and to release it when done processing.
- * <p/>
- * Closing this channel also releases retained metadata.
- * <p/>
  * Implementations are expected to be thread-safe.
+ * <p/>
+ * NOTE: Most of the operations performed in the REST front end are async. Therefore any reference counted objects
+ * inside an implementation of this interface have to be retained for the life of the object. They can be released on
+ * {@link #close()}.
  */
 public interface RestRequest extends ReadableStreamChannel {
   /**

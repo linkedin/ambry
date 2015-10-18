@@ -480,7 +480,7 @@ public class AsyncRequestResponseHandlerTest {
         new EventMonitor<MockRestResponseChannel.Event>(MockRestResponseChannel.Event.OnRequestComplete);
     restResponseChannel.addListener(eventMonitor);
     responseHandler.handleResponse(restRequest, restResponseChannel, response, exception);
-    if (!eventMonitor.awaitEvent(1, TimeUnit.HOURS)) {
+    if (!eventMonitor.awaitEvent(1, TimeUnit.SECONDS)) {
       fail("awaitResponse took too long. There might be a problem or the timeout may need to be increased");
     }
   }

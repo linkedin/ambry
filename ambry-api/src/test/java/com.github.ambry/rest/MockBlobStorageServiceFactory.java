@@ -9,14 +9,14 @@ import com.github.ambry.router.Router;
  * Implementation of {@link BlobStorageServiceFactory} that can be used in tests.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link MockBlobStorageService} and returns a new
- * instance on {@link MockBlobStorageServiceFactory#getBlobStorageService()}.
+ * instance on {@link #getBlobStorageService()}.
  */
 public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory {
   private final VerifiableProperties verifiableProperties;
   private final Router router;
 
   public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Object reqsponseHandlerController, Router router) {
+      Object responseHandlerController, Router router) {
     this.verifiableProperties = verifiableProperties;
     this.router = router;
   }

@@ -123,6 +123,14 @@ public class RequestResponseHandlerControllerTest {
 
   //helpers
   //general
+
+  /**
+   * Creates and gets an instance of {@link RequestResponseHandlerController}.
+   * @param handlerCount the number of scaling units required inside the {@link RequestResponseHandlerController}.
+   * @return an instance of {@link RequestResponseHandlerController}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   private RequestResponseHandlerController createHandlerController(int handlerCount)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());

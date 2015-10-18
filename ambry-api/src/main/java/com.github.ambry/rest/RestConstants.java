@@ -25,7 +25,7 @@ public final class RestConstants {
      */
     public final static String Private = "x-ambry-private";
     /**
-     * optional in request; string; default unset; content type of blob
+     * mandatory in request; string; default unset; content type of blob
      */
     public final static String Content_Type = "x-ambry-content-type";
     /**
@@ -38,14 +38,6 @@ public final class RestConstants {
      * not allowed  in request / response only; string; time at which blob was created.
      */
     public final static String Creation_Time = "x-ambry-creation-time";
-    /**
-     * Header to indicate if the client request is internal to LinkedIn
-     */
-    public final static String AMBRY_CLIENT_HEADER = "x-li-ambry-client";
-    /**
-     * Value of x-li-ambry-client header for internal clients.
-     */
-    public final static String AMBRY_CLIENT_HEADER_INTERNAL = "Internal";
   }
 }
 

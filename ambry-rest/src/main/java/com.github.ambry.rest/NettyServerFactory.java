@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
  * Netty specific implementation of {@link NioServerFactory}.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link NettyServer} and returns a new instance on
- * {@link NettyServerFactory#getNioServer()}.
+ * {@link #getNioServer()}.
  */
 public class NettyServerFactory implements NioServerFactory {
 
@@ -19,6 +19,14 @@ public class NettyServerFactory implements NioServerFactory {
   private final RequestResponseHandlerController requestResponseHandlerController;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  /**
+   * Creates a new instance of NettyServerFactory.
+   * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
+   * @param metricRegistry the {@link MetricRegistry} to use.
+   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to obtain an
+   *                                         instance of {@link AsyncRequestResponseHandler} to handle requests.
+   * @throws InstantiationException if there is any problem instantiating the factory.
+   */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RequestResponseHandlerController requestResponseHandlerController)
       throws InstantiationException {

@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
  * Admin specific implementation of {@link BlobStorageServiceFactory}.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link AdminBlobStorageService} and returns a new
- * instance on {@link AdminBlobStorageServiceFactory#getBlobStorageService()}.
+ * instance on {@link #getBlobStorageService()}.
  */
 public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory {
   private final AdminConfig adminConfig;
@@ -25,12 +25,13 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Instantiate AdminBlobStorageServiceFactory with properties, metrics registry, a cluster map and a router.
+   * Creates a new instance of AdminBlobStorageServiceFactory.
    * @param verifiableProperties the properties to use to create configs.
    * @param clusterMap the {@link ClusterMap} to use.
    * @param responseHandlerController the {@link RequestResponseHandlerController} that can be used to request an
    *                                  instance of {@link com.github.ambry.rest.AsyncRequestResponseHandler}.
    * @param router the {@link Router} to use.
+   * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       RequestResponseHandlerController responseHandlerController, Router router) {

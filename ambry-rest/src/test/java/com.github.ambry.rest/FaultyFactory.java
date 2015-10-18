@@ -1,29 +1,23 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 
 
+/**
+ * Factory that returns null on any function.
+ * <p/>
+ * Public because factories are usually constructed via {@link com.github.ambry.utils.Utils#getObj(String, Object...)}
+ */
 public class FaultyFactory implements BlobStorageServiceFactory, NioServerFactory, RouterFactory {
 
   // for BlobStorageServiceFactory
-  public FaultyFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Router router) {
+  public FaultyFactory(Object obj1, Object obj2, Object obj3, Object obj4) {
     // don't care.
   }
 
-  // for NioServerFactory
-  public FaultyFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RequestResponseHandlerController requestResponseHandlerController) {
-    // don't care.
-  }
-
-  // for RouterFactory
-  public FaultyFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) {
+  // for NioServerFactory and RouterFactory
+  public FaultyFactory(Object obj1, Object obj2, Object obj3) {
     // don't care.
   }
 

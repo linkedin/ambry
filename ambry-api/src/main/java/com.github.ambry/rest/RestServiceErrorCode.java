@@ -8,17 +8,17 @@ import com.github.ambry.router.RouterErrorCode;
  * into certain "groups" that map to HTTP error codes.
  * <p/>
  * The groups are:
- * {@link #BadRequest}
- * {@link #InternalServerError}
- * {@link #UnknownErrorCode}
+ * {@link ResponseStatus#Gone}
+ * {@link ResponseStatus#NotFound}
+ * {@link ResponseStatus#BadRequest}
+ * {@link ResponseStatus#InternalServerError}
  * <p/>
  * About logging:
- * Generally, error codes belonging to the group {@link #BadRequest} are logged at DEBUG level. Those that belong to
- * {@link #InternalServerError} or {@link #UnknownErrorCode} are logged at ERROR level.
+ * Generally, error codes not belonging to the group {@link #InternalServerError} are logged at DEBUG level.
  */
 public enum RestServiceErrorCode {
   /**
-   * Resource has been deleted.
+   * Resource has been deleted or has expired.
    */
   Deleted,
 
@@ -28,16 +28,16 @@ public enum RestServiceErrorCode {
   NotFound,
 
   /**
-   * Generic BadRequest error code when client provides a request that is not fit for processing.
+   * Generic BadRequest error code when a client provides a request that is not fit for processing.
    */
   BadRequest,
   /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
-   * the number of arguments expected does not match.
+   * the number of values for an argument expected by the server does not match what the client sent.
    */
   InvalidArgs,
   /**
-   * Client has sent a request that is cannot be decoded using the REST protocol (usually HTTP).
+   * Client has sent a request that cannot be decoded using the REST protocol (usually HTTP).
    */
   MalformedRequest,
   /**
@@ -89,15 +89,11 @@ public enum RestServiceErrorCode {
    */
   RequestChannelClosed,
   /**
-   * Indicates failure of the RequestController to select and provide an instance of AsyncRequestResponseHandler.
-   */
-  RequestHandlerSelectionError,
-  /**
    * Indicates that the submitted request or response could not be queued in the AsyncRequestResponseHandler.
    */
   RequestResponseQueueingFailure,
   /**
-   * Indicates that there was a problem building the response (usually happens when the response is JSON).
+   * Indicates that there was a problem building the response.
    */
   ResponseBuildingFailure,
   /**
@@ -108,12 +104,7 @@ public enum RestServiceErrorCode {
    * Indicates a {@link RestMethod} is not supported (May also indicate a bug where behaviour for a new
    * {@link RestMethod} has not been defined in the implementation).
    */
-  UnsupportedRestMethod,
-
-  /**
-   * Error code group that catches all RestServiceErrorCodes that are not defined as part of a group.
-   */
-  UnknownErrorCode;
+  UnsupportedRestMethod;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.

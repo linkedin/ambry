@@ -75,6 +75,13 @@ public class NettyServerFactoryTest {
 
   // helpers
   // general
+
+  /**
+   * Gets an instance of {@link RequestResponseHandlerController}.
+   * @return an instance of {@link RequestResponseHandlerController}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   private RequestResponseHandlerController getRequestHandlerController()
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());

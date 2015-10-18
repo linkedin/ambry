@@ -1,6 +1,5 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.util.Iterator;
@@ -18,11 +17,11 @@ import org.slf4j.LoggerFactory;
  * Asynchronously handles requests and responses that are submitted.
  * <p/>
  * Requests are submitted by a {@link NioServer} and asynchronously routed to a {@link BlobStorageService}. Responses
- * are usually submitted through {@link Callback}s from beyond the {@link BlobStorageService} layer and asynchronously
- * sent to the client. In both pathways, this class enables the non-blocking paradigm.
+ * are usually submitted from beyond the {@link BlobStorageService} layer and asynchronously sent to the client. In both
+ * pathways, this class enables a non-blocking paradigm.
  * <p/>
  * Multiple instances are created by the {@link RequestResponseHandlerController} and each instance runs continuously to
- * handle submitted request.
+ * handle submitted requests and responses.
  * <p/>
  * Requests are queued on submission and handed off to the {@link BlobStorageService} when they are dequeued. Responses
  * are entered into a set/map that is continuously iterated upon and response bytes that are ready are sent to the
@@ -45,7 +44,7 @@ public class AsyncRequestResponseHandler {
    * Builds a AsyncRequestResponseHandler by creating a worker thread for handling queued requests and responses.
    * @param restServerMetrics the {@link RestServerMetrics} instance to use to track metrics.
    */
-  public AsyncRequestResponseHandler(RestServerMetrics restServerMetrics) {
+  protected AsyncRequestResponseHandler(RestServerMetrics restServerMetrics) {
     this.restServerMetrics = restServerMetrics;
     asyncHandlerWorker = new AsyncHandlerWorker(restServerMetrics);
     workerThread = new Thread(asyncHandlerWorker);
@@ -54,55 +53,8 @@ public class AsyncRequestResponseHandler {
   }
 
   /**
-   * Does startup tasks for the AsyncRequestResponseHandler. When the function returns, startup is FULLY complete.
-   * @throws IllegalStateException if a {@link BlobStorageService} has not been set before starting.
-   * @throws InstantiationException if the AsyncRequestResponseHandler is unable to start.
-   */
-  public void start()
-      throws InstantiationException {
-    if (!isRunning()) {
-      if (asyncHandlerWorker.isReadyToStart()) {
-        logger.info("Starting AsyncRequestResponseHandler");
-        workerThread.start();
-        logger.info("AsyncRequestResponseHandler has started");
-      } else {
-        throw new IllegalStateException("BlobStorageService has not been set");
-      }
-    }
-  }
-
-  /**
-   * Does shutdown tasks for the AsyncRequestResponseHandler. When the function returns, shutdown is FULLY complete.
-   * <p/>
-   * Any requests/responses queued after shutdown is called might be dropped.
-   * <p/>
-   * The {@link NioServer} is expected to have stopped queueing new requests before this function is called.
-   */
-  public void shutdown() {
-    if (isRunning()) {
-      logger.info("Shutting down AsyncRequestResponseHandler with {} requests and {} responses still in queue",
-          getRequestQueueSize(), getResponseSetSize());
-      long shutdownBeginTime = System.currentTimeMillis();
-      try {
-        asyncHandlerWorker.shutdown();
-        if (!asyncHandlerWorker.awaitShutdown(30, TimeUnit.SECONDS)) {
-          logger.error("Shutdown of AsyncRequestResponseHandler failed. This should not happen");
-          restServerMetrics.asyncRequestHandlerShutdownError.inc();
-        }
-      } catch (InterruptedException e) {
-        logger.error("Await shutdown of AsyncRequestResponseHandler was interrupted. It might not have shutdown", e);
-        restServerMetrics.asyncRequestHandlerShutdownError.inc();
-      } finally {
-        long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
-        logger.info("AsyncRequestResponseHandler shutdown took {} ms", shutdownTime);
-        restServerMetrics.asyncRequestHandlerShutdownTimeInMs.update(shutdownTime);
-      }
-    }
-  }
-
-  /**
    * Queues the {@code restRequest} to be handled async. When this function returns, it may not be handled yet. When
-   * the response is ready, {@link RestResponseChannel} will be used ot send the response.
+   * the response is ready, {@link RestResponseChannel} will be used to send the response.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} on which a response to the request may be sent.
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
@@ -148,6 +100,53 @@ public class AsyncRequestResponseHandler {
       throw new RestServiceException(
           "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
           RestServiceErrorCode.ServiceUnavailable);
+    }
+  }
+
+  /**
+   * Does startup tasks for the AsyncRequestResponseHandler. When the function returns, startup is FULLY complete.
+   * @throws IllegalStateException if a {@link BlobStorageService} has not been set before starting.
+   * @throws InstantiationException if the AsyncRequestResponseHandler is unable to start.
+   */
+  protected void start()
+      throws InstantiationException {
+    if (!isRunning()) {
+      if (asyncHandlerWorker.isReadyToStart()) {
+        logger.info("Starting AsyncRequestResponseHandler");
+        workerThread.start();
+        logger.info("AsyncRequestResponseHandler has started");
+      } else {
+        throw new IllegalStateException("BlobStorageService has not been set");
+      }
+    }
+  }
+
+  /**
+   * Does shutdown tasks for the AsyncRequestResponseHandler. When the function returns, shutdown is FULLY complete.
+   * <p/>
+   * Any requests/responses queued might be dropped during shutdown.
+   * <p/>
+   * The {@link NioServer} is expected to have stopped queueing new requests before this function is called.
+   */
+  protected void shutdown() {
+    if (isRunning()) {
+      logger.info("Shutting down AsyncRequestResponseHandler with {} requests and {} responses still in queue",
+          getRequestQueueSize(), getResponseSetSize());
+      long shutdownBeginTime = System.currentTimeMillis();
+      try {
+        asyncHandlerWorker.shutdown();
+        if (!asyncHandlerWorker.awaitShutdown(30, TimeUnit.SECONDS)) {
+          logger.error("Shutdown of AsyncRequestResponseHandler failed. This should not happen");
+          restServerMetrics.asyncRequestHandlerShutdownError.inc();
+        }
+      } catch (InterruptedException e) {
+        logger.error("Await shutdown of AsyncRequestResponseHandler was interrupted. It might not have shutdown", e);
+        restServerMetrics.asyncRequestHandlerShutdownError.inc();
+      } finally {
+        long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
+        logger.info("AsyncRequestResponseHandler shutdown took {} ms", shutdownTime);
+        restServerMetrics.asyncRequestHandlerShutdownTimeInMs.update(shutdownTime);
+      }
     }
   }
 
@@ -240,6 +239,10 @@ class AsyncHandlerWorker implements Runnable {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Used to query whether the AsyncHandlerWorker is ready to start.
+   * @return {@code true} if ready to start, otherwise {@code false}.
+   */
   protected boolean isReadyToStart() {
     return blobStorageService != null;
   }
@@ -313,8 +316,7 @@ class AsyncHandlerWorker implements Runnable {
    * Queues the response to be handled async. When this function returns, it may not be sent yet.
    * @param restRequest the {@link RestRequest} for which the response has been constructed.
    * @param restResponseChannel the {@link RestResponseChannel} to be used to send the response.
-   * @param response a {@link ReadableStreamChannel} that represents the response to the
-   *                                {@code restRequest}.
+   * @param response a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
    * @param exception if the response could not be constructed, the reason for the failure.
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
    * @throws RestServiceException if there is any error while processing the response.
@@ -515,6 +517,13 @@ class AsyncHandlerWorker implements Runnable {
   private void onResponseComplete(RestResponseChannel restResponseChannel, Exception exception, boolean forceClose) {
     restServerMetrics.dequeuedRequestHandlerRequestCompletionRate.mark();
     restResponseChannel.onResponseComplete(exception);
+    if (forceClose) {
+      try {
+        restResponseChannel.close();
+      } catch (IOException e) {
+        // log and metrics.
+      }
+    }
   }
 
   /**

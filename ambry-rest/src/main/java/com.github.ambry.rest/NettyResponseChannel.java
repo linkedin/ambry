@@ -414,6 +414,9 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     String fullMsg = "Failure: " + getHttpResponseStatus(status) + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
+    // clear any response headers
+    responseMetadata.headers().clear();
+    // write new headers.
     setStatus(status);
     setContentType("text/plain; charset=UTF-8");
     setContentLength(fullMsg.length());

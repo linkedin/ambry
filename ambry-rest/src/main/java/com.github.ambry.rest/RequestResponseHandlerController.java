@@ -26,6 +26,12 @@ public class RequestResponseHandlerController {
       new ArrayList<AsyncRequestResponseHandler>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
 
+  /**
+   * Creates a new instance of {@link RequestResponseHandlerController}.
+   * @param handlerCount the number of {@link AsyncRequestResponseHandler} instance required. Has to be > 0.
+   * @param restServerMetrics the {@link RestServerMetrics} instance to use.
+   * @throws IllegalArgumentException if {@code handlerCount} <= 0.
+   */
   public RequestResponseHandlerController(int handlerCount, RestServerMetrics restServerMetrics) {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
@@ -39,14 +45,15 @@ public class RequestResponseHandlerController {
   }
 
   /**
-   * Returns a {@link AsyncRequestResponseHandler} that can be used to handle incoming requests.
+   * Returns a {@link AsyncRequestResponseHandler} that can be used to handle incoming requests or send outgoing
+   * responses.
    * <p/>
    * If {@link RequestResponseHandlerController#start()} was not called before a call to this function, it is not
    * guaranteed that the {@link AsyncRequestResponseHandler} is started and available for use.
    * <p/>
    * Multiple calls to this function (even by the same thread) can return different instances of
    * {@link AsyncRequestResponseHandler} and no order/pattern can be expected.
-   * @return a {@link AsyncRequestResponseHandler} that can be used to handle requests..
+   * @return a {@link AsyncRequestResponseHandler} that can be used to handle requests/responses.
    */
   public AsyncRequestResponseHandler getHandler() {
     int index = currIndex.getAndIncrement();
@@ -73,8 +80,8 @@ public class RequestResponseHandlerController {
   protected void start()
       throws InstantiationException {
     logger.info("Starting RequestResponseHandlerController with {} request handler(s)", requestResponseHandlers.size());
-    for (int i = 0; i < requestResponseHandlers.size(); i++) {
-      requestResponseHandlers.get(i).start();
+    for (AsyncRequestResponseHandler requestResponseHandler : requestResponseHandlers) {
+      requestResponseHandler.start();
     }
     logger.info("RequestResponseHandlerController has started");
   }

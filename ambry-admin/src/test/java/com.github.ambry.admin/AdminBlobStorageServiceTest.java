@@ -130,6 +130,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void useServiceWithoutStartTest()
       throws Exception {
+    // simulating by shutting down first.
     adminBlobStorageService.shutdown();
     // fine to use without start.
     echoTest();
@@ -655,7 +656,6 @@ public class AdminBlobStorageServiceTest {
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restResponseChannel = new MockRestResponseChannel();
     callback = new PostCallback(restRequest, restResponseChannel, adminTestResponseHandler, blobProperties);
-    BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
     callback.onCompletion("BlobId", null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
     // resources should have been cleaned up.
@@ -717,7 +717,6 @@ public class AdminBlobStorageServiceTest {
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restResponseChannel = new MockRestResponseChannel();
     callback = new DeleteCallback(restRequest, restResponseChannel, adminTestResponseHandler);
-    BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
     callback.onCompletion(null, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
     // resources should have been cleaned up.
