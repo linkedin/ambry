@@ -50,19 +50,14 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.util.EnumSet;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-
-import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -70,6 +65,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class ReplicationTest {
@@ -313,8 +311,8 @@ public class ReplicationTest {
 
     public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
         StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-        Map<PartitionId, MockStore> stores) {
-      super(config, scheduler, registry, replicas, factory, recovery, hardDelete);
+        Map<PartitionId, MockStore> stores) throws StoreException {
+      super(config, scheduler, registry, replicas, factory, recovery, hardDelete, SystemTime.getInstance());
       this.stores = stores;
     }
 
@@ -341,10 +339,11 @@ public class ReplicationTest {
       }
 
       @Override
-      public void writeTo(WritableByteChannel channel)
+      public long writeTo(WritableByteChannel channel)
           throws IOException {
-        channel.write(bufferList.get(index));
+        long written = channel.write(bufferList.get(index));
         index++;
+        return written;
       }
 
       @Override

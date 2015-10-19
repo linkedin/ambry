@@ -1,17 +1,24 @@
 package com.github.ambry.store;
 
+import java.io.DataInputStream;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+
 
 public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
   HashMap<Long, MessageInfo> dummyMap;
+
   public DummyMessageStoreHardDelete(HashMap<Long, MessageInfo> dummyMap) {
     this.dummyMap = dummyMap;
   }
+
   public DummyMessageStoreHardDelete() {
   }
+
   @Override
-  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory) {
+  public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+      List<byte[]> recoveryInfoList) {
     return new Iterator<HardDeleteInfo>() {
       @Override
       public boolean hasNext() {

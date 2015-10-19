@@ -8,6 +8,15 @@ public class MockTime extends Time {
   public long currentNanoSeconds;
   public long sleepTimeExpected;
 
+  public MockTime(long initialMilliseconds) {
+    currentMilliseconds = initialMilliseconds;
+    currentNanoSeconds = initialMilliseconds * NsPerMs;
+  }
+
+  public MockTime() {
+    this(0);
+  }
+
   @Override
   public long milliseconds() {
     return currentMilliseconds;
@@ -35,6 +44,7 @@ public class MockTime extends Time {
   @Override
   public void wait(Object o, long ms)
     throws InterruptedException {
+    sleepTimeExpected = ms;
     sleep(ms);
   }
 }

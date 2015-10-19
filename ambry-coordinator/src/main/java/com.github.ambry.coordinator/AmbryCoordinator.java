@@ -2,34 +2,33 @@ package com.github.ambry.coordinator;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.CoordinatorConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolFactory;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Utils;
-import java.util.ArrayList;
-import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Random;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.utils.Utils.getRandomLong;
 
@@ -146,8 +145,10 @@ public class AmbryCoordinator implements Coordinator {
   }
 
   private OperationContext getOperationContext() {
-    return new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
+    OperationContext oc = new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
         coordinatorMetrics, responseHandler, sslEnabledDatacenters);
+    logger.trace("Operation context " + oc);
+    return oc;
   }
 
   private PartitionId getPartitionForPut()
@@ -169,6 +170,7 @@ public class AmbryCoordinator implements Coordinator {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);
+      logger.trace("BlobId created " + blobId + " with partition " + blobId.getPartition());
     } catch (Exception e) {
       logger.error("Caller passed in invalid BlobId " + blobIdString);
       throw new CoordinatorException("BlobId is invalid " + blobIdString, CoordinatorError.InvalidBlobId);

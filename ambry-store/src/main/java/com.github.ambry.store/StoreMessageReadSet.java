@@ -1,5 +1,7 @@
 package com.github.ambry.store;
 
+import java.io.DataInputStream;
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.File;
@@ -19,6 +21,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   private final Long ttl;
   private final StoreKey storeKey;
   private Logger logger = LoggerFactory.getLogger(getClass());
+
+  private static final short version = 0;
+  private static final short Version_Length = 2;
+  private static final short Offset_Length = 8;
+  private static final short Size_Length = 8;
+  private static final short TTL_Length = 8;
 
   BlobReadOptions(long offset, long size, long ttl, StoreKey storeKey) {
     this.offset = offset;
@@ -55,6 +63,32 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
   @Override
   public int compareTo(BlobReadOptions o) {
     return offset.compareTo(o.getOffset());
+  }
+
+  public byte[] toBytes() {
+    byte[] buf = new byte[Version_Length + Offset_Length + Size_Length + TTL_Length + storeKey.sizeInBytes()];
+    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
+    bufWrap.putShort(version);
+    bufWrap.putLong(offset);
+    bufWrap.putLong(size);
+    bufWrap.putLong(TTL_Length);
+    bufWrap.put(storeKey.toBytes());
+    return buf;
+  }
+
+  public static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory)
+      throws IOException {
+    short version = stream.readShort();
+    switch(version) {
+      case 0:
+        long offset = stream.readLong();
+        long size = stream.readLong();
+        long ttl = stream.readLong();
+        StoreKey key = factory.getStoreKey(stream);
+        return new BlobReadOptions(offset, size, ttl, key);
+      default:
+        throw new IOException("Unknown version encountered for BlobReadOptions");
+    }
   }
 }
 
