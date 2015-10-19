@@ -37,11 +37,13 @@ class BlockingChannelInfo {
   private int maxConnectionsPerHostPerPort;
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
+  private final MetricRegistry registry;
 
   public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     this.config = config;
     this.port = port;
+    this.registry = registry;
     if (port.getPortType() == PortType.SSL) {
       maxConnectionsPerHostPerPort = config.connectionPoolMaxConnectionsPerPortSSL;
     } else {
@@ -176,7 +178,7 @@ class BlockingChannelInfo {
           config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
           config.connectionPoolConnectTimeoutMs);
     } else if (this.port.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
+      channel = new SSLBlockingChannel(host, port, registry, config.connectionPoolReadBufferSizeBytes,
           config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
           config.connectionPoolConnectTimeoutMs, sslSocketFactory, sslConfig);
     }

@@ -40,7 +40,7 @@ public final class ToolUtils {
 
   public static Properties createSSLProperties(String sslEnabledDatacenters, String sslKeystorePath,
       String sslKeyStoreType, String sslKeystorePassword, String keyPassword, String sslTruststorePath,
-      String sslTruststorePassword) {
+      String sslTruststorePassword, String sslCipherSuites) {
     Properties props = new Properties();
     props.put("ssl.context.protocol", "TLS");
     props.put("ssl.context.provider", "SunJSSE");
@@ -56,7 +56,7 @@ public final class ToolUtils {
     props.put("ssl.truststore.type", "JKS");
     props.put("ssl.truststore.path", sslTruststorePath);
     props.put("ssl.truststore.password", sslTruststorePassword);
-    props.put("ssl.cipher.suites", "TLS_RSA_WITH_AES_128_CBC_SHA");
+    props.put("ssl.cipher.suites", sslCipherSuites);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
