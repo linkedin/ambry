@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * Represents a {@link ByteBuffer} as a {@link com.github.ambry.router.ReadableStreamChannel}.
+ * Represents a {@link ByteBuffer} as a {@link ReadableStreamChannel}.
  */
 public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
