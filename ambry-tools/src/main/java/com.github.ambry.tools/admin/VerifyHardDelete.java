@@ -110,8 +110,6 @@ class HardDeleteVerifier {
 
   private long getOffsetFromCleanupToken(File cleanupTokenFile)
       throws Exception {
-    FindToken startToken;
-    FindToken endToken;
     long parsedTokenValue = -1;
     if (cleanupTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
@@ -124,12 +122,14 @@ class HardDeleteVerifier {
         StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
         FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
-        startToken = factory.getFindToken(stream);
-        endToken = factory.getFindToken(stream);
+        FindToken startToken = factory.getFindToken(stream);
+        //read past the end token.
+        factory.getFindToken(stream);
 
         ByteBuffer bytebufferToken = ByteBuffer.wrap(startToken.toBytes());
-        if (bytebufferToken.getShort() != 0) {
-          throw new IllegalArgumentException("token version is unknown");
+        short tokenVersion = bytebufferToken.getShort();
+        if (tokenVersion != 0) {
+          throw new IllegalArgumentException("token version: " + tokenVersion + " is unknown");
         }
         int sessionIdsize = bytebufferToken.getInt();
         bytebufferToken.position(bytebufferToken.position() + sessionIdsize);
@@ -146,17 +146,15 @@ class HardDeleteVerifier {
         for (int i = 0; i < num; i++) {
           // Read BlobReadOptions
           short blobReadOptionsVersion = stream.readShort();
-          switch (blobReadOptionsVersion) {
-            case 0:
-              long offset = stream.readLong();
-              long sz = stream.readLong();
-              long ttl = stream.readLong();
-              StoreKey key = storeKeyFactory.getStoreKey(stream);
-              storeKeyList.add(key);
-              break;
-            default:
-              throw new IllegalStateException("Unknown blobReadOptionsVersion: " + blobReadOptionsVersion);
+          if (blobReadOptionsVersion != 0) {
+            throw new IllegalStateException("Unknown blobReadOptionsVersion: " + blobReadOptionsVersion);
           }
+          long offset = stream.readLong();
+          long sz = stream.readLong();
+          long ttl = stream.readLong();
+          StoreKey key = storeKeyFactory.getStoreKey(stream);
+          storeKeyList.add(key);
+          break;
         }
         for (int i = 0; i < num; i++) {
           int length = stream.readInt();
@@ -232,46 +230,44 @@ class HardDeleteVerifier {
       DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
       //System.out.println("Dumping index " + indexFileToDump.getName() + " for " + replica);
       short version = stream.readShort();
-      //System.out.println("version " + version);
-      if (version == 0) {
-        int keysize = stream.readInt();
-        int valueSize = stream.readInt();
-        long segmentEndOffset = stream.readLong();
-        if (segmentStartOffset > offsetUpto) {
-          if (!blobMap.equals(offRangeMap)) {
-            System.out.println(
-                "Reached the last segment with segment start offset " + segmentStartOffset + " greater than offsetUpto "
-                    + offsetUpto);
-            //switch to offRangeMap for subsequent entries.
-            blobMap = offRangeMap;
-          }
-        } else {
-          lastEligibleSegmentEndOffset = segmentEndOffset;
+      if (version != 0) {
+        throw new IllegalStateException("Unknown index file version: " + version);
+      }
+      int keysize = stream.readInt();
+      int valueSize = stream.readInt();
+      long segmentEndOffset = stream.readLong();
+      if (segmentStartOffset > offsetUpto) {
+        if (!blobMap.equals(offRangeMap)) {
+          System.out.println(
+              "Reached the last segment with segment start offset " + segmentStartOffset + " greater than offsetUpto "
+                  + offsetUpto);
+          //switch to offRangeMap for subsequent entries.
+          blobMap = offRangeMap;
         }
-        int Crc_Size = 8;
-        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
-        while (stream.available() > Crc_Size) {
-          BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
-          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
-          stream.read(value);
-          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
-          boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-          numberOfKeysProcessed++;
-          IndexValue oldValue = blobMap.get(key);
-          if (oldValue != null) {
-            // If there was an old entry for the same key, then ensure that the old value was not a delete
-            // and the new value *is* a delete.
-            if (oldValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              System.err.println("Old value was a delete and is getting replaced!");
-            }
-            if (!blobValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              System.err.println("New value is not a delete!");
-            }
-            blobMap.put(key, blobValue);
-          } else {
-            blobMap.put(key, blobValue);
+      } else {
+        lastEligibleSegmentEndOffset = segmentEndOffset;
+      }
+      int Crc_Size = 8;
+      StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
+      while (stream.available() > Crc_Size) {
+        BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
+        byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+        stream.read(value);
+        IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+        boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
+        numberOfKeysProcessed++;
+        IndexValue oldValue = blobMap.get(key);
+        if (oldValue != null) {
+          // If there was an old entry for the same key, then ensure that the old value was not a delete
+          // and the new value *is* a delete.
+          if (oldValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+            System.err.println("Old value was a delete and is getting replaced!");
+          }
+          if (!blobValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+            System.err.println("New value is not a delete!");
           }
         }
+        blobMap.put(key, blobValue);
       }
     }
 
@@ -289,19 +285,9 @@ class HardDeleteVerifier {
     return true;
   }
 
-  private boolean verifyMatch(byte[] arr, byte[] old_arr)
-      throws Exception {
+  private boolean verifyMatch(byte[] arr, byte[] old_arr) {
       /* Compare arr and old_arr */
-    if (arr.length != old_arr.length) {
-      System.err.println(" Old data length is different from new data length");
-      return false;
-    }
-    for (int i = 0; i < arr.length; i++) {
-      if (arr[i] != old_arr[i]) {
-        return false;
-      }
-    }
-    return true;
+    return Arrays.equals(arr, old_arr);
   }
 
   /**
@@ -309,7 +295,7 @@ class HardDeleteVerifier {
    *
 
    *
-   *  0. Read cleanupToken and get the conservative offset till hard deletes have surely been done.
+   *  0. Read cleanupToken and get the conservative offset till which hard deletes have surely been done.
    *  1. Read and store the index file entries (read all into memory).
    *  2. Scan the log up to the last segment's log end offset.
    *  3. For each entry:
@@ -335,8 +321,7 @@ class HardDeleteVerifier {
    * 3. Goes through the log file and for each blob that is deleted in the
    * @throws Exception
    */
-  public void verifyHardDeletes()
-      throws Exception {
+  public void verifyHardDeletes() {
     final String Cleanup_Token_Filename = "cleanuptoken";
 
     try {
@@ -365,7 +350,6 @@ class HardDeleteVerifier {
       /* The statistics we need to compute.*/
 
       // This says whether there were any entries in the log that could not be deserialized or had invalid version etc.
-      // Ideally, this should be 0.
       boolean invalidEntriesInlog = false;
 
       // Number of blobs that have a mismatch with their corresponding entry in the original log - the
@@ -424,7 +408,7 @@ class HardDeleteVerifier {
             }
 
             // read blob id
-            BlobId id = null;
+            BlobId id;
             try {
               id = new BlobId(new DataInputStream(streamlog), map);
               if (oldDataDir != null) {
@@ -444,7 +428,7 @@ class HardDeleteVerifier {
             }
 
             IndexValue indexValue = rangeMap.get(id);
-            boolean isDeleted;
+            boolean isDeleted = false;
             if (indexValue == null) {
               System.err.println("Key in log not found in index: " + id);
               invalidEntriesInlog = true;
@@ -452,15 +436,13 @@ class HardDeleteVerifier {
               continue;
             } else if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               isDeleted = true;
-            } else {
-              isDeleted = false;
             }
+
             if (header.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              BlobProperties props = null;
+              BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
               ByteBuffer metadata = null;
               BlobOutput output = null;
-              props = MessageFormatRecord.deserializeBlobProperties(streamlog);
               boolean caughtException = false;
               try {
                 metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
@@ -469,6 +451,7 @@ class HardDeleteVerifier {
                 System.err.println(
                     "Exception while deserializing, offset: " + currentOffset + " delete state: " + (isDeleted ? "true"
                         : "false"));
+                e.printStackTrace();
                 caughtException = true;
                 if (!isDeleted) {
                   corruptNonDeleted++;
@@ -480,7 +463,6 @@ class HardDeleteVerifier {
               ByteBuffer oldMetadata = null;
               BlobOutput oldOutput = null;
               if (oldDataDir != null) {
-                //oldRandomAccessFile.seek(randomAccessFile.getFilePointer());
                 oldProps = MessageFormatRecord.deserializeBlobProperties(oldStreamlog);
                 try {
                   oldMetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
@@ -513,6 +495,8 @@ class HardDeleteVerifier {
                       // bugs.
                       duplicatePuts++;
                     }
+                  } else {
+                    hardDeletedPuts++;
                   }
                 } else {
                   if (oldDataDir != null && (!verifyMatch(metadata.array(), oldMetadata.array()) || !verifyMatch(Utils
@@ -521,17 +505,19 @@ class HardDeleteVerifier {
                       .readBytesFromStream(oldOutput.getStream(), new byte[(int) oldOutput.getSize()], 0,
                           (int) oldOutput.getSize())))) {
                     IndexValue value = offRangeMap.get(id);
+
+                    // this is basically a best effort to see if any mismatch that was seen - that is a blob is hard
+                    // deleted in the newer datadir but not in the old datadir - is due to the fact that these records
+                    // were deleted later on (between the time the old data dir was saved off and the time that the new
+                    // data dir was saved off).
                     if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
                       mismatchAccountedInNewerSegments++;
                     } else {
                       mismatchWithOld = true;
                     }
+                  } else {
+                    unDeletedPuts++;
                   }
-                }
-                if (isDeleted) {
-                  hardDeletedPuts++;
-                } else {
-                  unDeletedPuts++;
                 }
               }
             } else {
