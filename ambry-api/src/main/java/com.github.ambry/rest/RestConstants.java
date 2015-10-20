@@ -35,7 +35,7 @@ public final class RestConstants {
      */
     public final static String Owner_Id = "x-ambry-owner-id";
     /**
-     * not allowed  in request / response only; string; time at which blob was created.
+     * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
     public final static String Creation_Time = "x-ambry-creation-time";
   }
