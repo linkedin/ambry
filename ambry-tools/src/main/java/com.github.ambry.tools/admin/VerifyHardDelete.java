@@ -225,50 +225,56 @@ class HardDeleteVerifier {
     HashMap<BlobId, IndexValue> blobMap = rangeMap;
     int numberOfKeysProcessed = 0;
     for (File indexFile : indexFiles) {
-      long segmentStartOffset = Long.parseLong(indexFile.getName().substring(0, indexFile.getName().indexOf("_", 0)));
+      DataInputStream stream = null;
+      try {
+        long segmentStartOffset = Long.parseLong(indexFile.getName().substring(0, indexFile.getName().indexOf("_", 0)));
         /* Read each index file as long as it is within the endToken and populate a map with the status of the blob.*/
-      DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
-      short version = stream.readShort();
-      if (version != 0) {
-        throw new IllegalStateException("Unknown index file version: " + version);
-      }
-      int keysize = stream.readInt();
-      int valueSize = stream.readInt();
-      long segmentEndOffset = stream.readLong();
-      if (segmentStartOffset > offsetUpto) {
-        if (!blobMap.equals(offRangeMap)) {
-          System.out.println(
-              "Reached the last segment with segment start offset " + segmentStartOffset + " greater than offsetUpto "
-                  + offsetUpto);
-          //switch to offRangeMap for subsequent entries.
-          blobMap = offRangeMap;
+        stream = new DataInputStream(new FileInputStream(indexFile));
+        short version = stream.readShort();
+        if (version != 0) {
+          throw new IllegalStateException("Unknown index file version: " + version);
         }
-      } else {
-        lastEligibleSegmentEndOffset = segmentEndOffset;
-      }
-      int Crc_Size = 8;
-      StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
-      while (stream.available() > Crc_Size) {
-        BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
-        byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
-        stream.read(value);
-        IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
-        boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-        numberOfKeysProcessed++;
-        IndexValue oldValue = blobMap.get(key);
-        if (oldValue != null) {
-          // If there was an old entry for the same key, then ensure that the old value was not a delete
-          // and the new value *is* a delete.
-          if (oldValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            System.err.println("Old value was a delete and is getting replaced!");
+        int keysize = stream.readInt();
+        int valueSize = stream.readInt();
+        long segmentEndOffset = stream.readLong();
+        if (segmentStartOffset > offsetUpto) {
+          if (!blobMap.equals(offRangeMap)) {
+            System.out.println(
+                "Reached the last segment with segment start offset " + segmentStartOffset + " greater than offsetUpto "
+                    + offsetUpto);
+            //switch to offRangeMap for subsequent entries.
+            blobMap = offRangeMap;
           }
-          if (!blobValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            System.err.println("New value is not a delete!");
-          }
+        } else {
+          lastEligibleSegmentEndOffset = segmentEndOffset;
         }
-        blobMap.put(key, blobValue);
+        int Crc_Size = 8;
+        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
+        while (stream.available() > Crc_Size) {
+          BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
+          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+          stream.read(value);
+          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
+          numberOfKeysProcessed++;
+          IndexValue oldValue = blobMap.get(key);
+          if (oldValue != null) {
+            // If there was an old entry for the same key, then ensure that the old value was not a delete
+            // and the new value *is* a delete.
+            if (oldValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              System.err.println("Old value was a delete and is getting replaced!");
+            }
+            if (!blobValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              System.err.println("New value is not a delete!");
+            }
+          }
+          blobMap.put(key, blobValue);
+        }
+      } finally {
+        if (stream != null) {
+          stream.close();
+        }
       }
-      stream.close();
     }
 
     System.out.println("Total number of keys processed " + numberOfKeysProcessed);
