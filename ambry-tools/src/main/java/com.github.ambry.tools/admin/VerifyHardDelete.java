@@ -45,7 +45,7 @@ class HardDeleteVerifier {
   private final String oldDataDir;
   private HashMap<BlobId, IndexValue> rangeMap;
   private HashMap<BlobId, IndexValue> offRangeMap;
-  private final short HARD_DELETE_TOKEN_V0 = 0;
+  private static final short HARD_DELETE_TOKEN_V0 = 0;
 
   public HardDeleteVerifier(ClusterMap map, String dataDir, String oldDataDir, String outFile) {
     this.map = map;
@@ -115,6 +115,7 @@ class HardDeleteVerifier {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
       try {
+        // The format of the cleanup token is documented in PersistentIndex.persistCleanupToken()
         short version = stream.readShort();
         if (version != HARD_DELETE_TOKEN_V0) {
           throw new IllegalStateException("Unknown version encountered while parsing cleanup token");
@@ -154,7 +155,6 @@ class HardDeleteVerifier {
           long ttl = stream.readLong();
           StoreKey key = storeKeyFactory.getStoreKey(stream);
           storeKeyList.add(key);
-          break;
         }
         for (int i = 0; i < num; i++) {
           int length = stream.readInt();
@@ -228,7 +228,6 @@ class HardDeleteVerifier {
       long segmentStartOffset = Long.parseLong(indexFile.getName().substring(0, indexFile.getName().indexOf("_", 0)));
         /* Read each index file as long as it is within the endToken and populate a map with the status of the blob.*/
       DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
-      //System.out.println("Dumping index " + indexFileToDump.getName() + " for " + replica);
       short version = stream.readShort();
       if (version != 0) {
         throw new IllegalStateException("Unknown index file version: " + version);
@@ -269,6 +268,7 @@ class HardDeleteVerifier {
         }
         blobMap.put(key, blobValue);
       }
+      stream.close();
     }
 
     System.out.println("Total number of keys processed " + numberOfKeysProcessed);
@@ -283,11 +283,6 @@ class HardDeleteVerifier {
       }
     }
     return true;
-  }
-
-  private boolean verifyMatch(byte[] arr, byte[] old_arr) {
-      /* Compare arr and old_arr */
-    return Arrays.equals(arr, old_arr);
   }
 
   /**
@@ -319,13 +314,15 @@ class HardDeleteVerifier {
    * 2. Reads the index files and stores everything upto the conservative offset above in a "rangeMap" and the later
    *    entries in an "offRangeMap".
    * 3. Goes through the log file and for each blob that is deleted in the
-   * @throws Exception
+   * @throws IOException
    */
-  public void verifyHardDeletes() {
+  public void verifyHardDeletes()
+      throws IOException {
     final String Cleanup_Token_Filename = "cleanuptoken";
 
+    FileWriter fileWriter = null;
     try {
-      FileWriter fileWriter = new FileWriter(new File(outFile));
+      fileWriter = new FileWriter(new File(outFile));
       long offsetInCleanupToken = getOffsetFromCleanupToken(new File(dataDir, Cleanup_Token_Filename));
       rangeMap = new HashMap<BlobId, IndexValue>();
       offRangeMap = new HashMap<BlobId, IndexValue>();
@@ -359,6 +356,11 @@ class HardDeleteVerifier {
 
       // Same as above, but provides the number of blobs that are zeroed out in the new log that were deleted after the
       // last eligible segment. Ideally this should be 0.
+      // Basically, there could have been deletes between the startToken (which determines the last eligible segment)
+      // and the endToken that the rangeMap (which has entries till the last eligible segment) does not reflect. The
+      // hard delete thread could have processed these deletes, so a mismatch that we see could be due to that.
+      // Therefore, those kind of mismatches will be counted toward this count and not towards
+      // mismatchWithOldErrorCount.
       long mismatchAccountedInNewerSegments = 0;
 
       // Number of deleted blobs before the end point represented by the cleanup token, which do not have the blob
@@ -402,9 +404,9 @@ class HardDeleteVerifier {
 
             /* Verify that the header is the same in old and new log files */
             if (oldDataDir != null) {
-              ByteBuffer oldBuffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+              ByteBuffer oldBuffer = ByteBuffer.allocate(buffer.capacity());
               oldRandomAccessFile.read(oldBuffer.array(), 0, oldBuffer.capacity());
-              mismatchWithOld = !verifyMatch(buffer.array(), oldBuffer.array());
+              mismatchWithOld = !Arrays.equals(buffer.array(), oldBuffer.array());
             }
 
             // read blob id
@@ -499,8 +501,8 @@ class HardDeleteVerifier {
                     hardDeletedPuts++;
                   }
                 } else {
-                  if (oldDataDir != null && (!verifyMatch(metadata.array(), oldMetadata.array()) || !verifyMatch(Utils
-                      .readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
+                  if (oldDataDir != null && (!Arrays.equals(metadata.array(), oldMetadata.array()) || !Arrays.equals(
+                      Utils.readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
                           (int) output.getSize()), Utils
                       .readBytesFromStream(oldOutput.getStream(), new byte[(int) oldOutput.getSize()], 0,
                           (int) oldOutput.getSize())))) {
@@ -555,12 +557,15 @@ class HardDeleteVerifier {
       msg += "\n============";
       fileWriter.write(msg);
       System.out.println(msg);
-      fileWriter.flush();
-      fileWriter.close();
     } catch (IOException ioException) {
       System.out.println("IOException thrown " + ioException);
     } catch (Exception exception) {
       System.out.println("Exception thrown " + exception);
+    } finally {
+      if (fileWriter != null) {
+        fileWriter.flush();
+        fileWriter.close();
+      }
     }
   }
 }
