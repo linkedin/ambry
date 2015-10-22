@@ -663,7 +663,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         restResponseChannel.onResponseComplete(null);
       }
     } else {
-      throw new RestServiceException("Received data without a request", RestServiceErrorCode.NoRequest);
+      throw new RestServiceException("Received data without a request", RestServiceErrorCode.InvalidRequestState);
     }
   }
 

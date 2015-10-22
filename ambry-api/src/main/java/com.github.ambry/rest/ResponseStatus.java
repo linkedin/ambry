@@ -51,9 +51,9 @@ public enum ResponseStatus {
         return ResponseStatus.NotFound;
       case BadRequest:
       case InvalidArgs:
+      case InvalidRequestState:
       case MalformedRequest:
       case MissingArgs:
-      case NoRequest:
       case UnknownHttpObject:
       case UnsupportedHttpMethod:
       case UnsupportedOperation:

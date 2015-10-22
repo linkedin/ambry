@@ -56,6 +56,7 @@ public interface RestResponseChannel extends WritableByteChannel {
    * Typically {@link #onResponseComplete(Throwable)} will take care of closing the channel if required. It will
    * handle keep-alive headers and close the channel gracefully as opposed to this function which will simply close
    * the channel abruptly.
+   * {@inheritDoc}
    * @throws IOException if there was a problem closing the channel.
    */
   @Override

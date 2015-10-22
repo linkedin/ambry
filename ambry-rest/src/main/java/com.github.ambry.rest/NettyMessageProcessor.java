@@ -270,21 +270,23 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   private void handleContent(HttpContent httpContent)
       throws RestServiceException {
-    try {
-      if (request != null) {
-        logger.trace("Received content for request - {}", request.getUri());
+    if (request != null) {
+      logger.trace("Received content for request - {}", request.getUri());
+      try {
         request.addContent(httpContent);
-        if (!RestMethod.POST.equals(request.getRestMethod())) {
-          requestHandler.handleRequest(request, responseChannel);
-        }
-      } else {
-        logger.warn("Received content without a request on channel {}", ctx.channel());
-        nettyMetrics.noRequestError.inc();
-        throw new RestServiceException("Received content without a request", RestServiceErrorCode.NoRequest);
+      } catch (IllegalStateException e) {
+        throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
+      } catch (ClosedChannelException e) {
+        throw new RestServiceException("The request has been closed and is not accepting content",
+            RestServiceErrorCode.RequestChannelClosed);
       }
-    } catch (ClosedChannelException e) {
-      throw new RestServiceException("The request has been closed and is not accepting content",
-          RestServiceErrorCode.RequestChannelClosed);
+      if (!RestMethod.POST.equals(request.getRestMethod())) {
+        requestHandler.handleRequest(request, responseChannel);
+      }
+    } else {
+      logger.warn("Received content without a request on channel {}", ctx.channel());
+      nettyMetrics.noRequestError.inc();
+      throw new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState);
     }
   }
 

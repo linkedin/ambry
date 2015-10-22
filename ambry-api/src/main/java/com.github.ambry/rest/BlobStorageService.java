@@ -5,8 +5,9 @@ package com.github.ambry.rest;
  * that communicates with a storage backend).
  * <p/>
  * Typically, a BlobStorageService is expected to receive requests from the RESTful frontend, handle them as required
- * and either send a response (if immediately available) or pass control to another component that do further handling
- * and generate a response. The information received from the scaling layer should be enough to perform these functions.
+ * and either send a response (if immediately available) or pass control to another component that does further handling
+ * and generates a response. The information received from the scaling layer should be enough to perform these
+ * functions.
  * <p/>
  * Most operations are performed async and responses are therefore queued asynchronously instead of being available at
  * the end of the function call.

@@ -37,6 +37,11 @@ public enum RestServiceErrorCode {
    */
   InvalidArgs,
   /**
+   * Client has sent request content without sending request metadata first or has sent content when no content
+   * was expected (for e.g. content with {@link RestMethod#GET}).
+   */
+  InvalidRequestState,
+  /**
    * Client has sent a request that cannot be decoded using the REST protocol (usually HTTP).
    */
   MalformedRequest,
@@ -45,10 +50,6 @@ public enum RestServiceErrorCode {
    * service the request.
    */
   MissingArgs,
-  /**
-   * Client has sent request content without sending request metadata first.
-   */
-  NoRequest,
   /**
    * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
    * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
