@@ -404,7 +404,7 @@ class HardDeleteVerifier {
             ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             buffer.putShort(version);
             randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-            buffer.clear();
+            buffer.flip();
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
 
