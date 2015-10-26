@@ -38,7 +38,6 @@ public class RequestResponseHandlerController {
       createRequestHandlers(handlerCount);
       restServerMetrics.trackRequestHandlerHealth(requestResponseHandlers);
     } else {
-      restServerMetrics.requestHandlerControllerInstantiationError.inc();
       throw new IllegalArgumentException("Handlers to be created has to be > 0. Is " + handlerCount);
     }
     logger.trace("Instantiated RequestResponseHandlerController");

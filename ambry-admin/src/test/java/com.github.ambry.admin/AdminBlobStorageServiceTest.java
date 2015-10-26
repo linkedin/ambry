@@ -49,6 +49,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+// TODO: tests for both result and exception null in callbacks.
 
 /**
  * Unit tests for {@link AdminBlobStorageService}.
@@ -459,6 +460,9 @@ public class AdminBlobStorageServiceTest {
     HeadForGetCallback callback =
         new HeadForGetCallback(restRequest, restResponseChannel, adminTestResponseHandler, router, 0);
     callback.onCompletion(null, null);
+    // there should be an exception
+    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
+        adminTestResponseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
@@ -531,6 +535,9 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     GetCallback callback = new GetCallback(restRequest, restResponseChannel, adminTestResponseHandler);
     callback.onCompletion(null, null);
+    // there should be an exception
+    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
+        adminTestResponseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
@@ -608,6 +615,9 @@ public class AdminBlobStorageServiceTest {
     PostCallback callback =
         new PostCallback(restRequest, restResponseChannel, adminTestResponseHandler, blobProperties);
     callback.onCompletion(null, null);
+    // there should be an exception
+    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
+        adminTestResponseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
@@ -740,6 +750,9 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     HeadCallback callback = new HeadCallback(restRequest, restResponseChannel, adminTestResponseHandler);
     callback.onCompletion(null, null);
+    // there should be an exception
+    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
+        adminTestResponseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
@@ -1367,7 +1380,7 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public RestMethod getRestMethod() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
@@ -1377,7 +1390,7 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public String getUri() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
@@ -1398,7 +1411,7 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public long getSize() {
-    throw new IllegalStateException("Not implemented");
+    return -1;
   }
 
   @Override
@@ -1415,7 +1428,7 @@ class BadRSC implements ReadableStreamChannel {
 
   @Override
   public long getSize() {
-    throw new IllegalStateException("Not implemented");
+    return -1;
   }
 
   @Override

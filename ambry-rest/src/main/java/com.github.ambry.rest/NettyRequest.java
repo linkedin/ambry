@@ -40,6 +40,7 @@ class NettyRequest implements RestRequest {
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
@@ -112,6 +113,8 @@ class NettyRequest implements RestRequest {
     if (channelOpen.compareAndSet(true, false)) {
       try {
         contentLock.lock();
+        logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
+        // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
         Iterator<NettyContent> nettyContentIterator = requestContents.iterator();
         while (nettyContentIterator.hasNext()) {
           nettyContentIterator.next().release();
@@ -191,7 +194,10 @@ class NettyRequest implements RestRequest {
           if (currentBytesWritten == -1) {
             NettyContent nettyContent = requestContents.remove(0);
             nettyContent.release();
-            streamEnded.set(nettyContent.isLast());
+            if (nettyContent.isLast()) {
+              logger.trace("Content stream has ended in NettyRequest {}", getUri());
+              streamEnded.set(true);
+            }
           } else {
             bytesWritten += currentBytesWritten;
           }

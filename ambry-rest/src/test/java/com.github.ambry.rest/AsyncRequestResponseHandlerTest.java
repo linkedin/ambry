@@ -766,7 +766,7 @@ class BadRSC implements ReadableStreamChannel {
 
   @Override
   public long getSize() {
-    throw new IllegalStateException("Not implemented");
+    return -1;
   }
 
   @Override
@@ -888,22 +888,22 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public RestMethod getRestMethod() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public String getPath() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public String getUri() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public Map<String, List<String>> getArgs() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
