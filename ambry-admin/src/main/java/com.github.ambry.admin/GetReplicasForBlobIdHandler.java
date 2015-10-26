@@ -53,6 +53,7 @@ class GetReplicasForBlobIdHandler {
       restResponseChannel.setContentType("application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
+      // TODO: rethink these processing metrics.
       long processingTime = System.currentTimeMillis() - startTime;
       adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
       restRequest.getMetrics().addToTotalTime(processingTime);

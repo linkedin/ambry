@@ -50,6 +50,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+// TODO: tests for both result and exception null in callbacks.
 
 /**
  * Unit tests for {@link AdminBlobStorageService}.
