@@ -173,7 +173,7 @@ class NettyServerDeployer implements Runnable {
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
       try {
-        if (!workerGroup.awaitTermination(30, TimeUnit.SECONDS) || !bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
+        if (!(workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS))) {
           logger.error("NettyServer shutdown failed after waiting for 30 seconds");
           nettyMetrics.nettyServerShutdownError.inc();
         }

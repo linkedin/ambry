@@ -40,6 +40,7 @@ class NettyRequest implements RestRequest {
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
@@ -110,8 +111,10 @@ class NettyRequest implements RestRequest {
   public void close()
       throws IOException {
     if (channelOpen.compareAndSet(true, false)) {
-      contentLock.lock();
       try {
+        contentLock.lock();
+        logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
+        // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
         Iterator<NettyContent> nettyContentIterator = requestContents.iterator();
         while (nettyContentIterator.hasNext()) {
           nettyContentIterator.next().release();
@@ -133,7 +136,7 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#Blob_Size}. If there is
+   * Returns the value of the ambry specific content length header ({@link RestConstants.Headers#Blob_Size}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, tries to infer content
    * size. If that cannot be done, returns 0.
    * <p/>
@@ -144,8 +147,8 @@ class NettyRequest implements RestRequest {
   @Override
   public long getSize() {
     long contentLength;
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size, null) != null) {
-      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size));
+    if (HttpHeaders.getHeader(request, RestConstants.Headers.Blob_Size, null) != null) {
+      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestConstants.Headers.Blob_Size));
     } else {
       contentLength = HttpHeaders.getContentLength(request, 0);
     }
@@ -155,15 +158,12 @@ class NettyRequest implements RestRequest {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
+    int bytesWritten = streamEnded.get() ? -1 : 0;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
-    } else if (streamEnded.get()) {
-      bytesWritten = -1;
-    } else {
-      bytesWritten = 0;
-      contentLock.lock();
+    } else if (!streamEnded.get()) {
       try {
+        contentLock.lock();
         // We read from the NettyContent at the head of the list until :-
         // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
         //      ends.
@@ -194,7 +194,10 @@ class NettyRequest implements RestRequest {
           if (currentBytesWritten == -1) {
             NettyContent nettyContent = requestContents.remove(0);
             nettyContent.release();
-            streamEnded.set(nettyContent.isLast());
+            if (nettyContent.isLast()) {
+              logger.trace("Content stream has ended in NettyRequest {}", getUri());
+              streamEnded.set(true);
+            }
           } else {
             bytesWritten += currentBytesWritten;
           }
@@ -220,13 +223,13 @@ class NettyRequest implements RestRequest {
    */
   public void addContent(HttpContent httpContent)
       throws ClosedChannelException {
-    if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
+    if (!RestMethod.POST.equals(getRestMethod()) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
       NettyContent nettyContent = new NettyContent(httpContent);
-      contentLock.lock();
       try {
+        contentLock.lock();
         if (!isOpen()) {
           throw new ClosedChannelException();
         }
@@ -251,29 +254,29 @@ class NettyContent {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Wraps the {@code httpContent} so that is easier to read.
-   * @param httpContent the {@link HttpContent} that needs to be wrapped.
-   * @throws IllegalArgumentException if {@code httpContent} is null.
+   * Wraps the {@code content} so that is easier to read.
+   * @param content the {@link HttpContent} that needs to be wrapped.
+   * @throws IllegalArgumentException if {@code content} is null.
    */
-  public NettyContent(HttpContent httpContent) {
-    if (httpContent == null) {
+  public NettyContent(HttpContent content) {
+    if (content == null) {
       throw new IllegalArgumentException("Received null HttpContent");
-    } else if (httpContent.content().nioBufferCount() > 0) {
+    } else if (content.content().nioBufferCount() > 0) {
       // not a copy.
-      contentChannel = new ByteBufferReadableStreamChannel(httpContent.content().nioBuffer());
-      this.content = httpContent;
+      contentChannel = new ByteBufferReadableStreamChannel(content.content().nioBuffer());
+      this.content = content;
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
-      logger.warn("Http httpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
-      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
-      httpContent.content().readBytes(contentBuffer);
+      logger.warn("Http content had to be copied because ByteBuf did not have a backing ByteBuffer");
+      ByteBuffer contentBuffer = ByteBuffer.allocate(content.content().capacity());
+      content.content().readBytes(contentBuffer);
       contentChannel = new ByteBufferReadableStreamChannel(contentBuffer);
-      // no need to retain httpContent since we have a copy.
+      // no need to retain content since we have a copy.
       this.content = null;
     }
     // LastHttpContent in the end marker in netty http world.
-    isLast = httpContent instanceof LastHttpContent;
+    isLast = content instanceof LastHttpContent;
   }
 
   /**

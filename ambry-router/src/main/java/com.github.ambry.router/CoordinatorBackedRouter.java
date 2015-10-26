@@ -69,6 +69,7 @@ public class CoordinatorBackedRouter implements Router {
           "Router scaling unit count defined in config should be > 0 (is " + routerConfig.routerScalingUnitCount + ")");
     }
     this.coordinator = coordinator;
+    logger.trace("Instantiated CoordinatorBackedRouter");
   }
 
   @Override
@@ -78,6 +79,7 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
+    logger.trace("Beginning getBlobInfo for {}", blobId);
     FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
     CoordinatorOperation operation =
         new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.GetBlobInfo);
@@ -92,6 +94,7 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+    logger.trace("Beginning getBlob for {}", blobId);
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     CoordinatorOperation operation =
         new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.GetBlob);
@@ -107,6 +110,7 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
+    logger.trace("Beginning putBlob");
     FutureResult<String> futureResult = new FutureResult<String>();
     CoordinatorOperation operation =
         new CoordinatorOperation(coordinator, futureResult, blobProperties, usermetadata, channel, callback);
@@ -121,6 +125,7 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+    logger.trace("Beginning deleteBlob for {}", blobId);
     FutureResult<Void> futureResult = new FutureResult<Void>();
     CoordinatorOperation operation =
         new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.DeleteBlob);
@@ -142,6 +147,7 @@ public class CoordinatorBackedRouter implements Router {
         operationPool.awaitTermination(1, TimeUnit.MINUTES);
       }
     } catch (InterruptedException e) {
+      // TODO: metrics.
       logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
     }
   }
@@ -201,6 +207,8 @@ enum CoordinatorOperationType {
  * Thread that performs the required {@link CoordinatorOperationType} using the blocking APIs of a {@link Coordinator}.
  */
 class CoordinatorOperation implements Runnable {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+
   // general
   private final Coordinator coordinator;
   private final FutureResult futureResult;
@@ -260,6 +268,7 @@ class CoordinatorOperation implements Runnable {
     this.futureResult = futureResult;
     this.callback = callback;
     this.opType = opType;
+    logger.trace("Instantiated CoordinatorOperation for {} operation", this.opType);
   }
 
   @Override
@@ -269,29 +278,40 @@ class CoordinatorOperation implements Runnable {
     try {
       switch (opType) {
         case GetBlob:
+          logger.trace("Beginning coordinator getBlob");
           BlobOutput blobOutput = coordinator.getBlob(blobId);
           // (int) blobOutput.getSize() will not work for blobs >2GB in size but that is not a concern right now.
           // CoordinatorBackedRouter will be long gone before (if) we support blobs with that size.
+          logger.trace("Finished coordinator getBlob");
           byte[] buf = Utils.readBytesFromStream(blobOutput.getStream(), (int) blobOutput.getSize());
+          logger.trace("Blob data has completely arrived");
           operationResult = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
           break;
         case GetBlobInfo:
+          logger.trace("Beginning coordinator getBlobProperties");
           blobProperties = coordinator.getBlobProperties(blobId);
+          logger.trace("Finished coordinator getBlobProperties. Beginning coordinator getBlobUserMetadata");
           ByteBuffer usermetadataBuffer = coordinator.getBlobUserMetadata(blobId);
+          logger.trace("Finished coordinator getBlobUserMetadata.");
           if (usermetadataBuffer.hasArray()) {
             usermetadata = usermetadataBuffer.array();
           } else {
+            logger.trace("Usermetadata buffer was not backed by an array. Copying the data");
             usermetadata = new byte[usermetadataBuffer.capacity()];
             usermetadataBuffer.get(usermetadata);
           }
           operationResult = new BlobInfo(blobProperties, usermetadata);
           break;
         case PutBlob:
+          logger.trace("Beginning coordinator putBlob");
           operationResult = coordinator
               .putBlob(blobProperties, ByteBuffer.wrap(usermetadata), new ReadableStreamChannelInputStream(channel));
+          logger.trace("Finished coordinator putBlob");
           break;
         case DeleteBlob:
+          logger.trace("Beginning coordinator deleteBlob");
           coordinator.deleteBlob(blobId);
+          logger.trace("Finished coordinator deleteBlob");
           break;
         default:
           throw new IllegalStateException("Unsupported CoordinatorOperationType - " + opType);

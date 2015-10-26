@@ -47,6 +47,7 @@ class EchoHandler {
       restResponseChannel.setContentType("application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
     } finally {
+      // TODO: rethink these processing metrics.
       long processingTime = System.currentTimeMillis() - startTime;
       logger.trace("Processing echo response for request {} took {} ms", restRequest.getUri(), processingTime);
       adminMetrics.echoProcessingTimeInMs.update(processingTime);
