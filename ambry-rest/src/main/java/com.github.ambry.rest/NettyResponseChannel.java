@@ -120,15 +120,16 @@ class NettyResponseChannel implements RestResponseChannel {
     if (ctx.channel().isWritable()) {
       emptyingFlushRequired.set(true);
       int bytesToWrite = Math.min(src.remaining(), ctx.channel().config().getWriteBufferLowWaterMark());
-      logger.trace("Adding {} bytes of data to response on channel {}", bytesToWrite, ctx.channel());
       ByteBuf buf =
           Unpooled.wrappedBuffer(src.array(), src.arrayOffset() + src.position(), bytesToWrite).order(src.order());
+      logger.trace("Writing {} bytes to channel {}", bytesToWrite, ctx.channel());
       ChannelFuture writeFuture = writeToChannel(new DefaultHttpContent(buf), ChannelWriteType.Safe);
       if (!writeFuture.isDone() || writeFuture.isSuccess()) {
         bytesWritten = bytesToWrite;
         src.position(src.position() + bytesToWrite);
       }
     } else if (emptyingFlushRequired.compareAndSet(true, false)) {
+      // TODO: metrics.
       flush();
     }
     return bytesWritten;
@@ -169,6 +170,7 @@ class NettyResponseChannel implements RestResponseChannel {
           }
           writeToChannel(new DefaultLastHttpContent(), ChannelWriteType.Unsafe);
         } else {
+          // TODO: rename metric?
           nettyMetrics.requestHandlingError.inc();
           if (isOpen() && !responseMetadataWritten.get()) {
             sendErrorResponse(cause);
@@ -297,6 +299,8 @@ class NettyResponseChannel implements RestResponseChannel {
     try {
       verifyChannelActive();
       if (ChannelWriteType.Safe.equals(channelWriteType) && !ctx.channel().isWritable()) {
+        // TODO: metrics.
+        logger.debug("writeToChannel discovered that the channel is not writable. Not an error but unexpected");
         emptyingFlushRequired.set(true);
         return ctx.newFailedFuture(new BufferOverflowException());
       }
@@ -304,7 +308,6 @@ class NettyResponseChannel implements RestResponseChannel {
       // While this class makes sure that close happens only after all writes of this class are complete, any external
       // thread that has a direct reference to the ChannelHandlerContext can close the channel at any time and we
       // might not have got in our write when the channel was requested to be closed.
-      logger.trace("Writing to channel {}", ctx.channel());
       lastWriteFuture = channelWriteResultListener.trackWrite(ctx.write(httpObject));
       return lastWriteFuture;
     } finally {
@@ -373,6 +376,10 @@ class NettyResponseChannel implements RestResponseChannel {
     }
   }
 
+  /**
+   * Builds and sends an error response to the client based on {@code cause}.
+   * @param cause the cause of the request handling failure.
+   */
   private void sendErrorResponse(Throwable cause) {
     try {
       logger.trace("Sending error response to client on channel {}", ctx.channel());
@@ -383,9 +390,9 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.error("Swallowing write exception encountered while sending error response to client on channel {}",
             ctx.channel(), errorResponseWrite.cause());
         nettyMetrics.responseSendingError.inc();
-        // close the connection anyway so that the client knows something went wrong.
       }
     } catch (Exception e) {
+      // TODO: metrics.
       logger.debug("Could not send error response", e);
     }
   }
@@ -408,6 +415,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
     } else {
       status = ResponseStatus.InternalServerError;
+      // TODO: this should be tracked at the scaling layer - not here.
       nettyMetrics.unknownExceptionError.inc();
     }
     String fullMsg = "Failure: " + getHttpResponseStatus(status) + errReason;
@@ -443,9 +451,11 @@ class NettyResponseChannel implements RestResponseChannel {
         status = HttpResponseStatus.BAD_REQUEST;
         break;
       case NotFound:
+        // TODO: metrics.
         status = HttpResponseStatus.NOT_FOUND;
         break;
       case Gone:
+        // TODO: metrics.
         status = HttpResponseStatus.GONE;
         break;
       case InternalServerError:
@@ -453,6 +463,7 @@ class NettyResponseChannel implements RestResponseChannel {
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
         break;
       default:
+        // TODO: change name of metric.
         nettyMetrics.unknownRestServiceExceptionError.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
         break;
@@ -487,6 +498,8 @@ class NettyResponseChannel implements RestResponseChannel {
     return true;
   }
 }
+
+// TODO: This needs a total rework.
 
 /**
  * Class that tracks multiple writes and takes actions on completion of those writes.
