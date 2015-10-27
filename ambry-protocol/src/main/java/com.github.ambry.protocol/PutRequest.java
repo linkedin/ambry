@@ -88,7 +88,7 @@ public class PutRequest extends RequestOrResponse {
       throws IOException {
     long totalWritten = 0;
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(Math.max((int)sizeInBytes(), MAX_WRITE_BUFFER_SIZE));
+      bufferToSend = ByteBuffer.allocate(Math.min((int)sizeInBytes(), MAX_WRITE_BUFFER_SIZE));
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
