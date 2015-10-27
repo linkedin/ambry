@@ -376,13 +376,13 @@ public class AsyncRequestResponseHandlerTest {
         assertEquals("Requests queue size mismatch", requests.size(), handler.getRequestQueueSize());
         assertEquals("Responses queue size mismatch", responses.size(), handler.getResponseSetSize());
 
-        // try queuing a response for a request that is already queued
+        // try queueing a response for a request that is already queued
         try {
           handler.handleResponse(restRequest, restResponseChannel,
               new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), null);
-          fail("Response queuing should have thrown exception since the request is duplicate");
+          fail("Response queueing should have thrown exception since the request is duplicate");
         } catch (RestServiceException e) {
-          assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestResponseQueuingFailure,
+          assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestResponseQueueingFailure,
               e.getErrorCode());
         }
       } else {
@@ -919,7 +919,7 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public RestRequestMetrics getMetrics() {
-    return new RestRequestMetrics();
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
