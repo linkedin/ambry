@@ -25,6 +25,8 @@ public class PutRequest extends RequestOrResponse {
   private BlobProperties properties;
 
   private static final int UserMetadata_Size_InBytes = 4;
+  private static final int MAX_WRITE_BUFFER_SIZE = (16 * 1024);
+  // buffer size set to 16K due to net read buffer size at the server side
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, InputStream data) {
@@ -86,7 +88,7 @@ public class PutRequest extends RequestOrResponse {
       throws IOException {
     long totalWritten = 0;
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(sizeExcludingData());
+      bufferToSend = ByteBuffer.allocate(Math.max((int)sizeInBytes(), MAX_WRITE_BUFFER_SIZE));
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
