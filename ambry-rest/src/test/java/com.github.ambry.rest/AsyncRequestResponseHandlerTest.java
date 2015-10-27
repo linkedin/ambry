@@ -918,6 +918,11 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  public RestRequestMetrics getMetrics() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public long getSize() {
     throw new IllegalStateException("Not implemented");
   }

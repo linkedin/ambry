@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -282,8 +283,15 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   private void onRequestAborted(Throwable cause) {
     if (responseChannel != null) {
-      String uri = request != null ? request.getUri() : null;
-      logger.trace("Request {} is aborted", uri);
+      if(request != null) {
+        logger.trace("Request {} is aborted", request.getUri());
+        try {
+          request.close();
+        } catch (IOException e) {
+          logger.error("Error while closing request", e);
+          // TODO: metrics.
+        }
+      }
       // TODO: metrics.
       responseChannel.onResponseComplete(cause);
     } else {

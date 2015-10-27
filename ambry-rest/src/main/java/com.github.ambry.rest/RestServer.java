@@ -66,8 +66,9 @@ public class RestServer {
       throw new IllegalArgumentException(errorMessage.toString());
     }
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
-    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
+    RestRequestMetrics.setDefaults(clusterMap.getMetricRegistry());
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     try {
       requestResponseHandlerController =
           new RequestResponseHandlerController(restServerConfig.restServerScalingUnitCount, restServerMetrics);
