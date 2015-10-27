@@ -26,7 +26,7 @@ public class PutRequest extends RequestOrResponse {
 
   private static final int UserMetadata_Size_InBytes = 4;
   private static final int MAX_WRITE_BUFFER_SIZE = (16 * 1024);
-  // buffer size set to 16K due to net read buffer size at the server side
+  // max buffer size for the data to be sent across the network
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, InputStream data) {
