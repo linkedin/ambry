@@ -46,7 +46,6 @@ class GetReplicasForBlobIdHandler {
       ClusterMap clusterMap, AdminMetrics adminMetrics)
       throws RestServiceException {
     logger.trace("Handling getReplicasForBlobId - {}", restRequest.getUri());
-    adminMetrics.getReplicasForBlobIdRate.mark();
     long startTime = System.currentTimeMillis();
     ReadableStreamChannel channel = null;
     try {
@@ -54,11 +53,11 @@ class GetReplicasForBlobIdHandler {
       restResponseChannel.setContentType("application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
-      // TODO: rethink these processing metrics.
       long processingTime = System.currentTimeMillis() - startTime;
       logger.trace("Processing getReplicasForBlobId response for request {} took {} ms", restRequest.getUri(),
           processingTime);
       adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
+      restRequest.getMetrics().addToTotalTime(processingTime);
     }
     return channel;
   }

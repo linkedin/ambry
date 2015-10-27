@@ -39,7 +39,6 @@ class EchoHandler {
       AdminMetrics adminMetrics)
       throws RestServiceException {
     logger.trace("Handling echo - {}", restRequest.getUri());
-    adminMetrics.echoRate.mark();
     long startTime = System.currentTimeMillis();
     ReadableStreamChannel channel = null;
     try {
@@ -47,10 +46,10 @@ class EchoHandler {
       restResponseChannel.setContentType("application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
     } finally {
-      // TODO: rethink these processing metrics.
       long processingTime = System.currentTimeMillis() - startTime;
       logger.trace("Processing echo response for request {} took {} ms", restRequest.getUri(), processingTime);
       adminMetrics.echoProcessingTimeInMs.update(processingTime);
+      restRequest.getMetrics().addToTotalTime(processingTime);
     }
     return channel;
   }

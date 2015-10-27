@@ -223,6 +223,11 @@ public class MockRestRequest implements RestRequest {
     onEventComplete(Event.Close);
   }
 
+  @Override
+  public RestRequestMetrics getMetrics() {
+    return new RestRequestMetrics();
+  }
+
   /**
    * Register to be notified about events that occur in this MockRestRequest.
    * @param listener the listener that needs to be notified of events.
