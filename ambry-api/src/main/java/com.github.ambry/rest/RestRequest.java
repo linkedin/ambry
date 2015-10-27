@@ -49,7 +49,8 @@ public interface RestRequest extends ReadableStreamChannel {
   public Map<String, List<String>> getArgs();
 
   /**
-   * Closes this request channel and releases all of the resources associated with it.
+   * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
+   * the {@link RestRequestMetrics} instance attached to this RestRequest.
    * <p/>
    * {@inheritDoc}
    * @throws IOException if there is an I/O error while closing the request channel.
@@ -57,4 +58,10 @@ public interface RestRequest extends ReadableStreamChannel {
   @Override
   public void close()
       throws IOException;
+
+  /**
+   * Gets the {@link RestRequestMetrics} instance attached to this RestRequest.
+   * @return the {@link RestRequestMetrics} instance attached to this RestRequest.
+   */
+  public RestRequestMetrics getMetrics();
 }

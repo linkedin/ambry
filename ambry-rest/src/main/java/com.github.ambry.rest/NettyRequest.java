@@ -38,6 +38,7 @@ class NettyRequest implements RestRequest {
 
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
+  private final RestRequestMetrics restRequestMetrics = new RestRequestMetrics();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
 
@@ -119,8 +120,14 @@ class NettyRequest implements RestRequest {
         }
       } finally {
         contentLock.unlock();
+        restRequestMetrics.recordMetrics();
       }
     }
+  }
+
+  @Override
+  public RestRequestMetrics getMetrics() {
+    return restRequestMetrics;
   }
 
   /**
