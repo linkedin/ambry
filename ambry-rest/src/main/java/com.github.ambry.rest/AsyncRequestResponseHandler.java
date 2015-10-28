@@ -65,8 +65,7 @@ public class AsyncRequestResponseHandler {
     if (isRunning()) {
       asyncHandlerWorker.handleRequest(restRequest, restResponseChannel);
     } else {
-      // TODO: change metric
-      restServerMetrics.asyncRequestHandlerUnavailableError.inc();
+      restServerMetrics.requestResponseHandlerUnavailable.inc();
       throw new RestServiceException(
           "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
           RestServiceErrorCode.ServiceUnavailable);
@@ -97,8 +96,7 @@ public class AsyncRequestResponseHandler {
     if (isRunning()) {
       asyncHandlerWorker.handleResponse(restRequest, restResponseChannel, response, exception);
     } else {
-      // TODO: change metric
-      restServerMetrics.asyncRequestHandlerUnavailableError.inc();
+      restServerMetrics.requestResponseHandlerUnavailable.inc();
       throw new RestServiceException(
           "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
           RestServiceErrorCode.ServiceUnavailable);
@@ -118,7 +116,6 @@ public class AsyncRequestResponseHandler {
         workerThread.start();
         logger.info("AsyncRequestResponseHandler has started");
       } else {
-        // TODO: metric
         throw new IllegalStateException("BlobStorageService has not been set");
       }
     }
@@ -133,22 +130,21 @@ public class AsyncRequestResponseHandler {
    */
   protected void shutdown() {
     if (isRunning()) {
-      logger.info("Shutting down AsyncRequestResponseHandler with {} requests and {} responses still in queue",
-          getRequestQueueSize(), getResponseSetSize());
+      logger.info("Shutting down AsyncRequestResponseHandler");
       long shutdownBeginTime = System.currentTimeMillis();
       try {
         asyncHandlerWorker.shutdown();
         if (!asyncHandlerWorker.awaitShutdown(30, TimeUnit.SECONDS)) {
           logger.error("Shutdown of AsyncRequestResponseHandler failed. This should not happen");
-          restServerMetrics.asyncRequestHandlerShutdownError.inc();
+          restServerMetrics.requestResponseHandlerShutdownError.inc();
         }
       } catch (InterruptedException e) {
         logger.error("Await shutdown of AsyncRequestResponseHandler was interrupted. It might not have shutdown", e);
-        restServerMetrics.asyncRequestHandlerShutdownError.inc();
+        restServerMetrics.requestResponseHandlerShutdownError.inc();
       } finally {
         long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
         logger.info("AsyncRequestResponseHandler shutdown took {} ms", shutdownTime);
-        restServerMetrics.asyncRequestHandlerShutdownTimeInMs.update(shutdownTime);
+        restServerMetrics.requestResponseHandlerShutdownTimeInMs.update(shutdownTime);
       }
     }
   }
@@ -200,7 +196,6 @@ class AsyncHandlerWorker implements Runnable {
   private final ConcurrentHashMap<RestRequest, AsyncResponseInfo> responses =
       new ConcurrentHashMap<RestRequest, AsyncResponseInfo>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private final QueuingTimeTracker queuingTimeTracker = new QueuingTimeTracker();
   private final AtomicBoolean running = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -238,8 +233,7 @@ class AsyncHandlerWorker implements Runnable {
         processRequests();
       } catch (Exception e) {
         logger.error("Swallowing unexpected exception during processing of responses and requests", e);
-        // TODO: change metric.
-        restServerMetrics.dequeuedRequestHandlerUnexpectedExceptionError.inc();
+        restServerMetrics.unexpectedException.inc();
       }
     }
     discardRequestsResponses();
@@ -287,37 +281,26 @@ class AsyncHandlerWorker implements Runnable {
    */
   protected void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
-    if (restRequest == null) {
-      restServerMetrics.asyncRequestHandlerRestRequestNullError.inc();
-      throw new IllegalArgumentException("RestRequest is null");
-    } else if (restResponseChannel == null) {
-      restServerMetrics.asyncRequestHandlerRestResponseChannelNullError.inc();
-      throw new IllegalArgumentException("RestResponseChannel is null");
-    }
-    restServerMetrics.asyncRequestHandlerRequestArrivalRate.mark();
+    long processingStartTime = System.currentTimeMillis();
+    handlePrechecks(restRequest, restResponseChannel);
+    restServerMetrics.requestArrivalRate.mark();
     logger.trace("Queueing request {}", restRequest.getUri());
-    queuingTimeTracker.startTracking(restRequest);
-    boolean offerFailed = false;
+    AsyncRequestInfo requestInfo = new AsyncRequestInfo(restRequest, restResponseChannel);
     try {
-      if (!requests
-          .offer(new AsyncRequestInfo(restRequest, restResponseChannel), OFFER_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-        offerFailed = true;
-        restServerMetrics.asyncRequestHandlerQueueOfferTooLongError.inc();
+      if (!requests.offer(requestInfo, OFFER_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+        restServerMetrics.requestQueueOfferError.inc();
         throw new RestServiceException("Attempt to queue request timed out",
             RestServiceErrorCode.RequestResponseQueueingFailure);
       } else {
         logger.trace("Queued request {}", restRequest.getUri());
-        restServerMetrics.asyncRequestHandlerQueueingRate.mark();
+        restServerMetrics.requestQueueingRate.mark();
       }
     } catch (InterruptedException e) {
-      offerFailed = true;
-      restServerMetrics.asyncRequestHandlerQueueOfferInterruptedError.inc();
+      restServerMetrics.requestQueueOfferError.inc();
       throw new RestServiceException("Attempt to queue request interrupted", e,
           RestServiceErrorCode.RequestResponseQueueingFailure);
     } finally {
-      if (offerFailed) {
-        queuingTimeTracker.stopTracking(restRequest);
-      }
+      restRequest.getMetrics().scalingLayerMetrics.addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
     }
   }
 
@@ -333,28 +316,27 @@ class AsyncHandlerWorker implements Runnable {
   protected void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel response, Exception exception)
       throws RestServiceException {
-    if (restRequest == null) {
-      // TODO: revisit metric
-      restServerMetrics.asyncRequestHandlerRestRequestNullError.inc();
-      throw new IllegalArgumentException("RestRequest is null");
-    } else if (restResponseChannel == null) {
-      restServerMetrics.asyncRequestHandlerRestResponseChannelNullError.inc();
-      throw new IllegalArgumentException("RestResponseChannel is null");
-    } else if (exception != null || response == null) {
-      logger.trace("There was no queueing required for response for request {}", restRequest.getUri());
-      // TODO: I think exception logging should be inside onResponseComplete.
-      // TODO: or there should be a function there that logs based on what the ResponseStatus will be.
-      onResponseComplete(restRequest, restResponseChannel, exception, false);
-      releaseResources(restRequest, response);
-    } else {
-      if (responses.putIfAbsent(restRequest, new AsyncResponseInfo(response, restResponseChannel)) != null) {
-        // TODO: metrics.
-        throw new RestServiceException("Request for which response is being scheduled has a response outstanding",
-            RestServiceErrorCode.RequestResponseQueueingFailure);
+    long processingStartTime = System.currentTimeMillis();
+    handlePrechecks(restRequest, restResponseChannel);
+    restServerMetrics.responseArrivalRate.mark();
+    try {
+      if (exception != null || response == null) {
+        restServerMetrics.responseCompletionRate.mark();
+        logger.trace("There was no queueing required for response for request {}", restRequest.getUri());
+        onResponseComplete(restRequest, restResponseChannel, exception, false);
+        releaseResources(restRequest, response);
       } else {
-        logger.trace("Queueing response of size {} for request {}", response.getSize(), restRequest.getUri());
-        // TODO: metrics for response queueing rate.
+        if (responses.putIfAbsent(restRequest, new AsyncResponseInfo(response, restResponseChannel)) != null) {
+          restServerMetrics.responseAlreadyInFlight.inc();
+          throw new RestServiceException("Request for which response is being scheduled has a response outstanding",
+              RestServiceErrorCode.RequestResponseQueueingFailure);
+        } else {
+          restServerMetrics.responseQueueingRate.mark();
+          logger.trace("Queueing response of size {} for request {}", response.getSize(), restRequest.getUri());
+        }
       }
+    } finally {
+      restRequest.getMetrics().scalingLayerMetrics.addToResponseProcessingTime(System.currentTimeMillis() - processingStartTime);
     }
   }
 
@@ -384,6 +366,24 @@ class AsyncHandlerWorker implements Runnable {
   }
 
   /**
+   * Checks for bad arguments or states.
+   * @param restRequest the {@link RestRequest} to use. Cannot be null.
+   * @param restResponseChannel the {@link RestResponseChannel} to use. Cannot be null.
+   */
+  private void handlePrechecks(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    if (restRequest == null || restResponseChannel == null) {
+      StringBuilder errorMessage = new StringBuilder("Null arg(s) received -");
+      if (restRequest == null) {
+        errorMessage.append(" [RestRequest] ");
+      }
+      if (restResponseChannel == null) {
+        errorMessage.append(" [RestResponseChannel] ");
+      }
+      throw new IllegalArgumentException(errorMessage.toString());
+    }
+  }
+
+  /**
    * Iterates through the response map and sends out any response bytes that are ready over the appropriate
    * {@link RestResponseChannel}.
    * <p/>
@@ -394,30 +394,30 @@ class AsyncHandlerWorker implements Runnable {
     Iterator<Map.Entry<RestRequest, AsyncResponseInfo>> responseIterator = responses.entrySet().iterator();
     while (responseIterator.hasNext()) {
       Map.Entry<RestRequest, AsyncResponseInfo> responseInfo = responseIterator.next();
+      long processingStartTime = System.currentTimeMillis();
       RestRequest restRequest = responseInfo.getKey();
-      ReadableStreamChannel response = responseInfo.getValue().getResponse();
-      RestResponseChannel restResponseChannel = responseInfo.getValue().getRestResponseChannel();
+      AsyncResponseInfo asyncResponseInfo = responseInfo.getValue();
+      ReadableStreamChannel response = asyncResponseInfo.getResponse();
+      RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
       int bytesWritten = 0;
       Exception exception = null;
       try {
+        onResponseDequeue(restRequest, asyncResponseInfo);
         bytesWritten = response.read(restResponseChannel);
         logger.trace("{} response bytes were written for request {}", bytesWritten, restRequest.getUri());
       } catch (Exception e) {
+        restServerMetrics.responseProcessingError.inc();
         exception = e;
       }
 
       if (bytesWritten == -1 || exception != null) {
-        if (exception != null) {
-          // TODO: I think exception logging should be inside RestResponseChannel::onResponseComplete.
-          // TODO: or there should be a function there that logs based on what the ResponseStatus will be.
-        }
+        restServerMetrics.responseCompletionRate.mark();
         onResponseComplete(restRequest, restResponseChannel, exception, false);
-        releaseResources(responseInfo.getKey(), response);
+        releaseResources(restRequest, response);
         responseIterator.remove();
-        // TODO: metrics of finishing.
-        // TODO: need metrics of response sending time.
         logger.trace("Response complete for request {}", restRequest.getUri());
       }
+      restRequest.getMetrics().scalingLayerMetrics.addToResponseProcessingTime(System.currentTimeMillis() - processingStartTime);
     }
   }
 
@@ -427,26 +427,22 @@ class AsyncHandlerWorker implements Runnable {
    */
   private void processRequests() {
     AsyncRequestInfo requestInfo = null;
-    String uri = null;
     while (true) {
       try {
         requestInfo = requests.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         if (requestInfo != null) {
-          uri = requestInfo.getRestRequest().getUri();
-          trackMetricsOnDequeue(requestInfo);
           processRequest(requestInfo);
-          // TODO: metrics.
-          logger.trace("Request {} was handled successfully", uri);
+          logger.trace("Request {} was processed successfully", requestInfo.getRestRequest().getUri());
         } else {
           break;
         }
       } catch (Exception e) {
-        // TODO: this logging can probably go into onResponseComplete.
-        logger.error("Handling of request {} failed", uri, e);
-        restServerMetrics.dequeuedRequestHandlerRequestHandlingError.inc();
+        restServerMetrics.requestProcessingError.inc();
         if (requestInfo != null) {
           onResponseComplete(requestInfo.getRestRequest(), requestInfo.getRestResponseChannel(), e, false);
           releaseResources(requestInfo.getRestRequest(), null);
+        } else {
+          logger.error("Unexpected exception while processing requests", e);
         }
       }
     }
@@ -458,31 +454,35 @@ class AsyncHandlerWorker implements Runnable {
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
    */
   private void processRequest(AsyncRequestInfo asyncRequestInfo) {
+    long processingStartTime = System.currentTimeMillis();
     RestRequest restRequest = asyncRequestInfo.getRestRequest();
-    RestResponseChannel restResponseChannel = asyncRequestInfo.getRestResponseChannel();
-    RestMethod restMethod = restRequest.getRestMethod();
-    logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
-    switch (restMethod) {
-      case GET:
-        blobStorageService.handleGet(restRequest, restResponseChannel);
-        break;
-      case POST:
-        blobStorageService.handlePost(restRequest, restResponseChannel);
-        break;
-      case DELETE:
-        blobStorageService.handleDelete(restRequest, restResponseChannel);
-        break;
-      case HEAD:
-        blobStorageService.handleHead(restRequest, restResponseChannel);
-        break;
-      default:
-        // TODO: This logging can probably go inside onResponseComplete.
-        logger.debug("Unknown REST method [{}] in request {}", restMethod, restRequest.getUri());
-        restServerMetrics.dequeuedRequestHandlerUnknownRestMethodError.inc();
-        onResponseComplete(restRequest, restResponseChannel,
-            new RestServiceException("Unsupported REST method - " + restMethod,
-                RestServiceErrorCode.UnsupportedRestMethod), false);
-        releaseResources(restRequest, null);
+    try {
+      onRequestDequeue(asyncRequestInfo);
+      RestResponseChannel restResponseChannel = asyncRequestInfo.getRestResponseChannel();
+      RestMethod restMethod = restRequest.getRestMethod();
+      logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
+      switch (restMethod) {
+        case GET:
+          blobStorageService.handleGet(restRequest, restResponseChannel);
+          break;
+        case POST:
+          blobStorageService.handlePost(restRequest, restResponseChannel);
+          break;
+        case DELETE:
+          blobStorageService.handleDelete(restRequest, restResponseChannel);
+          break;
+        case HEAD:
+          blobStorageService.handleHead(restRequest, restResponseChannel);
+          break;
+        default:
+          restServerMetrics.unknownRestMethod.inc();
+          RestServiceException e = new RestServiceException("Unsupported REST method: " + restMethod,
+              RestServiceErrorCode.UnsupportedRestMethod);
+          onResponseComplete(restRequest, restResponseChannel, e, false);
+          releaseResources(restRequest, null);
+      }
+    } finally {
+      restRequest.getMetrics().scalingLayerMetrics.addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
     }
   }
 
@@ -490,14 +490,14 @@ class AsyncHandlerWorker implements Runnable {
    * Empties the remaining requests and responses and releases resources held by them.
    */
   private void discardRequestsResponses() {
-    logger.trace("Discarding request/responses on account of shutdown");
+    logger.trace("Discarding requests/responses on account of shutdown");
     RestServiceException e = new RestServiceException("Service shutdown", RestServiceErrorCode.ServiceUnavailable);
     if (requests.size() > 0) {
       logger.info("There were {} requests in flight during shutdown", requests.size());
-      restServerMetrics.asyncRequestHandlerResidualRequestQueueSize.inc(requests.size());
+      restServerMetrics.residualRequestQueueSize.inc(requests.size());
       AsyncRequestInfo residualRequestInfo = requests.poll();
       while (residualRequestInfo != null) {
-        queuingTimeTracker.stopTracking(residualRequestInfo.getRestRequest());
+        onRequestDequeue(residualRequestInfo);
         onResponseComplete(residualRequestInfo.getRestRequest(), residualRequestInfo.getRestResponseChannel(), e, true);
         releaseResources(residualRequestInfo.getRestRequest(), null);
         residualRequestInfo = requests.poll();
@@ -505,15 +505,17 @@ class AsyncHandlerWorker implements Runnable {
     }
     if (responses.size() > 0) {
       logger.info("There were {} responses in flight during was shut down", responses.size());
-      // TODO: metrics.
+      restServerMetrics.residualResponseSetSize.inc(responses.size());
       Iterator<Map.Entry<RestRequest, AsyncResponseInfo>> responseIterator = responses.entrySet().iterator();
       while (responseIterator.hasNext()) {
-        Map.Entry<RestRequest, AsyncResponseInfo> response = responseIterator.next();
-        RestRequest restRequest = response.getKey();
-        ReadableStreamChannel readableStreamChannel = response.getValue().getResponse();
-        RestResponseChannel restResponseChannel = response.getValue().getRestResponseChannel();
+        Map.Entry<RestRequest, AsyncResponseInfo> responseInfo = responseIterator.next();
+        RestRequest restRequest = responseInfo.getKey();
+        AsyncResponseInfo asyncResponseInfo = responseInfo.getValue();
+        onResponseDequeue(restRequest, asyncResponseInfo);
+        ReadableStreamChannel response = asyncResponseInfo.getResponse();
+        RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
         onResponseComplete(restRequest, restResponseChannel, e, true);
-        releaseResources(restRequest, readableStreamChannel);
+        releaseResources(restRequest, response);
         responseIterator.remove();
       }
     }
@@ -528,16 +530,16 @@ class AsyncHandlerWorker implements Runnable {
     try {
       restRequest.close();
     } catch (IOException e) {
+      restServerMetrics.resourceReleaseError.inc();
       logger.error("Error closing request", e);
-      // TODO: metrics.
     }
 
     if (readableStreamChannel != null) {
       try {
         readableStreamChannel.close();
       } catch (IOException e) {
+        restServerMetrics.resourceReleaseError.inc();
         logger.error("Error closing response", e);
-        // TODO: metrics.
       }
     }
   }
@@ -551,30 +553,30 @@ class AsyncHandlerWorker implements Runnable {
    */
   private void onResponseComplete(RestRequest restRequest, RestResponseChannel restResponseChannel, Exception exception,
       boolean forceClose) {
-    // TODO: this metric needs to go somewhere else and a new metric here maybe?
-    restServerMetrics.dequeuedRequestHandlerRequestCompletionRate.mark();
-    if (exception instanceof RestServiceException) {
-      RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
-      if (ResponseStatus.getResponseStatus(errorCode) != ResponseStatus.InternalServerError) {
-        logger.debug("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-            exception);
+    try {
+      if (exception instanceof RestServiceException) {
+        RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
+        if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.InternalServerError) {
+          logger.error("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
+              exception);
+        } else if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest){
+          logger.debug("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
+              exception);
+        } else {
+          logger.trace("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
+              exception);
+        }
       } else {
         logger.error("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
             exception);
       }
-    } else {
-      logger.error("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-          exception);
-    }
-    restResponseChannel.onResponseComplete(exception);
-    if (forceClose) {
-      // TODO: metric
-      try {
-        restResponseChannel.close();
-      } catch (IOException e) {
-        logger.error("Error closing RestResponseChannel", e);
-        // TODO: metrics.
+      restResponseChannel.onResponseComplete(exception);
+      if (forceClose) {
+          restResponseChannel.close();
       }
+    } catch (Exception e) {
+      restServerMetrics.responseCompleteTasksError.inc();
+      logger.error("Error during response complete tasks", e);
     }
   }
 
@@ -582,50 +584,24 @@ class AsyncHandlerWorker implements Runnable {
    * Tracks required metrics once a {@link AsyncRequestInfo} is dequeued.
    * @param requestInfo the {@link AsyncRequestInfo} that was just dequeued.
    */
-  private void trackMetricsOnDequeue(AsyncRequestInfo requestInfo) {
-    // TODO: this needs reworking.
-    Long queueTime = queuingTimeTracker.stopTracking(requestInfo.getRestRequest());
-    if (queueTime != null) {
-      restServerMetrics.asyncRequestHandlerQueueTimeInMs.update(queueTime);
-      logger.trace("Dequeued request spent {} ms in the queue", queueTime);
-    } else {
-      logger.warn("Queueing time of request was not tracked since queue start time was not recorded");
-    }
-    restServerMetrics.dequeuedRequestHandlerDequeuingRate.mark();
-  }
-}
-
-/**
- * Used to track the time a particular {@link RestRequest} spends being queued.
- */
-class QueuingTimeTracker {
-  // TODO: this needs reworking.
-  private final ConcurrentHashMap<RestRequest, Long> queueTimes = new ConcurrentHashMap<RestRequest, Long>();
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-
-  /**
-   * Starts tracking the time the request spends being queued.
-   * @param restRequest the {@link RestRequest} whose queueing time needs to be tracked.
-   */
-  public void startTracking(RestRequest restRequest) {
-    Long queueStartTime = System.currentTimeMillis();
-    Long prevStartTime = queueTimes.putIfAbsent(restRequest, queueStartTime);
-    if (prevStartTime != null) {
-      logger.warn("Duplicate call to track a request. Prev track start time - {}, current time - {}", restRequest,
-          prevStartTime, queueStartTime);
+  private void onRequestDequeue(AsyncRequestInfo requestInfo) {
+    Long queueTime = requestInfo.getQueueTime();
+    if(queueTime != null) {
+      requestInfo.getRestRequest().getMetrics().scalingLayerMetrics.addToRequestQueueingTime(queueTime);
+      restServerMetrics.requestDequeueingRate.mark();
     }
   }
 
   /**
-   * Stops tracking the time elapsed since {@link #startTracking(RestRequest)} was called on this {@code restRequest}
-   * and returns it. If {@link #startTracking(RestRequest)} was never called on this {@code restRequest}, returns null.
-   * @param restRequest the {@link RestRequest} whose queueing time tracking needs to be stopped and recorded.
-   * @return time elapsed since {@link #startTracking(RestRequest)} was called on the {@code restRequest}. If
-   * {@link #startTracking(RestRequest)} was never called, returns null.
+   * Tracks required metrics once a {@link AsyncResponseInfo} is dequeued.
+   * @param restRequest the {@link RestRequest} for whose response was just dequeued.
+   * @param responseInfo the {@link AsyncResponseInfo} that was just dequeued.
    */
-  public Long stopTracking(RestRequest restRequest) {
-    Long queueStartTime = queueTimes.remove(restRequest);
-    return queueStartTime != null ? System.currentTimeMillis() - queueStartTime : null;
+  private void onResponseDequeue(RestRequest restRequest, AsyncResponseInfo responseInfo) {
+    Long queueTime = responseInfo.getQueueTime();
+    if(queueTime != null) {
+      restRequest.getMetrics().scalingLayerMetrics.addToResponseQueueingTime(queueTime);
+    }
   }
 }
 
@@ -635,6 +611,7 @@ class QueuingTimeTracker {
 class AsyncRequestInfo {
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
+  private Long queueStartTime = System.currentTimeMillis();
 
   public RestRequest getRestRequest() {
     return restRequest;
@@ -642,6 +619,20 @@ class AsyncRequestInfo {
 
   public RestResponseChannel getRestResponseChannel() {
     return restResponseChannel;
+  }
+
+  /**
+   * Gets the time elapsed since the construction of this object. This function returns a non-null value only on the
+   * first call. All subsequent calls return null.
+   * @return On the first call, the time elapsed since the construction of the object. {@code null} on subsequent calls.
+   */
+  public Long getQueueTime() {
+    Long queueTime = null;
+    if(queueStartTime != null) {
+      queueTime = System.currentTimeMillis() - queueStartTime;
+      queueStartTime = null;
+    }
+    return queueTime;
   }
 
   /**
@@ -662,6 +653,7 @@ class AsyncRequestInfo {
 class AsyncResponseInfo {
   private final ReadableStreamChannel response;
   private final RestResponseChannel restResponseChannel;
+  private Long queueStartTime = System.currentTimeMillis();
 
   public ReadableStreamChannel getResponse() {
     return response;
@@ -669,6 +661,20 @@ class AsyncResponseInfo {
 
   public RestResponseChannel getRestResponseChannel() {
     return restResponseChannel;
+  }
+
+  /**
+   * Gets the time elapsed since the construction of this object. This function returns a non-null value only on the
+   * first call. All subsequent calls return null.
+   * @return On the first call, the time elapsed since the construction of the object. {@code null} on subsequent calls.
+   */
+  public Long getQueueTime() {
+    Long queueTime = null;
+    if(queueStartTime != null) {
+      queueTime = System.currentTimeMillis() - queueStartTime;
+      queueStartTime = null;
+    }
+    return queueTime;
   }
 
   /**

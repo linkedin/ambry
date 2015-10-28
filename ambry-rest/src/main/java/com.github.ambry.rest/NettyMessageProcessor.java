@@ -75,8 +75,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
           RestServiceErrorCode.ChannelCreationTasksFailure);
     }
     logger.trace("Instantiated NettyMessageProcessor");
-    // TODO: remove useless metric.
-    nettyMetrics.processorCreationRate.mark();
   }
 
   /**
@@ -283,7 +281,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    */
   private void onRequestAborted(Throwable cause) {
     if (responseChannel != null) {
-      if(request != null) {
+      if (request != null) {
         logger.trace("Request {} is aborted", request.getUri());
         try {
           request.close();
