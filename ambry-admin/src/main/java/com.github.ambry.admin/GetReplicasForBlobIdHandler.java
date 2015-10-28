@@ -54,8 +54,6 @@ class GetReplicasForBlobIdHandler {
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
-      logger.trace("Processing getReplicasForBlobId response for request {} took {} ms", restRequest.getUri(),
-          processingTime);
       adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
     }
