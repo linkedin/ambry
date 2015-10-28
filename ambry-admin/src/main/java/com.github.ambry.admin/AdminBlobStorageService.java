@@ -126,7 +126,6 @@ class AdminBlobStorageService implements BlobStorageService {
       adminMetrics.blobPropsBuildTimeInMs.update(propsBuildTime);
       restRequest.getMetrics().addToTotalTime(propsBuildTime);
       logger.trace("Blob properties of blob being POSTed - {}", blobProperties);
-      logger.trace("Building properties and user metadata took {} ms", propsBuildTime);
       logger.trace("Forwarding POST to the router");
       PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, responseHandler, blobProperties);
       router.putBlob(blobProperties, usermetadata, restRequest, callback);
@@ -302,7 +301,6 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.headForGetTimeInMs.update(routerTime);
       restRequest.getMetrics().addToTotalTime(routerTime);
-      logger.trace("Router took {} ms to execute GetBlobInfo", routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD before GET of {}", blobId);
@@ -327,7 +325,6 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.headForGetCallbackProcessingTimeInMs.update(processingStartTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
-      logger.trace("HeadForGetCallback processing took {} ms", processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
         adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
@@ -402,7 +399,6 @@ class GetCallback implements Callback<ReadableStreamChannel> {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.getTimeInMs.update(routerTime);
       restRequest.getMetrics().addToTotalTime(routerTime);
-      logger.trace("Router took {} ms to execute GetBlob", routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for GET of {}", blobId);
@@ -423,8 +419,6 @@ class GetCallback implements Callback<ReadableStreamChannel> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.getCallbackProcessingTimeInMs.update(processingStartTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
-      logger.trace("GetCallback processing took {} ms", processingTime);
-
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -478,7 +472,6 @@ class PostCallback implements Callback<String> {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.postTimeInMs.update(routerTime);
       restRequest.getMetrics().addToTotalTime(routerTime);
-      logger.trace("Router took {} ms to execute PostBlob", routerTime);
 
       logger.trace("Callback received for POST");
       restResponseChannel.setDate(new GregorianCalendar().getTime());
@@ -499,8 +492,6 @@ class PostCallback implements Callback<String> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.postCallbackProcessingTimeInMs.update(processingStartTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
-      logger.trace("PostCallback processing took {} ms", processingTime);
-
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -562,7 +553,6 @@ class DeleteCallback implements Callback<Void> {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.deleteTimeInMs.update(routerTime);
       restRequest.getMetrics().addToTotalTime(routerTime);
-      logger.trace("Router took {} ms to execute DeleteBlob", routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for DELETE of {}", blobId);
@@ -583,8 +573,6 @@ class DeleteCallback implements Callback<Void> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.deleteCallbackProcessingTimeInMs.update(processingStartTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
-      logger.trace("DeleteCallback processing took {} ms", processingTime);
-
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -634,7 +622,6 @@ class HeadCallback implements Callback<BlobInfo> {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.headTimeInMs.update(routerTime);
       restRequest.getMetrics().addToTotalTime(routerTime);
-      logger.trace("Router took {} ms to execute GetBlobInfo", routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD of {}", blobId);
@@ -656,8 +643,6 @@ class HeadCallback implements Callback<BlobInfo> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.headCallbackProcessingTimeInMs.update(processingStartTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
-      logger.trace("HeadCallback processing took {} ms", processingTime);
-
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }

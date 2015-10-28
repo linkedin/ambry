@@ -47,7 +47,6 @@ class EchoHandler {
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
-      logger.trace("Processing echo response for request {} took {} ms", restRequest.getUri(), processingTime);
       adminMetrics.echoProcessingTimeInMs.update(processingTime);
       restRequest.getMetrics().addToTotalTime(processingTime);
     }
