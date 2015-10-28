@@ -85,8 +85,8 @@ public class RestServer {
               requestResponseHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
-      logger.error("Exception during instantiation of RestServer", e);
       restServerMetrics.restServerInstantiationError.inc();
+      logger.error("Exception during instantiation of RestServer", e);
       throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
 

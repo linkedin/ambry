@@ -113,8 +113,8 @@ class AdminBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    adminMetrics.postBlobRate.mark();
     handlePrechecks(restRequest, restResponseChannel);
+    adminMetrics.postBlobRate.mark();
     restRequest.getMetrics().injectTracker(adminMetrics.postBlobTracker);
     AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
@@ -122,9 +122,7 @@ class AdminBlobStorageService implements BlobStorageService {
       long propsBuildStartTime = System.currentTimeMillis();
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest);
-      long propsBuildTime = System.currentTimeMillis() - propsBuildStartTime;
-      adminMetrics.blobPropsBuildTimeInMs.update(propsBuildTime);
-      restRequest.getMetrics().addToTotalTime(propsBuildTime);
+      adminMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       logger.trace("Blob properties of blob being POSTed - {}", blobProperties);
       logger.trace("Forwarding POST to the router");
       PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, responseHandler, blobProperties);
@@ -137,8 +135,8 @@ class AdminBlobStorageService implements BlobStorageService {
 
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    adminMetrics.deleteBlobRate.mark();
     handlePrechecks(restRequest, restResponseChannel);
+    adminMetrics.deleteBlobRate.mark();
     restRequest.getMetrics().injectTracker(adminMetrics.deleteBlobTracker);
     AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
@@ -155,7 +153,7 @@ class AdminBlobStorageService implements BlobStorageService {
 
   @Override
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    adminMetrics.headBlobRate.mark();
+
     handlePrechecks(restRequest, restResponseChannel);
     restRequest.getMetrics().injectTracker(adminMetrics.headBlobTracker);
     AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
