@@ -14,81 +14,42 @@ import com.codahale.metrics.MetricRegistry;
 public class CoordinatorBackedRouterMetrics {
 
   // Rates
-  // CoordinatorBackedRouter
   public final Meter deleteBlobRate;
   public final Meter getBlobInfoRate;
   public final Meter getBlobRate;
   public final Meter putBlobRate;
-  // CoordinatorOperation
-  public final Meter operationQueuingRate;
-  public final Meter operationDequeuingRate;
 
   // Latencies
-  // CoordinatorBackedRouter
-  public final Histogram closeTimeInMs;
-  public final Histogram operationPostProcessingTimeInMs;
-  public final Histogram operationPreProcessingTimeInMs;
-  // CoordinatorOperation
-  public final Histogram operationQueuingTimeInMs;
-  // DeleteBlob
-  public final Histogram deleteBlobTotalTimeInMs;
-  // GetBlob
-  public final Histogram getBlobResultConstructionTimeInMs;
-  public final Histogram getBlobTimeInMs;
-  public final Histogram getBlobTotalTimeInMs;
+  public final Histogram operationQueueingTimeInMs;
   // GetBlobInfo
   public final Histogram getBlobInfoResultConstructionTimeInMs;
   public final Histogram getBlobInfoTotalTimeInMs;
   public final Histogram getBlobPropertiesTimeInMs;
   public final Histogram getUserMetadataTimeInMs;
+  // GetBlob
+  public final Histogram getBlobResultConstructionTimeInMs;
+  public final Histogram getBlobTimeInMs;
+  public final Histogram getBlobTotalTimeInMs;
   // PutBlob
   public final Histogram putBlobTotalTimeInMs;
+  // DeleteBlob
+  public final Histogram deleteBlobTotalTimeInMs;
 
   // Errors
-  // CoordinatorBackedRouter
-  public final Counter closeError;
-  public final Counter futureCallbackError;
-  public final Counter unavailableError;
-  // CoordinatorOperation
   public final Counter operationError;
-  public final Counter queueStartTimeNotRecordedError;
+  public final Counter closeError;
+  public final Counter unavailableError;
 
-  /**
-   * Creates an instance of CoordinatorBackedRouterMetrics using the given {@code metricRegistry}.
-   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
-   */
   public CoordinatorBackedRouterMetrics(MetricRegistry metricRegistry) {
     // Rates
-    // CoordinatorBackedRouter
     deleteBlobRate = metricRegistry.meter(MetricRegistry.name(CoordinatorBackedRouter.class, "DeleteBlobRate"));
     getBlobInfoRate = metricRegistry.meter(MetricRegistry.name(CoordinatorBackedRouter.class, "GetBlobInfoRate"));
     getBlobRate = metricRegistry.meter(MetricRegistry.name(CoordinatorBackedRouter.class, "GetBlobRate"));
     putBlobRate = metricRegistry.meter(MetricRegistry.name(CoordinatorBackedRouter.class, "PutBlobRate"));
-    // CoordinatorOperation
-    operationQueuingRate =
-        metricRegistry.meter(MetricRegistry.name(CoordinatorOperation.class, "OperationQueuingRate"));
-    operationDequeuingRate =
-        metricRegistry.meter(MetricRegistry.name(CoordinatorOperation.class, "OperationDequeuingRate"));
 
     // Latencies
-    // CoordinatorBackedRouter
-    closeTimeInMs = metricRegistry.histogram(MetricRegistry.name(CoordinatorBackedRouter.class, "CloseTimeInMs"));
-    operationPostProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorBackedRouter.class, "OperationPostProcessingTimeInMs"));
-    operationPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorBackedRouter.class, "OperationPreProcessingTimeInMs"));
-    // CoordinatorOperation
-    operationQueuingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "OperationQueuingTimeInMs"));
-    // DeleteBlob
-    deleteBlobTotalTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "DeleteBlobTotalTimeInMs"));
-    // GetBlob
-    getBlobResultConstructionTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobResultConstructionTimeInMs"));
-    getBlobTimeInMs = metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobTimeInMs"));
-    getBlobTotalTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobTotalTimeInMs"));
+    operationQueueingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "OperationQueueingTimeInMs"));
     // GetBlobInfo
     getBlobInfoResultConstructionTimeInMs = metricRegistry
         .histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobInfoResultConstructionTimeInMs"));
@@ -98,19 +59,22 @@ public class CoordinatorBackedRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobPropertiesTimeInMs"));
     getUserMetadataTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetUserMetadataTimeInMs"));
+    // GetBlob
+    getBlobResultConstructionTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobResultConstructionTimeInMs"));
+    getBlobTimeInMs = metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobTimeInMs"));
+    getBlobTotalTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "GetBlobTotalTimeInMs"));
     // PutBlob
     putBlobTotalTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "PutBlobTotalTimeInMs"));
+    // DeleteBlob
+    deleteBlobTotalTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(CoordinatorOperation.class, "DeleteBlobTotalTimeInMs"));
 
     // Errors
-    // CoordinatorBackedRouter
-    closeError = metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "CloseError"));
-    futureCallbackError =
-        metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "FutureCallbackError"));
-    unavailableError = metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "UnavailableError"));
-    // CoordinatorOperation
     operationError = metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "OperationError"));
-    queueStartTimeNotRecordedError =
-        metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "QueueStartTimeNotRecordedError"));
+    closeError = metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "CloseError"));
+    unavailableError = metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "UnavailableError"));
   }
 }

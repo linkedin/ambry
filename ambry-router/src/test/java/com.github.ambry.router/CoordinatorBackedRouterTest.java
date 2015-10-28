@@ -76,11 +76,9 @@ public class CoordinatorBackedRouterTest {
     }
 
     // CoordinatorOperation instantiation test
-    verifiableProperties = getVProps(new Properties());
-    routerConfig = new RouterConfig(verifiableProperties);
     try {
-      new CoordinatorOperation(new CoordinatorBackedRouter(routerConfig, metrics, coordinator),
-          new FutureResult<String>(), "@@blobid@@", null, CoordinatorOperationType.PutBlob);
+      new CoordinatorOperation(coordinator, metrics, new FutureResult<String>(), "@@blobid@@", null,
+          CoordinatorOperationType.PutBlob);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
