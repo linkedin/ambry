@@ -41,22 +41,26 @@ public class CoordinatorBackedRouterTest {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     ClusterMap clusterMap = new MockClusterMap();
+    CoordinatorBackedRouterMetrics metrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
 
+    // RouterConfig null.
     try {
-      new CoordinatorBackedRouter(null, clusterMap.getMetricRegistry(), coordinator);
+      new CoordinatorBackedRouter(null, metrics, coordinator);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
 
+    // CoordinatorBackedRouterMetrics null.
     try {
       new CoordinatorBackedRouter(routerConfig, null, coordinator);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
 
+    // Coordinator null.
     try {
-      new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), null);
+      new CoordinatorBackedRouter(routerConfig, metrics, null);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -66,14 +70,14 @@ public class CoordinatorBackedRouterTest {
     verifiableProperties = getVProps(properties);
     routerConfig = new RouterConfig(verifiableProperties);
     try {
-      new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+      new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
 
     // CoordinatorOperation instantiation test
     try {
-      new CoordinatorOperation(coordinator, new FutureResult<String>(), "@@blobid@@", null,
+      new CoordinatorOperation(coordinator, metrics, new FutureResult<String>(), "@@blobid@@", null,
           CoordinatorOperationType.PutBlob);
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -90,8 +94,9 @@ public class CoordinatorBackedRouterTest {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     ClusterMap clusterMap = new MockClusterMap();
+    CoordinatorBackedRouterMetrics metrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    Router router = new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+    Router router = new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     router.close();
     // should not throw exception
     router.close();
@@ -117,8 +122,9 @@ public class CoordinatorBackedRouterTest {
     VerifiableProperties verifiableProperties = getVProps(new Properties());
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     ClusterMap clusterMap = new MockClusterMap();
+    CoordinatorBackedRouterMetrics metrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    Router router = new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+    Router router = new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     for (int i = 0; i < 200; i++) {
       doPutGetDeleteTest(router, RouterUsage.WithCallback);
       doPutGetDeleteTest(router, RouterUsage.WithoutCallback);
@@ -139,8 +145,9 @@ public class CoordinatorBackedRouterTest {
     properties.setProperty(MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START, "true");
     VerifiableProperties verifiableProperties = getVProps(properties);
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+    CoordinatorBackedRouterMetrics metrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
     Coordinator coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    Router router = new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+    Router router = new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.UnexpectedInternalError,
         MockCoordinator.CHECKED_EXCEPTION_ON_OPERATION_START);
 
@@ -155,7 +162,7 @@ public class CoordinatorBackedRouterTest {
     verifiableProperties = getVProps(properties);
     routerConfig = new RouterConfig(verifiableProperties);
     coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    router = new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+    router = new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.UnexpectedInternalError,
         MockCoordinator.RUNTIME_EXCEPTION_ON_OPERATION_START);
     router.close();
@@ -163,7 +170,7 @@ public class CoordinatorBackedRouterTest {
     verifiableProperties = getVProps(properties);
     routerConfig = new RouterConfig(verifiableProperties);
     coordinator = new MockCoordinator(verifiableProperties, clusterMap);
-    router = new CoordinatorBackedRouter(routerConfig, clusterMap.getMetricRegistry(), coordinator);
+    router = new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
     router.close();
     triggerExceptionHandlingTest(verifiableProperties, clusterMap, router, RouterErrorCode.RouterClosed, null);
   }
