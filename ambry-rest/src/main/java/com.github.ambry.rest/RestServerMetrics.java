@@ -30,29 +30,30 @@ public class RestServerMetrics {
   // Rates
   // AsyncHandlerWorker
   public final Meter requestArrivalRate;
-  public final Meter requestDequeueingRate;
-  public final Meter requestQueueingRate;
+  public final Meter requestDequeuingRate;
+  public final Meter requestQueuingRate;
   public final Meter responseArrivalRate;
   public final Meter responseCompletionRate;
-  public final Meter responseQueueingRate;
+  public final Meter responseQueuingRate;
 
   // Latencies
+  // AsyncHandlerWorker
+  public final Histogram requestPreProcessingTimeInMs;
+  public final Histogram responsePreProcessingTimeInMs;
 
   // Errors
   // AsyncHandlerWorker
   public final Counter requestProcessingError;
   public final Counter requestQueueOfferError;
-  public final Counter residualRequestQueueSize;
-  public final Counter residualResponseSetSize;
   public final Counter resourceReleaseError;
-  public final Counter responseAlreadyInFlight;
+  public final Counter responseAlreadyInFlightError;
   public final Counter responseCompleteTasksError;
   public final Counter responseProcessingError;
-  public final Counter unexpectedException;
-  public final Counter unknownRestMethod;
+  public final Counter unexpectedError;
+  public final Counter unknownRestMethodError;
   // AsyncRequestResponseHandler
   public final Counter requestResponseHandlerShutdownError;
-  public final Counter requestResponseHandlerUnavailable;
+  public final Counter requestResponseHandlerUnavailableError;
   // RestServer
   public final Counter restServerInstantiationError;
   // RestServerMetrics
@@ -61,9 +62,21 @@ public class RestServerMetrics {
   // Others
   // AsyncRequestResponseHandler
   public final Histogram requestResponseHandlerShutdownTimeInMs;
+  public final Histogram requestResponseHandlerStartTimeInMs;
+  public final Counter residualRequestQueueSize;
+  public final Counter residualResponseSetSize;
   // RestServer
+  public final Histogram blobStorageServiceShutdownTimeInMs;
+  public final Histogram blobStorageServiceStartTimeInMs;
+  public final Histogram controllerShutdownTimeInMs;
+  public final Histogram controllerStartTimeInMs;
+  public final Histogram nioServerShutdownTimeInMs;
+  public final Histogram nioServerStartTimeInMs;
+  public final Histogram jmxReporterShutdownTimeInMs;
+  public final Histogram jmxReporterStartTimeInMs;
   public final Histogram restServerShutdownTimeInMs;
   public final Histogram restServerStartTimeInMs;
+  public final Histogram routerCloseTime;
 
   public RestServerMetrics(MetricRegistry metricRegistry) {
     this.metricRegistry = metricRegistry;
@@ -74,19 +87,20 @@ public class RestServerMetrics {
 
     // Rates
     // AsyncHandlerWorker
-    requestArrivalRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestArrivalRate"));
-    requestDequeueingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestDequeuingRate"));
-    requestQueueingRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueueingRate"));
-    responseArrivalRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseArrivalRate"));
+    requestArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestArrivalRate"));
+    requestDequeuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestDequeuingRate"));
+    requestQueuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueuingRate"));
+    responseArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseArrivalRate"));
     responseCompletionRate =
         metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseCompletionRate"));
-    responseQueueingRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseQueueingRate"));
+    responseQueuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseQueuingRate"));
 
     // Latencies
+    // AsyncHandlerWorker
+    requestPreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncHandlerWorker.class, "RequestPreProcessingTimeInMs"));
+    responsePreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncHandlerWorker.class, "ResponsePreProcessingTimeInMs"));
 
     // Errors
     // AsyncHandlerWorker
@@ -94,24 +108,21 @@ public class RestServerMetrics {
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestProcessingError"));
     requestQueueOfferError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueueOfferError"));
-    residualRequestQueueSize =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualRequestQueueSize"));
-    residualResponseSetSize =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualResponseSetSize"));
-    resourceReleaseError = metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResourceReleaseError"));
-    responseAlreadyInFlight =
+    resourceReleaseError =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResourceReleaseError"));
+    responseAlreadyInFlightError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseAlreadyInFlightError"));
     responseCompleteTasksError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseCompleteTasksError"));
     responseProcessingError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseProcessingError"));
-    unexpectedException =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnexpectedExceptionError"));
-    unknownRestMethod = metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnknownRestMethodError"));
+    unexpectedError = metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnexpectedError"));
+    unknownRestMethodError =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnknownRestMethodError"));
     // AsyncRequestResponseHandler
     requestResponseHandlerShutdownError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownError"));
-    requestResponseHandlerUnavailable =
+    requestResponseHandlerUnavailableError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "UnavailableError"));
     // RestServer
     restServerInstantiationError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
@@ -122,9 +133,32 @@ public class RestServerMetrics {
     // AsyncRequestResponseHandler
     requestResponseHandlerShutdownTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownTimeInMs"));
+    requestResponseHandlerStartTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "StartTimeInMs"));
+    residualRequestQueueSize =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualRequestQueueSize"));
+    residualResponseSetSize =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualResponseSetSize"));
     // RestServer
-    restServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ShutdownTimeInMs"));
-    restServerStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "StartTimeInMs"));
+    blobStorageServiceShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceShutdownTimeInMs"));
+    blobStorageServiceStartTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceStartTimeInMs"));
+    controllerShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ControllerShutdownTimeInMs"));
+    controllerStartTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ControllerStartTimeInMs"));
+    jmxReporterShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxShutdownTimeInMs"));
+    jmxReporterStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxStartTimeInMs"));
+    nioServerShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerShutdownTimeInMs"));
+    nioServerStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerStartTimeInMs"));
+    restServerShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerShutdownTimeInMs"));
+    restServerStartTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
+    routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
   }
 
   /**
@@ -142,8 +176,7 @@ public class RestServerMetrics {
         }
       };
       if (requestQueueSizeGauges.add(gauge)) {
-        metricRegistry
-            .register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
+        metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
       } else {
         logger.warn("Failed to register AsyncRequestResponseHandler to the request queue size tracker");
         metricAdditionError.inc();
@@ -156,8 +189,7 @@ public class RestServerMetrics {
         }
       };
       if (responseSetSizeGauges.add(gauge)) {
-        metricRegistry
-            .register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-ResponseSetSize"), gauge);
+        metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-ResponseSetSize"), gauge);
       } else {
         logger.warn("Failed to register AsyncRequestResponseHandler to the response set size tracker");
         metricAdditionError.inc();

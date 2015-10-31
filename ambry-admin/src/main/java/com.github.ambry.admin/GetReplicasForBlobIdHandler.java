@@ -55,6 +55,7 @@ class GetReplicasForBlobIdHandler {
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
       adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
+      restRequest.getMetrics().addToTotalTime(processingTime);
     }
     return channel;
   }

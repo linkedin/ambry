@@ -22,12 +22,11 @@ public class RestRequestMetrics {
   public static class RequestMetricsTracker {
     public final Histogram nioRequestProcessingTime;
     public final Histogram nioResponseProcessingTime;
-    public final Histogram nioResponseWriteTime;
 
     public final Histogram scRequestProcessingTime;
-    public final Histogram scRequestQueueingTime;
+    public final Histogram scRequestQueuingTime;
     public final Histogram scResponseProcessingTime;
-    public final Histogram scResponseQueueingTime;
+    public final Histogram scResponseQueuingTime;
 
     public final Histogram totalTime;
 
@@ -50,17 +49,15 @@ public class RestRequestMetrics {
           metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "NioRequestProcessingTime"));
       nioResponseProcessingTime =
           metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "NioResponseProcessingTime"));
-      nioResponseWriteTime =
-          metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "NioResponseWriteTime"));
 
       scRequestProcessingTime =
           metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScRequestProcessingTime"));
-      scRequestQueueingTime =
-          metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScRequestQueueingTime"));
+      scRequestQueuingTime =
+          metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScRequestQueuingTime"));
       scResponseProcessingTime =
           metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScResponseProcessingTime"));
-      scResponseQueueingTime =
-          metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScResponseQueueingTime"));
+      scResponseQueuingTime =
+          metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "ScResponseQueuingTime"));
 
       totalTime = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + "TotalTime"));
     }
@@ -69,7 +66,6 @@ public class RestRequestMetrics {
   public class NioLayerMetrics {
     private final AtomicLong requestProcessingTime = new AtomicLong(0);
     private final AtomicLong responseProcessingTime = new AtomicLong(0);
-    private final AtomicLong responseWriteTime = new AtomicLong(0);
 
     public long addToRequestProcessingTime(long delta) {
       addToTotalTime(delta);
@@ -79,28 +75,23 @@ public class RestRequestMetrics {
     public long addToResponseProcessingTime(long delta) {
       addToTotalTime(delta);
       return responseProcessingTime.addAndGet(delta);
-    }
-
-    public long addToResponseWriteTime(long delta) {
-      addToTotalTime(delta);
-      return responseWriteTime.addAndGet(delta);
     }
   }
 
   public class ScalingLayerMetrics {
     private final AtomicLong requestProcessingTime = new AtomicLong(0);
-    private final AtomicLong requestQueueingTime = new AtomicLong(0);
+    private final AtomicLong requestQueuingTime = new AtomicLong(0);
     private final AtomicLong responseProcessingTime = new AtomicLong(0);
-    private final AtomicLong responseQueueingTime = new AtomicLong(0);
+    private final AtomicLong responseQueuingTime = new AtomicLong(0);
 
     public long addToRequestProcessingTime(long delta) {
       addToTotalTime(delta);
       return requestProcessingTime.addAndGet(delta);
     }
 
-    public long addToRequestQueueingTime(long delta) {
+    public long addToRequestQueuingTime(long delta) {
       addToTotalTime(delta);
-      return requestQueueingTime.addAndGet(delta);
+      return requestQueuingTime.addAndGet(delta);
     }
 
     public long addToResponseProcessingTime(long delta) {
@@ -108,9 +99,9 @@ public class RestRequestMetrics {
       return responseProcessingTime.addAndGet(delta);
     }
 
-    public long addToResponseQueueingTime(long delta) {
+    public long addToResponseQueuingTime(long delta) {
       addToTotalTime(delta);
-      return responseQueueingTime.addAndGet(delta);
+      return responseQueuingTime.addAndGet(delta);
     }
   }
 
@@ -127,12 +118,11 @@ public class RestRequestMetrics {
       if (metricsRecorded.compareAndSet(false, true)) {
         metricsTracker.nioRequestProcessingTime.update(nioLayerMetrics.requestProcessingTime.get());
         metricsTracker.nioResponseProcessingTime.update(nioLayerMetrics.responseProcessingTime.get());
-        metricsTracker.nioResponseWriteTime.update(nioLayerMetrics.responseWriteTime.get());
 
         metricsTracker.scRequestProcessingTime.update(scalingLayerMetrics.requestProcessingTime.get());
-        metricsTracker.scRequestQueueingTime.update(scalingLayerMetrics.requestQueueingTime.get());
+        metricsTracker.scRequestQueuingTime.update(scalingLayerMetrics.requestQueuingTime.get());
         metricsTracker.scResponseProcessingTime.update(scalingLayerMetrics.responseProcessingTime.get());
-        metricsTracker.scResponseQueueingTime.update(scalingLayerMetrics.responseQueueingTime.get());
+        metricsTracker.scResponseQueuingTime.update(scalingLayerMetrics.responseQueuingTime.get());
 
         metricsTracker.totalTime.update(totalTime.get());
       }

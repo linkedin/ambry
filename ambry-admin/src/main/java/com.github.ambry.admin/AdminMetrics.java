@@ -41,7 +41,15 @@ class AdminMetrics {
 
   // Latencies
   // AdminBlobStorageService
+  // DELETE
+  public final Histogram deletePreProcessingTimeInMs;
+  // HEAD
+  public final Histogram headPreProcessingTimeInMs;
+  // GET
+  public final Histogram getPreProcessingTimeInMs;
+  // POST
   public final Histogram blobPropsBuildTimeInMs;
+  public final Histogram postPreProcessingTimeInMs;
   // DeleteCallback
   public final Histogram deleteCallbackProcessingTimeInMs;
   public final Histogram deleteTimeInMs;
@@ -113,8 +121,20 @@ class AdminMetrics {
 
     // Latencies
     // AdminBlobStorageService
+    // DELETE
+    deletePreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "DeletePreProcessingTimeInMs"));
+    // HEAD
+    headPreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "HeadPreProcessingTimeInMs"));
+    // GET
+    getPreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetPreProcessingTimeInMs"));
+    // POST
     blobPropsBuildTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "BlobPropsBuildTimeInMs"));
+    postPreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "PostPreProcessingTimeInMs"));
     // DeleteCallback
     deleteCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteCallback.class, "ProcessingTimeInMs"));

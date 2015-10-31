@@ -116,22 +116,22 @@ class NettyServerDeployer implements Runnable {
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
       b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
-          .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog).handler(new LoggingHandler(LogLevel.INFO))
-          .childHandler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            public void initChannel(SocketChannel ch)
-                throws Exception {
-              ch.pipeline()
-                  // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-                  // to go here.
-                  .addLast("codec", new HttpServerCodec())
-                      // for detecting connections that have been idle too long - probably because of an error.
-                  .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                      // custom processing class that interfaces with a BlobStorageService.
-                  .addLast("processor",
-                      new NettyMessageProcessor(nettyMetrics, nettyConfig, requestResponseHandlerController));
-            }
-          });
+          .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
+          .handler(new LoggingHandler(LogLevel.DEBUG)).childHandler(new ChannelInitializer<SocketChannel>() {
+        @Override
+        public void initChannel(SocketChannel ch)
+            throws Exception {
+          ch.pipeline()
+              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+              // to go here.
+              .addLast("codec", new HttpServerCodec())
+                  // for detecting connections that have been idle too long - probably because of an error.
+              .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
+                  // custom processing class that interfaces with a BlobStorageService.
+              .addLast("processor",
+                  new NettyMessageProcessor(nettyMetrics, nettyConfig, requestResponseHandlerController));
+        }
+      });
       ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
       logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
       // let the parent know that startup is complete and so that it can proceed.
