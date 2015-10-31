@@ -181,23 +181,35 @@ public class NettyResponseChannelTest {
   /**
    * Tests the {@link ChannelWriteResultListener}. Currently tests for reactions to bad input, bad state transitions and
    * write failures.
+   * @throws RestServiceException
    */
   @Test
-  public void channelWriteResultListenerTest() {
-    ChannelWriteResultListener listener = new ChannelWriteResultListener(new NettyMetrics(new MetricRegistry()));
+  public void channelWriteResultListenerTest()
+      throws RestServiceException {
+    HttpRequest httpRequest = createRequest(HttpMethod.GET, "/");
+    NettyRequest nettyRequest = new NettyRequest(httpRequest, new NettyMetrics(new MetricRegistry()));
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     Channel channel = new EmbeddedChannel(processor);
     assertTrue("Channel is not open", channel.isOpen());
     DefaultChannelPromise future = new DefaultChannelPromise(channel);
 
-    // operationComplete() for future not being tracked - should not throw exceptions.
+    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics);
+    // operationComplete() should not throw exceptions even though NettyRequest is null.
+    future.setSuccess();
     listener.operationComplete(future);
-    // track future
-    listener.trackWrite(future);
-    // try to re-track future - should not throw exceptions
-    listener.trackWrite(future);
+
+    listener = new ChannelWriteResultListener(nettyRequest, nettyMetrics);
+    // successful operationComplete() and NettyRequest present.
+    future = new DefaultChannelPromise(channel);
+    future.setSuccess();
+    listener.operationComplete(future);
+
     // mark future as failed and verify that channel is closed.
+    future = new DefaultChannelPromise(channel);
     future.setFailure(new Exception("placeHolderException"));
+    listener.operationComplete(future);
     assertFalse("Channel is still open after failed write", channel.isOpen());
   }
 
@@ -543,7 +555,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   public static final String CUSTOM_HEADER_NAME = "customHeader";
 
   private ChannelHandlerContext ctx;
-  private RestRequest request;
+  private NettyRequest request;
   private NettyResponseChannel restResponseChannel;
 
   @Override
@@ -586,7 +598,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleRequest(HttpRequest httpRequest)
       throws IOException, ParseException, RestServiceException {
     if (request == null) {
-      request = new NettyRequest(httpRequest);
+      request = new NettyRequest(httpRequest, new NettyMetrics(new MetricRegistry()));
+      restResponseChannel.setRequest(request);
       restResponseChannel.setContentType("text/plain; charset=UTF-8");
       TestingUri uri = TestingUri.getTestingURI(request.getUri());
       switch (uri) {
