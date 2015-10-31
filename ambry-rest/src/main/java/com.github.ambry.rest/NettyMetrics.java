@@ -26,11 +26,10 @@ class NettyMetrics {
 
   // Latencies
   // NettyResponseChannel
-  public final Histogram channelWriteProcessingTimeInMs;
-  public final Histogram errorResponseProcessingTimeInMs;
-  public final Histogram headerSetTimeInMs;
-  public final Histogram responseMetadataProcessingTimeInMs;
-  public final Histogram writeProcessingTimeInMs;
+  public final Histogram channelWriteProcessingTime;
+  public final Histogram errorResponseProcessingTime;
+  public final Histogram responseMetadataProcessingTime;
+  public final Histogram writeProcessingTime;
 
   // Errors
   // ChannelWriteResultListner
@@ -76,10 +75,6 @@ class NettyMetrics {
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
 
-  /**
-   * Creates an instance of NettyMetrics using the given {@code metricRegistry}.
-   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
-   */
   public NettyMetrics(MetricRegistry metricRegistry) {
     // Rates
     // NettyMessageProcessor
@@ -97,15 +92,14 @@ class NettyMetrics {
 
     // Latencies
     // NettyResponseChannel
-    channelWriteProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteProcessingTimeInMs"));
-    errorResponseProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseProcessingTimeInMs"));
-    headerSetTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "HeaderSetTimeInMs"));
-    responseMetadataProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataProcessingTimeInMs"));
-    writeProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTimeInMs"));
+    channelWriteProcessingTime =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteProcessingTime"));
+    errorResponseProcessingTime =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseProcessingTime"));
+    responseMetadataProcessingTime =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataProcessingTime"));
+    writeProcessingTime =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTime"));
 
     // Errors
     // ChannelWriteResultListener
