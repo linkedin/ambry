@@ -1,5 +1,6 @@
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.ByteBufferChannel;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpContent;
@@ -97,10 +98,10 @@ public class NettyRequestTest {
   @Test
   public void conversionWithBadInputTest()
       throws RestServiceException {
-    // null input.
+    // HttpRequest null.
     try {
-      new NettyRequest(null);
-      fail("Provided null input to NettyRequest, yet it did not fail");
+      new NettyRequest(null, new NettyMetrics(new MetricRegistry()));
+      fail("Provided null HttpRequest to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
@@ -325,7 +326,7 @@ public class NettyRequestTest {
   @Test
   public void nettyContentBadInputTest() {
     try {
-      new NettyContent(null);
+      new NettyContent(null, new NettyMetrics(new MetricRegistry()));
       fail("Constructor of NettyContent should have thrown IllegalArgumentException on null input");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -345,11 +346,13 @@ public class NettyRequestTest {
    */
   private NettyRequest createNettyRequest(HttpMethod httpMethod, String uri, HttpHeaders headers)
       throws RestServiceException {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetrics.setDefaults(metricRegistry);
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
     if (headers != null) {
       httpRequest.headers().set(headers);
     }
-    return new NettyRequest(httpRequest);
+    return new NettyRequest(httpRequest, new NettyMetrics(metricRegistry));
   }
 
   /**

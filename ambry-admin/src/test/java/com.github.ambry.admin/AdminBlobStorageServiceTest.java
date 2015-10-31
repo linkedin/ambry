@@ -1342,7 +1342,7 @@ class AdminTestResponseHandler extends AsyncRequestResponseHandler {
       restResponseChannel.onResponseComplete(exception);
       responseSubmitted.countDown();
     } else {
-      throw new RestServiceException("Response handler inactive", RestServiceErrorCode.RequestResponseQueueingFailure);
+      throw new RestServiceException("Response handler inactive", RestServiceErrorCode.RequestResponseQueuingFailure);
     }
   }
 
