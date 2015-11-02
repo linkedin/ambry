@@ -15,14 +15,14 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 class Sender implements Runnable {
 
-  BlockingQueue<Payload> blockingQueue;
+  BlockingQueue<Payload> payloadQueue;
   CountDownLatch completedLatch;
   int numberOfRequests;
   Coordinator coordinator;
 
-  public Sender(LinkedBlockingQueue<Payload> blockingQueue, CountDownLatch completedLatch, int numberOfRequests,
+  public Sender(LinkedBlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, int numberOfRequests,
       Coordinator coordinator) {
-    this.blockingQueue = blockingQueue;
+    this.payloadQueue = payloadQueue;
     this.completedLatch = completedLatch;
     this.numberOfRequests = numberOfRequests;
     this.coordinator = coordinator;
@@ -39,7 +39,7 @@ class Sender implements Runnable {
         new Random().nextBytes(metadata);
         new Random().nextBytes(blob);
         String blobId = coordinator.putBlob(properties, ByteBuffer.wrap(metadata), new ByteArrayInputStream(blob));
-        blockingQueue.put(new Payload(properties, metadata, blob, blobId));
+        payloadQueue.put(new Payload(properties, metadata, blob, blobId));
       }
     } catch (Exception e) {
       e.printStackTrace();

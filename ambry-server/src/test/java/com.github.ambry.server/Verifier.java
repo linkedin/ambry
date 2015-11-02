@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Verifier thread to get blob from ambry and check with the original blob
  */
 class Verifier implements Runnable {
-  private BlockingQueue<Payload> blockingQueue;
+  private BlockingQueue<Payload> payloadQueue;
   private CountDownLatch completedLatch;
   private AtomicInteger totalRequests;
   private AtomicInteger requestsVerified;
@@ -42,10 +42,10 @@ class Verifier implements Runnable {
   private ConnectionPool connectionPool;
   private MockNotificationSystem notificationSystem;
 
-  public Verifier(BlockingQueue<Payload> blockingQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
+  public Verifier(BlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
       AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
       ConnectionPool connectionPool, MockNotificationSystem notificationSystem) {
-    this.blockingQueue = blockingQueue;
+    this.payloadQueue = payloadQueue;
     this.completedLatch = completedLatch;
     this.totalRequests = totalRequests;
     this.requestsVerified = requestsVerified;
@@ -61,7 +61,7 @@ class Verifier implements Runnable {
     try {
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
-        Payload payload = blockingQueue.poll(1000, TimeUnit.MILLISECONDS);
+        Payload payload = payloadQueue.poll(1000, TimeUnit.MILLISECONDS);
         if (payload != null) {
           notificationSystem.awaitBlobCreations(payload.blobId);
           for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {

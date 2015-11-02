@@ -680,19 +680,19 @@ public final class ServerTestUtil {
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
     Thread[] senderThreads = new Thread[3];
-    LinkedBlockingQueue<Payload> blockingQueue = new LinkedBlockingQueue<Payload>();
+    LinkedBlockingQueue<Payload> payloadQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
     int numberOfVerifierThreads = 3;
     CountDownLatch senderLatch = new CountDownLatch(numberOfSenderThreads);
     int numberOfRequestsToSendPerThread = 5;
     for (int i = 0; i < numberOfSenderThreads; i++) {
       senderThreads[i] =
-          new Thread(new Sender(blockingQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
+          new Thread(new Sender(payloadQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
       senderThreads[i].start();
     }
     senderLatch.await();
 
-    if (blockingQueue.size() != numberOfRequestsToSendPerThread * numberOfSenderThreads) {
+    if (payloadQueue.size() != numberOfRequestsToSendPerThread * numberOfSenderThreads) {
       // Failed during putBlob
       throw new IllegalStateException();
     }
@@ -709,7 +709,7 @@ public final class ServerTestUtil {
     AtomicBoolean cancelTest = new AtomicBoolean(false);
     for (int i = 0; i < numberOfVerifierThreads; i++) {
       Thread thread = new Thread(
-          new Verifier(blockingQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
+          new Verifier(payloadQueue, verifierLatch, totalRequests, verifiedRequests, cluster.getClusterMap(),
               cancelTest, portType, connectionPool, notificationSystem));
       thread.start();
     }
