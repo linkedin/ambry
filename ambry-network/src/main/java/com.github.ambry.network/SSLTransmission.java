@@ -417,9 +417,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       netReadBuffer = Utils.ensureCapacity(netReadBuffer, packetBufferSize());
       if (netReadBuffer.remaining() > 0) {
         int netread = socketChannel.read(netReadBuffer);
-        if (netread == 0 && netReadBuffer.position() == 0) {
+        if (netread == 0) {
           return read;
-        } else if (netread < 0 && netReadBuffer.position() == 0) {
+        } else if (netread < 0) {
           throw new EOFException("EOF during read");
         }
       }
@@ -444,7 +444,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         }
 
         if (unwrapResult.getStatus() == SSLEngineResult.Status.OK) {
+          if(dst.remaining() > 0) {
             read += readFromAppBuffer(dst);
+          }
         } else if (unwrapResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
           int currentApplicationBufferSize = applicationBufferSize();
           appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
@@ -472,7 +474,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         } else if (unwrapResult.getStatus() == SSLEngineResult.Status.CLOSED) {
           throw new EOFException();
         }
-      } while (dst.hasRemaining() && netReadBuffer.position() != 0);
+      } while (netReadBuffer.position() != 0);
     }
     return read;
   }
