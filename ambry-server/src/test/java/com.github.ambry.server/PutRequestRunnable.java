@@ -29,10 +29,10 @@ class PutRequestRunnable implements Runnable {
   byte[] data;
   byte[] usermetadata;
   BlobProperties blobProperties;
-  CountDownLatch latch;
+  CountDownLatch endLatch;
 
   public PutRequestRunnable(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
-      byte[] usermetadata, BlobProperties blobProperties, CountDownLatch latch) {
+      byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;
     blobIds = new ArrayList<BlobId>(totalBlobsToPut);
@@ -45,7 +45,7 @@ class PutRequestRunnable implements Runnable {
     this.data = data;
     this.usermetadata = usermetadata;
     this.blobProperties = blobProperties;
-    this.latch = latch;
+    this.endLatch = endLatch;
   }
 
   @Override
@@ -64,7 +64,7 @@ class PutRequestRunnable implements Runnable {
     } catch (Exception e) {
       Assert.assertTrue(false);
     } finally {
-      latch.countDown();
+      endLatch.countDown();
     }
   }
 
