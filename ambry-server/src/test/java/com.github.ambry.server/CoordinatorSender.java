@@ -11,17 +11,17 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 
 /**
- * Sending thread to put request to ambry
+ * Sending thread to put request to ambry through Coordinator
  */
-class Sender implements Runnable {
+class CoordinatorSender implements Runnable {
 
   BlockingQueue<Payload> payloadQueue;
   CountDownLatch completedLatch;
   int numberOfRequests;
   Coordinator coordinator;
 
-  public Sender(LinkedBlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, int numberOfRequests,
-      Coordinator coordinator) {
+  public CoordinatorSender(LinkedBlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch,
+      int numberOfRequests, Coordinator coordinator) {
     this.payloadQueue = payloadQueue;
     this.completedLatch = completedLatch;
     this.numberOfRequests = numberOfRequests;

@@ -22,7 +22,7 @@ import org.junit.Assert;
 /**
  *
  */
-class PutRequestRunnable implements Runnable {
+class DirectSender implements Runnable {
 
   BlockingChannel channel;
   List<BlobId> blobIds;
@@ -31,7 +31,7 @@ class PutRequestRunnable implements Runnable {
   BlobProperties blobProperties;
   CountDownLatch endLatch;
 
-  public PutRequestRunnable(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
+  public DirectSender(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
       byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;

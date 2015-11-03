@@ -279,7 +279,7 @@ public final class ServerTestUtil {
 
       int noOfParallelThreads = 3;
       CountDownLatch latch = new CountDownLatch(noOfParallelThreads);
-      List<PutRequestRunnable> runnables = new ArrayList<PutRequestRunnable>(noOfParallelThreads);
+      List<DirectSender> runnables = new ArrayList<DirectSender>(noOfParallelThreads);
       BlockingChannel channel = null;
       for (int i = 0; i < noOfParallelThreads; i++) {
         if (i % noOfParallelThreads == 0) {
@@ -289,8 +289,8 @@ public final class ServerTestUtil {
         } else if (i % noOfParallelThreads == 2) {
           channel = channel3;
         }
-        PutRequestRunnable runnable =
-            new PutRequestRunnable(cluster, channel, 50, data, usermetadata, properties, latch);
+        DirectSender runnable =
+            new DirectSender(cluster, channel, 50, data, usermetadata, properties, latch);
         runnables.add(runnable);
         Thread threadToRun = new Thread(runnable);
         threadToRun.start();
@@ -687,7 +687,7 @@ public final class ServerTestUtil {
     int numberOfRequestsToSendPerThread = 5;
     for (int i = 0; i < numberOfSenderThreads; i++) {
       senderThreads[i] =
-          new Thread(new Sender(payloadQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
+          new Thread(new CoordinatorSender(payloadQueue, senderLatch, numberOfRequestsToSendPerThread, coordinator));
       senderThreads[i].start();
     }
     senderLatch.await();
