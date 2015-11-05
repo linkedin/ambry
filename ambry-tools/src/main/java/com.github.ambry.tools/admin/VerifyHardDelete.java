@@ -47,6 +47,47 @@ class HardDeleteVerifier {
   private HashMap<BlobId, IndexValue> offRangeMap;
   private static final short HARD_DELETE_TOKEN_V0 = 0;
 
+  /* The statistics we need to compute.*/
+
+  // This says whether there were any entries in the log that could not be deserialized or had invalid version etc.
+  private boolean invalidEntriesInlog = false;
+
+  // Number of blobs that have a mismatch with their corresponding entry in the original log - the
+  // number of undeleted blobs that are not exactly the same as the blob read from the same offset in the original
+  // replica. This should be 0.
+  private long mismatchWithOldErrorCount = 0;
+
+  // Same as above, but provides the number of blobs that are zeroed out in the new log that were deleted after the
+  // last eligible segment. Ideally this should be 0.
+  // Basically, there could have been deletes between the startToken (which determines the last eligible segment)
+  // and the endToken that the rangeMap (which has entries till the last eligible segment) does not reflect. The
+  // hard delete thread could have processed these deletes, so a mismatch that we see could be due to that.
+  // Therefore, those kind of mismatches will be counted toward this count and not towards
+  // mismatchWithOldErrorCount.
+  private long mismatchAccountedInNewerSegments = 0;
+
+  // Number of deleted blobs before the end point represented by the cleanup token, which do not have the blob
+  // properties and the content zeroed out. This should be 0.
+  private long notHardDeletedErrorCount = 0;
+
+  // (Approximate) Number of times multiple put records for the same blob was encountered.
+  private long duplicatePuts = 0;
+
+  // Number of put records that are still untouched.
+  private long unDeletedPuts = 0;
+
+  // Number of records that are deleted before the end point represented by the cleanup token.
+  private long hardDeletedPuts = 0;
+
+  // Number of delete records encountered.
+  private long deletes = 0;
+
+  // Number of non deleted blobs that are corrupt.
+  private long corruptNonDeleted = 0;
+
+  // Number of deleted blobs that are corrupt.
+  private long corruptDeleted = 0;
+
   public HardDeleteVerifier(ClusterMap map, String dataDir, String oldDataDir, String outFile) {
     this.map = map;
     this.dataDir = dataDir;
@@ -105,6 +146,12 @@ class HardDeleteVerifier {
       hardDeleteVerifier.verifyHardDeletes();
     } catch (Exception e) {
       e.printStackTrace();
+    }
+  }
+
+  private class ContinueException extends Exception {
+    ContinueException(String s) {
+      super(s);
     }
   }
 
@@ -281,8 +328,7 @@ class HardDeleteVerifier {
     return lastEligibleSegmentEndOffset;
   }
 
-  private boolean verifyZeroed(byte[] arr)
-      throws Exception {
+  private boolean verifyZeroed(byte[] arr) {
     for (int i = 0; i < arr.length; i++) {
       if (arr[i] != 0) {
         return false;
@@ -291,11 +337,16 @@ class HardDeleteVerifier {
     return true;
   }
 
-  /**
-   *
-   *
+  public void verifyHardDeletes()
+      throws Exception {
+    if (oldDataDir != null) {
+      verify(dataDir, oldDataDir);
+    } else {
+      verify(dataDir);
+    }
+  }
 
-   *
+  /**
    *  0. Read cleanupToken and get the conservative offset till which hard deletes have surely been done.
    *  1. Read and store the index file entries (read all into memory).
    *  2. Scan the log up to the last segment's log end offset.
@@ -322,8 +373,8 @@ class HardDeleteVerifier {
    * 3. Goes through the log file and for each blob that is deleted in the
    * @throws IOException
    */
-  public void verifyHardDeletes()
-      throws IOException {
+  private void verify(String dataDir)
+      throws Exception {
     final String Cleanup_Token_Filename = "cleanuptoken";
 
     FileWriter fileWriter = null;
@@ -339,211 +390,271 @@ class HardDeleteVerifier {
       RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
       InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
 
-      RandomAccessFile oldRandomAccessFile = null;
-      InputStream oldStreamlog = null;
-      if (oldDataDir != null) {
-        File oldLogFile = new File(oldDataDir, "log_current");
-        oldRandomAccessFile = new RandomAccessFile(oldLogFile, "r");
-        oldStreamlog = Channels.newInputStream(oldRandomAccessFile.getChannel());
-      }
-
       long currentOffset = 0;
-      System.out.println("Starting scan from offset 0");
+      System.out.println("Starting scan from offset " + currentOffset + " to " + offsetInCleanupToken);
 
-      /* The statistics we need to compute.*/
-
-      // This says whether there were any entries in the log that could not be deserialized or had invalid version etc.
-      boolean invalidEntriesInlog = false;
-
-      // Number of blobs that have a mismatch with their corresponding entry in the original log - the
-      // number of undeleted blobs that are not exactly the same as the blob read from the same offset in the original
-      // replica. This should be 0.
-      long mismatchWithOldErrorCount = 0;
-
-      // Same as above, but provides the number of blobs that are zeroed out in the new log that were deleted after the
-      // last eligible segment. Ideally this should be 0.
-      // Basically, there could have been deletes between the startToken (which determines the last eligible segment)
-      // and the endToken that the rangeMap (which has entries till the last eligible segment) does not reflect. The
-      // hard delete thread could have processed these deletes, so a mismatch that we see could be due to that.
-      // Therefore, those kind of mismatches will be counted toward this count and not towards
-      // mismatchWithOldErrorCount.
-      long mismatchAccountedInNewerSegments = 0;
-
-      // Number of deleted blobs before the end point represented by the cleanup token, which do not have the blob
-      // properties and the content zeroed out. This should be 0.
-      long notHardDeletedErrorCount = 0;
-
-      // (Approximate) Number of times multiple put records for the same blob was encountered.
-      long duplicatePuts = 0;
-
-      // Number of put records that are still untouched.
-      long unDeletedPuts = 0;
-
-      // Number of records that are deleted before the end point represented by the cleanup token.
-      long hardDeletedPuts = 0;
-
-      // Number of delete records encountered.
-      long deletes = 0;
-
-      // Number of non deleted blobs that are corrupt.
-      long corruptNonDeleted = 0;
-
-      // Number of deleted blobs that are corrupt.
-      long corruptDeleted = 0;
-
-      long lastOffsetToLookFor = oldDataDir == null ? lastEligibleSegmentEndOffset
-          : Math.min(lastEligibleSegmentEndOffset, oldRandomAccessFile.length());
+      long lastOffsetToLookFor = lastEligibleSegmentEndOffset;
+      boolean seeking = false;
       while (currentOffset < lastOffsetToLookFor) {
-        boolean mismatchWithOld = false;
         try {
-          if (oldDataDir != null) {
-            oldRandomAccessFile.seek(randomAccessFile.getFilePointer());
-          }
           short version = randomAccessFile.readShort();
           if (version == 1) {
+            seeking = false;
             ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             buffer.putShort(version);
             randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-            buffer.flip();
+            buffer.rewind();
             MessageFormatRecord.MessageHeader_Format_V1 header =
                 new MessageFormatRecord.MessageHeader_Format_V1(buffer);
 
-            /* Verify that the header is the same in old and new log files */
-            if (oldDataDir != null) {
-              ByteBuffer oldBuffer = ByteBuffer.allocate(buffer.capacity());
-              oldRandomAccessFile.read(oldBuffer.array(), 0, oldBuffer.capacity());
-              mismatchWithOld = !Arrays.equals(buffer.array(), oldBuffer.array());
-            }
-
             // read blob id
             BlobId id;
-            try {
-              id = new BlobId(new DataInputStream(streamlog), map);
-              if (oldDataDir != null) {
-                BlobId old_id = new BlobId(new DataInputStream(oldStreamlog), map);
-                if (old_id.compareTo(id) != 0) {
-                  mismatchWithOld = true;
-                }
-              }
-            } catch (IOException e) {
-              invalidEntriesInlog = true;
-              randomAccessFile.seek(++currentOffset);
-              continue;
-            } catch (IllegalArgumentException e) {
-              invalidEntriesInlog = true;
-              randomAccessFile.seek(++currentOffset);
-              continue;
-            }
+            id = new BlobId(new DataInputStream(streamlog), map);
 
             IndexValue indexValue = rangeMap.get(id);
             boolean isDeleted = false;
             if (indexValue == null) {
-              System.err.println("Key in log not found in index: " + id);
-              invalidEntriesInlog = true;
-              randomAccessFile.seek(++currentOffset);
-              continue;
+              throw new IllegalStateException("Key in log not found in index " + id);
             } else if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               isDeleted = true;
             }
 
             if (header.getBlobPropertiesRecordRelativeOffset()
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-              BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-              ByteBuffer metadata = null;
-              BlobOutput output = null;
-              boolean caughtException = false;
+              BlobProperties props;
+              ByteBuffer metadata;
+              BlobOutput output;
               try {
+                props = MessageFormatRecord.deserializeBlobProperties(streamlog);
                 metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
                 output = MessageFormatRecord.deserializeBlob(streamlog);
               } catch (MessageFormatException e) {
-                System.err.println(
-                    "Exception while deserializing, offset: " + currentOffset + " delete state: " + (isDeleted ? "true"
-                        : "false"));
-                e.printStackTrace();
-                caughtException = true;
                 if (!isDeleted) {
                   corruptNonDeleted++;
                 } else {
                   corruptDeleted++;
                 }
-              }
-              BlobProperties oldProps = null;
-              ByteBuffer oldMetadata = null;
-              BlobOutput oldOutput = null;
-              if (oldDataDir != null) {
-                oldProps = MessageFormatRecord.deserializeBlobProperties(oldStreamlog);
-                try {
-                  oldMetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
-                  oldOutput = MessageFormatRecord.deserializeBlob(oldStreamlog);
-                } catch (MessageFormatException e) {
-                  System.err.println(
-                      "Exception while deserializing old record, offset: " + currentOffset + " delete state: " + (
-                          isDeleted ? "true" : "false"));
-                  caughtException = true;
-                }
+                throw e;
               }
 
-              if (!caughtException) {
-                if (oldProps != null && props.toString().compareTo(oldProps.toString()) != 0) {
-                  System.err.println("Blob properties mismatch");
-                  mismatchWithOld = true;
-                }
-
-                if (isDeleted) {
-                  if (!verifyZeroed(metadata.array()) || !verifyZeroed(Utils
-                      .readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
-                          (int) output.getSize()))) {
+              if (isDeleted) {
+                if (!verifyZeroed(metadata.array()) || !verifyZeroed(Utils
+                    .readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
+                        (int) output.getSize()))) {
                     /* If the offset in the index is different from that in the log, hard delete wouldn't have been
                        possible and we just saw a duplicate put for the same key, otherwise we missed a hard delete. */
-                    if (currentOffset == indexValue.getOriginalMessageOffset()) {
-                      notHardDeletedErrorCount++;
-                    } else {
-                      // the assumption here is that this put has been lost as far as the index is concerned due to
-                      // a duplicate put. Of course, these shouldn't happen anymore, we are accounting for past
-                      // bugs.
-                      duplicatePuts++;
-                    }
+                  if (currentOffset == indexValue.getOriginalMessageOffset()) {
+                    notHardDeletedErrorCount++;
                   } else {
-                    hardDeletedPuts++;
+                    // the assumption here is that this put has been lost as far as the index is concerned due to
+                    // a duplicate put. Of course, these shouldn't happen anymore, we are accounting for past
+                    // bugs.
+                    duplicatePuts++;
                   }
                 } else {
-                  if (oldDataDir != null && (!Arrays.equals(metadata.array(), oldMetadata.array()) || !Arrays.equals(
-                      Utils.readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
-                          (int) output.getSize()), Utils
-                      .readBytesFromStream(oldOutput.getStream(), new byte[(int) oldOutput.getSize()], 0,
-                          (int) oldOutput.getSize())))) {
-                    IndexValue value = offRangeMap.get(id);
+                  hardDeletedPuts++;
+                }
+              } else {
+                unDeletedPuts++;
+              }
+            } else {
+              MessageFormatRecord.deserializeDeleteRecord(streamlog);
+              deletes++;
+            }
+            currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
+          } else {
+            throw new IllegalStateException("Unknown version for entry");
+          }
+        } catch (MessageFormatException e) {
+          if (!seeking) {
+            invalidEntriesInlog = true;
+            e.printStackTrace();
+            seeking = true;
+          }
+          randomAccessFile.seek(++currentOffset);
+        } catch (IOException e) {
+          if (!seeking) {
+            invalidEntriesInlog = true;
+            e.printStackTrace();
+            seeking = true;
+          }
+          randomAccessFile.seek(++currentOffset);
+        } catch (IllegalArgumentException e) {
+          if (!seeking) {
+            invalidEntriesInlog = true;
+            e.printStackTrace();
+            seeking = true;
+          }
+          randomAccessFile.seek(++currentOffset);
+        } catch (IllegalStateException e) {
+          if (!seeking) {
+            invalidEntriesInlog = true;
+            e.printStackTrace();
+            seeking = true;
+          }
+          randomAccessFile.seek(++currentOffset);
+        } catch (Exception e) {
+          e.printStackTrace(System.err);
+          invalidEntriesInlog = true;
+          randomAccessFile.seek(++currentOffset);
+          break;
+        }
+      }
+      String msg = ("\n============");
+      msg += "\ninvalidEntriesInlog? " + (invalidEntriesInlog ? "Yes" : "No");
+      msg += "\nnotHardDeletedErrorCount: " + notHardDeletedErrorCount;
+      msg += "\ncorruptNonDeletedCount:" + corruptNonDeleted;
+      msg += "\n========";
+      msg += "\ncorruptDeleted:" + corruptDeleted;
+      msg += "\nduplicatePuts: " + duplicatePuts;
+      msg += "\nundeleted Put Records: " + unDeletedPuts;
+      msg += "\nhard deleted Put Records: " + hardDeletedPuts;
+      msg += "\nDelete Records: " + deletes;
+      msg += "\n============";
+      fileWriter.write(msg);
+      System.out.println(msg);
+    } finally {
+      if (fileWriter != null) {
+        fileWriter.flush();
+        fileWriter.close();
+      }
+    }
+  }
 
-                    // this is basically a best effort to see if any mismatch that was seen - that is a blob is hard
-                    // deleted in the newer datadir but not in the old datadir - is due to the fact that these records
-                    // were deleted later on (between the time the old data dir was saved off and the time that the new
-                    // data dir was saved off).
-                    if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+  /**
+   *  0. Read cleanupToken and get the conservative offset till which hard deletes have surely been done.
+   *  1. Read and store the index file entries (read all into memory).
+   *  2. Scan the log up to the last segment's log end offset.
+   *  3. For each entry:
+   *   a. ensure crc passes
+   *   b. If user metadata and blob are 0s, and the key is within the last eligible segment
+   *      (or the cleanupToken:startToken), then findKey() should return isDeleted=true.
+   *   c. If user metadata and blob are not 0s, then findKey() should return isDeleted=false.
+   *   d. Any mismatch, write to a file.
+   *
+   *   For details, see https://iwww.corp.linkedin.com/wiki/cf/display/ENGS/Hard+Deletes+in+Ambry
+   */
+
+  /**
+   * This method ensures that all the blobs that should have been hard deleted are indeed hard deleted and the rest
+   * are untouched. Optionally, if the state of the dataDir prior to hard deletes being enabled is available, then
+   * compares the non-hard deleted records between the two and ensure they are exactly the same.
+   *
+   * Here's the algorithm:
+   *
+   * 1. Reads cleanupToken and gets the conservative offset till hard deletes surely are complete.
+   * 2. Reads the index files and stores everything upto the conservative offset above in a "rangeMap" and the later
+   *    entries in an "offRangeMap".
+   * 3. Goes through the log file and for each blob that is deleted in the
+   * @throws IOException
+   */
+  private void verify(String dataDir, String oldDataDir)
+      throws Exception {
+    final String Cleanup_Token_Filename = "cleanuptoken";
+
+    FileWriter fileWriter = null;
+    try {
+      fileWriter = new FileWriter(new File(outFile));
+      long offsetInCleanupToken = getOffsetFromCleanupToken(new File(dataDir, Cleanup_Token_Filename));
+      rangeMap = new HashMap<BlobId, IndexValue>();
+      offRangeMap = new HashMap<BlobId, IndexValue>();
+      long lastEligibleSegmentEndOffset = readAndPopulateIndex(offsetInCleanupToken);
+
+      // 2. Scan the log and check against blobMap
+      File logFile = new File(dataDir, "log_current");
+      RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
+      InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+
+      File oldLogFile = new File(oldDataDir, "log_current");
+      RandomAccessFile oldRandomAccessFile = new RandomAccessFile(oldLogFile, "r");
+      InputStream oldStreamlog = Channels.newInputStream(oldRandomAccessFile.getChannel());
+
+      long currentOffset = 0;
+      System.out.println("Starting scan from offset " + currentOffset + " to " + offsetInCleanupToken);
+
+      long lastOffsetToLookFor = Math.min(lastEligibleSegmentEndOffset, oldRandomAccessFile.length());
+      boolean seeking = false;
+      while (currentOffset < lastOffsetToLookFor) {
+        boolean mismatchWithOld = false;
+        try {
+          oldRandomAccessFile.seek(randomAccessFile.getFilePointer());
+          short version = randomAccessFile.readShort();
+          if (version == 1) {
+            seeking = false;
+            ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+            buffer.putShort(version);
+            randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+            buffer.rewind();
+            MessageFormatRecord.MessageHeader_Format_V1 header =
+                new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+
+
+            /* Verify that the header is the same in old and new log files */
+            ByteBuffer oldBuffer = ByteBuffer.allocate(buffer.capacity());
+            oldRandomAccessFile.read(oldBuffer.array(), 0, oldBuffer.capacity());
+            mismatchWithOld = !Arrays.equals(buffer.array(), oldBuffer.array());
+
+            BlobId id = readBlobId(streamlog, oldStreamlog);
+
+            boolean isDeleted = false;
+            boolean proceed = true;
+            IndexValue indexValue = readIndexValueFromRangeMap(id);
+            if (indexValue == null) {
+              proceed = false;
+            } else {
+              isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
+            }
+
+            if (proceed) {
+              if (header.getBlobPropertiesRecordRelativeOffset()
+                  != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+                deserializeBlobProperties(streamlog, oldStreamlog, isDeleted);
+                boolean asExpected = deserializeUserMetadataAndBlob(streamlog, oldStreamlog, isDeleted);
+                if (!asExpected) {
+                  if (isDeleted) {
+                    if (indexValue.getOriginalMessageOffset() != currentOffset) {
+                      duplicatePuts++;
+                    } else {
+                      notHardDeletedErrorCount++;
+                    }
+                  } else {
+                    indexValue = offRangeMap.get(id);
+                    if (indexValue != null && indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
                       mismatchAccountedInNewerSegments++;
                     } else {
                       mismatchWithOld = true;
                     }
+                  }
+                } else {
+                  if (isDeleted) {
+                    hardDeletedPuts++;
                   } else {
                     unDeletedPuts++;
                   }
                 }
+              } else {
+                deserializeDeleteRecord(streamlog, oldStreamlog);
+                deletes++;
               }
-            } else {
-              deletes++;
-              MessageFormatRecord.deserializeDeleteRecord(streamlog);
             }
-            currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
-            if (mismatchWithOld) {
-              System.err.println("Mismatch for blob id: " + id);
-              mismatchWithOldErrorCount++;
-            }
+            currentOffset += header.getMessageSize() + buffer.capacity() + id.sizeInBytes();
           } else {
-            invalidEntriesInlog = true;
-            randomAccessFile.seek(++currentOffset);
+            throw new ContinueException("Version mismatch");
           }
+        } catch (ContinueException e) {
+          if (!seeking) {
+            invalidEntriesInlog = true;
+            e.printStackTrace();
+            seeking = true;
+          }
+          randomAccessFile.seek(++currentOffset);
         } catch (Exception e) {
-          System.err.println("Received exception" + e);
+          e.printStackTrace(System.err);
           break;
+        } finally {
+          if (mismatchWithOld) {
+            mismatchWithOldErrorCount++;
+          }
         }
       }
       String msg = ("\n============");
@@ -563,15 +674,186 @@ class HardDeleteVerifier {
       msg += "\n============";
       fileWriter.write(msg);
       System.out.println(msg);
-    } catch (IOException ioException) {
-      System.out.println("IOException thrown " + ioException);
-    } catch (Exception exception) {
-      System.out.println("Exception thrown " + exception);
     } finally {
       if (fileWriter != null) {
         fileWriter.flush();
         fileWriter.close();
       }
     }
+  }
+
+  void deserializeDeleteRecord(InputStream streamlog, InputStream oldStreamlog)
+      throws ContinueException {
+    boolean caughtException = false;
+    boolean caughtExceptionInOld = false;
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(streamlog);
+    } catch (MessageFormatException e) {
+      caughtException = true;
+    } catch (IOException e) {
+      caughtExceptionInOld = true;
+    }
+
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(oldStreamlog);
+    } catch (MessageFormatException e) {
+      caughtException = true;
+    } catch (IOException e) {
+      caughtExceptionInOld = true;
+    }
+
+    if (caughtException) {
+      throw new ContinueException("delete record could not be deserialized");
+    }
+  }
+
+  boolean deserializeUserMetadataAndBlob(InputStream streamlog, InputStream oldStreamlog, boolean isDeleted)
+      throws ContinueException {
+    boolean caughtException = false;
+    boolean caughtExceptionInOld = false;
+    ByteBuffer usermetadata = null;
+    ByteBuffer oldUsermetadata = null;
+    BlobOutput blobOutput = null;
+    BlobOutput oldBlobOutput = null;
+
+    try {
+      usermetadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+      blobOutput = MessageFormatRecord.deserializeBlob(streamlog);
+    } catch (MessageFormatException e) {
+      caughtException = true;
+    } catch (IOException e) {
+      caughtException = true;
+    }
+
+    try {
+      oldUsermetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
+      oldBlobOutput = MessageFormatRecord.deserializeBlob(oldStreamlog);
+    } catch (MessageFormatException e) {
+      caughtExceptionInOld = true;
+    } catch (IOException e) {
+      caughtExceptionInOld = true;
+    }
+
+    boolean asExpected;
+
+    if (!caughtException) {
+      if (isDeleted) {
+        try {
+          asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(Utils
+              .readBytesFromStream(blobOutput.getStream(), new byte[(int) blobOutput.getSize()], 0,
+                  (int) blobOutput.getSize()));
+        } catch (IOException e) {
+          asExpected = false;
+        }
+      } else {
+        try {
+          asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(Utils
+              .readBytesFromStream(blobOutput.getStream(), new byte[(int) blobOutput.getSize()], 0,
+                  (int) blobOutput.getSize()), Utils
+              .readBytesFromStream(oldBlobOutput.getStream(), new byte[(int) oldBlobOutput.getSize()], 0,
+                  (int) oldBlobOutput.getSize()));
+        } catch (IOException e) {
+          asExpected = false;
+        }
+      }
+      return asExpected;
+    } else if (!caughtExceptionInOld) {
+      if (isDeleted) {
+        corruptDeleted++;
+      } else {
+        corruptNonDeleted++;
+      }
+      throw new ContinueException("records did not deserialize");
+    } else {
+      throw new ContinueException("records did not deserialize in either.");
+    }
+  }
+
+  boolean deserializeBlobProperties(InputStream streamlog, InputStream oldStreamlog, boolean isDeleted)
+      throws ContinueException {
+    boolean caughtException = false;
+    boolean caughtExceptionInOld = false;
+    BlobProperties props = null;
+    BlobProperties oldProps = null;
+
+    try {
+      props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+    } catch (MessageFormatException e) {
+      caughtException = true;
+    } catch (IOException e) {
+      caughtException = true;
+    }
+
+    try {
+      oldProps = MessageFormatRecord.deserializeBlobProperties(oldStreamlog);
+    } catch (MessageFormatException e) {
+      caughtExceptionInOld = true;
+    } catch (IOException e) {
+      caughtExceptionInOld = true;
+    }
+
+    if (!caughtException) {
+      if (props.toString().compareTo(oldProps.toString()) != 0) {
+        System.out.println("Blob id mismatch!");
+        return false;
+      }
+    } else if (!caughtExceptionInOld) {
+      if (isDeleted) {
+        corruptDeleted++;
+      } else {
+        corruptNonDeleted++;
+      }
+      throw new ContinueException("blob properties could not be deserialized.");
+    } else {
+      throw new ContinueException("blob properties could not be deserialized in either");
+    }
+    return true;
+  }
+
+  IndexValue readIndexValueFromRangeMap(BlobId id)
+      throws ContinueException {
+    IndexValue indexValue = rangeMap.get(id);
+    if (indexValue == null) {
+      //@todo: update
+      return null;
+    }
+    return indexValue;
+  }
+
+  BlobId readBlobId(InputStream streamlog, InputStream oldStreamlog)
+      throws ContinueException {
+    BlobId id = null;
+    BlobId idInOld = null;
+    boolean caughtException = false;
+    boolean caughtExceptionInOld = false;
+
+    try {
+      id = new BlobId(new DataInputStream(streamlog), map);
+    } catch (IOException e) {
+      caughtException = true;
+    } catch (IllegalArgumentException e) {
+      caughtException = true;
+    }
+
+    try {
+      idInOld = new BlobId(new DataInputStream(oldStreamlog), map);
+    } catch (IOException e) {
+      caughtExceptionInOld = true;
+    } catch (IllegalArgumentException e) {
+      caughtExceptionInOld = true;
+    }
+
+    if (!caughtException) {
+      if (id.compareTo(idInOld) != 0) {
+        //@todo: update counter.
+        throw new ContinueException("id mismatch");
+      }
+    } else if (!caughtExceptionInOld) {
+      //@todo: update counter.
+      throw new ContinueException("blob id could not be deserialized");
+    } else {
+      throw new ContinueException("blob id could not be deserialized in either.");
+    }
+    return id;
   }
 }
