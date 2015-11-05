@@ -337,6 +337,23 @@ class HardDeleteVerifier {
     return true;
   }
 
+  /**
+   * This method ensures that all the blobs that should have been hard deleted are indeed hard deleted and the rest
+   * are untouched. Optionally, if the state of the dataDir prior to hard deletes being enabled is available, then
+   * compares the non-hard deleted records between the two and ensure they are exactly the same.
+   *
+   * Here's the algorithm:
+   *
+   * 1. Reads cleanupToken and gets the conservative offset till which hard deletes surely are complete.
+   * 2. Reads the index files and stores everything upto the conservative offset above in a "rangeMap" and the later
+   *    entries in an "offRangeMap".
+   * 3. Goes through the log file upto the conservative offset, and for each entry checks whether deserialization
+   *    happens successfully, whether it is zeroed out if it is deleted, whether the content is the same as in the
+   *    older data file (if there is one) if it undeleted, whether duplicate puts were encountered etc.
+   *
+   * @throws IOException
+   */
+
   public void verifyHardDeletes()
       throws Exception {
     if (oldDataDir != null) {
@@ -346,33 +363,6 @@ class HardDeleteVerifier {
     }
   }
 
-  /**
-   *  0. Read cleanupToken and get the conservative offset till which hard deletes have surely been done.
-   *  1. Read and store the index file entries (read all into memory).
-   *  2. Scan the log up to the last segment's log end offset.
-   *  3. For each entry:
-   *   a. ensure crc passes
-   *   b. If user metadata and blob are 0s, and the key is within the last eligible segment
-   *      (or the cleanupToken:startToken), then findKey() should return isDeleted=true.
-   *   c. If user metadata and blob are not 0s, then findKey() should return isDeleted=false.
-   *   d. Any mismatch, write to a file.
-   *
-   *   For details, see https://iwww.corp.linkedin.com/wiki/cf/display/ENGS/Hard+Deletes+in+Ambry
-   */
-
-  /**
-   * This method ensures that all the blobs that should have been hard deleted are indeed hard deleted and the rest
-   * are untouched. Optionally, if the state of the dataDir prior to hard deletes being enabled is available, then
-   * compares the non-hard deleted records between the two and ensure they are exactly the same.
-   *
-   * Here's the algorithm:
-   *
-   * 1. Reads cleanupToken and gets the conservative offset till hard deletes surely are complete.
-   * 2. Reads the index files and stores everything upto the conservative offset above in a "rangeMap" and the later
-   *    entries in an "offRangeMap".
-   * 3. Goes through the log file and for each blob that is deleted in the
-   * @throws IOException
-   */
   private void verify(String dataDir)
       throws Exception {
     final String Cleanup_Token_Filename = "cleanuptoken";
@@ -521,33 +511,6 @@ class HardDeleteVerifier {
     }
   }
 
-  /**
-   *  0. Read cleanupToken and get the conservative offset till which hard deletes have surely been done.
-   *  1. Read and store the index file entries (read all into memory).
-   *  2. Scan the log up to the last segment's log end offset.
-   *  3. For each entry:
-   *   a. ensure crc passes
-   *   b. If user metadata and blob are 0s, and the key is within the last eligible segment
-   *      (or the cleanupToken:startToken), then findKey() should return isDeleted=true.
-   *   c. If user metadata and blob are not 0s, then findKey() should return isDeleted=false.
-   *   d. Any mismatch, write to a file.
-   *
-   *   For details, see https://iwww.corp.linkedin.com/wiki/cf/display/ENGS/Hard+Deletes+in+Ambry
-   */
-
-  /**
-   * This method ensures that all the blobs that should have been hard deleted are indeed hard deleted and the rest
-   * are untouched. Optionally, if the state of the dataDir prior to hard deletes being enabled is available, then
-   * compares the non-hard deleted records between the two and ensure they are exactly the same.
-   *
-   * Here's the algorithm:
-   *
-   * 1. Reads cleanupToken and gets the conservative offset till hard deletes surely are complete.
-   * 2. Reads the index files and stores everything upto the conservative offset above in a "rangeMap" and the later
-   *    entries in an "offRangeMap".
-   * 3. Goes through the log file and for each blob that is deleted in the
-   * @throws IOException
-   */
   private void verify(String dataDir, String oldDataDir)
       throws Exception {
     final String Cleanup_Token_Filename = "cleanuptoken";
@@ -814,7 +777,6 @@ class HardDeleteVerifier {
       throws ContinueException {
     IndexValue indexValue = rangeMap.get(id);
     if (indexValue == null) {
-      //@todo: update
       return null;
     }
     return indexValue;
@@ -845,11 +807,9 @@ class HardDeleteVerifier {
 
     if (!caughtException) {
       if (id.compareTo(idInOld) != 0) {
-        //@todo: update counter.
         throw new ContinueException("id mismatch");
       }
     } else if (!caughtExceptionInOld) {
-      //@todo: update counter.
       throw new ContinueException("blob id could not be deserialized");
     } else {
       throw new ContinueException("blob id could not be deserialized in either.");
