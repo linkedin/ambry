@@ -53,6 +53,10 @@ public class CoordinatorBackedRouterMetrics {
   public final Counter operationError;
   public final Counter queueStartTimeNotRecordedError;
 
+  /**
+   * Creates an instance of CoordinatorBackedRouterMetrics using the given {@code metricRegistry}.
+   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+   */
   public CoordinatorBackedRouterMetrics(MetricRegistry metricRegistry) {
     // Rates
     // CoordinatorBackedRouter
