@@ -22,6 +22,7 @@ import java.io.IOException;
 public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler {
   public static String RUNTIME_EXCEPTION_ON_HANDLE = "runtime.exception.on.handle";
   public static String REST_EXCEPTION_ON_HANDLE = "rest.exception.on.handle";
+  public static String CLOSE_REQUEST_ON_HANDLE = "close.request.on.handle";
 
   private boolean isRunning = false;
   private VerifiableProperties failureProperties = null;
@@ -61,12 +62,6 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
   public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
-      if (restRequest == null) {
-        throw new IllegalArgumentException("RestRequest is null");
-      } else if (restResponseChannel == null) {
-        throw new IllegalArgumentException("RestResponseChannel is null");
-      }
-
       RestMethod restMethod = restRequest.getRestMethod();
       switch (restMethod) {
         case GET:
@@ -105,12 +100,6 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
       throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
       try {
-        if (restRequest == null) {
-          throw new IllegalArgumentException("RestRequest is null");
-        } else if (restResponseChannel == null) {
-          throw new IllegalArgumentException("RestResponseChannel is null");
-        }
-
         if (exception == null && response != null) {
           // BEWARE: test code with assumptions of non blocking behaviour in this class may run into an infinite loop.
           while (response.read(restResponseChannel) != -1) {
@@ -166,8 +155,13 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
    */
   private boolean shouldProceed(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {
-    if (failureProperties != null) {
-      if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE)) {
+    if (restRequest == null) {
+      throw new IllegalArgumentException("RestRequest is null");
+    } else if (restResponseChannel == null) {
+      throw new IllegalArgumentException("RestResponseChannel is null");
+    } else if (failureProperties != null) {
+      if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE) && failureProperties
+          .getBoolean(RUNTIME_EXCEPTION_ON_HANDLE)) {
         throw new RuntimeException(RUNTIME_EXCEPTION_ON_HANDLE);
       } else if (failureProperties.containsKey(REST_EXCEPTION_ON_HANDLE)) {
         RestServiceErrorCode errorCode = RestServiceErrorCode.InternalServerError;
@@ -177,6 +171,13 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
           // it's alright.
         }
         throw new RestServiceException(REST_EXCEPTION_ON_HANDLE, errorCode);
+      } else if (failureProperties.containsKey(CLOSE_REQUEST_ON_HANDLE) && failureProperties
+          .getBoolean(CLOSE_REQUEST_ON_HANDLE)) {
+        try {
+          restRequest.close();
+        } catch (IOException e) {
+          // too bad.
+        }
       }
     }
     return failureProperties == null;

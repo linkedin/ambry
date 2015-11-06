@@ -145,7 +145,7 @@ class NettyResponseChannel implements RestResponseChannel {
     } finally {
       long writeProcessingTime =
           System.currentTimeMillis() - writeProcessingStartTime - responseMetadataWriteTime - channelWriteTime;
-      nettyMetrics.writeProcessingTime.update(writeProcessingTime);
+      nettyMetrics.writeProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
         request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
@@ -266,11 +266,15 @@ class NettyResponseChannel implements RestResponseChannel {
    *                NettyResponseChannel.
    */
   protected void setRequest(NettyRequest request) {
-    if (this.request == null) {
-      this.request = request;
+    if (request != null) {
+      if (this.request == null) {
+        this.request = request;
+      } else {
+        throw new IllegalStateException(
+            "Request has already been set inside NettyResponseChannel for channel {} " + ctx.channel());
+      }
     } else {
-      throw new IllegalStateException(
-          "Request has already been set inside NettyResponseChannel for channel {} " + ctx.channel());
+      throw new IllegalArgumentException("RestRequest provided is null");
     }
   }
 
@@ -316,7 +320,7 @@ class NettyResponseChannel implements RestResponseChannel {
         channelWriteTime = currentTime - channelWriteStartTime;
       }
       long writeProcessingTime = currentTime - writeProcessingStartTime - channelWriteTime;
-      nettyMetrics.responseMetadataProcessingTime.update(writeProcessingTime);
+      nettyMetrics.responseMetadataProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
         request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
@@ -361,7 +365,7 @@ class NettyResponseChannel implements RestResponseChannel {
         channelWriteTime = currentTime - writeResultListener.writeStartTime;
       }
       long writeProcessingTime = currentTime - channelWriteProcessingTime - channelWriteTime;
-      nettyMetrics.channelWriteProcessingTime.update(writeProcessingTime);
+      nettyMetrics.channelWriteProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
         request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
@@ -380,6 +384,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private HttpHeaders setResponseHeader(String headerName, Object headerValue)
       throws RestServiceException {
     if (headerName != null && headerValue != null) {
+      long startTime = System.currentTimeMillis();
       try {
         responseMetadataChangeLock.lock();
         verifyResponseAlive();
@@ -396,6 +401,7 @@ class NettyResponseChannel implements RestResponseChannel {
         throw e;
       } finally {
         responseMetadataChangeLock.unlock();
+        nettyMetrics.headerSetTimeInMs.update(System.currentTimeMillis() - startTime);
       }
     } else {
       throw new IllegalArgumentException("Header name [" + headerName + "] or header value [" + headerValue + "] null");
@@ -472,7 +478,7 @@ class NettyResponseChannel implements RestResponseChannel {
     } finally {
       long errorResponseProcessingTime =
           System.currentTimeMillis() - errorResponseProcessingStartTime - channelWriteTime;
-      nettyMetrics.errorResponseProcessingTime.update(errorResponseProcessingTime);
+      nettyMetrics.errorResponseProcessingTimeInMs.update(errorResponseProcessingTime);
       if (request != null) {
         request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(errorResponseProcessingTime);
       }
