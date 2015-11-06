@@ -60,6 +60,8 @@ public class RestServerMetrics {
   private final Counter metricAdditionError;
 
   // Others
+  // AsyncaHandlerWorker
+  public final Counter responseExceptionCount;
   // AsyncRequestResponseHandler
   public final Histogram requestResponseHandlerShutdownTimeInMs;
   public final Histogram requestResponseHandlerStartTimeInMs;
@@ -130,6 +132,9 @@ public class RestServerMetrics {
     metricAdditionError = metricRegistry.counter(MetricRegistry.name(getClass(), "MetricAdditionError"));
 
     // Others
+    // AsyncHandlerWorker
+    responseExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseExceptionCount"));
     // AsyncRequestResponseHandler
     requestResponseHandlerShutdownTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownTimeInMs"));

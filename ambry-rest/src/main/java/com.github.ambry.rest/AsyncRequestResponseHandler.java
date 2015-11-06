@@ -576,21 +576,26 @@ class AsyncHandlerWorker implements Runnable {
   private void onResponseComplete(RestRequest restRequest, RestResponseChannel restResponseChannel, Exception exception,
       boolean forceClose) {
     try {
-      if (exception instanceof RestServiceException) {
-        RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
-        if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.InternalServerError) {
-          logger.error("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-              exception);
-        } else if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
-          logger.debug("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-              exception);
+      if (exception != null) {
+        restServerMetrics.responseExceptionCount.inc();
+        if (exception instanceof RestServiceException) {
+          RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
+          ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
+          if (responseStatus == ResponseStatus.InternalServerError) {
+            logger.error("Internal error handling request {} with method {}.", restRequest.getUri(),
+                restRequest.getRestMethod(), exception);
+          } else if (responseStatus == ResponseStatus.BadRequest) {
+            logger
+                .debug("Request {} with method {} is a bad request.", restRequest.getUri(), restRequest.getRestMethod(),
+                    exception);
+          } else {
+            logger.trace("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
+                exception);
+          }
         } else {
-          logger.trace("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-              exception);
+          logger.error("Unexpected error handling request {} with method {}.", restRequest.getUri(),
+              restRequest.getRestMethod(), exception);
         }
-      } else if (exception != null) {
-        logger.error("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
-            exception);
       }
       restResponseChannel.onResponseComplete(exception);
       if (forceClose) {
