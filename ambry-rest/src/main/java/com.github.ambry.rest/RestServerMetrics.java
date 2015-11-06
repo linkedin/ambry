@@ -70,6 +70,10 @@ public class RestServerMetrics {
   public final Histogram restServerStartTimeInMs;
   public final Histogram restServerShutdownTimeInMs;
 
+  /**
+   * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
+   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+   */
   public RestServerMetrics(MetricRegistry metricRegistry) {
     this.metricRegistry = metricRegistry;
     asyncRequestQueueOccupancyGauges = new ArrayList<Gauge<Integer>>();

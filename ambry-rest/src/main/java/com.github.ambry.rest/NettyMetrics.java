@@ -76,6 +76,10 @@ class NettyMetrics {
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
 
+  /**
+   * Creates an instance of NettyMetrics using the given {@code metricRegistry}.
+   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+   */
   public NettyMetrics(MetricRegistry metricRegistry) {
     // Rates
     // NettyMessageProcessor

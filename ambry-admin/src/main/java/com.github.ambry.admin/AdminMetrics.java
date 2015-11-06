@@ -86,6 +86,10 @@ class AdminMetrics {
   public final Counter getReplicasForBlobIdPartitionNullError;
   public final Counter getReplicasForBlobIdResponseBuildingError;
 
+  /**
+   * Creates an instance of AdminMetrics using the given {@code metricRegistry}.
+   * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+   */
   public AdminMetrics(MetricRegistry metricRegistry) {
     // RequestMetricsTracker instances
     // DELETE
