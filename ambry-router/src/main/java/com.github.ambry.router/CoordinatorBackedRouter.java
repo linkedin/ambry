@@ -407,6 +407,8 @@ class CoordinatorOperation implements Runnable {
       router.metrics.operationQueuingTimeInMs.update(queueTime);
       logger.trace("Operation spent {} ms in execution queue", queueTime);
       router.metrics.operationDequeuingRate.mark();
+    } else {
+      router.metrics.queueStartTimeNotRecordedError.inc();
     }
   }
 }

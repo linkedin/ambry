@@ -45,13 +45,13 @@ public class CoordinatorBackedRouterMetrics {
   public final Histogram putBlobTotalTimeInMs;
 
   // Errors
-  // CoordinatorOperation
   // CoordinatorBackedRouter
   public final Counter closeError;
   public final Counter futureCallbackError;
   public final Counter unavailableError;
   // CoordinatorOperation
   public final Counter operationError;
+  public final Counter queueStartTimeNotRecordedError;
 
   public CoordinatorBackedRouterMetrics(MetricRegistry metricRegistry) {
     // Rates
@@ -106,5 +106,7 @@ public class CoordinatorBackedRouterMetrics {
     unavailableError = metricRegistry.counter(MetricRegistry.name(CoordinatorBackedRouter.class, "UnavailableError"));
     // CoordinatorOperation
     operationError = metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "OperationError"));
+    queueStartTimeNotRecordedError =
+        metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "QueueStartTimeNotRecordedError"));
   }
 }
