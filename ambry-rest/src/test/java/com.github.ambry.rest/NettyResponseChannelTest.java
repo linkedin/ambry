@@ -283,6 +283,20 @@ public class NettyResponseChannelTest {
     assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
   }
 
+  /**
+   * Tries different exception scenarios for {@link NettyResponseChannel#setRequest(NettyRequest)}.
+   */
+  @Test
+  public void setRequestTest() {
+    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetRequestTest.toString());
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    channel.writeInbound(request);
+
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
+  }
+
   // helpers
   // general
 
@@ -519,6 +533,10 @@ enum TestingUri {
    */
   SetNullHeader,
   /**
+   * Tests setting of a {@link NettyRequest} in {@link NettyResponseChannel}.
+   */
+  SetRequestTest,
+  /**
    * When this request is received, the {@link NettyResponseChannel} is closed and then a write operation is attempted.
    */
   WriteAfterClose,
@@ -644,6 +662,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         case SetNullHeader:
           setNullHeaders();
           break;
+        case SetRequestTest:
+          setRequestTest();
+          break;
         case WriteAfterClose:
           restResponseChannel.close();
           restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()));
@@ -734,6 +755,37 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         fail("Call to setHeader with null values succeeded. It should have not");
       } catch (IllegalArgumentException e) {
         // expected. nothing to do.
+      }
+    } finally {
+      restResponseChannel.setStatus(status);
+      restResponseChannel.onResponseComplete(null);
+    }
+  }
+
+  /**
+   * Tries different exception scenarios for {@link NettyResponseChannel#setRequest(NettyRequest)}.
+   * @throws RestServiceException
+   */
+  private void setRequestTest()
+      throws RestServiceException {
+    ResponseStatus status = ResponseStatus.Accepted;
+    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
+    try {
+      try {
+        restResponseChannel.setRequest(null);
+        status = ResponseStatus.InternalServerError;
+        fail("Tried to set null request yet no exception was thrown");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+
+      restResponseChannel.setRequest(request);
+      try {
+        restResponseChannel.setRequest(request);
+        status = ResponseStatus.InternalServerError;
+        fail("Tried to reset request and no exception was thrown");
+      } catch (IllegalStateException e) {
+        // expected. Nothing to do.
       }
     } finally {
       restResponseChannel.setStatus(status);
