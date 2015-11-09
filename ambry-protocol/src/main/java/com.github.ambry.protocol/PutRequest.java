@@ -1,11 +1,10 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertiesSerDe;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,36 +16,44 @@ import java.nio.channels.WritableByteChannel;
  * A Put Request used to put a blob
  */
 public class PutRequest extends RequestOrResponse {
-
   private ByteBuffer usermetadata;
   private InputStream data;
+  private long dataSize;
   private BlobId blobId;
   private long sentBytes = 0;
   private BlobProperties properties;
 
   private static final int UserMetadata_Size_InBytes = 4;
+  private static final int BlobData_Size_InBytes = 8;
+  private static final short Put_Request_Version_V1 = 1;
+  private static final short Put_Request_Version_V2 = 2;
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream data) {
-    super(RequestOrResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
-
+      ByteBuffer usermetadata, InputStream data, long dataSize, short versionId) {
+    super(RequestOrResponseType.PutRequest, versionId, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
     this.data = data;
+    this.dataSize = dataSize;
+  }
+
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, InputStream data, long dataSize) {
+    this(correlationId, clientId, blobId, properties, usermetadata, data, dataSize, Put_Request_Version_V2);
   }
 
   public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short versionId = stream.readShort();
-    // ignore version for now
-    int correlationId = stream.readInt();
-    String clientId = Utils.readIntString(stream);
-    BlobId id = new BlobId(stream, map);
-    BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
-    ByteBuffer metadata = Utils.readIntBuffer(stream);
-    InputStream data = stream;
-    return new PutRequest(correlationId, clientId, id, properties, metadata, data);
+    switch (versionId) {
+      case Put_Request_Version_V1:
+        return PutRequest_V1.readFrom(stream, map);
+      case Put_Request_Version_V2:
+        return PutRequest_V2.readFrom(stream, map);
+      default:
+        throw new IllegalStateException("Unknown Request response version" + versionId);
+    }
   }
 
   public BlobId getBlobId() {
@@ -66,19 +73,19 @@ public class PutRequest extends RequestOrResponse {
   }
 
   public long getDataSize() {
-    return properties.getBlobSize();
+    return dataSize;
   }
 
   @Override
   public long sizeInBytes() {
     // sizeExcludingData + blob size
-    return sizeExcludingData() + properties.getBlobSize();
+    return sizeExcludingData() + dataSize;
   }
 
   private int sizeExcludingData() {
-    // header + blobId size + blobId + metadata size + metadata + blob property size
-    return (int) super.sizeInBytes() + blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
-        BlobPropertiesSerDe.getBlobPropertiesSize(properties);
+    // size of (header + blobId + blob properties + metadata size + metadata + blob size)
+    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties) +
+        UserMetadata_Size_InBytes + usermetadata.capacity() + BlobData_Size_InBytes;
   }
 
   @Override
@@ -92,6 +99,7 @@ public class PutRequest extends RequestOrResponse {
       BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());
       bufferToSend.put(usermetadata);
+      bufferToSend.putLong(dataSize);
       bufferToSend.flip();
     }
     while (sentBytes < sizeInBytes()) {
@@ -133,7 +141,39 @@ public class PutRequest extends RequestOrResponse {
     } else {
       sb.append(", ").append("UserMetaDataSize=0");
     }
+    sb.append(", ").append("dataSize=").append(getDataSize());
     sb.append("]");
     return sb.toString();
+  }
+
+  // Class to read protocol version 1 Put Request from the stream.
+  public static class PutRequest_V1 {
+    public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+        throws IOException {
+      int correlationId = stream.readInt();
+      String clientId = Utils.readIntString(stream);
+      BlobId id = new BlobId(stream, map);
+      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
+      ByteBuffer metadata = Utils.readIntBuffer(stream);
+      InputStream data = stream;
+      return new PutRequest(correlationId, clientId, id, properties, metadata, data, properties.getBlobSize(),
+          Put_Request_Version_V1);
+    }
+  }
+
+  // Class to read protocol version 2 Put Request from the stream.
+  public static class PutRequest_V2 {
+    public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+        throws IOException {
+      int correlationId = stream.readInt();
+      String clientId = Utils.readIntString(stream);
+      BlobId id = new BlobId(stream, map);
+      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
+      ByteBuffer metadata = Utils.readIntBuffer(stream);
+      long dataSize = stream.readLong();
+      InputStream data = stream;
+      return new PutRequest(correlationId, clientId, id, properties, metadata, data, dataSize,
+          Put_Request_Version_V2);
+    }
   }
 }

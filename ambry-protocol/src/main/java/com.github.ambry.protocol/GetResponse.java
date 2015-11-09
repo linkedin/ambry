@@ -25,10 +25,11 @@ public class GetResponse extends Response {
   private int partitionResponseInfoSize;
 
   private static int Partition_Response_Info_List_Size = 4;
+  private static final short Get_Response_Version_V1 = 1;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -39,7 +40,7 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       InputStream stream, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -49,7 +50,7 @@ public class GetResponse extends Response {
   }
 
   public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
     this.partitionResponseInfoList = null;
     this.partitionResponseInfoSize = 0;
   }

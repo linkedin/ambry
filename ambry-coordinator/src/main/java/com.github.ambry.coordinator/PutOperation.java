@@ -64,7 +64,7 @@ final public class PutOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
-        userMetadata.duplicate(), materializedBlobStream.duplicate());
+        userMetadata.duplicate(), materializedBlobStream.duplicate(), blobProperties.getBlobSize());
     return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
   }
 

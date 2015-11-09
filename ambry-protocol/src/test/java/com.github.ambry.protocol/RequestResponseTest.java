@@ -98,7 +98,7 @@ public class RequestResponseTest {
         new BlobProperties(dataSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
 
     PutRequest request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-        new ByteBufferInputStream(ByteBuffer.wrap(data)));
+        new ByteBufferInputStream(ByteBuffer.wrap(data)), dataSize);
 
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
