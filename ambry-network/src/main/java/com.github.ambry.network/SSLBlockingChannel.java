@@ -21,6 +21,7 @@ public class SSLBlockingChannel extends BlockingChannel {
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
   public final Counter sslClientHandshakeErrorCount;
+  public final Counter sslClientHandshakeCount;
 
   public SSLBlockingChannel(String host, int port, MetricRegistry registry, int readBufferSize, int writeBufferSize,
       int readTimeoutMs, int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
@@ -32,6 +33,8 @@ public class SSLBlockingChannel extends BlockingChannel {
     this.sslConfig = sslConfig;
     sslClientHandshakeErrorCount =
         registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeErrorCount"));
+    sslClientHandshakeCount =
+        registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeCount"));
   }
 
   @Override
@@ -68,6 +71,7 @@ public class SSLBlockingChannel extends BlockingChannel {
         // handshake in a blocking way
         try {
           sslSocket.startHandshake();
+          sslClientHandshakeCount.inc();
         } catch (IOException e) {
           sslClientHandshakeErrorCount.inc();
           throw e;
