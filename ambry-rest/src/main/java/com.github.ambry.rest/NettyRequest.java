@@ -110,8 +110,8 @@ class NettyRequest implements RestRequest {
   public void close()
       throws IOException {
     if (channelOpen.compareAndSet(true, false)) {
+      contentLock.lock();
       try {
-        contentLock.lock();
         Iterator<NettyContent> nettyContentIterator = requestContents.iterator();
         while (nettyContentIterator.hasNext()) {
           nettyContentIterator.next().release();
@@ -155,12 +155,15 @@ class NettyRequest implements RestRequest {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten = streamEnded.get() ? -1 : 0;
+    int bytesWritten;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
-    } else if (!streamEnded.get()) {
+    } else if (streamEnded.get()) {
+      bytesWritten = -1;
+    } else {
+      bytesWritten = 0;
+      contentLock.lock();
       try {
-        contentLock.lock();
         // We read from the NettyContent at the head of the list until :-
         // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
         //      ends.
@@ -222,8 +225,8 @@ class NettyRequest implements RestRequest {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
       NettyContent nettyContent = new NettyContent(httpContent);
+      contentLock.lock();
       try {
-        contentLock.lock();
         if (!isOpen()) {
           throw new ClosedChannelException();
         }
@@ -248,29 +251,29 @@ class NettyContent {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Wraps the {@code content} so that is easier to read.
-   * @param content the {@link HttpContent} that needs to be wrapped.
-   * @throws IllegalArgumentException if {@code content} is null.
+   * Wraps the {@code httpContent} so that is easier to read.
+   * @param httpContent the {@link HttpContent} that needs to be wrapped.
+   * @throws IllegalArgumentException if {@code httpContent} is null.
    */
-  public NettyContent(HttpContent content) {
-    if (content == null) {
+  public NettyContent(HttpContent httpContent) {
+    if (httpContent == null) {
       throw new IllegalArgumentException("Received null HttpContent");
-    } else if (content.content().nioBufferCount() > 0) {
+    } else if (httpContent.content().nioBufferCount() > 0) {
       // not a copy.
-      contentChannel = new ByteBufferReadableStreamChannel(content.content().nioBuffer());
-      this.content = content;
+      contentChannel = new ByteBufferReadableStreamChannel(httpContent.content().nioBuffer());
+      this.content = httpContent;
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
-      logger.warn("Http content had to be copied because ByteBuf did not have a backing ByteBuffer");
-      ByteBuffer contentBuffer = ByteBuffer.allocate(content.content().capacity());
-      content.content().readBytes(contentBuffer);
+      logger.warn("Http httpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
+      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
+      httpContent.content().readBytes(contentBuffer);
       contentChannel = new ByteBufferReadableStreamChannel(contentBuffer);
-      // no need to retain content since we have a copy.
+      // no need to retain httpContent since we have a copy.
       this.content = null;
     }
     // LastHttpContent in the end marker in netty http world.
-    isLast = content instanceof LastHttpContent;
+    isLast = httpContent instanceof LastHttpContent;
   }
 
   /**

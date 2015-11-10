@@ -83,7 +83,7 @@ public class RestServerTest {
   public void startShutdownTestWithBadComponent()
       throws InstantiationException, IOException {
     Properties properties = new Properties();
-    properties.setProperty("rest.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     // makes MockNioServer throw exceptions.
     properties.setProperty(MockNioServerFactory.IS_FAULTY_KEY, "true");
     VerifiableProperties verifiableProperties = getVProps(properties);
@@ -114,8 +114,9 @@ public class RestServerTest {
    * @return an instance of {@link VerifiableProperties}.
    */
   private VerifiableProperties getVProps(Properties properties) {
-    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory",
+        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     return new VerifiableProperties(properties);
   }
 
@@ -166,7 +167,7 @@ public class RestServerTest {
   private void badNioServerClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty("rest.nio.server.factory", "non.existent.nio.server.factory");
+    properties.setProperty("rest.server.nio.server.factory", "non.existent.nio.server.factory");
     VerifiableProperties verifiableProperties = getVProps(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -176,7 +177,7 @@ public class RestServerTest {
     }
 
     // invalid NioServerFactory.
-    properties.setProperty("rest.nio.server.factory", RestServer.class.getCanonicalName());
+    properties.setProperty("rest.server.nio.server.factory", RestServer.class.getCanonicalName());
     verifiableProperties = getVProps(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -186,7 +187,7 @@ public class RestServerTest {
     }
 
     // faulty NioServerFactory
-    properties.setProperty("rest.nio.server.factory", FaultyFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.nio.server.factory", FaultyFactory.class.getCanonicalName());
     verifiableProperties = getVProps(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -203,8 +204,8 @@ public class RestServerTest {
   private void badBlobStorageServiceClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty("rest.blob.storage.service.factory", "non.existent.blob.storage.service.factory");
-    properties.setProperty("rest.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory", "non.existent.blob.storage.service.factory");
+    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -214,8 +215,8 @@ public class RestServerTest {
     }
 
     // invalid BlobStorageServiceFactory.
-    properties.setProperty("rest.blob.storage.service.factory", RestServer.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory", RestServer.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -225,8 +226,8 @@ public class RestServerTest {
     }
 
     // faulty BlobStorageServiceFactory
-    properties.setProperty("rest.blob.storage.service.factory", FaultyFactory.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory", FaultyFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -243,8 +244,9 @@ public class RestServerTest {
   private void badRouterFactoryClassTest()
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", "non.existent.router.factory");
+    properties.setProperty("rest.server.blob.storage.service.factory",
+        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", "non.existent.router.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -254,8 +256,9 @@ public class RestServerTest {
     }
 
     // invalid RouterFactory.
-    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", InMemoryRouter.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory",
+        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", InMemoryRouter.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
@@ -265,8 +268,9 @@ public class RestServerTest {
     }
 
     // faulty RouterFactory
-    properties.setProperty("rest.blob.storage.service.factory", MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.router.factory", FaultyFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory",
+        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.router.factory", FaultyFactory.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());

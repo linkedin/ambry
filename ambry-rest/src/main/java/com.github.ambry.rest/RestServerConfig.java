@@ -17,39 +17,39 @@ class RestServerConfig {
    * The {@link BlobStorageServiceFactory} that needs to be used by the {@link RestServer}
    * for bootstrapping the {@link BlobStorageService}.
    */
-  @Config("rest.blob.storage.service.factory")
-  public final String restBlobStorageServiceFactory;
+  @Config("rest.server.blob.storage.service.factory")
+  public final String restServerBlobStorageServiceFactory;
 
   /**
    * The {@link NioServerFactory} that needs to be used by the {@link RestServer} for
    * bootstrapping the {@link NioServer}.
    */
-  @Config("rest.nio.server.factory")
-  @Default("NettyServerFactory")
-  public final String restNioServerFactory;
+  @Config("rest.server.nio.server.factory")
+  @Default("com.github.ambry.rest.NettyServerFactory")
+  public final String restServerNioServerFactory;
 
   /**
    * The number of {@link AsyncRequestResponseHandler} instances that need to be started by the
    * {@link RequestResponseHandlerController} to handle requests and responses.
    */
-  @Config("rest.scaling.unit.count")
+  @Config("rest.server.scaling.unit.count")
   @Default("5")
-  public final int restScalingUnitCount;
+  public final int restServerScalingUnitCount;
 
   /**
    * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
    * for bootstrapping the {@link com.github.ambry.router.Router}.
    */
-  @Config("rest.router.factory")
+  @Config("rest.server.router.factory")
   @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")
-  public final String restRouterFactory;
+  public final String restServerRouterFactory;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    restBlobStorageServiceFactory = verifiableProperties.getString("rest.blob.storage.service.factory");
-    restNioServerFactory =
-        verifiableProperties.getString("rest.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
-    restScalingUnitCount = verifiableProperties.getInt("rest.scaling.unit.count", 5);
-    restRouterFactory =
-        verifiableProperties.getString("rest.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
+    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
+    restServerNioServerFactory =
+        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
+    restServerScalingUnitCount = verifiableProperties.getInt("rest.server.scaling.unit.count", 5);
+    restServerRouterFactory = verifiableProperties
+        .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
   }
 }

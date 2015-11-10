@@ -138,7 +138,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * {@inheritDoc}
    * <p/>
    * Marks the channel as closed. No further communication will be possible. Any pending writes (that are not already
-   * flushed) might be discarded. The underlying network channel is also closed.
+   * flushed) might be discarded. The process of closing the network channel is also initiated.
    * <p/>
    * The underlying network channel might not be closed immediately but no more writes will be accepted and any calls to
    * {@link #isOpen()} after a call to this function will return {@code false}.
@@ -259,9 +259,9 @@ class NettyResponseChannel implements RestResponseChannel {
    * {@link ChannelFuture} wrapping the exact exception.
    */
   private ChannelFuture maybeWriteResponseMetadata() {
+    responseMetadataChangeLock.lock();
     try {
-      responseMetadataChangeLock.lock();
-      verifyResponseAlive();
+      verifyResponseMetadataAlive();
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked. Note that sending HttpContent chunks data anyway - we are just explicitly specifying
@@ -293,8 +293,8 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private ChannelFuture writeToChannel(HttpObject httpObject, ChannelWriteType channelWriteType)
       throws ClosedChannelException {
+    channelWriteLock.lock();
     try {
-      channelWriteLock.lock();
       verifyChannelActive();
       if (ChannelWriteType.Safe.equals(channelWriteType) && !ctx.channel().isWritable()) {
         emptyingFlushRequired.set(true);
@@ -317,16 +317,15 @@ class NettyResponseChannel implements RestResponseChannel {
    * sent.
    * @param headerName The name of the header.
    * @param headerValue The intended value of the header.
-   * @return The updated headers.
    * @throws IllegalArgumentException if any of {@code headerName} or {@code headerValue} is null.
    * @throws RestServiceException if channel is closed or the response metadata is already sent or is being sent.
    */
-  private HttpHeaders setResponseHeader(String headerName, Object headerValue)
+  private void setResponseHeader(String headerName, Object headerValue)
       throws RestServiceException {
     if (headerName != null && headerValue != null) {
+      responseMetadataChangeLock.lock();
       try {
-        responseMetadataChangeLock.lock();
-        verifyResponseAlive();
+        verifyResponseMetadataAlive();
 
         if (headerValue instanceof Date) {
           HttpHeaders.setDateHeader(responseMetadata, headerName, (Date) headerValue);
@@ -335,7 +334,6 @@ class NettyResponseChannel implements RestResponseChannel {
         }
         logger.trace("Header {} set to {} for channel {}", headerName, responseMetadata.headers().get(headerName),
             ctx.channel());
-        return responseMetadata.headers();
       } catch (RestServiceException e) {
         nettyMetrics.deadResponseAccessError.inc();
         throw e;
@@ -348,14 +346,14 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Verify state of responseMetadata so that we do not try to modify responseMetadata after it has been written to the
-   * channel.
+   * Verify state of response metadata so that we do not try to modify response metadata after it has been written to
+   * the channel.
    * <p/>
    * Simply checks for invalid state transitions. No atomicity guarantees. If the caller requires atomicity, it is
    * their responsibility to ensure it.
    * @throws RestServiceException if response metadata has already been sent.
    */
-  private void verifyResponseAlive()
+  private void verifyResponseMetadataAlive()
       throws RestServiceException {
     if (responseMetadataWritten.get() || !isOpen() || !(ctx.channel().isActive())) {
       throw new RestServiceException("No more changes to response metadata possible",
@@ -467,8 +465,8 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void closeResponseChannel() {
     if (isOpen()) {
+      channelWriteLock.lock();
       try {
-        channelWriteLock.lock();
         responseChannelOpen.set(false);
         logger.trace("NettyResponseChannel for network channel {} closed", ctx.channel());
       } finally {
@@ -481,10 +479,12 @@ class NettyResponseChannel implements RestResponseChannel {
    * May close the underlying network channel depending on whether it has been forced or depending on the value of
    * keep-alive.
    * @param forceClose if {@code true}, closes channel despite keep-alive or any other concerns.
+   * @return {@code true} if a close was initiated on the channel. Otherwise {@code false}.
    */
-  private void maybeCloseNetworkChannel(boolean forceClose) {
+  private boolean maybeCloseNetworkChannel(boolean forceClose) {
     lastWriteFuture.addListener(ChannelFutureListener.CLOSE);
     logger.trace("Requested closing of channel {}", ctx.channel());
+    return true;
   }
 }
 
@@ -535,7 +535,6 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
         logger.error("Write on channel {} failed due to exception. Closed channel", future.channel(), future.cause());
         nettyMetrics.channelWriteError.inc();
       } else {
-
         nettyMetrics.channelWriteLatencyInMs.update(System.currentTimeMillis() - writeStartTime);
       }
     } else {

@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
 public class RequestResponseHandlerController {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerMetrics restServerMetrics;
-  private final List<AsyncRequestResponseHandler> requestResponseHandlers =
+  private final List<AsyncRequestResponseHandler> asyncRequestResponseHandlers =
       new ArrayList<AsyncRequestResponseHandler>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
 
@@ -35,8 +35,8 @@ public class RequestResponseHandlerController {
   public RequestResponseHandlerController(int handlerCount, RestServerMetrics restServerMetrics) {
     if (handlerCount > 0) {
       this.restServerMetrics = restServerMetrics;
-      createRequestHandlers(handlerCount);
-      restServerMetrics.trackRequestHandlerHealth(requestResponseHandlers);
+      createRequestResponseHandlers(handlerCount);
+      restServerMetrics.trackRequestHandlerHealth(asyncRequestResponseHandlers);
     } else {
       restServerMetrics.requestHandlerControllerInstantiationError.inc();
       throw new IllegalArgumentException("Handlers to be created has to be > 0. Is " + handlerCount);
@@ -58,8 +58,8 @@ public class RequestResponseHandlerController {
   public AsyncRequestResponseHandler getHandler() {
     int index = currIndex.getAndIncrement();
     logger.trace("Monotonically increasing value {} was used to pick request handler at index {}", index,
-        index % requestResponseHandlers.size());
-    return requestResponseHandlers.get(index % requestResponseHandlers.size());
+        index % asyncRequestResponseHandlers.size());
+    return asyncRequestResponseHandlers.get(index % asyncRequestResponseHandlers.size());
   }
 
   /**
@@ -68,7 +68,7 @@ public class RequestResponseHandlerController {
    *                           {@link AsyncRequestResponseHandler}.
    */
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
-    for (AsyncRequestResponseHandler requestResponseHandler : requestResponseHandlers) {
+    for (AsyncRequestResponseHandler requestResponseHandler : asyncRequestResponseHandlers) {
       requestResponseHandler.setBlobStorageService(blobStorageService);
     }
   }
@@ -79,8 +79,9 @@ public class RequestResponseHandlerController {
    */
   protected void start()
       throws InstantiationException {
-    logger.info("Starting RequestResponseHandlerController with {} request handler(s)", requestResponseHandlers.size());
-    for (AsyncRequestResponseHandler requestResponseHandler : requestResponseHandlers) {
+    logger.info("Starting RequestResponseHandlerController with {} request handler(s)",
+        asyncRequestResponseHandlers.size());
+    for (AsyncRequestResponseHandler requestResponseHandler : asyncRequestResponseHandlers) {
       requestResponseHandler.start();
     }
     logger.info("RequestResponseHandlerController has started");
@@ -90,9 +91,9 @@ public class RequestResponseHandlerController {
    * Does shutdown tasks for the RequestResponseHandlerController. When the function returns, shutdown is FULLY complete.
    */
   protected void shutdown() {
-    if (requestResponseHandlers.size() > 0) {
+    if (asyncRequestResponseHandlers.size() > 0) {
       logger.info("Shutting down RequestResponseHandlerController");
-      Iterator<AsyncRequestResponseHandler> asyncRequestHandlerIterator = requestResponseHandlers.iterator();
+      Iterator<AsyncRequestResponseHandler> asyncRequestHandlerIterator = asyncRequestResponseHandlers.iterator();
       while (asyncRequestHandlerIterator.hasNext()) {
         AsyncRequestResponseHandler requestHandler = asyncRequestHandlerIterator.next();
         requestHandler.shutdown();
@@ -106,10 +107,10 @@ public class RequestResponseHandlerController {
    * Creates handlerCount instances of {@link AsyncRequestResponseHandler}. They are not started.
    * @param handlerCount The number of instances of {@link AsyncRequestResponseHandler} to be created.
    */
-  private void createRequestHandlers(int handlerCount) {
+  private void createRequestResponseHandlers(int handlerCount) {
     logger.trace("Creating {} instances of AsyncRequestResponseHandler", handlerCount);
     for (int i = 0; i < handlerCount; i++) {
-      requestResponseHandlers.add(new AsyncRequestResponseHandler(restServerMetrics));
+      asyncRequestResponseHandlers.add(new AsyncRequestResponseHandler(restServerMetrics));
     }
   }
 }

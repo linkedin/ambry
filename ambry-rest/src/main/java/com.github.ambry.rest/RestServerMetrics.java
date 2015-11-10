@@ -44,8 +44,7 @@ public class RestServerMetrics {
   public final Counter requestHandlerControllerInstantiationError;
   public final Counter requestHandlerSelectionError;
   // AsyncRequestResponseHandler
-  public final Counter asyncRequestHandlerQueueOfferTooLongError;
-  public final Counter asyncRequestHandlerQueueOfferInterruptedError;
+  public final Counter asyncRequestHandlerQueueAddError;
   public final Counter asyncRequestHandlerRestRequestInfoNullError;
   public final Counter asyncRequestHandlerRestResponseChannelNullError;
   public final Counter asyncRequestHandlerRestRequestNullError;
@@ -90,10 +89,8 @@ public class RestServerMetrics {
         metricRegistry.counter(MetricRegistry.name(RequestResponseHandlerController.class, "InstantiationError"));
     requestHandlerSelectionError = metricRegistry
         .counter(MetricRegistry.name(RequestResponseHandlerController.class, "RequestHandlerSelectionError"));
-    asyncRequestHandlerQueueOfferTooLongError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueOfferTooLongError"));
-    asyncRequestHandlerQueueOfferInterruptedError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueOfferInterruptedError"));
+    asyncRequestHandlerQueueAddError =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueAddError"));
     asyncRequestHandlerRestRequestInfoNullError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "RestRequestInfoNullError"));
     asyncRequestHandlerRestResponseChannelNullError =

@@ -54,14 +54,12 @@ public class RestUtils {
 
     boolean isPrivate = false;
     String isPrivateStr = getHeader(args, RestConstants.Headers.Private, false);
-    if (isPrivateStr != null) {
-      if (isPrivateStr.toLowerCase().equals("true")) {
-        isPrivate = true;
-      } else if (!isPrivateStr.toLowerCase().equals("false")) {
-        throw new RestServiceException(
-            RestConstants.Headers.Private + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
-            RestServiceErrorCode.InvalidArgs);
-      }
+    if (isPrivateStr != null && isPrivateStr.toLowerCase().equals("true")) {
+      isPrivate = true;
+    } else if (isPrivateStr != null && !isPrivateStr.toLowerCase().equals("false")) {
+      throw new RestServiceException(
+          RestConstants.Headers.Private + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
+          RestServiceErrorCode.InvalidArgs);
     }
 
     String serviceId = getHeader(args, RestConstants.Headers.Service_Id, true);

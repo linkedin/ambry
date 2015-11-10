@@ -40,7 +40,6 @@ public class RequestResponseHandlerControllerTest {
   public void startWithHandlerCountZeroTest()
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     try {
       new RequestResponseHandlerController(0, restServerMetrics);
       fail("RequestResponseHandlerController instantiation should have failed because handlerCount is 0");

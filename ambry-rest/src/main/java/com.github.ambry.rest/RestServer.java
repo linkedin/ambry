@@ -70,17 +70,17 @@ public class RestServer {
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     try {
       requestResponseHandlerController =
-          new RequestResponseHandlerController(restServerConfig.restScalingUnitCount, restServerMetrics);
+          new RequestResponseHandlerController(restServerConfig.restServerScalingUnitCount, restServerMetrics);
       RouterFactory routerFactory =
-          Utils.getObj(restServerConfig.restRouterFactory, verifiableProperties, clusterMap, notificationSystem);
+          Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
       router = routerFactory.getRouter();
       BlobStorageServiceFactory blobStorageServiceFactory = Utils
-          .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, clusterMap,
+          .getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
               requestResponseHandlerController, router);
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
       requestResponseHandlerController.setBlobStorageService(blobStorageService);
       NioServerFactory nioServerFactory = Utils
-          .getObj(restServerConfig.restNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
+          .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               requestResponseHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {

@@ -21,16 +21,15 @@ import org.slf4j.LoggerFactory;
 /**
  * Netty specific implementation of {@link NioServer}.
  * <p/>
- * Responsible for accepting connections from clients, decoding HTTP data, passing them on the underlying
- * {@link BlobStorageService} and providing a Netty specific implementation of
- * {@link RestResponseChannel} ({@link NettyResponseChannel}) for writing responses to
- * clients.
+ * Responsible for accepting connections from clients, decoding HTTP data and passing them on to services that can
+ * generate responses via {@link NettyMessageProcessor}.
+ * <p/>
+ * The accompanying framework also provides a Netty specific implementation of {@link RestResponseChannel}
+ * ({@link NettyResponseChannel}) for writing responses to clients.
  * <p/>
  * This implementation creates a pipeline of handlers for every connection that it accepts and the last inbound handler,
- * {@link NettyMessageProcessor}, is responsible for invoking a {@link AsyncRequestResponseHandler}.
- * <p/>
- * Each {@link NettyMessageProcessor} instance makes use of the {@link RequestResponseHandlerController} provided to request
- * a {@link AsyncRequestResponseHandler}.
+ * {@link NettyMessageProcessor}, is responsible for processing the inbound requests and passing them to services that
+ * can generate a response.
  */
 class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;

@@ -154,12 +154,15 @@ public class MockRestRequest implements RestRequest {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten = streamEnded.get() ? -1 : 0;
+    int bytesWritten;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
-    } else if (!streamEnded.get()) {
+    } else if (streamEnded.get()) {
+      bytesWritten = -1;
+    } else {
+      bytesWritten = 0;
+      contentLock.lock();
       try {
-        contentLock.lock();
         // We read from the ByteBuffer at the head of the list until :-
         // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
         //      ends.
@@ -246,8 +249,8 @@ public class MockRestRequest implements RestRequest {
     if (!RestMethod.POST.equals(getRestMethod()) && content != null) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
+      contentLock.lock();
       try {
-        contentLock.lock();
         if (!isOpen()) {
           throw new ClosedChannelException();
         }
