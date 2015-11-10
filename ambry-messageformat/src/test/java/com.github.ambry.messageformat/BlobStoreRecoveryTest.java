@@ -7,13 +7,13 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Test;
-import org.junit.Assert;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Random;
 import java.util.List;
+import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 class MockId extends StoreKey {
@@ -123,17 +123,17 @@ public class BlobStoreRecoveryTest {
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =
           new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
 
       // 2nd message
       PutMessageFormatInputStream msg2 =
           new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
 
       // 3rd message
       PutMessageFormatInputStream msg3 =
           new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
 
       // 4th message
       DeleteMessageFormatInputStream msg4 = new DeleteMessageFormatInputStream(keys[1]);
@@ -141,7 +141,7 @@ public class BlobStoreRecoveryTest {
       // 5th message
       PutMessageFormatInputStream msg5 =
           new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
 
       buffer = ByteBuffer.allocate((int) (msg1.getSize() +
           msg2.getSize() +

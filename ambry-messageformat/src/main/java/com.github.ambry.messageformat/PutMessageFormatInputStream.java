@@ -26,7 +26,7 @@ import java.nio.ByteBuffer;
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
   public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
-      InputStream data, long streamSize)
+      InputStream data, long streamSize, BlobDataType dataType)
       throws MessageFormatException {
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();

@@ -2,6 +2,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.utils.Utils;
@@ -22,25 +23,28 @@ public class PutRequest extends RequestOrResponse {
   private BlobId blobId;
   private long sentBytes = 0;
   private BlobProperties properties;
+  private BlobDataType dataType;
 
   private static final int UserMetadata_Size_InBytes = 4;
   private static final int BlobData_Size_InBytes = 8;
+  private static final int BlobDataType_Size_InBytes = 2;
   private static final short Put_Request_Version_V1 = 1;
   private static final short Put_Request_Version_V2 = 2;
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream data, long dataSize, short versionId) {
+      ByteBuffer usermetadata, InputStream data, long dataSize, BlobDataType dataType, short versionId) {
     super(RequestOrResponseType.PutRequest, versionId, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
     this.data = data;
     this.dataSize = dataSize;
+    this.dataType = dataType;
   }
 
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream data, long dataSize) {
-    this(correlationId, clientId, blobId, properties, usermetadata, data, dataSize, Put_Request_Version_V2);
+      ByteBuffer usermetadata, InputStream data, long dataSize, BlobDataType dataType) {
+    this(correlationId, clientId, blobId, properties, usermetadata, data, dataSize, dataType, Put_Request_Version_V2);
   }
 
   public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
@@ -76,6 +80,10 @@ public class PutRequest extends RequestOrResponse {
     return dataSize;
   }
 
+  public BlobDataType getDataType() {
+    return dataType;
+  }
+
   @Override
   public long sizeInBytes() {
     // sizeExcludingData + blob size
@@ -83,9 +91,9 @@ public class PutRequest extends RequestOrResponse {
   }
 
   private int sizeExcludingData() {
-    // size of (header + blobId + blob properties + metadata size + metadata + blob size)
+    // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob data type)
     return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties) +
-        UserMetadata_Size_InBytes + usermetadata.capacity() + BlobData_Size_InBytes;
+        UserMetadata_Size_InBytes + usermetadata.capacity() + BlobData_Size_InBytes + BlobDataType_Size_InBytes;
   }
 
   @Override
@@ -100,6 +108,7 @@ public class PutRequest extends RequestOrResponse {
       bufferToSend.putInt(usermetadata.capacity());
       bufferToSend.put(usermetadata);
       bufferToSend.putLong(dataSize);
+      bufferToSend.putShort((short) dataType.ordinal());
       bufferToSend.flip();
     }
     while (sentBytes < sizeInBytes()) {
@@ -142,6 +151,7 @@ public class PutRequest extends RequestOrResponse {
       sb.append(", ").append("UserMetaDataSize=0");
     }
     sb.append(", ").append("dataSize=").append(getDataSize());
+    sb.append(", ").append("dataType=").append(getDataType());
     sb.append("]");
     return sb.toString();
   }
@@ -157,7 +167,7 @@ public class PutRequest extends RequestOrResponse {
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       InputStream data = stream;
       return new PutRequest(correlationId, clientId, id, properties, metadata, data, properties.getBlobSize(),
-          Put_Request_Version_V1);
+          BlobDataType.DataBlob, Put_Request_Version_V1);
     }
   }
 
@@ -171,8 +181,9 @@ public class PutRequest extends RequestOrResponse {
       BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       long dataSize = stream.readLong();
+      BlobDataType dataType = BlobDataType.values()[stream.readShort()];
       InputStream data = stream;
-      return new PutRequest(correlationId, clientId, id, properties, metadata, data, dataSize,
+      return new PutRequest(correlationId, clientId, id, properties, metadata, data, dataSize, dataType,
           Put_Request_Version_V2);
     }
   }

@@ -13,6 +13,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.CoordinatorException;
+import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
@@ -162,12 +163,11 @@ public class ServerTool {
     ConnectedChannel blockingChannel = null;
 
     try {
-      blockingChannel = connectionPool
-          .checkOutConnection(replicaId.getDataNodeId().getHostname(), new Port(replicaId.getDataNodeId().getPort(),
-              PortType.PLAINTEXT), 100000);
+      blockingChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
+          new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT), 100000);
       PutRequest putRequest =
           new PutRequest(correlationId.incrementAndGet(), "consumerThread", blobId, blobProperties, userMetaData,
-              stream);
+              stream, blobProperties.getBlobSize(), BlobDataType.DataBlob);
 
       if (enableVerboseLogging) {
         System.out.println("Put Request to a replica : " + putRequest + " for blobId " + blobId);

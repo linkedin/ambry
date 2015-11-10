@@ -7,6 +7,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -31,15 +32,14 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
@@ -142,7 +142,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         MessageFormatInputStream stream =
             new PutMessageFormatInputStream(putRequest.getBlobId(), putRequest.getBlobProperties(),
-                putRequest.getUsermetadata(), putRequest.getData(), putRequest.getDataSize());
+                putRequest.getUsermetadata(), putRequest.getData(), putRequest.getDataSize(), putRequest.getDataType());
         MessageInfo info = new MessageInfo(putRequest.getBlobId(), stream.getSize(), Utils
             .addSecondsToEpochTime(putRequest.getBlobProperties().getCreationTimeInMs(),
                 putRequest.getBlobProperties().getTimeToLiveInSeconds()));
@@ -152,7 +152,7 @@ public class AmbryRequests implements RequestAPI {
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
-        metrics.blobSizeInBytes.update(putRequest.getBlobProperties().getBlobSize());
+        metrics.blobSizeInBytes.update(putRequest.getDataSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
           notification
@@ -184,7 +184,7 @@ public class AmbryRequests implements RequestAPI {
     sendPutResponse(requestResponseChannel, response, request,
         new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
         new HistogramMeasurement(metrics.putBlobSendTimeInMs), new HistogramMeasurement(metrics.putBlobTotalTimeInMs),
-        totalTimeSpent, putRequest.getBlobProperties().getBlobSize(), metrics);
+        totalTimeSpent, putRequest.getDataSize(), metrics);
   }
 
   public void handleGetRequest(Request request)
@@ -410,10 +410,8 @@ public class AmbryRequests implements RequestAPI {
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
         if (error != ServerErrorCode.No_Error) {
-          logger.error("Validating replica metadata request failed with error {} for partition {}", error,
-              partitionId);
-          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-              new ReplicaMetadataResponseInfo(partitionId, error);
+          logger.error("Validating replica metadata request failed with error {} for partition {}", error, partitionId);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo = new ReplicaMetadataResponseInfo(partitionId, error);
           replicaMetadataResponseList.add(replicaMetadataResponseInfo);
         } else {
           try {
@@ -453,8 +451,7 @@ public class AmbryRequests implements RequestAPI {
               metrics.unExpectedStoreFindEntriesError.inc();
             }
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId,
-                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+                new ReplicaMetadataResponseInfo(partitionId, ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }

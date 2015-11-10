@@ -6,16 +6,15 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class MessageSievingInputStreamTest {
@@ -37,7 +36,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000);
+        new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
 
@@ -51,7 +51,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        new PutMessageFormatInputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2, 2000);
+        new PutMessageFormatInputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), false, -1);
 
@@ -65,7 +66,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000);
+        new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
 
@@ -88,8 +90,7 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     MessageSievingInputStream validMessageDetectionInputStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -139,7 +140,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000);
+        new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
 
@@ -153,7 +155,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        new PutMessageFormatInputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2, 2000);
+        new PutMessageFormatInputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), false, -1);
 
@@ -173,7 +176,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000);
+        new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000,
+            BlobDataType.DataBlob);
 
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
 
@@ -196,8 +200,7 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     MessageSievingInputStream validMessageDetectionInputStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), new MetricRegistry());
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -234,63 +237,63 @@ public class MessageSievingInputStreamTest {
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
 
     try {
-    // create message stream for blob 1
-    StoreKey key1 = new MockId("id1");
-    BlobProperties prop1 = new BlobProperties(10, "servid1");
-    byte[] usermetadata1 = new byte[1000];
-    new Random().nextBytes(usermetadata1);
-    byte[] data1 = new byte[2000];
-    new Random().nextBytes(data1);
-    ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
+      // create message stream for blob 1
+      StoreKey key1 = new MockId("id1");
+      BlobProperties prop1 = new BlobProperties(10, "servid1");
+      byte[] usermetadata1 = new byte[1000];
+      new Random().nextBytes(usermetadata1);
+      byte[] data1 = new byte[2000];
+      new Random().nextBytes(data1);
+      ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
-    MessageFormatInputStream messageFormatStream1 =
-        new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000);
+      MessageFormatInputStream messageFormatStream1 =
+          new PutMessageFormatInputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1, 2000,
+              BlobDataType.DataBlob);
 
-    MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
+      MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
 
-    // create message stream for blob 2 and mark it as deleted
-    StoreKey key2 = new MockId("id2");
-    MessageFormatInputStream messageFormatStream2 = new DeleteMessageFormatInputStream(key2);
+      // create message stream for blob 2 and mark it as deleted
+      StoreKey key2 = new MockId("id2");
+      MessageFormatInputStream messageFormatStream2 = new DeleteMessageFormatInputStream(key2);
 
-    MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), true, -1);
+      MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), true, -1);
 
-    // create message stream for blob 3
-    StoreKey key3 = new MockId("id3");
-    BlobProperties prop3 = new BlobProperties(10, "servid3");
-    byte[] usermetadata3 = new byte[1000];
-    new Random().nextBytes(usermetadata3);
-    byte[] data3 = new byte[2000];
-    new Random().nextBytes(data3);
-    ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
+      // create message stream for blob 3
+      StoreKey key3 = new MockId("id3");
+      BlobProperties prop3 = new BlobProperties(10, "servid3");
+      byte[] usermetadata3 = new byte[1000];
+      new Random().nextBytes(usermetadata3);
+      byte[] data3 = new byte[2000];
+      new Random().nextBytes(data3);
+      ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
-    MessageFormatInputStream messageFormatStream3 =
-        new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000);
+      MessageFormatInputStream messageFormatStream3 =
+          new PutMessageFormatInputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3, 2000,
+              BlobDataType.DataBlob);
 
-    MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
+      MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
 
-    //create input stream for all blob messages together
-    byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-        + (int) messageFormatStream3.getSize()];
-    messageFormatStream1.read(totalMessageContent, 0, (int) messageFormatStream1.getSize());
-    messageFormatStream2
-        .read(totalMessageContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
-    messageFormatStream3
-        .read(totalMessageContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-            (int) messageFormatStream3.getSize());
+      //create input stream for all blob messages together
+      byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+          + (int) messageFormatStream3.getSize()];
+      messageFormatStream1.read(totalMessageContent, 0, (int) messageFormatStream1.getSize());
+      messageFormatStream2
+          .read(totalMessageContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
+      messageFormatStream3
+          .read(totalMessageContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+              (int) messageFormatStream3.getSize());
 
-    InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageContent));
+      InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageContent));
 
-    List<MessageInfo> msgInfoList = new ArrayList<MessageInfo>();
-    msgInfoList.add(msgInfo1);
-    msgInfoList.add(msgInfo2);
-    msgInfoList.add(msgInfo3);
+      List<MessageInfo> msgInfoList = new ArrayList<MessageInfo>();
+      msgInfoList.add(msgInfo1);
+      msgInfoList.add(msgInfo2);
+      msgInfoList.add(msgInfo3);
 
-    MessageSievingInputStream validMessageDetectionInputStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(),
-            new MetricRegistry());
+      MessageSievingInputStream validMessageDetectionInputStream =
+          new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), new MetricRegistry());
       Assert.fail("IllegalStateException should have been thrown due to delete record ");
-    }
-    catch(IllegalStateException e) {
+    } catch (IllegalStateException e) {
       Assert.assertTrue("IllegalStateException thrown as expected ", true);
     }
   }

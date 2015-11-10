@@ -1,16 +1,17 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
@@ -23,23 +24,23 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
-import java.util.Collections;
-import java.util.List;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 import static com.github.ambry.utils.Utils.getRandomLong;
 
@@ -81,8 +82,7 @@ public class ServerWritePerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time spent for putting blobs, not wall time").ofType(Long.class)
-              .defaultsTo(300L);
+              .describedAs("The CPU time spent for putting blobs, not wall time").ofType(Long.class).defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -135,9 +135,8 @@ public class ServerWritePerformance {
       }
 
       long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
-          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
-          sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
@@ -293,7 +292,7 @@ public class ServerWritePerformance {
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
-                new ByteBufferInputStream(ByteBuffer.wrap(blob)));
+                new ByteBufferInputStream(ByteBuffer.wrap(blob)), props.getBlobSize(), BlobDataType.DataBlob);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
