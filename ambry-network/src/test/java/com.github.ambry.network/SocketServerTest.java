@@ -81,8 +81,8 @@ public class SocketServerTest {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.SSL) {
       channel =
-          new SSLBlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000, clientSSLSocketFactory,
-              clientSSLConfig);
+          new SSLBlockingChannel("localhost", targetPort.getPort(), new MetricRegistry(), 10000, 10000, 1000, 2000,
+              clientSSLSocketFactory, clientSSLConfig);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }

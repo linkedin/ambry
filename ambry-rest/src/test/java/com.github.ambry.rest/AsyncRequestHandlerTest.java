@@ -113,7 +113,7 @@ public class AsyncRequestHandlerTest {
       throws Exception {
     handleRequestInfoWithRestRequestInfoNull(asyncRequestHandler);
     handleRequestInfoWithRestRequestMetadataNull(asyncRequestHandler);
-    handleRequestInfoWithRestResponseHandlerNull(asyncRequestHandler);
+    handleRequestInfoWithRestResponseChannelNull(asyncRequestHandler);
   }
 
   /**
@@ -192,7 +192,7 @@ public class AsyncRequestHandlerTest {
   private RestRequestInfo createRestRequestInfo(RestMethod method, String uri, JSONObject headers)
       throws JSONException, URISyntaxException {
     RestRequestMetadata restRequestMetadata = createRestRequest(method, uri, headers);
-    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseHandler(), true);
+    return new RestRequestInfo(restRequestMetadata, null, new MockRestResponseChannel(), true);
   }
 
   private void finishRequest(RestRequestInfo restRequestInfo, RestRequestInfoEventListener resultListener,
@@ -200,7 +200,7 @@ public class AsyncRequestHandlerTest {
       throws InstantiationException, JSONException, RestServiceException {
     RestRequestInfo lastRestRequestInfo =
         new RestRequestInfo(restRequestInfo.getRestRequestMetadata(), createRestContent(true),
-            restRequestInfo.getRestResponseHandler());
+            restRequestInfo.getRestResponseChannel());
     lastRestRequestInfo.addListener(resultListener);
     requestHandler.handleRequest(lastRestRequestInfo);
   }
@@ -231,7 +231,7 @@ public class AsyncRequestHandlerTest {
     requestHandler.handleRequest(restRequestInfo);
 
     RestRequestInfoHandlingSuccessMonitor restRequestInfoHandlingSuccessMonitor =
-        new RestRequestInfoHandlingSuccessMonitor((MockRestResponseHandler) restRequestInfo.getRestResponseHandler(),
+        new RestRequestInfoHandlingSuccessMonitor((MockRestResponseChannel) restRequestInfo.getRestResponseChannel(),
             restMethod);
     finishRequest(restRequestInfo, restRequestInfoHandlingSuccessMonitor, requestHandler);
 
@@ -256,16 +256,16 @@ public class AsyncRequestHandlerTest {
 
   private void handleRequestInfoWithRestRequestMetadataNull(RestRequestHandler requestHandler)
       throws Exception {
-    MockRestResponseHandler restResponseHandler = new MockRestResponseHandler();
-    RestRequestInfo restRequestInfo = new RestRequestInfo(null, null, restResponseHandler, true);
+    MockRestResponseChannel responseChannel = new MockRestResponseChannel();
+    RestRequestInfo restRequestInfo = new RestRequestInfo(null, null, responseChannel, true);
     doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.RequestMetadataNull, requestHandler);
   }
 
-  private void handleRequestInfoWithRestResponseHandlerNull(RestRequestHandler requestHandler)
+  private void handleRequestInfoWithRestResponseChannelNull(RestRequestHandler requestHandler)
       throws Exception {
     RestRequestMetadata restRequestMetadata = createRestRequest(RestMethod.GET, "/", new JSONObject());
     RestRequestInfo restRequestInfo = new RestRequestInfo(restRequestMetadata, null, null, true);
-    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ResponseHandlerNull, requestHandler);
+    doHandleRequestFailureTest(restRequestInfo, RestServiceErrorCode.ResponseChannelNull, requestHandler);
   }
 
   /**
@@ -433,14 +433,14 @@ class RestRequestInfoHandlingBadMonitor implements RestRequestInfoEventListener 
  */
 class RestRequestInfoHandlingSuccessMonitor implements RestRequestInfoEventListener {
   private final CountDownLatch toBeProcessed = new CountDownLatch(1);
-  private final MockRestResponseHandler restResponseHandler;
+  private final MockRestResponseChannel restResponseChannel;
   private final RestMethod restMethod;
 
   private Exception exception = null;
   private AssertionError assertionError = null;
 
-  public RestRequestInfoHandlingSuccessMonitor(MockRestResponseHandler restResponseHandler, RestMethod restMethod) {
-    this.restResponseHandler = restResponseHandler;
+  public RestRequestInfoHandlingSuccessMonitor(MockRestResponseChannel responseChannel, RestMethod restMethod) {
+    this.restResponseChannel = responseChannel;
     this.restMethod = restMethod;
   }
 
@@ -448,7 +448,7 @@ class RestRequestInfoHandlingSuccessMonitor implements RestRequestInfoEventListe
   public void onHandlingComplete(RestRequestInfo restRequestInfo, Exception e) {
     try {
       if (e == null) {
-        String responseBody = restResponseHandler.getFlushedResponseBody();
+        String responseBody = restResponseChannel.getFlushedResponseBody();
         // expect MockBlobStorageService to echo the method back.
         assertEquals("Unexpected response for " + restMethod, restMethod.toString(), responseBody);
       } else {

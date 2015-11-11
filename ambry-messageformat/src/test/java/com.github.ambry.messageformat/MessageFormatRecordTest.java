@@ -2,11 +2,10 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.nio.ByteBuffer;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class MessageFormatRecordTest {
@@ -19,7 +18,8 @@ public class MessageFormatRecordTest {
           ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
       MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
       stream.flip();
-      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+      BlobProperties result =
+          MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
       Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
       Assert.assertEquals(properties.getContentType(), result.getContentType());
       Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
@@ -30,7 +30,8 @@ public class MessageFormatRecordTest {
       stream.flip();
       stream.put(10, (byte) 10);
       try {
-        BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+        BlobProperties resultCorrupt =
+            MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         Assert.assertEquals(true, false);
       } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
@@ -80,7 +81,8 @@ public class MessageFormatRecordTest {
           ByteBuffer.allocate(MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata));
       MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(output, usermetadata);
       output.flip();
-      ByteBuffer bufOutput = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
+      ByteBuffer bufOutput =
+          MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
       Assert.assertArrayEquals(usermetadata.array(), bufOutput.array());
 
       // corrupt usermetadata record V1

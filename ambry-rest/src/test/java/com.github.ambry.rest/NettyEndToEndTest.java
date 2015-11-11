@@ -31,7 +31,7 @@ import static org.junit.Assert.fail;
 
 /**
  * Some end to end tests that exercise {@link NettyServer}, {@link NettyMessageProcessor} and
- * {@link NettyResponseHandler}.
+ * {@link NettyResponseChannel}.
  */
 public class NettyEndToEndTest {
   private static String NETTY_SERVER_PORT = "16503";
@@ -91,7 +91,7 @@ public class NettyEndToEndTest {
   }
 
   /**
-   * Exercises some internals (mostly error handling) of {@link NettyMessageProcessor} and {@link NettyResponseHandler}
+   * Exercises some internals (mostly error handling) of {@link NettyMessageProcessor} and {@link NettyResponseChannel}
    * by wilfully introducing exceptions through {@link MockBlobStorageService}.
    * @throws Exception
    */

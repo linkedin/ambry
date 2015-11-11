@@ -9,13 +9,12 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -30,7 +29,7 @@ final public class GetBlobPropertiesOperation extends GetOperation {
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
         MessageFormatFlags.BlobProperties);
-    logger.trace("GetBlobProperties: Datacenter name " + datacenterName + " Connection pool " + connectionPool
+    logger.trace("GetBlobProperties: Datacenter name " + datacenterName + " Connection pool " + (connectionPool != null)
         + ", requester pool " + (requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId
         + ", timeout " + operationTimeoutMs + ", clustermap " + (clusterMap != null));
     this.blobProperties = null;

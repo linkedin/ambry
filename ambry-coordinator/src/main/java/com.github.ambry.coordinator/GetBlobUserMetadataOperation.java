@@ -1,21 +1,20 @@
 package com.github.ambry.coordinator;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.RequestOrResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -30,9 +29,10 @@ final public class GetBlobUserMetadataOperation extends GetOperation {
       throws CoordinatorException {
     super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, clusterMap,
         MessageFormatFlags.BlobUserMetadata);
-    logger.trace("GetBlobUserMetadata: Datacenter name " + datacenterName + " Connection pool " + connectionPool
-        + ", requester pool " + (requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId
-        + ", timeout " + operationTimeoutMs + ", clustermap " + (clusterMap != null));
+    logger.trace(
+        "GetBlobUserMetadata: Datacenter name " + datacenterName + " Connection pool " + (connectionPool != null)
+            + ", requester pool " + (requesterPool != null) + ", Operation context " + oc + ", blobId " + blobId
+            + ", timeout " + operationTimeoutMs + ", clustermap " + (clusterMap != null));
     this.userMetadata = null;
   }
 

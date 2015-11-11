@@ -1,10 +1,10 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -29,23 +29,23 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
+import java.io.BufferedReader;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-import java.io.BufferedReader;
-import java.io.DataInputStream;
-import java.io.FileReader;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Properties;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -75,8 +75,7 @@ public class ServerReadPerformance {
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
           parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class)
-              .defaultsTo(300L);
+              .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class).defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
@@ -110,6 +109,10 @@ public class ServerReadPerformance {
           parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
               .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
+              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -126,8 +129,9 @@ public class ServerReadPerformance {
       }
 
       long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
-          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
+          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
+          sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
@@ -135,7 +139,7 @@ public class ServerReadPerformance {
         sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
             options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
             options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
-            options.valueOf(sslTruststorePasswordOpt));
+            options.valueOf(sslTruststorePasswordOpt), options.valueOf(sslCipherSuitesOpt));
       } else {
         sslProperties = new Properties();
       }

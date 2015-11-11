@@ -90,8 +90,9 @@ public class GetResponse extends Response {
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel)
+  public long writeTo(WritableByteChannel channel)
       throws IOException {
+    long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer
           .allocate((int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
@@ -105,11 +106,12 @@ public class GetResponse extends Response {
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
-      channel.write(bufferToSend);
+      written = channel.write(bufferToSend);
     }
     if (bufferToSend.remaining() == 0 && toSend != null && !toSend.isSendComplete()) {
-      toSend.writeTo(channel);
+      written += toSend.writeTo(channel);
     }
+    return written;
   }
 
   @Override

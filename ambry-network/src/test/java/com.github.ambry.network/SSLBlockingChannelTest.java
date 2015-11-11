@@ -1,5 +1,6 @@
 package com.github.ambry.network;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
 import java.io.File;
@@ -73,7 +74,8 @@ public class SSLBlockingChannelTest {
   public void testSendAndReceive()
       throws Exception {
     BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
+        new SSLBlockingChannel(hostName, sslPort, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
+            clientSSLConfig);
     sendAndReceive(channel);
     channel.disconnect();
   }
@@ -82,7 +84,8 @@ public class SSLBlockingChannelTest {
   public void testRenegotiation()
       throws Exception {
     BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
+        new SSLBlockingChannel(hostName, sslPort, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
+            clientSSLConfig);
     sendAndReceive(channel);
     sslEchoServer.renegotiate();
     sendAndReceive(channel);
@@ -93,7 +96,8 @@ public class SSLBlockingChannelTest {
   public void testWrongPortConnection()
       throws Exception {
     BlockingChannel channel =
-        new SSLBlockingChannel(hostName, sslPort + 1, 10000, 10000, 10000, 2000, sslSocketFactory, clientSSLConfig);
+        new SSLBlockingChannel(hostName, sslPort + 1, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
+            clientSSLConfig);
     try {
       // send request
       channel.connect();

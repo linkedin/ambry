@@ -2,9 +2,11 @@ package com.github.ambry.admin;
 
 import com.github.ambry.rest.RestRequestInfo;
 import com.github.ambry.rest.RestRequestMetadata;
-import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
@@ -24,7 +26,7 @@ class EchoHandler {
    * Handles {@link AdminOperationType#echo} operations.
    * <p/>
    * Extracts the parameters from the {@link RestRequestMetadata}, performs an echo if possible and writes the response
-   * to the client via a {@link RestResponseHandler}.
+   * to the client via a {@link RestResponseChannel}.
    * <p/>
    * Flushes the written data and closes the connection on receiving an end marker (the last part of
    * {@link com.github.ambry.rest.RestRequestContent} in the request). Any other content is ignored.
@@ -34,17 +36,19 @@ class EchoHandler {
    */
   public static void handleRequest(RestRequestInfo restRequestInfo, AdminMetrics adminMetrics)
       throws RestServiceException {
-    RestResponseHandler responseHandler = restRequestInfo.getRestResponseHandler();
+    RestResponseChannel responseChannel = restRequestInfo.getRestResponseChannel();
     if (restRequestInfo.isFirstPart()) {
       logger.trace("Handling echo - {}", restRequestInfo.getRestRequestMetadata().getUri());
       adminMetrics.echoRate.mark();
       long startTime = System.currentTimeMillis();
       try {
         String echoStr = echo(restRequestInfo.getRestRequestMetadata(), adminMetrics).toString();
-        responseHandler.setContentType("application/json");
-        responseHandler.addToResponseBody(echoStr.getBytes(), true);
-        responseHandler.flush();
+        responseChannel.setContentType("application/json");
+        responseChannel.write(ByteBuffer.wrap(echoStr.getBytes()));
+        responseChannel.flush();
         logger.trace("Sent echo response for request {}", restRequestInfo.getRestRequestMetadata().getUri());
+      } catch (IOException e) {
+        throw new RestServiceException(e, RestServiceErrorCode.ChannelWriteError);
       } finally {
         long processingTime = System.currentTimeMillis() - startTime;
         logger.trace("Processing echo response for request {} took {} ms",
@@ -52,7 +56,7 @@ class EchoHandler {
         adminMetrics.echoProcessingTimeInMs.update(processingTime);
       }
     } else if (restRequestInfo.getRestRequestContent().isLast()) {
-      responseHandler.onRequestComplete(null, false);
+      responseChannel.onRequestComplete(null, false);
       logger.trace("Echo request {} complete", restRequestInfo.getRestRequestMetadata().getUri());
     }
   }

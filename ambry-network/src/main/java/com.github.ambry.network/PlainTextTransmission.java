@@ -1,8 +1,8 @@
 package com.github.ambry.network;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import org.slf4j.Logger;
@@ -31,7 +31,7 @@ public class PlainTextTransmission extends Transmission {
 
   /**
    * Plain text channel is always ready to accept read and write calls
-   * @return
+   * @return true
    */
   @Override
   public boolean ready() {
@@ -39,7 +39,7 @@ public class PlainTextTransmission extends Transmission {
   }
 
   /**
-   * Reads a sequence of bytes from the channel into the {@NetworkReceive}
+   * Reads a sequence of bytes from the channel into the {@link NetworkReceive}
    *
    * @return true if the read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
@@ -50,18 +50,21 @@ public class PlainTextTransmission extends Transmission {
     if (!hasReceive()) {
       networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
+    long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(socketChannel);
-    metrics.selectorBytesReceived.update(bytesRead);
-    metrics.selectorBytesReceivedCount.inc(bytesRead);
-    logger.trace("Bytes read " + bytesRead + " from {} using key {}", socketChannel.socket().getRemoteSocketAddress(),
-        getConnectionId());
+    long readTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
+    if (bytesRead > 0) {
+      metrics.plaintextReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
+    }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
 
   /**
-   * Writes a sequence of bytes to the channel from the payload in {@NetworkSend}
+   * Writes a sequence of bytes to the channel from the payload in {@link NetworkSend}
    *
-   * @returns true if {@Send} in {@NetworkSend} is completely written to the channel, false otherwise
+   * @return true if {@link Send} in {@link NetworkSend} is completely written to the channel, false otherwise
    * @throws IOException If some other I/O error occurs
    */
   @Override
@@ -71,9 +74,14 @@ public class PlainTextTransmission extends Transmission {
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
     }
-    send.writeTo(socketChannel);
-    logger
-        .trace("Bytes written to {} using key {}", socketChannel.socket().getRemoteSocketAddress(), getConnectionId());
+    long startTimeMs = SystemTime.getInstance().milliseconds();
+    long bytesWritten = send.writeTo(socketChannel);
+    long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+    logger.trace("Bytes written {} to {} using key {} Time: {}",
+        bytesWritten, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    if (bytesWritten > 0) {
+      metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
+    }
     return send.isSendComplete();
   }
 
@@ -93,5 +101,27 @@ public class PlainTextTransmission extends Transmission {
       metrics.selectorCloseSocketErrorCount.inc();
       logger.error("Exception closing connection to node {}:", getConnectionId(), e);
     }
+  }
+
+  /**
+   * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
+   */
+  @Override
+  public void onSendComplete() {
+    long sendTimeMs = SystemTime.getInstance().milliseconds() - networkSend.getSendStartTimeInMs();
+    networkSend.onSendComplete();
+    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
+    metrics.plaintextSendBytesRate.update((long) sendBytesRate);
+  }
+
+  /**
+   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
+   */
+  @Override
+  public void onReceiveComplete() {
+    long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
+    double receiveBytesRate =
+        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+    metrics.plaintextReceiveBytesRate.update((long) receiveBytesRate);
   }
 }
