@@ -444,7 +444,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         }
 
         if (unwrapResult.getStatus() == SSLEngineResult.Status.OK) {
-          read += readFromAppBuffer(dst);
+          if(dst.remaining() > 0) {
+            read += readFromAppBuffer(dst);
+          }
         } else if (unwrapResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
           int currentApplicationBufferSize = applicationBufferSize();
           appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
