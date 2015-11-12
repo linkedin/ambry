@@ -12,6 +12,42 @@ import java.util.Map;
 public class RestUtils {
 
   /**
+   * Ambry specific HTTP headers.
+   */
+  public static final class Headers {
+    /**
+     * mandatory in request; long; size of blob in bytes
+     */
+    public final static String Blob_Size = "x-ambry-blob-size";
+    /**
+     * mandatory in request; string; name of service
+     */
+    public final static String Service_Id = "x-ambry-service-id";
+    /**
+     * optional in request; date string; default unset ("infinite ttl")
+     */
+    public final static String TTL = "x-ambry-ttl";
+    /**
+     * optional in request; 'true' or 'false' case insensitive; default 'false'; indicates private content
+     */
+    public final static String Private = "x-ambry-private";
+    /**
+     * mandatory in request; string; default unset; content type of blob
+     */
+    public final static String Content_Type = "x-ambry-content-type";
+    /**
+     * optional in request; string; default unset; member id.
+     * <p/>
+     * Expected usage is to set to member id of content owner.
+     */
+    public final static String Owner_Id = "x-ambry-owner-id";
+    /**
+     * not allowed  in request. Allowed in response only; string; time at which blob was created.
+     */
+    public final static String Creation_Time = "x-ambry-creation-time";
+  }
+
+  /**
    * Builds {@link BlobProperties} given a {@link RestRequest}.
    * @param restRequest the {@link RestRequest} to use.
    * @return the {@link BlobProperties} extracted from {@code restRequest}.
@@ -25,46 +61,45 @@ public class RestUtils {
     String blobSizeStr = null;
     long blobSize;
     try {
-      blobSizeStr = getHeader(args, RestConstants.Headers.Blob_Size, true);
+      blobSizeStr = getHeader(args, Headers.Blob_Size, true);
       blobSize = Long.parseLong(blobSizeStr);
       if (blobSize < 0) {
-        throw new RestServiceException(RestConstants.Headers.Blob_Size + "[" + blobSize + "] is less than 0",
+        throw new RestServiceException(Headers.Blob_Size + "[" + blobSize + "] is less than 0",
             RestServiceErrorCode.InvalidArgs);
       }
     } catch (NumberFormatException e) {
-      throw new RestServiceException(
-          RestConstants.Headers.Blob_Size + "[" + blobSizeStr + "] could not parsed into a number",
+      throw new RestServiceException(Headers.Blob_Size + "[" + blobSizeStr + "] could not parsed into a number",
           RestServiceErrorCode.InvalidArgs);
     }
 
     long ttl = Utils.Infinite_Time;
-    String ttlStr = getHeader(args, RestConstants.Headers.TTL, false);
+    String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
       try {
         ttl = Long.parseLong(ttlStr);
         if (ttl < -1) {
-          throw new RestServiceException(RestConstants.Headers.TTL + "[" + ttl + "] is not valid (has to be >= -1)",
+          throw new RestServiceException(Headers.TTL + "[" + ttl + "] is not valid (has to be >= -1)",
               RestServiceErrorCode.InvalidArgs);
         }
       } catch (NumberFormatException e) {
-        throw new RestServiceException(RestConstants.Headers.TTL + "[" + ttlStr + "] could not parsed into a number",
+        throw new RestServiceException(Headers.TTL + "[" + ttlStr + "] could not parsed into a number",
             RestServiceErrorCode.InvalidArgs);
       }
     }
 
     boolean isPrivate = false;
-    String isPrivateStr = getHeader(args, RestConstants.Headers.Private, false);
+    String isPrivateStr = getHeader(args, Headers.Private, false);
     if (isPrivateStr != null && isPrivateStr.toLowerCase().equals("true")) {
       isPrivate = true;
     } else if (isPrivateStr != null && !isPrivateStr.toLowerCase().equals("false")) {
       throw new RestServiceException(
-          RestConstants.Headers.Private + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
+          Headers.Private + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
           RestServiceErrorCode.InvalidArgs);
     }
 
-    String serviceId = getHeader(args, RestConstants.Headers.Service_Id, true);
-    String contentType = getHeader(args, RestConstants.Headers.Content_Type, true);
-    String ownerId = getHeader(args, RestConstants.Headers.Owner_Id, false);
+    String serviceId = getHeader(args, Headers.Service_Id, true);
+    String contentType = getHeader(args, Headers.Content_Type, true);
+    String ownerId = getHeader(args, Headers.Owner_Id, false);
 
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl);
   }

@@ -7,7 +7,6 @@ import com.github.ambry.rest.AsyncRequestResponseHandler;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.RequestResponseHandlerController;
 import com.github.ambry.rest.ResponseStatus;
-import com.github.ambry.rest.RestConstants;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -283,7 +282,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestConstants.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setContentType(blobProperties.getContentType());
       // Ensure browsers do not execute html with embedded exploits.
@@ -407,7 +406,7 @@ class PostCallback implements Callback<String> {
     restResponseChannel.setStatus(ResponseStatus.Created);
     restResponseChannel.setLocation(location);
     restResponseChannel.setContentLength(0);
-    restResponseChannel.setHeader(RestConstants.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
   }
 }
 
@@ -519,19 +518,19 @@ class HeadCallback implements Callback<BlobInfo> {
     restResponseChannel.setContentLength(blobProperties.getBlobSize());
 
     // Blob props
-    restResponseChannel.setHeader(RestConstants.Headers.Blob_Size, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestConstants.Headers.Service_Id, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestConstants.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestConstants.Headers.Private, blobProperties.isPrivate());
+    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.Service_Id, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.Private, blobProperties.isPrivate());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
-      restResponseChannel.setHeader(RestConstants.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
+      restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestConstants.Headers.Content_Type, blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.Content_Type, blobProperties.getContentType());
       restResponseChannel.setContentType(blobProperties.getContentType());
     }
     if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestConstants.Headers.Owner_Id, blobProperties.getOwnerId());
+      restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
     // TODO: send user metadata also as header after discussion with team.
   }

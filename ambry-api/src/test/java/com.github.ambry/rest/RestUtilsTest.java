@@ -58,7 +58,7 @@ public class RestUtilsTest {
     // content length null.
     headers = new JSONObject();
     setAmbryHeaders(headers, null, ttl, isPrivate, serviceId, contentType, ownerId);
-    headers.put(RestConstants.Headers.Blob_Size, JSONObject.NULL);
+    headers.put(RestUtils.Headers.Blob_Size, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // content length not a number.
     headers = new JSONObject();
@@ -87,7 +87,7 @@ public class RestUtilsTest {
     // serviceId null.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, null, contentType, ownerId);
-    headers.put(RestConstants.Headers.Service_Id, JSONObject.NULL);
+    headers.put(RestUtils.Headers.Service_Id, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // contentType missing.
     headers = new JSONObject();
@@ -96,17 +96,17 @@ public class RestUtilsTest {
     // contentType null.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, null, ownerId);
-    headers.put(RestConstants.Headers.Content_Type, JSONObject.NULL);
+    headers.put(RestUtils.Headers.Content_Type, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // too many values for all headers.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, contentType, ownerId);
-    tooManyValuesTest(headers, RestConstants.Headers.Blob_Size);
-    tooManyValuesTest(headers, RestConstants.Headers.TTL);
-    tooManyValuesTest(headers, RestConstants.Headers.Private);
-    tooManyValuesTest(headers, RestConstants.Headers.Service_Id);
-    tooManyValuesTest(headers, RestConstants.Headers.Content_Type);
-    tooManyValuesTest(headers, RestConstants.Headers.Owner_Id);
+    tooManyValuesTest(headers, RestUtils.Headers.Blob_Size);
+    tooManyValuesTest(headers, RestUtils.Headers.TTL);
+    tooManyValuesTest(headers, RestUtils.Headers.Private);
+    tooManyValuesTest(headers, RestUtils.Headers.Service_Id);
+    tooManyValuesTest(headers, RestUtils.Headers.Content_Type);
+    tooManyValuesTest(headers, RestUtils.Headers.Owner_Id);
 
     // no failures.
     // ttl missing. Should be infinite time by default.
@@ -119,19 +119,19 @@ public class RestUtilsTest {
     // ttl null.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, null, isPrivate, serviceId, contentType, ownerId);
-    headers.put(RestConstants.Headers.TTL, JSONObject.NULL);
+    headers.put(RestUtils.Headers.TTL, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // isPrivate null.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, contentType, ownerId);
-    headers.put(RestConstants.Headers.Private, JSONObject.NULL);
+    headers.put(RestUtils.Headers.Private, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // ownerId null.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, contentType, null);
-    headers.put(RestConstants.Headers.Owner_Id, JSONObject.NULL);
+    headers.put(RestUtils.Headers.Owner_Id, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
   }
 
@@ -187,23 +187,23 @@ public class RestUtilsTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
-   * @param contentLength sets the {@link RestConstants.Headers#Blob_Size} header.
-   * @param ttlInSecs sets the {@link RestConstants.Headers#TTL} header.
-   * @param isPrivate sets the {@link RestConstants.Headers#Private} header. Allowed values: true, false.
-   * @param serviceId sets the {@link RestConstants.Headers#Service_Id} header.
-   * @param contentType sets the {@link RestConstants.Headers#Content_Type} header.
-   * @param ownerId sets the {@link RestConstants.Headers#Owner_Id} header. Optional - if not required, send null.
+   * @param contentLength sets the {@link RestUtils.Headers#Blob_Size} header.
+   * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header.
+   * @param isPrivate sets the {@link RestUtils.Headers#Private} header. Allowed values: true, false.
+   * @param serviceId sets the {@link RestUtils.Headers#Service_Id} header.
+   * @param contentType sets the {@link RestUtils.Headers#Content_Type} header.
+   * @param ownerId sets the {@link RestUtils.Headers#Owner_Id} header. Optional - if not required, send null.
    * @throws JSONException
    */
   private void setAmbryHeaders(JSONObject headers, String contentLength, String ttlInSecs, String isPrivate,
       String serviceId, String contentType, String ownerId)
       throws JSONException {
-    headers.putOpt(RestConstants.Headers.Blob_Size, contentLength);
-    headers.putOpt(RestConstants.Headers.TTL, ttlInSecs);
-    headers.putOpt(RestConstants.Headers.Private, isPrivate);
-    headers.putOpt(RestConstants.Headers.Service_Id, serviceId);
-    headers.putOpt(RestConstants.Headers.Content_Type, contentType);
-    headers.putOpt(RestConstants.Headers.Owner_Id, ownerId);
+    headers.putOpt(RestUtils.Headers.Blob_Size, contentLength);
+    headers.putOpt(RestUtils.Headers.TTL, ttlInSecs);
+    headers.putOpt(RestUtils.Headers.Private, isPrivate);
+    headers.putOpt(RestUtils.Headers.Service_Id, serviceId);
+    headers.putOpt(RestUtils.Headers.Content_Type, contentType);
+    headers.putOpt(RestUtils.Headers.Owner_Id, ownerId);
   }
 
   /**
@@ -216,26 +216,24 @@ public class RestUtilsTest {
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
-    assertEquals("Blob size does not match", headers.getLong(RestConstants.Headers.Blob_Size),
+    assertEquals("Blob size does not match", headers.getLong(RestUtils.Headers.Blob_Size),
         blobProperties.getBlobSize());
     long expectedTTL = Utils.Infinite_Time;
-    if (headers.has(RestConstants.Headers.TTL) && !JSONObject.NULL.equals(headers.get(RestConstants.Headers.TTL))) {
-      expectedTTL = headers.getLong(RestConstants.Headers.TTL);
+    if (headers.has(RestUtils.Headers.TTL) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.TTL))) {
+      expectedTTL = headers.getLong(RestUtils.Headers.TTL);
     }
     assertEquals("Blob TTL does not match", expectedTTL, blobProperties.getTimeToLiveInSeconds());
     boolean expectedIsPrivate = false;
-    if (headers.has(RestConstants.Headers.Private) && !JSONObject.NULL
-        .equals(headers.get(RestConstants.Headers.Private))) {
-      expectedIsPrivate = headers.getBoolean(RestConstants.Headers.Private);
+    if (headers.has(RestUtils.Headers.Private) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.Private))) {
+      expectedIsPrivate = headers.getBoolean(RestUtils.Headers.Private);
     }
     assertEquals("Blob isPrivate does not match", expectedIsPrivate, blobProperties.isPrivate());
-    assertEquals("Blob service ID does not match", headers.getString(RestConstants.Headers.Service_Id),
+    assertEquals("Blob service ID does not match", headers.getString(RestUtils.Headers.Service_Id),
         blobProperties.getServiceId());
-    assertEquals("Blob content type does not match", headers.getString(RestConstants.Headers.Content_Type),
+    assertEquals("Blob content type does not match", headers.getString(RestUtils.Headers.Content_Type),
         blobProperties.getContentType());
-    if (headers.has(RestConstants.Headers.Owner_Id) && !JSONObject.NULL
-        .equals(headers.get(RestConstants.Headers.Owner_Id))) {
-      assertEquals("Blob owner ID does not match", headers.getString(RestConstants.Headers.Owner_Id),
+    if (headers.has(RestUtils.Headers.Owner_Id) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.Owner_Id))) {
+      assertEquals("Blob owner ID does not match", headers.getString(RestUtils.Headers.Owner_Id),
           blobProperties.getOwnerId());
     }
   }
