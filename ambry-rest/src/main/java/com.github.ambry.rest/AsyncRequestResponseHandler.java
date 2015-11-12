@@ -292,20 +292,25 @@ class AsyncHandlerWorker implements Runnable {
     logger.trace("Queueing request {}", restRequest.getUri());
     queuingTimeTracker.startTracking(restRequest);
     boolean added = false;
+    RestServiceException exception = null;
     try {
       added = requests.add(new AsyncRequestInfo(restRequest, restResponseChannel));
     } catch (Exception e) {
-      restServerMetrics.asyncRequestHandlerQueueAddError.inc();
-      throw new RestServiceException("Attempt to add request failed", e,
+      exception = new RestServiceException("Attempt to add request failed", e,
           RestServiceErrorCode.RequestResponseQueueingFailure);
-    } finally {
-      if (added) {
-        queuedRequestCount.incrementAndGet();
-        logger.trace("Queued request {}", restRequest.getUri());
-        restServerMetrics.asyncRequestHandlerQueueingRate.mark();
-      } else {
-        queuingTimeTracker.stopTracking(restRequest);
+    }
+    if (added) {
+      queuedRequestCount.incrementAndGet();
+      logger.trace("Queued request {}", restRequest.getUri());
+      restServerMetrics.asyncRequestHandlerQueueingRate.mark();
+    } else {
+      queuingTimeTracker.stopTracking(restRequest);
+      restServerMetrics.asyncRequestHandlerQueueAddError.inc();
+      if (exception == null) {
+        exception = new RestServiceException("Attempt to add request failed",
+            RestServiceErrorCode.RequestResponseQueueingFailure);
       }
+      throw exception;
     }
   }
 
