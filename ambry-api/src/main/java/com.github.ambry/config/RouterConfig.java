@@ -20,6 +20,6 @@ public class RouterConfig {
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
-    routerScalingUnitCount = verifiableProperties.getInt("router.scaling.unit.count", 200);
+    routerScalingUnitCount = verifiableProperties.getInt("router.scaling.unit.count", 1);
   }
 }

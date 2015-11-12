@@ -220,7 +220,7 @@ class NettyRequest implements RestRequest {
    */
   public void addContent(HttpContent httpContent)
       throws ClosedChannelException {
-    if (!RestMethod.POST.equals(getRestMethod()) && (!(httpContent instanceof LastHttpContent)
+    if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
