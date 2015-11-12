@@ -44,7 +44,7 @@ public class RestServerMetrics {
   // Errors
   // AsyncHandlerWorker
   public final Counter requestProcessingError;
-  public final Counter requestQueueOfferError;
+  public final Counter requestQueueAddError;
   public final Counter resourceReleaseError;
   public final Counter responseAlreadyInFlightError;
   public final Counter responseCompleteTasksError;
@@ -112,8 +112,8 @@ public class RestServerMetrics {
     // AsyncHandlerWorker
     requestProcessingError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestProcessingError"));
-    requestQueueOfferError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueueOfferError"));
+    requestQueueAddError =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueueAddError"));
     resourceReleaseError =
         metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResourceReleaseError"));
     responseAlreadyInFlightError =

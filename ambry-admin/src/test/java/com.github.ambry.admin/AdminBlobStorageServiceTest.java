@@ -77,6 +77,7 @@ public class AdminBlobStorageServiceTest {
    */
   public AdminBlobStorageServiceTest()
       throws InstantiationException, IOException {
+    RestRequestMetrics.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(new VerifiableProperties(new Properties()));
     adminResponseHandlerController = new AdminResponseHandlerController();
     adminBlobStorageService = getAdminBlobStorageService();
