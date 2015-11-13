@@ -47,25 +47,25 @@ public class BlobStoreHardDeleteTest {
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg0 =
           new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
 
       PutMessageFormatInputStream msg1 =
           new PutMessageFormatInputStream(keys[1], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
 
       PutMessageFormatInputStream msg2 =
           new PutMessageFormatInputStream(keys[2], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
 
       DeleteMessageFormatInputStream msg3d = new DeleteMessageFormatInputStream(keys[1]);
 
       PutMessageFormatInputStream msg4 =
           new PutMessageFormatInputStream(keys[3], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
 
       PutMessageFormatInputStream msg5 =
           new PutMessageFormatInputStream(keys[4], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
 
       buffer = ByteBuffer.allocate((int) (msg0.getSize() +
           msg1.getSize() +
@@ -233,7 +233,7 @@ public class BlobStoreHardDeleteTest {
 
     // read from a random location.
     try {
-      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1))/2, keyFactory);
+      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1)) / 2, keyFactory);
       Assert.assertTrue(false);
     } catch (IOException e) {
     }

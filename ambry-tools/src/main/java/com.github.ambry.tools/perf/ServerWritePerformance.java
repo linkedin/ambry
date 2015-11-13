@@ -11,8 +11,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -292,7 +292,7 @@ public class ServerWritePerformance {
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
-                new ByteBufferInputStream(ByteBuffer.wrap(blob)), props.getBlobSize(), BlobDataType.DataBlob);
+                new ByteBufferInputStream(ByteBuffer.wrap(blob)), props.getBlobSize(), BlobType.DataBlob);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);

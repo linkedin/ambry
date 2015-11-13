@@ -10,7 +10,6 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
@@ -1209,7 +1208,7 @@ public class ReplicationTest {
 
     MessageFormatInputStream inputStream =
         new PutMessageFormatInputStream(id, blobProperties, ByteBuffer.wrap(usermetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(blob)), (int) blobSize, BlobDataType.DataBlob);
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), (int) blobSize);
     int streamSize = (int) inputStream.getSize();
     byte[] entireBlob = new byte[streamSize];
     inputStream.read(entireBlob, 0, streamSize);

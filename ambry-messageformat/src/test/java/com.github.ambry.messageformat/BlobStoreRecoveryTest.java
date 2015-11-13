@@ -123,17 +123,17 @@ public class BlobStoreRecoveryTest {
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =
           new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 2nd message
       PutMessageFormatInputStream msg2 =
           new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 3rd message
       PutMessageFormatInputStream msg3 =
           new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
       DeleteMessageFormatInputStream msg4 = new DeleteMessageFormatInputStream(keys[1]);
@@ -141,7 +141,7 @@ public class BlobStoreRecoveryTest {
       // 5th message
       PutMessageFormatInputStream msg5 =
           new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000, BlobDataType.DataBlob);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       buffer = ByteBuffer.allocate((int) (msg1.getSize() +
           msg2.getSize() +

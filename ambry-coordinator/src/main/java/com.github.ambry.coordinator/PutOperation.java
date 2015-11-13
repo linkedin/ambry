@@ -3,8 +3,8 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobDataType;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
@@ -64,8 +64,7 @@ final public class PutOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
-        userMetadata.duplicate(), materializedBlobStream.duplicate(), blobProperties.getBlobSize(),
-        BlobDataType.DataBlob);
+        userMetadata.duplicate(), materializedBlobStream.duplicate(), blobProperties.getBlobSize(), BlobType.DataBlob);
     return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
   }
 

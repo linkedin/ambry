@@ -26,9 +26,8 @@ import java.nio.ByteBuffer;
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
   public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
-      InputStream data, long streamSize, BlobDataType dataType)
+      InputStream blobStream, long streamSize, BlobType blobType)
       throws MessageFormatException {
-
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
@@ -50,9 +49,15 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(buffer, streamSize);
     Crc32 crc = new Crc32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
-    stream = new CrcInputStream(crc, data);
+    stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
     messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
     buffer.flip();
+  }
+
+  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
+      InputStream blobStream, long streamSize)
+      throws MessageFormatException {
+    this(key, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob);
   }
 }

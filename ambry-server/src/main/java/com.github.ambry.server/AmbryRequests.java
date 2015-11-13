@@ -142,7 +142,8 @@ public class AmbryRequests implements RequestAPI {
       } else {
         MessageFormatInputStream stream =
             new PutMessageFormatInputStream(putRequest.getBlobId(), putRequest.getBlobProperties(),
-                putRequest.getUsermetadata(), putRequest.getData(), putRequest.getDataSize(), putRequest.getDataType());
+                putRequest.getUsermetadata(), putRequest.getBlobStream(), putRequest.getBlobSize(),
+                putRequest.getBlobType());
         MessageInfo info = new MessageInfo(putRequest.getBlobId(), stream.getSize(), Utils
             .addSecondsToEpochTime(putRequest.getBlobProperties().getCreationTimeInMs(),
                 putRequest.getBlobProperties().getTimeToLiveInSeconds()));
@@ -152,7 +153,7 @@ public class AmbryRequests implements RequestAPI {
         Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
-        metrics.blobSizeInBytes.update(putRequest.getDataSize());
+        metrics.blobSizeInBytes.update(putRequest.getBlobSize());
         metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
         if (notification != null) {
           notification
@@ -184,7 +185,7 @@ public class AmbryRequests implements RequestAPI {
     sendPutResponse(requestResponseChannel, response, request,
         new HistogramMeasurement(metrics.putBlobResponseQueueTimeInMs),
         new HistogramMeasurement(metrics.putBlobSendTimeInMs), new HistogramMeasurement(metrics.putBlobTotalTimeInMs),
-        totalTimeSpent, putRequest.getDataSize(), metrics);
+        totalTimeSpent, putRequest.getBlobSize(), metrics);
   }
 
   public void handleGetRequest(Request request)
