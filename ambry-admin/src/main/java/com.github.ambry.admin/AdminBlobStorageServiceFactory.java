@@ -28,18 +28,19 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    * Creates a new instance of AdminBlobStorageServiceFactory.
    * @param verifiableProperties the properties to use to create configs.
    * @param clusterMap the {@link ClusterMap} to use.
-   * @param responseHandlerController the {@link RequestResponseHandlerController} that can be used to request an
+   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to request an
    *                                  instance of {@link com.github.ambry.rest.AsyncRequestResponseHandler}.
    * @param router the {@link Router} to use.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RequestResponseHandlerController responseHandlerController, Router router) {
-    if (verifiableProperties != null && clusterMap != null && responseHandlerController != null && router != null) {
+      RequestResponseHandlerController requestResponseHandlerController, Router router) {
+    if (verifiableProperties != null && clusterMap != null && requestResponseHandlerController != null
+        && router != null) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;
-      this.requestResponseHandlerController = responseHandlerController;
+      this.requestResponseHandlerController = requestResponseHandlerController;
       this.router = router;
     } else {
       StringBuilder errorMessage =
@@ -50,7 +51,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
-      if (responseHandlerController == null) {
+      if (requestResponseHandlerController == null) {
         errorMessage.append(" [RequestResponseHandlerController] ");
       }
       if (router == null) {
