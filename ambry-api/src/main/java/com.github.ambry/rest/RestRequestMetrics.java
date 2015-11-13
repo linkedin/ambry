@@ -190,7 +190,7 @@ public class RestRequestMetrics {
    *                                {@link RestRequest} that this instance of RestRequestMetrics is attached to.
    */
   public void injectTracker(RequestMetricsTracker requestMetricsTracker) {
-    if (metricsTracker != null) {
+    if (requestMetricsTracker != null) {
       metricsTracker = requestMetricsTracker;
     } else {
       throw new IllegalArgumentException("RequestMetricsTracker provided cannot be null");

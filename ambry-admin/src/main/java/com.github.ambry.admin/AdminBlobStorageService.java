@@ -7,7 +7,6 @@ import com.github.ambry.rest.AsyncRequestResponseHandler;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.RequestResponseHandlerController;
 import com.github.ambry.rest.ResponseStatus;
-import com.github.ambry.rest.RestConstants;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -22,6 +21,8 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,16 @@ import org.slf4j.LoggerFactory;
  * All the operations that need to be performed by the Admin are supported here.
  */
 class AdminBlobStorageService implements BlobStorageService {
+  protected final static String ECHO = "echo";
+  protected final static String GET_REPLICAS_FOR_BLOB_ID = "getReplicasForBlobId";
+
+  private final static Set<String> adminOperations = new HashSet<String>();
+
+  static {
+    adminOperations.add(ECHO);
+    adminOperations.add(GET_REPLICAS_FOR_BLOB_ID);
+  }
+
   protected final AdminMetrics adminMetrics;
 
   private final ClusterMap clusterMap;
@@ -82,33 +93,37 @@ class AdminBlobStorageService implements BlobStorageService {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
       logger.trace("GET operation/blob ID requested - {}", operationOrBlobId);
-      AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationOrBlobId);
       ReadableStreamChannel response;
-      switch (operationType) {
-        case echo:
+      if (adminOperations.contains(operationOrBlobId)) {
+        if (operationOrBlobId.equals(ECHO)) {
           adminMetrics.echoRate.mark();
           restRequest.getMetrics().injectTracker(adminMetrics.echoTracker);
           preProcessingTime = System.currentTimeMillis() - processingStartTime;
           response = EchoHandler.handleGetRequest(restRequest, restResponseChannel, adminMetrics);
           submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
-          break;
-        case getReplicasForBlobId:
+        } else if (operationOrBlobId.equals(GET_REPLICAS_FOR_BLOB_ID)) {
           adminMetrics.getReplicasForBlobIdRate.mark();
           restRequest.getMetrics().injectTracker(adminMetrics.getReplicasForBlobIdTracker);
           preProcessingTime = System.currentTimeMillis() - processingStartTime;
           response =
               GetReplicasForBlobIdHandler.handleGetRequest(restRequest, restResponseChannel, clusterMap, adminMetrics);
           submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
-          break;
-        default:
-          adminMetrics.getBlobRate.mark();
-          restRequest.getMetrics().injectTracker(adminMetrics.getBlobTracker);
-          logger.trace("Forwarding GET of {} to the router", operationOrBlobId);
-          preProcessingTime = System.currentTimeMillis() - processingStartTime;
-          HeadForGetCallback callback =
-              new HeadForGetCallback(this, restRequest, restResponseChannel, responseHandler, router,
-                  cacheValidityInSecs);
-          router.getBlobInfo(operationOrBlobId, callback);
+        } else {
+          adminMetrics.missingOperationHandlerError.inc();
+          RestServiceException exception =
+              new RestServiceException("No handler available for valid admin operation - " + operationOrBlobId,
+                  RestServiceErrorCode.ServiceUnavailable);
+          submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+        }
+      } else {
+        adminMetrics.getBlobRate.mark();
+        restRequest.getMetrics().injectTracker(adminMetrics.getBlobTracker);
+        logger.trace("Forwarding GET of {} to the router", operationOrBlobId);
+        preProcessingTime = System.currentTimeMillis() - processingStartTime;
+        HeadForGetCallback callback =
+            new HeadForGetCallback(this, restRequest, restResponseChannel, responseHandler, router,
+                cacheValidityInSecs);
+        router.getBlobInfo(operationOrBlobId, callback);
       }
     } catch (Exception e) {
       adminMetrics.operationError.inc();
@@ -364,7 +379,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestConstants.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setContentType(blobProperties.getContentType());
       // Ensure browsers do not execute html with embedded exploits.
@@ -532,7 +547,7 @@ class PostCallback implements Callback<String> {
     restResponseChannel.setStatus(ResponseStatus.Created);
     restResponseChannel.setLocation(location);
     restResponseChannel.setContentLength(0);
-    restResponseChannel.setHeader(RestConstants.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
   }
 }
 
@@ -686,19 +701,19 @@ class HeadCallback implements Callback<BlobInfo> {
     restResponseChannel.setContentLength(blobProperties.getBlobSize());
 
     // Blob props
-    restResponseChannel.setHeader(RestConstants.Headers.Blob_Size, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestConstants.Headers.Service_Id, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestConstants.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestConstants.Headers.Private, blobProperties.isPrivate());
+    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.Service_Id, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.Private, blobProperties.isPrivate());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
-      restResponseChannel.setHeader(RestConstants.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
+      restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestConstants.Headers.Content_Type, blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.Content_Type, blobProperties.getContentType());
       restResponseChannel.setContentType(blobProperties.getContentType());
     }
     if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestConstants.Headers.Owner_Id, blobProperties.getOwnerId());
+      restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
     // TODO: send user metadata also as header after discussion with team.
   }

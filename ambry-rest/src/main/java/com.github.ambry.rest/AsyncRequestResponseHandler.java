@@ -290,30 +290,33 @@ class AsyncHandlerWorker implements Runnable {
     long processingStartTime = System.currentTimeMillis();
     handlePrechecks(restRequest, restResponseChannel);
     restServerMetrics.requestArrivalRate.mark();
-    logger.trace("Queuing request {}", restRequest.getUri());
-    AsyncRequestInfo requestInfo = new AsyncRequestInfo(restRequest, restResponseChannel);
-    boolean added = false;
-    RestServiceException exception = null;
     try {
-      added = requests.add(requestInfo);
-    } catch (Exception e) {
-      exception = new RestServiceException("Attempt to add request failed", e,
-          RestServiceErrorCode.RequestResponseQueuingFailure);
-    }
-    long preProcessingTime = System.currentTimeMillis() - processingStartTime;
-    restServerMetrics.requestPreProcessingTimeInMs.update(preProcessingTime);
-    restRequest.getMetrics().scalingLayerMetrics.addToRequestProcessingTime(preProcessingTime);
-    if (added) {
-      queuedRequestCount.incrementAndGet();
-      logger.trace("Queued request {}", restRequest.getUri());
-      restServerMetrics.requestQueuingRate.mark();
-    } else {
-      restServerMetrics.requestQueueAddError.inc();
-      if (exception == null) {
-        exception = new RestServiceException("Attempt to add request failed",
+      logger.trace("Queuing request {}", restRequest.getUri());
+      AsyncRequestInfo requestInfo = new AsyncRequestInfo(restRequest, restResponseChannel);
+      boolean added = false;
+      RestServiceException exception = null;
+      try {
+        added = requests.add(requestInfo);
+      } catch (Exception e) {
+        exception = new RestServiceException("Attempt to add request failed", e,
             RestServiceErrorCode.RequestResponseQueuingFailure);
       }
-      throw exception;
+      if (added) {
+        queuedRequestCount.incrementAndGet();
+        logger.trace("Queued request {}", restRequest.getUri());
+        restServerMetrics.requestQueuingRate.mark();
+      } else {
+        restServerMetrics.requestQueueAddError.inc();
+        if (exception == null) {
+          exception = new RestServiceException("Attempt to add request failed",
+              RestServiceErrorCode.RequestResponseQueuingFailure);
+        }
+        throw exception;
+      }
+    } finally {
+      long preProcessingTime = System.currentTimeMillis() - processingStartTime;
+      restServerMetrics.requestPreProcessingTimeInMs.update(preProcessingTime);
+      restRequest.getMetrics().scalingLayerMetrics.addToRequestProcessingTime(preProcessingTime);
     }
   }
 
