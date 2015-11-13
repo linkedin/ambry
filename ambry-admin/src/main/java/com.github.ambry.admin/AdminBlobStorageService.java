@@ -21,6 +21,8 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +33,16 @@ import org.slf4j.LoggerFactory;
  * All the operations that need to be performed by the Admin are supported here.
  */
 class AdminBlobStorageService implements BlobStorageService {
+  protected final static String ECHO = "echo";
+  protected final static String GET_REPLICAS_FOR_BLOB_ID = "getReplicasForBlobId";
+
+  private final static Set<String> adminOperations = new HashSet<String>();
+
+  static {
+    adminOperations.add(ECHO);
+    adminOperations.add(GET_REPLICAS_FOR_BLOB_ID);
+  }
+
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
   private final RequestResponseHandlerController requestResponseHandlerController;
@@ -78,23 +90,26 @@ class AdminBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
-      logger.trace("GET operation requested - {}", operationOrBlobId);
-      AdminOperationType operationType = AdminOperationType.getAdminOperationType(operationOrBlobId);
+      logger.trace("GET operation/blob ID requested - {}", operationOrBlobId);
       ReadableStreamChannel response;
-      switch (operationType) {
-        case echo:
+      if (adminOperations.contains(operationOrBlobId)) {
+        if (operationOrBlobId.equals(ECHO)) {
           response = EchoHandler.handleGetRequest(restRequest, restResponseChannel, adminMetrics);
           submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
-          break;
-        case getReplicasForBlobId:
+        } else if (operationOrBlobId.equals(GET_REPLICAS_FOR_BLOB_ID)) {
           response =
               GetReplicasForBlobIdHandler.handleGetRequest(restRequest, restResponseChannel, clusterMap, adminMetrics);
           submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
-          break;
-        default:
-          HeadForGetCallback callback =
-              new HeadForGetCallback(restRequest, restResponseChannel, responseHandler, router, cacheValidityInSecs);
-          router.getBlobInfo(operationOrBlobId, callback);
+        } else {
+          RestServiceException exception =
+              new RestServiceException("No handler available for valid admin operation - " + operationOrBlobId,
+                  RestServiceErrorCode.ServiceUnavailable);
+          submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+        }
+      } else {
+        HeadForGetCallback callback =
+            new HeadForGetCallback(restRequest, restResponseChannel, responseHandler, router, cacheValidityInSecs);
+        router.getBlobInfo(operationOrBlobId, callback);
       }
     } catch (Exception e) {
       submitResponse(restRequest, restResponseChannel, responseHandler, null, e);

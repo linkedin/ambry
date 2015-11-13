@@ -302,7 +302,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests the {@link AdminOperationType#echo} admin operation. Checks to see that the echo matches input text.
+   * Tests the {@link AdminBlobStorageService#ECHO} admin operation. Checks to see that the echo matches input text.
    * @throws Exception
    */
   @Test
@@ -319,15 +319,15 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests reactions of the {@link AdminOperationType#echo} operation to bad input - specifically if we do not include
-   * required parameters.
+   * Tests reactions of the {@link AdminBlobStorageService#ECHO} operation to bad input - specifically if we do not
+   * include required parameters.
    * @throws Exception
    */
   @Test
   public void echoWithBadInputTest()
       throws Exception {
     // bad input - uri does not have text that needs to be echoed.
-    RestRequest restRequest = createRestRequest(RestMethod.GET, AdminOperationType.echo.toString(), null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, AdminBlobStorageService.ECHO, null, null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
       doGet(restRequest, restResponseChannel);
@@ -338,7 +338,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests the {@link AdminOperationType#getReplicasForBlobId} admin operation.
+   * Tests the {@link AdminBlobStorageService#ECHO} admin operation.
    * <p/>
    * For the each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created.
    * The string representation is sent to the {@link AdminBlobStorageService} as a part of getReplicasForBlobId request.
@@ -365,8 +365,8 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests reactions of the {@link AdminOperationType#getReplicasForBlobId} operation to bad input - specifically if we
-   * do not include required parameters.
+   * Tests reactions of the {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID} operation to bad input -
+   * specifically if we do not include required parameters.
    * @throws Exception
    */
   @Test
@@ -375,7 +375,7 @@ public class AdminBlobStorageServiceTest {
     try {
       // bad input - uri missing the blob id whose replicas need to be returned.
       RestRequest restRequest =
-          createRestRequest(RestMethod.GET, AdminOperationType.getReplicasForBlobId.toString(), null, null);
+          createRestRequest(RestMethod.GET, AdminBlobStorageService.GET_REPLICAS_FOR_BLOB_ID, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       doGet(restRequest, restResponseChannel);
       fail("Exception should have been thrown because some required parameters were missing");
@@ -1214,32 +1214,34 @@ public class AdminBlobStorageServiceTest {
   // echoTest() helpers
 
   /**
-   * Creates a request that can be used to test {@link AdminOperationType#echo}.
+   * Creates a request that can be used to test {@link AdminBlobStorageService#ECHO}.
    * @param echoText the text that needs to be echoed.
-   * @return a {@link RestRequest} for {@link AdminOperationType#echo} with echo text as specified.
+   * @return a {@link RestRequest} for {@link AdminBlobStorageService#ECHO} with echo text as specified.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
   private RestRequest createEchoGetRestRequest(String echoText)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String uri = AdminOperationType.echo + "?" + EchoHandler.TEXT_KEY + "=" + echoText;
+    String uri = AdminBlobStorageService.ECHO + "?" + EchoHandler.TEXT_KEY + "=" + echoText;
     return createRestRequest(RestMethod.GET, uri, null, null);
   }
 
   // handleGetReplicasForBlobIdWithBadInputTest() helpers
 
   /**
-   * Creates a request that can be used to test {@link AdminOperationType#getReplicasForBlobId}.
+   * Creates a request that can be used to test {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID}.
    * @param blobId the blob ID to include in the request.
-   * @return a {@link RestRequest} for {@link AdminOperationType#getReplicasForBlobId} with blob ID as specified.
+   * @return a {@link RestRequest} for {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID} with blob ID as
+   * specified.
    * @throws JSONException
    * @throws URISyntaxException
    * @throws UnsupportedEncodingException
    */
   private RestRequest createGetReplicasForBlobIdRestRequest(String blobId)
       throws JSONException, URISyntaxException, UnsupportedEncodingException {
-    String uri = AdminOperationType.getReplicasForBlobId + "?" + GetReplicasForBlobIdHandler.BLOB_ID_KEY + "=" + blobId;
+    String uri =
+        AdminBlobStorageService.GET_REPLICAS_FOR_BLOB_ID + "?" + GetReplicasForBlobIdHandler.BLOB_ID_KEY + "=" + blobId;
     return createRestRequest(RestMethod.GET, uri, null, null);
   }
 }

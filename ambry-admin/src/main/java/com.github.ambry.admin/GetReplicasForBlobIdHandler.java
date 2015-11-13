@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Performs the custom {@link AdminOperationType#getReplicasForBlobId} operation supported by the admin.
+ * Performs the custom {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID} operation supported by the admin.
  */
 class GetReplicasForBlobIdHandler {
   protected static String BLOB_ID_KEY = "blobId";
@@ -29,7 +29,7 @@ class GetReplicasForBlobIdHandler {
   private static Logger logger = LoggerFactory.getLogger(GetReplicasForBlobIdHandler.class);
 
   /**
-   * Handles {@link AdminOperationType#getReplicasForBlobId}} operations.
+   * Handles {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID}} operations.
    * <p/>
    * Extracts the blob ID from the {@code restRequest}, infers replicas of the blob ID if possible, packages the replica
    * list into a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}.

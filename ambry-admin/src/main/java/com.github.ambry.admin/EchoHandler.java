@@ -16,14 +16,14 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Performs the custom {@link AdminOperationType#echo} operation supported by the admin.
+ * Performs the custom {@link AdminBlobStorageService#ECHO} operation supported by the admin.
  */
 class EchoHandler {
   protected static String TEXT_KEY = "text";
   private static Logger logger = LoggerFactory.getLogger(EchoHandler.class);
 
   /**
-   * Handles {@link AdminOperationType#echo} operations.
+   * Handles {@link AdminBlobStorageService#ECHO} operations.
    * <p/>
    * Extracts the echo text from the {@code restRequest}, performs an echo if possible, packages the echo response in
    * a {@link JSONObject} and makes the object available via a {@link ReadableStreamChannel}.
