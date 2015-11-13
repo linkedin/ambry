@@ -201,7 +201,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       responseChannel = new NettyResponseChannel(ctx, nettyMetrics);
       logger.trace("Created RestResponseChannel for channel {}", ctx.channel());
     }
-    if (obj != null && obj instanceof HttpRequest) {
+    if (obj instanceof HttpRequest) {
       if (obj.getDecoderResult().isSuccess()) {
         handleRequest((HttpRequest) obj);
       } else {
@@ -210,7 +210,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         throw new RestServiceException("Decoder failed because of malformed request",
             RestServiceErrorCode.MalformedRequest);
       }
-    } else if (obj != null && obj instanceof HttpContent) {
+    } else if (obj instanceof HttpContent) {
       handleContent((HttpContent) obj);
     } else {
       logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
@@ -249,7 +249,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
       // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
       // schedule the other methods for handling in handleContent().
-      if (RestMethod.POST.equals(request.getRestMethod())) {
+      if (request.getRestMethod().equals(RestMethod.POST)) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {
@@ -292,7 +292,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         request.getMetrics().nioLayerMetrics
             .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
       }
-      if (!RestMethod.POST.equals(request.getRestMethod())) {
+      if (!request.getRestMethod().equals(RestMethod.POST)) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {

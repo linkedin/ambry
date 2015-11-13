@@ -74,6 +74,7 @@ class AdminMetrics {
   // AdminBlobStorageService
   public final Counter callbackProcessingError;
   public final Counter operationError;
+  public final Counter missingOperationHandlerError;
   public final Counter responseSubmissionError;
   public final Counter resourceReleaseError;
   // EchoHandler
@@ -169,6 +170,8 @@ class AdminMetrics {
     // AdminBlobStorageService
     callbackProcessingError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "CallbackProcessingError"));
     operationError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "OperationError"));
+    missingOperationHandlerError =
+        metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "MissingOperationHandlerError"));
     responseSubmissionError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "ResponseSubmissionError"));
     resourceReleaseError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "ResourceReleaseError"));
     // EchoHandler
