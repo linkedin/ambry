@@ -233,11 +233,15 @@ public class RequestResponseTest {
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize);
 
+    // Put Request with empty user metadata.
+    byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+    testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
+        blob, blobSize);
 
+    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
     // Ensure Put Request V1 still deserializes correctly.
     testPutRequestV1(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
-
     // Ensure a Put Request with an invalid version does not get deserialized correctly.
     testPutRequestInvalidVersion(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
 
