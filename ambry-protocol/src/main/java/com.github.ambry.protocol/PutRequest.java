@@ -17,13 +17,13 @@ import java.nio.channels.WritableByteChannel;
  * A Put Request used to put a blob
  */
 public class PutRequest extends RequestOrResponse {
-  protected ByteBuffer usermetadata;
-  protected InputStream blobStream;
-  protected long blobSize;
-  protected BlobId blobId;
+  protected final ByteBuffer usermetadata;
+  protected final InputStream blobStream;
+  protected final long blobSize;
+  protected final BlobId blobId;
   protected long sentBytes = 0;
-  protected BlobProperties properties;
-  protected BlobType blobType;
+  protected final BlobProperties properties;
+  protected final BlobType blobType;
 
   private static final int UserMetadata_Size_InBytes = 4;
   protected static final int Blob_Size_InBytes = 8;
