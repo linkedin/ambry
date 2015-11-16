@@ -120,13 +120,12 @@ class MockPutRequestV1 extends PutRequest {
 }
 
 public class RequestResponseTest {
-  void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
+  private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
       throws IOException {
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     PutRequest request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
         new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
-    request.toString();
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     while (!request.isSendComplete()) {
@@ -146,7 +145,7 @@ public class RequestResponseTest {
     Assert.assertArrayEquals(blob, blobRead);
   }
 
-  void testPutRequestV1(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
+  private void testPutRequestV1(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
       throws IOException {
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
@@ -154,7 +153,6 @@ public class RequestResponseTest {
         new MockPutRequestV1(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), sizeInBlobProperties, BlobType.DataBlob,
             PutRequest.Put_Request_Version_V1);
-    request.toString();
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     while (!request.isSendComplete()) {
@@ -174,8 +172,8 @@ public class RequestResponseTest {
     Assert.assertArrayEquals(blob, blobRead);
   }
 
-  void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-      BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
+  private void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId,
+      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
       throws IOException {
     final short Put_Request_Invalid_version = 0;
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
@@ -183,7 +181,6 @@ public class RequestResponseTest {
         new MockPutRequestV1(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), sizeInBlobProperties, BlobType.DataBlob,
             Put_Request_Invalid_version);
-    request.toString();
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     while (!request.isSendComplete()) {
@@ -194,9 +191,8 @@ public class RequestResponseTest {
     Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
     try {
       PutRequest.readFrom(requestStream, clusterMap);
-      Assert.assertFalse(true);
+      Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
     } catch (IllegalStateException e) {
-
     }
   }
 

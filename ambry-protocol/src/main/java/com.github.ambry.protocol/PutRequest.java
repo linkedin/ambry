@@ -157,7 +157,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   // Class to read protocol version 1 Put Request from the stream.
-  static class PutRequest_V1 {
+  private static class PutRequest_V1 {
     static PutRequest readFrom(DataInputStream stream, ClusterMap map)
         throws IOException {
       int correlationId = stream.readInt();
