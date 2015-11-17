@@ -37,8 +37,8 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
     } else {
+      bufferReadLock.lock();
       try {
-        bufferReadLock.lock();
         if (buffer.hasRemaining()) {
           bytesWritten = channel.write(buffer);
         }
