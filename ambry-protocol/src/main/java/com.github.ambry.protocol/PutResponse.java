@@ -11,9 +11,10 @@ import java.io.IOException;
  * A Response to the Put Request
  */
 public class PutResponse extends Response {
+  private static final short Put_Response_Version_V1 = 1;
 
   public PutResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.PutResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.PutResponse, Put_Response_Version_V1, correlationId, clientId, error);
   }
 
   public static PutResponse readFrom(DataInputStream stream)

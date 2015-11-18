@@ -11,9 +11,10 @@ import java.io.IOException;
  * Response of delete request
  */
 public class DeleteResponse extends Response {
+  private static final short Delete_Response_Version_V1 = 1;
 
   public DeleteResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.DeleteResponse, Request_Response_Version, correlationId, clientId, error);
+    super(RequestOrResponseType.DeleteResponse, Delete_Response_Version_V1, correlationId, clientId, error);
   }
 
   public static DeleteResponse readFrom(DataInputStream stream)
