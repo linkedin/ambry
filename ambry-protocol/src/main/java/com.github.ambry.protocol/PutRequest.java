@@ -29,6 +29,8 @@ public class PutRequest extends RequestOrResponse {
   protected static final int Blob_Size_InBytes = 8;
   protected static final int BlobType_Size_InBytes = 2;
   protected static final short Put_Request_Version_V1 = 1;
+  // Version 2 added to support chunking for large objects, where the size of a chunk can be different from the size
+  // in the BlobProperties (which will be the size of the whole object).
   protected static final short Put_Request_Version_V2 = 2;
 
   protected PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
