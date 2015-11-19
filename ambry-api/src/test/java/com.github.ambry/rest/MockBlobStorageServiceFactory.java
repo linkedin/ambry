@@ -16,7 +16,7 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
   private final Router router;
 
   public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Object responseHandlerController, Router router) {
+      Object restResponseHandler, Router router) {
     this.verifiableProperties = verifiableProperties;
     this.router = router;
   }

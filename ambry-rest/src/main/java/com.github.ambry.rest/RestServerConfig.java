@@ -6,8 +6,8 @@ import com.github.ambry.config.VerifiableProperties;
 
 
 /**
- * Configuration parameters required by {@link RestServer} and Rest infrastructure
- * ({@link RequestResponseHandlerController}, {@link AsyncRequestResponseHandler}).
+ * Configuration parameters required by {@link RestServer} and Rest infrastructure ({@link RestRequestHandler},
+ * {@link RestResponseHandler}).
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for {@link RestServer} and presents them for retrieval through defined APIs.
@@ -29,12 +29,34 @@ class RestServerConfig {
   public final String restServerNioServerFactory;
 
   /**
-   * The number of {@link AsyncRequestResponseHandler} instances that need to be started by the
-   * {@link RequestResponseHandlerController} to handle requests and responses.
+   * The number of scaling units in {@link RestRequestHandler} that will handle requests.
    */
-  @Config("rest.server.scaling.unit.count")
+  @Config("rest.server.request.handler.scaling.unit.count")
   @Default("5")
-  public final int restServerScalingUnitCount;
+  public final int restServerRequestHandlerScalingUnitCount;
+
+  /**
+   * The {@link RestRequestHandlerFactory} that needs to be used by the {@link RestServer}
+   * for bootstrapping the {@link RestRequestHandler}.
+   */
+  @Config("rest.server.rest.request.handler.factory")
+  @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
+  public final String restServerRestRequestHandlerFactory;
+
+  /**
+   * The number of scaling units in {@link RestResponseHandler} handle responses.
+   */
+  @Config("rest.server.response.handler.scaling.unit.count")
+  @Default("5")
+  public final int restServerResponseHandlerScalingUnitCount;
+
+  /**
+   * The {@link RestResponseHandlerFactory} that needs to be used by the {@link RestServer}
+   * for bootstrapping the {@link RestResponseHandler}.
+   */
+  @Config("rest.server.rest.response.handler.factory")
+  @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
+  public final String restServerRestResponseHandlerFactory;
 
   /**
    * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
@@ -48,7 +70,14 @@ class RestServerConfig {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
     restServerNioServerFactory =
         verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
-    restServerScalingUnitCount = verifiableProperties.getInt("rest.server.scaling.unit.count", 5);
+    restServerRequestHandlerScalingUnitCount =
+        verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
+    restServerRestRequestHandlerFactory = verifiableProperties.getString("rest.server.rest.request.handler.factory",
+        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
+    restServerResponseHandlerScalingUnitCount =
+        verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
+    restServerRestResponseHandlerFactory = verifiableProperties.getString("rest.server.rest.response.handler.factory",
+        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
   }

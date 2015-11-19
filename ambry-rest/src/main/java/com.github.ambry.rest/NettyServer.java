@@ -38,11 +38,16 @@ class NettyServer implements NioServer {
   private final Thread nettyServerDeployerThread;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      RequestResponseHandlerController requestResponseHandlerController) {
+  /**
+   * Creates a new instance of NettyServer.
+   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
+   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   */
+  public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestResponseHandlerController);
+    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler);
     nettyServerDeployerThread = new Thread(nettyServerDeployer);
     logger.trace("Instantiated NettyServer");
   }
@@ -94,14 +99,19 @@ class NettyServerDeployer implements Runnable {
   private final EventLoopGroup workerGroup;
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final RequestResponseHandlerController requestResponseHandlerController;
+  private final RestRequestHandler requestHandler;
   private Exception exception = null;
 
-  public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      RequestResponseHandlerController requestResponseHandlerController) {
+  /**
+   * Create a new instance of NettyServerDeployer.
+   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
+   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   */
+  public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    this.requestResponseHandlerController = requestResponseHandlerController;
+    this.requestHandler = requestHandler;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServerDeployer");
@@ -127,8 +137,7 @@ class NettyServerDeployer implements Runnable {
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                   // custom processing class that interfaces with a BlobStorageService.
-              .addLast("processor",
-                  new NettyMessageProcessor(nettyMetrics, nettyConfig, requestResponseHandlerController));
+              .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
         }
       });
       ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();

@@ -16,24 +16,22 @@ public class NettyServerFactory implements NioServerFactory {
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final RequestResponseHandlerController requestResponseHandlerController;
+  private final RestRequestHandler requestHandler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates a new instance of NettyServerFactory.
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
-   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to obtain an
-   *                                         instance of {@link AsyncRequestResponseHandler} to handle requests.
-   * @throws InstantiationException if there is any problem instantiating the factory.
+   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RequestResponseHandlerController requestResponseHandlerController)
-      throws InstantiationException {
-    if (verifiableProperties != null && metricRegistry != null && requestResponseHandlerController != null) {
+      RestRequestHandler requestHandler) {
+    if (verifiableProperties != null && metricRegistry != null && requestHandler != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
-      this.requestResponseHandlerController = requestResponseHandlerController;
+      this.requestHandler = requestHandler;
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
@@ -43,10 +41,10 @@ public class NettyServerFactory implements NioServerFactory {
       if (metricRegistry == null) {
         errorMessage.append(" [MetricRegistry] ");
       }
-      if (requestResponseHandlerController == null) {
-        errorMessage.append(" [RequestResponseHandlerController] ");
+      if (requestHandler == null) {
+        errorMessage.append(" [RestRequestHandler] ");
       }
-      throw new InstantiationException(errorMessage.toString());
+      throw new IllegalArgumentException(errorMessage.toString());
     }
     logger.trace("Instantiated NettyServerFactory");
   }
@@ -55,7 +53,8 @@ public class NettyServerFactory implements NioServerFactory {
    * Returns a new instance of {@link NettyServer}.
    * @return a new instance of {@link NettyServer}.
    */
+  @Override
   public NioServer getNioServer() {
-    return new NettyServer(nettyConfig, nettyMetrics, requestResponseHandlerController);
+    return new NettyServer(nettyConfig, nettyMetrics, requestHandler);
   }
 }

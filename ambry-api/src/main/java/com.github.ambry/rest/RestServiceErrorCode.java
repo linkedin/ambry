@@ -70,10 +70,6 @@ public enum RestServiceErrorCode {
    */
   InternalServerError,
   /**
-   * Indicates failure of tasks that needed to be done when a new channel with a client became active.
-   */
-  ChannelCreationTasksFailure,
-  /**
    * Indicates that an error occurred while data was being written to a channel.
    */
   ChannelWriteError,

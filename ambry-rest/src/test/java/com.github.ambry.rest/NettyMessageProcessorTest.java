@@ -31,27 +31,23 @@ import static org.junit.Assert.assertFalse;
 public class NettyMessageProcessorTest {
   private final Router router;
   private final BlobStorageService blobStorageService;
-  private final MockRequestResponseHandlerController requestHandlerController;
-  private final MockRestRequestResponseHandler requestHandler;
+  private final MockRequestResponseHandler requestHandler;
 
   /**
-   * Sets up the {@link MockRequestResponseHandlerController} that {@link NettyMessageProcessor} can use.
+   * Sets up the mock services that {@link NettyMessageProcessor} can use.
    * @throws InstantiationException
    * @throws IOException
-   * @throws RestServiceException
    */
   public NettyMessageProcessorTest()
-      throws InstantiationException, IOException, RestServiceException {
+      throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetrics.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties);
     blobStorageService = new MockBlobStorageService(verifiableProperties, router);
-    requestHandlerController = new MockRequestResponseHandlerController(1);
-    requestHandlerController.setBlobStorageService(blobStorageService);
+    requestHandler = new MockRequestResponseHandler();
+    requestHandler.setBlobStorageService(blobStorageService);
     blobStorageService.start();
-    requestHandlerController.start();
-    // since we start it up with one handler only and it will be a MockRestRequestResponseHandler, get it.
-    requestHandler = (MockRestRequestResponseHandler) requestHandlerController.getHandler();
+    requestHandler.start();
   }
 
   /**
@@ -60,7 +56,6 @@ public class NettyMessageProcessorTest {
   @After
   public void cleanUp()
       throws IOException {
-    requestHandlerController.shutdown();
     blobStorageService.shutdown();
     router.close();
   }
@@ -68,11 +63,10 @@ public class NettyMessageProcessorTest {
   /**
    * Tests for the common case request handling flow.
    * @throws IOException
-   * @throws RestServiceException
    */
   @Test
   public void requestHandleWithGoodInputTest()
-      throws IOException, RestServiceException {
+      throws IOException {
     doRequestHandleWithGoodInputTest(HttpMethod.GET, RestMethod.GET);
     doRequestHandleWithGoodInputTest(HttpMethod.POST, RestMethod.POST);
     doRequestHandleWithGoodInputTest(HttpMethod.DELETE, RestMethod.DELETE);
@@ -80,45 +74,10 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Tests the exceptions thrown on failure of tasks performed by
-   * {@link NettyMessageProcessor#channelActive(io.netty.channel.ChannelHandlerContext)}.
-   */
-  @Test
-  public void channelActiveTasksFailureTest()
-      throws RestServiceException {
-    try {
-      Properties properties = new Properties();
-      properties.setProperty(MockRequestResponseHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "true");
-      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      // AsyncRequestResponseHandler returned is null.
-      requestHandlerController.breakdown(verifiableProperties);
-      try {
-        createChannel();
-      } catch (RestServiceException e) {
-        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ChannelCreationTasksFailure,
-            e.getErrorCode());
-      }
-      properties.setProperty(MockRequestResponseHandlerController.RETURN_NULL_ON_GET_REQUEST_HANDLER, "false");
-      verifiableProperties = new VerifiableProperties(properties);
-      // Runtime is thrown when a call is made to getHandler().
-      requestHandlerController.breakdown(verifiableProperties);
-      try {
-        createChannel();
-      } catch (RuntimeException e) {
-        // expected. nothing to do.
-      }
-    } finally {
-      requestHandlerController.fix();
-    }
-  }
-
-  /**
    * Tests for error handling flow when bad input streams are provided to the {@link NettyMessageProcessor}.
-   * @throws RestServiceException
    */
   @Test
-  public void requestHandleWithBadInputTest()
-      throws RestServiceException {
+  public void requestHandleWithBadInputTest() {
     // content without request.
     String content = "@@randomContent@@@";
     EmbeddedChannel channel = createChannel();
@@ -142,29 +101,27 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Tests for error handling flow when the {@link AsyncRequestResponseHandler} throws exceptions.
-   * @throws RestServiceException
+   * Tests for error handling flow when the {@link RestRequestHandler} throws exceptions.
    */
   @Test
-  public void requestHandlerExceptionTest()
-      throws RestServiceException {
+  public void requestHandlerExceptionTest() {
     try {
       // RuntimeException
       Properties properties = new Properties();
-      properties.setProperty(MockRestRequestResponseHandler.RUNTIME_EXCEPTION_ON_HANDLE, "true");
+      properties.setProperty(MockRequestResponseHandler.RUNTIME_EXCEPTION_ON_HANDLE, "true");
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
       // RestServiceException
       properties.clear();
-      properties.setProperty(MockRestRequestResponseHandler.REST_EXCEPTION_ON_HANDLE,
+      properties.setProperty(MockRequestResponseHandler.REST_EXCEPTION_ON_HANDLE,
           RestServiceErrorCode.InternalServerError.toString());
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
       // ClosedChannelException
       properties.clear();
-      properties.setProperty(MockRestRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
+      properties.setProperty(MockRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.POST, HttpResponseStatus.INTERNAL_SERVER_ERROR);
     } finally {
@@ -178,13 +135,11 @@ public class NettyMessageProcessorTest {
   /**
    * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
    * @return an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
-   * @throws RestServiceException
    */
-  private EmbeddedChannel createChannel()
-      throws RestServiceException {
+  private EmbeddedChannel createChannel() {
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
     NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(new Properties()));
-    NettyMessageProcessor processor = new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController);
+    NettyMessageProcessor processor = new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler);
     return new EmbeddedChannel(processor);
   }
 
@@ -219,10 +174,9 @@ public class NettyMessageProcessorTest {
    * @param restMethod the equivalent {@link RestMethod} for {@code httpMethod}. Used to check for correctness of
    *                   response.
    * @throws IOException
-   * @throws RestServiceException
    */
   private void doRequestHandleWithGoodInputTest(HttpMethod httpMethod, RestMethod restMethod)
-      throws IOException, RestServiceException {
+      throws IOException {
     EmbeddedChannel channel = createChannel();
     channel.writeInbound(createRequest(httpMethod, MockBlobStorageService.ECHO_REST_METHOD));
     if (httpMethod != HttpMethod.POST) {
@@ -245,10 +199,8 @@ public class NettyMessageProcessorTest {
    * in the response.
    * @param httpMethod the {@link HttpMethod} to use for the request.
    * @param expectedStatus the excepted {@link HttpResponseStatus} in the response.
-   * @throws RestServiceException
    */
-  private void doRequestHandlerExceptionTest(HttpMethod httpMethod, HttpResponseStatus expectedStatus)
-      throws RestServiceException {
+  private void doRequestHandlerExceptionTest(HttpMethod httpMethod, HttpResponseStatus expectedStatus) {
     EmbeddedChannel channel = createChannel();
     channel.writeInbound(createRequest(httpMethod, "/"));
     channel.writeInbound(new DefaultLastHttpContent());

@@ -37,7 +37,6 @@ class NettyMetrics {
   public final Counter channelWriteError;
   public final Counter metricsTrackingError;
   // NettyMessageProcessor
-  public final Counter channelCreationTasksError;
   public final Counter contentAdditionError;
   public final Counter duplicateRequestError;
   public final Counter exceptionCaughtTasksError;
@@ -114,8 +113,6 @@ class NettyMetrics {
     metricsTrackingError =
         metricRegistry.counter(MetricRegistry.name(ChannelWriteResultListener.class, "MetricsTrackingError"));
     // NettyMessageProcessor
-    channelCreationTasksError =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelCreationTasksError"));
     contentAdditionError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ContentAdditionError"));
     duplicateRequestError =

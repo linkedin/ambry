@@ -20,18 +20,18 @@ import org.slf4j.LoggerFactory;
  * It processes a request (in parts) by converting it from Netty specific objects ({@link HttpObject},
  * {@link HttpRequest}, {@link HttpContent}) into {@link RestRequest}, a generic request object that all the RESTful
  * layers can understand and passes it down the pipeline to a {@link BlobStorageService} through a
- * {@link AsyncRequestResponseHandler}.
+ * {@link RestRequestHandler}.
  * <p/>
  * It also maintains three pieces of state: -
  * 1. {@link RestRequest} representing the request - This is required since {@link HttpContent} that arrives
  * subsequently has to be available for reading through the read operations of {@link RestRequest}. This is a Netty
  * specific implementation, {@link NettyRequest}.
- * 2. {@link AsyncRequestResponseHandler} that is used to handle requests - This is optional but the same instance of
- * {@link AsyncRequestResponseHandler} is used for the lifetime of the channel.
+ * 2. {@link RestRequestHandler} that is used to handle requests - This is optional but the same instance of
+ * {@link RestRequestHandler} is used for the lifetime of the channel.
  * 3. {@link RestResponseChannel} - An abstraction of the network channel that the underlying layers can use to reply to
  * the client. This has to maintained at least per request in order to inform the client of early processing exceptions.
- * (exceptions that occur before the request is handed off to the {@link AsyncRequestResponseHandler}). This is a Netty
- * specific implementation, ({@link NettyResponseChannel}).
+ * (exceptions that occur before the request is handed off to the {@link RestRequestHandler}). This is a Netty specific
+ * implementation, ({@link NettyResponseChannel}).
  * <p/>
  * Every time a new channel is created, Netty creates instances of all handlers in its pipeline. Since this class is one
  * of the handlers, a new instance of it is created for every connection. Therefore there can be multiple instances of
@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final NettyMetrics nettyMetrics;
   private final NettyConfig nettyConfig;
-  private final AsyncRequestResponseHandler requestHandler;
+  private final RestRequestHandler requestHandler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   // variables that will live through the life of the channel.
@@ -59,24 +59,15 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
 
   /**
    * Creates a new NettyMessageProcessor instance with a metrics tracking object, a configuration object and a
-   * {@code requestResponseHandlerController}.
+   * {@code requestHandler}.
    * @param nettyMetrics the metrics object to use.
    * @param nettyConfig the configuration object to use.
-   * @param requestResponseHandlerController a {@link RequestResponseHandlerController} that can be used to obtain an
-   *                                         instance of {@link AsyncRequestResponseHandler}.
-   * @throws RestServiceException if the channel creation tasks failed for any reason.
+   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    */
-  public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig,
-      RequestResponseHandlerController requestResponseHandlerController)
-      throws RestServiceException {
+  public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig, RestRequestHandler requestHandler) {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
-    requestHandler = requestResponseHandlerController.getHandler();
-    if (requestHandler == null) {
-      nettyMetrics.channelCreationTasksError.inc();
-      throw new RestServiceException("Request handler received during channel bootstrap was null",
-          RestServiceErrorCode.ChannelCreationTasksFailure);
-    }
+    this.requestHandler = requestHandler;
     logger.trace("Instantiated NettyMessageProcessor");
   }
 
@@ -178,7 +169,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   /**
    * Netty calls this function whenever data is available on the channel that can be read.
    * <p/>
-   * {@link HttpRequest} is converted to {@link NettyRequest} and passed to the the {@link AsyncRequestResponseHandler}.
+   * {@link HttpRequest} is converted to {@link NettyRequest} and passed to the the {@link RestRequestHandler}.
    * <p/>
    * {@link HttpContent} is added to the {@link NettyRequest} currently being served by the channel.
    * @param ctx The {@link ChannelHandlerContext} that can be used to perform operations on the channel.
@@ -226,7 +217,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Does some state maintenance for all HTTP methods by creating a {@link RestRequest} wrapping this
    * {@link HttpRequest}
    * <p/>
-   * In case of POST, delegates handling of {@link RestRequest} to the {@link AsyncRequestResponseHandler}.
+   * In case of POST, delegates handling of {@link RestRequest} to the {@link RestRequestHandler}.
    * @param httpRequest the {@link HttpRequest} that needs to be handled.
    * @throws RestServiceException if there is an error handling the current {@link HttpRequest}.
    */
@@ -267,7 +258,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
    * Checks to see that a valid {@link RestRequest} is available so that the content can be pushed into the request.
    * <p/>
    * If the HTTP method for the request is something other than POST, delegates handling of {@link RestRequest} to the
-   * {@link AsyncRequestResponseHandler} when {@link LastHttpContent} is received.
+   * {@link RestRequestHandler} when {@link LastHttpContent} is received.
    * @param httpContent the {@link HttpContent} that needs to be handled.
    * @throws RestServiceException if there is an error handling the current {@link HttpContent}.
    */

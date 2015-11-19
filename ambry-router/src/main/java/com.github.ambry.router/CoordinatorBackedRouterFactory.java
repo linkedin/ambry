@@ -53,8 +53,7 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
   }
 
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() {
     return new CoordinatorBackedRouter(routerConfig, coordinatorBackedRouterMetrics, coordinator);
   }
 }

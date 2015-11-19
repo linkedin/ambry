@@ -5,7 +5,6 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.InMemoryRouterFactory;
 import java.io.IOException;
 import java.util.Properties;
@@ -68,9 +67,7 @@ public class RestServerTest {
   public void serverCreationWithBadInputTest()
       throws InstantiationException, IOException {
     badArgumentsTest();
-    badNioServerClassTest();
-    badBlobStorageServiceClassTest();
-    badRouterFactoryClassTest();
+    badFactoriesTest();
   }
 
   /**
@@ -114,9 +111,14 @@ public class RestServerTest {
    * @return an instance of {@link VerifiableProperties}.
    */
   private VerifiableProperties getVProps(Properties properties) {
+    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.rest.response.handler.factory",
+        MockRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.blob.storage.service.factory",
         MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.rest.request.handler.factory",
+        MockRequestResponseHandlerFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     return new VerifiableProperties(properties);
   }
 
@@ -160,122 +162,56 @@ public class RestServerTest {
     }
   }
 
-  /**
-   * Tests instantiation with bad {@link NioServerFactory} class.
-   * @throws IOException
-   */
-  private void badNioServerClassTest()
+  private void badFactoriesTest()
       throws IOException {
-    Properties properties = new Properties();
-    properties.setProperty("rest.server.nio.server.factory", "non.existent.nio.server.factory");
-    VerifiableProperties verifiableProperties = getVProps(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained non existent NioServerFactory, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    }
-
-    // invalid NioServerFactory.
-    properties.setProperty("rest.server.nio.server.factory", RestServer.class.getCanonicalName());
-    verifiableProperties = getVProps(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained invalid NioServerFactory class, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    }
-
-    // faulty NioServerFactory
-    properties.setProperty("rest.server.nio.server.factory", FaultyFactory.class.getCanonicalName());
-    verifiableProperties = getVProps(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained faulty NioServerFactory class, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    }
+    doBadFactoryClassTest("rest.server.nio.server.factory");
+    doBadFactoryClassTest("rest.server.blob.storage.service.factory");
+    doBadFactoryClassTest("rest.server.router.factory");
   }
 
-  /**
-   * Tests instantiation with bad {@link BlobStorageServiceFactory} class.
-   * @throws IOException
-   */
-  private void badBlobStorageServiceClassTest()
+  private void doBadFactoryClassTest(String configKey)
       throws IOException {
     Properties properties = new Properties();
-    properties.setProperty("rest.server.blob.storage.service.factory", "non.existent.blob.storage.service.factory");
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.rest.response.handler.factory",
+        MockRequestResponseHandlerFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.blob.storage.service.factory",
+        MockBlobStorageServiceFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.rest.request.handler.factory",
+        MockRequestResponseHandlerFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
+
+    // Non existent class.
+    properties.setProperty(configKey, "non.existent.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained non existent BlobStorageServiceFactory, yet no exception was thrown");
+      fail("Properties file contained non existent " + configKey + ", yet no exception was thrown");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     }
 
-    // invalid BlobStorageServiceFactory.
-    properties.setProperty("rest.server.blob.storage.service.factory", RestServer.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    // invalid factory class.
+    properties.setProperty(configKey, RestServer.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained invalid BlobStorageServiceFactory class, yet no exception was thrown");
+      fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
     } catch (InstantiationException e) {
       // nothing to do. expected.
     }
 
-    // faulty BlobStorageServiceFactory
-    properties.setProperty("rest.server.blob.storage.service.factory", FaultyFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
+    // faulty factory class
+    properties.setProperty(configKey, FaultyFactory.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained faulty BlobStorageServiceFactory class, yet no exception was thrown");
+      RestServer restServer =
+          new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
+      restServer.start();
+      fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
     } catch (InstantiationException e) {
       // nothing to do. expected.
-    }
-  }
-
-  /**
-   * Tests instantiation with bad {@link com.github.ambry.router.RouterFactory} class.
-   * @throws IOException
-   */
-  private void badRouterFactoryClassTest()
-      throws IOException {
-    Properties properties = new Properties();
-    properties.setProperty("rest.server.blob.storage.service.factory",
-        MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", "non.existent.router.factory");
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained non existent RouterFactory, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    }
-
-    // invalid RouterFactory.
-    properties.setProperty("rest.server.blob.storage.service.factory",
-        MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", InMemoryRouter.class.getCanonicalName());
-    verifiableProperties = new VerifiableProperties(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained invalid RouterFactory class, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    }
-
-    // faulty RouterFactory
-    properties.setProperty("rest.server.blob.storage.service.factory",
-        MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.router.factory", FaultyFactory.class.getCanonicalName());
-    verifiableProperties = new VerifiableProperties(properties);
-    try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      fail("Properties file contained invalid RouterFactory class, yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (NullPointerException e) {
       // nothing to do. expected.
     }
   }

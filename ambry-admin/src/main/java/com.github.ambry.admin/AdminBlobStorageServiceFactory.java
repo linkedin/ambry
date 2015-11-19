@@ -4,7 +4,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
-import com.github.ambry.rest.RequestResponseHandlerController;
+import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +20,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final AdminConfig adminConfig;
   private final AdminMetrics adminMetrics;
   private final ClusterMap clusterMap;
-  private final RequestResponseHandlerController requestResponseHandlerController;
+  private final RestResponseHandler responseHandler;
   private final Router router;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -28,19 +28,18 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    * Creates a new instance of AdminBlobStorageServiceFactory.
    * @param verifiableProperties the properties to use to create configs.
    * @param clusterMap the {@link ClusterMap} to use.
-   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to request an
-   *                                  instance of {@link com.github.ambry.rest.AsyncRequestResponseHandler}.
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
+   *                        out.
    * @param router the {@link Router} to use.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RequestResponseHandlerController requestResponseHandlerController, Router router) {
-    if (verifiableProperties != null && clusterMap != null && requestResponseHandlerController != null
-        && router != null) {
+      RestResponseHandler responseHandler, Router router) {
+    if (verifiableProperties != null && clusterMap != null && responseHandler != null && router != null) {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;
-      this.requestResponseHandlerController = requestResponseHandlerController;
+      this.responseHandler = responseHandler;
       this.router = router;
     } else {
       StringBuilder errorMessage =
@@ -51,8 +50,8 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
-      if (requestResponseHandlerController == null) {
-        errorMessage.append(" [RequestResponseHandlerController] ");
+      if (responseHandler == null) {
+        errorMessage.append(" [RestResponseHandler] ");
       }
       if (router == null) {
         errorMessage.append(" [Router] ");
@@ -68,6 +67,6 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap, requestResponseHandlerController, router);
+    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap, responseHandler, router);
   }
 }

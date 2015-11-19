@@ -2,7 +2,6 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.InMemoryRouter;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -85,24 +84,6 @@ public class NettyServerTest {
   // general
 
   /**
-   * Gets an instance of {@link RequestResponseHandlerController}.
-   * @param properties the in-memory {@link Properties} to use.
-   * @return an instance of {@link RequestResponseHandlerController}.
-   * @throws InstantiationException
-   * @throws IOException
-   */
-  private RequestResponseHandlerController getRequestHandlerController(Properties properties)
-      throws InstantiationException, IOException {
-    RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    BlobStorageService blobStorageService =
-        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
-    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
-    controller.setBlobStorageService(blobStorageService);
-    return controller;
-  }
-
-  /**
    * Gets an instance of {@link NettyServer}.
    * @param properties the in-memory {@link Properties} to use.
    * @return an instance of {@link NettyServer}.
@@ -118,7 +99,7 @@ public class NettyServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController(properties);
-    return new NettyServer(nettyConfig, nettyMetrics, requestResponseHandlerController);
+    RestRequestHandler requestHandler = new MockRequestResponseHandler();
+    return new NettyServer(nettyConfig, nettyMetrics, requestHandler);
   }
 }
