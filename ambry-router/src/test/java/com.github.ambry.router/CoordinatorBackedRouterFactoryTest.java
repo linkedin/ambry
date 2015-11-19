@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -21,15 +22,14 @@ public class CoordinatorBackedRouterFactoryTest {
   /**
    * Tests the instantiation of an {@link CoordinatorBackedRouter} instance through the
    * {@link CoordinatorBackedRouterFactory}.
-   * @throws InstantiationException
    * @throws IOException
    */
   @Test
   public void getCoordinatorBackedRouterTest()
-      throws InstantiationException, IOException {
+      throws IOException {
     VerifiableProperties verifiableProperties = getVprops();
 
-    RouterFactory routerFactory =
+    CoordinatorBackedRouterFactory routerFactory =
         new CoordinatorBackedRouterFactory(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
     Router router = routerFactory.getRouter();
     assertNotNull("No RouterFactory returned", routerFactory);
@@ -51,6 +51,7 @@ public class CoordinatorBackedRouterFactoryTest {
     // VerifiableProperties null.
     try {
       new CoordinatorBackedRouterFactory(null, clusterMap, notificationSystem);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
@@ -58,6 +59,7 @@ public class CoordinatorBackedRouterFactoryTest {
     // ClusterMap null.
     try {
       new CoordinatorBackedRouterFactory(verifiableProperties, null, notificationSystem);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
@@ -65,6 +67,7 @@ public class CoordinatorBackedRouterFactoryTest {
     // NotificationSystem null.
     try {
       new CoordinatorBackedRouterFactory(verifiableProperties, clusterMap, null);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }

@@ -29,6 +29,7 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
    * @param verifiableProperties the in-memory properties to use to construct configurations.
    * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
+   * @throws IllegalArgumentException if any of the arguments are null.
    */
   public CoordinatorBackedRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
@@ -54,8 +55,7 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
   }
 
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() {
     return new CoordinatorBackedRouter(routerConfig, metricRegistry, coordinator);
   }
 }

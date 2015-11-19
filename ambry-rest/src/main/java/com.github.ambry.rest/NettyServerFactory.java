@@ -25,11 +25,10 @@ public class NettyServerFactory implements NioServerFactory {
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to obtain an
    *                                         instance of {@link AsyncRequestResponseHandler} to handle requests.
-   * @throws InstantiationException if there is any problem instantiating the factory.
+   * @throws IllegalArgumentException if there is any problem instantiating the factory.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RequestResponseHandlerController requestResponseHandlerController)
-      throws InstantiationException {
+      RequestResponseHandlerController requestResponseHandlerController) {
     if (verifiableProperties != null && metricRegistry != null && requestResponseHandlerController != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
@@ -46,7 +45,7 @@ public class NettyServerFactory implements NioServerFactory {
       if (requestResponseHandlerController == null) {
         errorMessage.append(" [RequestResponseHandlerController] ");
       }
-      throw new InstantiationException(errorMessage.toString());
+      throw new IllegalArgumentException(errorMessage.toString());
     }
     logger.trace("Instantiated NettyServerFactory");
   }

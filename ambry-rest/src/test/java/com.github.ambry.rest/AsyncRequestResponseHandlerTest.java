@@ -497,7 +497,9 @@ public class AsyncRequestResponseHandlerTest {
       throws IOException {
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
-    handler.setBlobStorageService(blobStorageService);
+    if (blobStorageService != null) {
+      handler.setBlobStorageService(blobStorageService);
+    }
     return handler;
   }
 
