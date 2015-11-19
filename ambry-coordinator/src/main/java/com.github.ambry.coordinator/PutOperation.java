@@ -1,25 +1,25 @@
 package com.github.ambry.coordinator;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.utils.ByteBufferInputStream;
-import java.util.HashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -64,7 +64,7 @@ final public class PutOperation extends Operation {
   @Override
   protected OperationRequest makeOperationRequest(ReplicaId replicaId) {
     PutRequest putRequest = new PutRequest(context.getCorrelationId(), context.getClientId(), blobId, blobProperties,
-        userMetadata.duplicate(), materializedBlobStream.duplicate());
+        userMetadata.duplicate(), materializedBlobStream.duplicate(), blobProperties.getBlobSize(), BlobType.DataBlob);
     return new PutOperationRequest(connectionPool, responseQueue, context, blobId, replicaId, putRequest);
   }
 

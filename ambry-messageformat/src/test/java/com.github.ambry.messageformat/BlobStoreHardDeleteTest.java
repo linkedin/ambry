@@ -233,7 +233,7 @@ public class BlobStoreHardDeleteTest {
 
     // read from a random location.
     try {
-      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1))/2, keyFactory);
+      hardDelete.getMessageInfo(readImp, (msgOffsets.get(0) + msgOffsets.get(1)) / 2, keyFactory);
       Assert.assertTrue(false);
     } catch (IOException e) {
     }

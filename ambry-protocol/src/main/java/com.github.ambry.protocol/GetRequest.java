@@ -26,11 +26,11 @@ public class GetRequest extends RequestOrResponse {
   private static final int MessageFormat_Size_In_Bytes = 2;
   private static final int GetOptions_Size_In_Bytes = 2;
   private static final int Partition_Request_Info_List_Size = 4;
-  private static final short Get_Request_Version = 2;
+  private static final short Get_Request_Version_V2 = 2;
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
       List<PartitionRequestInfo> partitionRequestInfoList, GetOptions getOptions) {
-    super(RequestOrResponseType.GetRequest, Get_Request_Version, correlationId, clientId);
+    super(RequestOrResponseType.GetRequest, Get_Request_Version_V2, correlationId, clientId);
 
     this.flags = flags;
     this.getOptions = getOptions;
@@ -71,7 +71,7 @@ public class GetRequest extends RequestOrResponse {
       partitionRequestInfoList.add(partitionRequestInfo);
     }
     GetOptions getOption = GetOptions.None;
-    if (versionId == Get_Request_Version) {
+    if (versionId == Get_Request_Version_V2) {
       getOption = GetOptions.values()[stream.readShort()];
     }
     // ignore version for now

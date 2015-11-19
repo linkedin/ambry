@@ -11,8 +11,8 @@ public enum RequestOrResponseType {
   GetResponse,
   DeleteRequest,
   DeleteResponse,
-  TTLRequest,
-  TTLResponse,
+  TTLRequest, // Unsupported
+  TTLResponse, // Unsupported
   ReplicaMetadataRequest,
   ReplicaMetadataResponse
 }
