@@ -475,7 +475,7 @@ public class PersistentIndex {
       } else {
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       }
-    } else if (value.isExpired() && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
+    } else if (value.isExpired(time) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);

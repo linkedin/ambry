@@ -2,7 +2,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-
+import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 
 
@@ -83,7 +83,11 @@ public class IndexValue {
   }
 
   public boolean isExpired() {
-    if (getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > getTimeToLiveInMs()) {
+    return isExpired(SystemTime.getInstance());
+  }
+
+  public boolean isExpired(Time time){
+    if (getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > getTimeToLiveInMs()) {
       return true;
     }
     return false;

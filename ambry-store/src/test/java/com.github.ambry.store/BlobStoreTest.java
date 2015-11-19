@@ -10,6 +10,8 @@ import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -163,7 +165,6 @@ public class BlobStoreTest {
       ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>(2);
       listInfo.add(info1);
       listInfo.add(info2);
-
       MessageWriteSet set = new MockMessageWriteSet(ByteBuffer.wrap(bufToWrite), listInfo);
       store.put(set);
 
@@ -481,5 +482,77 @@ public class BlobStoreTest {
   @Test
   public void storeRecoverTest() {
 
+  }
+
+  @Test
+  public void storeGetWithTTLTest()
+      throws IOException {
+    MockClusterMap map = null;
+    try {
+      Scheduler scheduler = new Scheduler(4, "thread", false);
+      scheduler.startup();
+      Properties props = new Properties();
+      VerifiableProperties verifyProperty = new VerifiableProperties(props);
+      verifyProperty.verify();
+      StoreConfig config = new StoreConfig(verifyProperty);
+      map = new MockClusterMap();
+      DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
+      MockTime mockTime = new MockTime();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
+      Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(), mockTime);
+      store.start();
+      byte[] bufToWrite = new byte[1000];
+      new Random().nextBytes(bufToWrite);
+      MockId blobId = new MockId("id1");
+      Long ttl = 60L * Time.MsPerSec;
+      MessageInfo messageInfo = new MessageInfo(blobId, 1000, mockTime.currentMilliseconds + ttl);
+      ArrayList<MessageInfo> listInfo = new ArrayList<MessageInfo>();
+      listInfo.add(messageInfo);
+
+      MessageWriteSet set = new MockMessageWriteSet(ByteBuffer.wrap(bufToWrite), listInfo);
+      store.put(set);
+      mockTime.wait(store, 30L * Time.MsPerSec);
+
+      // verify existence
+      ArrayList<StoreKey> keyList = new ArrayList<StoreKey>();
+      keyList.add(blobId);
+      EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
+
+      try{
+        StoreInfo storeInfo = store.get(keyList, storeGetOptions);
+        MessageReadSet readSet = storeInfo.getMessageReadSet();
+        Assert.assertEquals(readSet.count(), 1);
+        Assert.assertEquals(readSet.sizeInBytes(0), 1000);
+        byte[] output = new byte[1000];
+
+        readSet.writeTo(0, Channels.newChannel(new ByteBufferOutputStream(ByteBuffer.wrap(output))), 0, 1000);
+        for (int i = 0; i < 1000; i++) {
+          Assert.assertEquals(bufToWrite[i], output[i]);
+        }
+      }catch(Exception e){
+        Assert.assertEquals(true, false);
+      }
+
+      mockTime.wait(store, 60L * Time.MsPerSec);
+
+      try{
+        StoreInfo storeInfo = store.get(keyList, storeGetOptions);
+        Assert.assertTrue(false);
+      }catch(StoreException e){
+        Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
+      }
+
+    } catch (Exception e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
+    finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
   }
 }
