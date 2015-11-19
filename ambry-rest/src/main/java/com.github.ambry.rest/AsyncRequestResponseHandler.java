@@ -185,7 +185,9 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
   protected void setRequestWorkersCount(int count) {
-    if (count > 0) {
+    if (count < 0) {
+      throw new IllegalArgumentException("Request worker count has to be >= 0");
+    } else {
       maybeAddWorkers(count);
       requestWorkersCount = count;
       logger.trace("Request handling units count set to {}", requestWorkersCount);
@@ -198,7 +200,9 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
   protected void setResponseWorkersCount(int count) {
-    if (count > 0) {
+    if (count < 0) {
+      throw new IllegalArgumentException("Response worker count has to be >= 0");
+    } else {
       maybeAddWorkers(count);
       responseWorkersCount = count;
       logger.trace("Response sending units count set to {}", responseWorkersCount);
@@ -211,7 +215,9 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
-    if (blobStorageService != null) {
+    if (blobStorageService == null) {
+      throw new IllegalArgumentException("BlobStorageService cannot be null");
+    } else {
       workerLock.lock();
       try {
         if (!isRunning()) {

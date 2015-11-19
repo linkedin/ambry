@@ -247,6 +247,36 @@ public class AsyncRequestResponseHandlerTest {
     verifyWorkers(requestResponseHandler, 5);
   }
 
+  @Test
+  public void setFunctionsBadArgumentsTest() {
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+
+    // set request workers < 0
+    try {
+      requestResponseHandler.setRequestWorkersCount(-1);
+      fail("Setting request workers < 0 should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
+    // set response workers < 0
+    try {
+      requestResponseHandler.setResponseWorkersCount(-1);
+      fail("Setting response workers < 0 should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
+    // set null BlobStorageService
+    try {
+      requestResponseHandler.setBlobStorageService(null);
+      fail("Setting BlobStorageService to null should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+  }
+
   /**
    * Tests behavior of {@link AsyncRequestResponseHandler#setRequestWorkersCount(int)},
    * {@link AsyncRequestResponseHandler#setResponseWorkersCount(int)} and
@@ -665,7 +695,9 @@ public class AsyncRequestResponseHandlerTest {
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
     handler.setRequestWorkersCount(requestWorkers);
     handler.setResponseWorkersCount(responseWorkers);
-    handler.setBlobStorageService(blobStorageService);
+    if (blobStorageService != null) {
+      handler.setBlobStorageService(blobStorageService);
+    }
     return handler;
   }
 
