@@ -7,6 +7,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,13 +20,7 @@ import org.slf4j.LoggerFactory;
  */
 public class RestServerMetrics {
   private final MetricRegistry metricRegistry;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final Object requestResponseHandlerRegister = new Object();
-
-  // Gauges
-  // AsyncRequestResponseHandler
-  private final List<Gauge<Integer>> requestQueueSizeGauges;
-  private final List<Gauge<Integer>> responseSetSizeGauges;
+  private final AtomicInteger asyncHandlerWorkerIndex = new AtomicInteger(0);
 
   // Rates
   // AsyncHandlerWorker
@@ -86,10 +81,6 @@ public class RestServerMetrics {
    */
   public RestServerMetrics(MetricRegistry metricRegistry) {
     this.metricRegistry = metricRegistry;
-
-    // Gauges
-    requestQueueSizeGauges = new ArrayList<Gauge<Integer>>();
-    responseSetSizeGauges = new ArrayList<Gauge<Integer>>();
 
     // Rates
     // AsyncHandlerWorker
@@ -175,35 +166,21 @@ public class RestServerMetrics {
    * @param requestResponseHandler the {@link AsyncRequestResponseHandler} whose metrics need to be tracked.
    */
   public void registerAsyncRequestResponseHandler(final AsyncRequestResponseHandler requestResponseHandler) {
-    synchronized (requestResponseHandlerRegister) {
-      assert requestQueueSizeGauges.size() == responseSetSizeGauges.size();
-      int pos = requestQueueSizeGauges.size();
-      Gauge<Integer> gauge = new Gauge<Integer>() {
+    int pos = asyncHandlerWorkerIndex.getAndIncrement();
+    Gauge<Integer> gauge = new Gauge<Integer>() {
         @Override
         public Integer getValue() {
           return requestResponseHandler.getRequestQueueSize();
         }
       };
-      if (requestQueueSizeGauges.add(gauge)) {
-        metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
-      } else {
-        logger.warn("Failed to register AsyncRequestResponseHandler to the request queue size tracker");
-        metricAdditionError.inc();
+    metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
+    gauge = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return requestResponseHandler.getResponseSetSize();
       }
-
-      gauge = new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return requestResponseHandler.getResponseSetSize();
-        }
-      };
-      if (responseSetSizeGauges.add(gauge)) {
-        metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-ResponseSetSize"), gauge);
-      } else {
-        logger.warn("Failed to register AsyncRequestResponseHandler to the response set size tracker");
-        metricAdditionError.inc();
-      }
-    }
+    };
+    metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-ResponseSetSize"), gauge);
   }
 
   /**

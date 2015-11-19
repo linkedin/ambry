@@ -89,14 +89,15 @@ public class RequestResponseHandlerControllerTest {
   @Test
   public void startWithoutBlobStorageServiceTest()
       throws InstantiationException, IOException {
-    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1, false);
+    RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
+    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
     try {
-      requestResponseHandlerController.start();
+      controller.start();
       fail("Start should have failed because no BlobStorageService was set.");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
     } finally {
-      requestResponseHandlerController.shutdown();
+      controller.shutdown();
     }
   }
 

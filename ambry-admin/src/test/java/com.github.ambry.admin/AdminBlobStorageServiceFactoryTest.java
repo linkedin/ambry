@@ -13,6 +13,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -59,6 +60,7 @@ public class AdminBlobStorageServiceFactoryTest {
     // VerifiableProperties null.
     try {
       new AdminBlobStorageServiceFactory(null, clusterMap, requestResponseHandlerController, router);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
@@ -66,6 +68,7 @@ public class AdminBlobStorageServiceFactoryTest {
     // ClusterMap null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, null, requestResponseHandlerController, router);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
@@ -73,6 +76,7 @@ public class AdminBlobStorageServiceFactoryTest {
     // RequestResponseHandlerController null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
@@ -80,6 +84,7 @@ public class AdminBlobStorageServiceFactoryTest {
     // Router null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, clusterMap, requestResponseHandlerController, null);
+      fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }

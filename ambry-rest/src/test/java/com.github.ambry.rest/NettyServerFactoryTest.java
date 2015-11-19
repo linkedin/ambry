@@ -9,6 +9,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -54,21 +55,24 @@ public class NettyServerFactoryTest {
     // VerifiableProperties null.
     try {
       new NettyServerFactory(null, metricRegistry, requestResponseHandlerController);
-    } catch (InstantiationException e) {
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // MetricRegistry null.
     try {
       new NettyServerFactory(verifiableProperties, null, requestResponseHandlerController);
-    } catch (InstantiationException e) {
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // RequestResponseHandlerController null.
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, null);
-    } catch (InstantiationException e) {
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
   }
