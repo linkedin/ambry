@@ -31,8 +31,8 @@ import static org.junit.Assert.fail;
 public class CoordinatorBackedRouterTest {
 
   /**
-   * Tests instantiation of {@link CoordinatorBackedRouter} with various errors and checks that the right
-   * exceptions are thrown.
+   * Tests instantiation of {@link CoordinatorBackedRouter} and {@link CoordinatorOperation} with various errors and
+   * checks that the right exceptions are thrown.
    * @throws IOException
    */
   @Test
