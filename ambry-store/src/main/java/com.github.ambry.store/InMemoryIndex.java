@@ -8,6 +8,7 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,7 @@ public class InMemoryIndex {
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private Time time;
   public static final Short version = 0;
 
   // metrics
@@ -70,7 +72,7 @@ public class InMemoryIndex {
    * @throws StoreException
    */
   public InMemoryIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MetricRegistry registry)
+      MessageStoreRecovery recovery, MetricRegistry registry, Time time)
       throws StoreException {
     try {
       this.recoveryTime = registry.timer(MetricRegistry.name(InMemoryIndex.class, "indexRecoveryTime"));
@@ -80,6 +82,7 @@ public class InMemoryIndex {
       this.journal = new InMemoryJournal(datadir, config.storeIndexMaxNumberOfInmemElements,
           config.storeMaxNumberOfEntriesToReturnFromJournal);
       logEndOffset = new AtomicLong(0);
+      this.time=time;
       this.log = log;
       this.factory = factory;
       // check if file exist and recover from it
@@ -229,11 +232,18 @@ public class InMemoryIndex {
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       logger.error("id {} has been deleted", id);
       throw new StoreException("id has been deleted in index " + id, StoreErrorCodes.ID_Deleted);
-    } else if (value.isExpired()) {
+    } else if (isExpired(value)) {
       logger.error("id {} has expired ttl {}", id, value.getTimeToLiveInMs());
       throw new StoreException("id not present in index " + id, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
+  }
+
+  private boolean isExpired(IndexValue value){
+    if (value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs()) {
+      return true;
+    }
+    return false;
   }
 
   /**
