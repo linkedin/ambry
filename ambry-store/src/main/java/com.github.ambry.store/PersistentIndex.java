@@ -1317,6 +1317,29 @@ public class PersistentIndex {
 
     private void persistCleanupToken()
         throws IOException, StoreException {
+        /* The cleanup token format is as follows:
+           --
+           token_version
+           startTokenForRecovery
+           endTokenForRecovery
+           numBlobsInRange
+           --
+           blob1_blobReadOptions {version, offset, sz, ttl, key}
+           blob2_blobReadOptions
+           ....
+           blobN_blobReadOptions
+           --
+           length_of_blob1_messageStoreRecoveryInfo
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           length_of_blob2_messageStoreRecoveryInfo
+           blob2_messageStoreRecoveryInfo
+           ....
+           length_of_blobN_messageStoreRecoveryInfo
+           blobN_messageStoreRecoveryInfo
+           --
+           crc
+           ---
+         */
       if (endToken == null || ((StoreFindToken) endToken).isUninitialized()) {
         return;
       }

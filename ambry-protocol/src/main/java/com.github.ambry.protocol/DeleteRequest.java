@@ -16,9 +16,10 @@ import java.nio.channels.WritableByteChannel;
 public class DeleteRequest extends RequestOrResponse {
   private BlobId blobId;
   private int sizeSent;
+  private static final short Delete_Request_Version_V1 = 1;
 
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    super(RequestOrResponseType.DeleteRequest, Request_Response_Version, correlationId, clientId);
+    super(RequestOrResponseType.DeleteRequest, Delete_Request_Version_V1, correlationId, clientId);
     this.blobId = blobId;
     sizeSent = 0;
   }

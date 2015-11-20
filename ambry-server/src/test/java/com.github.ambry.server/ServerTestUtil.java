@@ -17,6 +17,7 @@ import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -83,7 +84,7 @@ public final class ServerTestUtil {
       BlobId blobId4 = new BlobId(partitionIds.get(0));
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       BlockingChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
       channel.connect();
@@ -94,7 +95,7 @@ public final class ServerTestUtil {
 
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel.send(putRequest2);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -102,7 +103,7 @@ public final class ServerTestUtil {
 
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel.send(putRequest3);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -111,7 +112,7 @@ public final class ServerTestUtil {
       // put blob 4 that is expired
       BlobProperties propertiesExpired = new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0);
       PutRequest putRequest4 = new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel.send(putRequest4);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -289,8 +290,7 @@ public final class ServerTestUtil {
         } else if (i % noOfParallelThreads == 2) {
           channel = channel3;
         }
-        DirectSender runnable =
-            new DirectSender(cluster, channel, 50, data, usermetadata, properties, latch);
+        DirectSender runnable = new DirectSender(cluster, channel, 50, data, usermetadata, properties, latch);
         runnables.add(runnable);
         Thread threadToRun = new Thread(runnable);
         threadToRun.start();
@@ -748,7 +748,7 @@ public final class ServerTestUtil {
 
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       BlockingChannel channel1 =
           getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
       BlockingChannel channel2 =
@@ -765,14 +765,14 @@ public final class ServerTestUtil {
       Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -780,7 +780,7 @@ public final class ServerTestUtil {
 
       // put blob 4
       putRequest = new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel1.send(putRequest);
       putResponseStream = channel1.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -788,7 +788,7 @@ public final class ServerTestUtil {
 
       // put blob 5
       putRequest2 = new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -796,7 +796,7 @@ public final class ServerTestUtil {
 
       // put blob 6
       putRequest3 = new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -995,7 +995,7 @@ public final class ServerTestUtil {
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1003,7 +1003,7 @@ public final class ServerTestUtil {
 
       // put blob 8
       putRequest3 = new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1011,7 +1011,7 @@ public final class ServerTestUtil {
 
       // put blob 9
       putRequest2 = new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1019,7 +1019,7 @@ public final class ServerTestUtil {
 
       // put blob 10
       putRequest3 = new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1027,7 +1027,7 @@ public final class ServerTestUtil {
 
       // put blob 11
       putRequest2 = new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(data)));
+          new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
