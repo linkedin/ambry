@@ -1,11 +1,11 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertiesSerDe;
-import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,50 +17,38 @@ import java.nio.channels.WritableByteChannel;
  * A Put Request used to put a blob
  */
 public class PutRequest extends RequestOrResponse {
-  protected final ByteBuffer usermetadata;
-  protected final InputStream blobStream;
-  protected final long blobSize;
-  protected final BlobId blobId;
-  protected long sentBytes = 0;
-  protected final BlobProperties properties;
-  protected final BlobType blobType;
+
+  private ByteBuffer usermetadata;
+  private InputStream data;
+  private BlobId blobId;
+  private long sentBytes = 0;
+  private BlobProperties properties;
 
   private static final int UserMetadata_Size_InBytes = 4;
-  protected static final int Blob_Size_InBytes = 8;
-  protected static final int BlobType_Size_InBytes = 2;
-  protected static final short Put_Request_Version_V1 = 1;
-  // Version 2 added to support chunking for large objects, where the size of a chunk can be different from the size
-  // in the BlobProperties (which will be the size of the whole object).
-  protected static final short Put_Request_Version_V2 = 2;
+  private static final int MAX_WRITE_BUFFER_SIZE = (16 * 1024);
+  // max buffer size for the data to be sent across the network
 
-  protected PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType, short versionId) {
-    super(RequestOrResponseType.PutRequest, versionId, correlationId, clientId);
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, InputStream data) {
+    super(RequestOrResponseType.PutRequest, Request_Response_Version, correlationId, clientId);
+
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
-    this.blobStream = blobStream;
-    this.blobSize = blobSize;
-    this.blobType = blobType;
-  }
-
-  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType) {
-    this(correlationId, clientId, blobId, properties, usermetadata, blobStream, blobSize, blobType,
-        Put_Request_Version_V2);
+    this.data = data;
   }
 
   public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short versionId = stream.readShort();
-    switch (versionId) {
-      case Put_Request_Version_V1:
-        return PutRequest_V1.readFrom(stream, map);
-      case Put_Request_Version_V2:
-        return PutRequest_V2.readFrom(stream, map);
-      default:
-        throw new IllegalStateException("Unknown Request response version" + versionId);
-    }
+    // ignore version for now
+    int correlationId = stream.readInt();
+    String clientId = Utils.readIntString(stream);
+    BlobId id = new BlobId(stream, map);
+    BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
+    ByteBuffer metadata = Utils.readIntBuffer(stream);
+    InputStream data = stream;
+    return new PutRequest(correlationId, clientId, id, properties, metadata, data);
   }
 
   public BlobId getBlobId() {
@@ -75,27 +63,24 @@ public class PutRequest extends RequestOrResponse {
     return usermetadata;
   }
 
-  public InputStream getBlobStream() {
-    return blobStream;
+  public InputStream getData() {
+    return data;
   }
 
-  public long getBlobSize() {
-    return blobSize;
-  }
-
-  public BlobType getBlobType() {
-    return blobType;
+  public long getDataSize() {
+    return properties.getBlobSize();
   }
 
   @Override
   public long sizeInBytes() {
-    return sizeExcludingBlobSize() + blobSize;
+    // sizeExcludingData + blob size
+    return sizeExcludingData() + properties.getBlobSize();
   }
 
-  protected int sizeExcludingBlobSize() {
-    // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
-    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties) +
-        UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
+  private int sizeExcludingData() {
+    // header + blobId size + blobId + metadata size + metadata + blob property size
+    return (int) super.sizeInBytes() + blobId.sizeInBytes() + UserMetadata_Size_InBytes + usermetadata.capacity() +
+        BlobPropertiesSerDe.getBlobPropertiesSize(properties);
   }
 
   @Override
@@ -103,14 +88,14 @@ public class PutRequest extends RequestOrResponse {
       throws IOException {
     long totalWritten = 0;
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(sizeExcludingBlobSize());
+      int bufferSize = sizeInBytes() < MAX_WRITE_BUFFER_SIZE ? (int) sizeInBytes()
+          : (Math.max(MAX_WRITE_BUFFER_SIZE, sizeExcludingData()));
+      bufferToSend = ByteBuffer.allocate(bufferSize);
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
       bufferToSend.putInt(usermetadata.capacity());
       bufferToSend.put(usermetadata);
-      bufferToSend.putShort((short) blobType.ordinal());
-      bufferToSend.putLong(blobSize);
       bufferToSend.flip();
     }
     while (sentBytes < sizeInBytes()) {
@@ -125,9 +110,9 @@ public class PutRequest extends RequestOrResponse {
       }
       logger.trace("sent Bytes from Put Request {}", sentBytes);
       bufferToSend.clear();
-      int streamReadCount = blobStream
-          .read(bufferToSend.array(), 0, (int) Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
-      bufferToSend.limit(streamReadCount);
+      int dataRead =
+          data.read(bufferToSend.array(), 0, (int) Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
+      bufferToSend.limit(dataRead);
     }
     return totalWritten;
   }
@@ -152,39 +137,7 @@ public class PutRequest extends RequestOrResponse {
     } else {
       sb.append(", ").append("UserMetaDataSize=0");
     }
-    sb.append(", ").append("blobType=").append(getBlobType());
-    sb.append(", ").append("blobSize=").append(getBlobSize());
     sb.append("]");
     return sb.toString();
-  }
-
-  // Class to read protocol version 1 Put Request from the stream.
-  private static class PutRequest_V1 {
-    static PutRequest readFrom(DataInputStream stream, ClusterMap map)
-        throws IOException {
-      int correlationId = stream.readInt();
-      String clientId = Utils.readIntString(stream);
-      BlobId id = new BlobId(stream, map);
-      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
-      ByteBuffer metadata = Utils.readIntBuffer(stream);
-      return new PutRequest(correlationId, clientId, id, properties, metadata, stream, properties.getBlobSize(),
-          BlobType.DataBlob, Put_Request_Version_V1);
-    }
-  }
-
-  // Class to read protocol version 2 Put Request from the stream.
-  private static class PutRequest_V2 {
-    static PutRequest readFrom(DataInputStream stream, ClusterMap map)
-        throws IOException {
-      int correlationId = stream.readInt();
-      String clientId = Utils.readIntString(stream);
-      BlobId id = new BlobId(stream, map);
-      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
-      ByteBuffer metadata = Utils.readIntBuffer(stream);
-      BlobType blobType = BlobType.values()[stream.readShort()];
-      long blobSize = stream.readLong();
-      return new PutRequest(correlationId, clientId, id, properties, metadata, stream, blobSize, blobType,
-          Put_Request_Version_V2);
-    }
   }
 }
