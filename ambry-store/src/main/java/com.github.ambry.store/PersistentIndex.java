@@ -481,7 +481,7 @@ public class PersistentIndex {
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
   }
 
-  private boolean isExpired(IndexValue value){
+  protected boolean isExpired(IndexValue value){
     if (value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs()) {
       return true;
     }
