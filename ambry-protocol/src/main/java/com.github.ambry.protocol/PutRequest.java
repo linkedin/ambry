@@ -50,6 +50,12 @@ public class PutRequest extends RequestOrResponse {
         Put_Request_Version_V2);
   }
 
+  @Deprecated
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, InputStream data) {
+    this(correlationId, clientId, blobId, properties, usermetadata, data, properties.getBlobSize(), BlobType.DataBlob);
+  }
+
   public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short versionId = stream.readShort();
