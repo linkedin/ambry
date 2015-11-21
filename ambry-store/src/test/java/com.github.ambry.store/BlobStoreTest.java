@@ -499,7 +499,7 @@ public class BlobStoreTest {
     DataNodeId dataNodeId1 = map.getDataNodeIds().get(0);
     MockTime mockTime = new MockTime();
     StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
+    List<ReplicaId> replicaIds = map.getReplicaIds(dataNodeId1);
     Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
         replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
         new DummyMessageStoreHardDelete(), mockTime);
@@ -531,7 +531,7 @@ public class BlobStoreTest {
     mockTime.wait(store, 60L * Time.MsPerSec);
     try{
       storeInfo = store.get(keyList, storeGetOptions);
-      Assert.assertTrue(false);
+      Assert.fail("Blob already expired. Should throw exception here.");
     }catch(StoreException e){
       Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
     }
