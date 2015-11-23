@@ -447,7 +447,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         }
 
         if (unwrapResult.getStatus() == SSLEngineResult.Status.OK) {
-            read += readFromAppBuffer(dst);
+          read += readFromAppBuffer(dst);
         } else if (unwrapResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
           int currentApplicationBufferSize = applicationBufferSize();
           appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
@@ -495,8 +495,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesWritten = send.writeTo(this);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("Bytes written {} to {} using key {} Time: {}",
-        bytesWritten, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
       metrics.sslSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
     }
