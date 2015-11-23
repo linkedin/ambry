@@ -31,8 +31,11 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private boolean handshakeComplete = false;
   private boolean closing = false;
   private ByteBuffer netReadBuffer;
+  // buffer used to hold the encrypted data that is read from the network
   private ByteBuffer netWriteBuffer;
+  // buffer used to hold the encrypted data to be sent over the network
   private ByteBuffer appReadBuffer;
+  // buffer used to hold the decrypted data decrypted from networkReadBuffer
   private ByteBuffer emptyBuf = ByteBuffer.allocate(0);
   private long handshakeStartTime;
 
@@ -392,7 +395,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * Reads a sequence of bytes from this channel into the given buffer.
    *
    * @param dst The buffer into which bytes are to be transferred. Decryption happens within this method. Not all data
-   *            that is decrypted are guaranteed to be copied to the src dst buffer. Future calls will ensure to copy
+   *            that is decrypted are guaranteed to be copied to the dst buffer. Future calls will ensure to copy
    *            the pending data if any from the already decrypted data
    * @return The number of bytes read, possible zero or -1 if the channel has reached end-of-stream
    * @throws IOException if some other I/O error occurs
