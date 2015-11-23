@@ -22,10 +22,11 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   private static final int Max_Entries_Size_In_Bytes = 8;
   private static final int Replica_Metadata_Request_Info_List_Size_In_Bytes = 4;
+  private static final short Replica_Metadata_Request_Version_V1 = 1;
 
   public ReplicaMetadataRequest(int correlationId, String clientId,
       List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes) {
-    super(RequestOrResponseType.ReplicaMetadataRequest, Request_Response_Version, correlationId, clientId);
+    super(RequestOrResponseType.ReplicaMetadataRequest, Replica_Metadata_Request_Version_V1, correlationId, clientId);
     if (replicaMetadataRequestInfoList == null) {
       throw new IllegalArgumentException("replicaMetadataRequestInfoList cannot be null");
     }

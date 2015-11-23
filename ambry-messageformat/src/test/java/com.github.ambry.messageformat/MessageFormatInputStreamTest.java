@@ -4,13 +4,12 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class MessageFormatInputStreamTest {

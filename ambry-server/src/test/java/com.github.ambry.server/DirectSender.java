@@ -5,6 +5,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
@@ -54,7 +55,7 @@ class DirectSender implements Runnable {
       for (int i = 0; i < blobIds.size(); i++) {
         PutRequest putRequest =
             new PutRequest(1, "client1", blobIds.get(i), blobProperties, ByteBuffer.wrap(usermetadata),
-                new ByteBufferInputStream(ByteBuffer.wrap(data)));
+                new ByteBufferInputStream(ByteBuffer.wrap(data)), blobProperties.getBlobSize(), BlobType.DataBlob);
 
         channel.send(putRequest);
         InputStream putResponseStream = channel.receive().getInputStream();
