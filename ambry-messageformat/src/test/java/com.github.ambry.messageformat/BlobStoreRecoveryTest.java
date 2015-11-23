@@ -7,13 +7,13 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Test;
-import org.junit.Assert;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Random;
 import java.util.List;
+import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 class MockId extends StoreKey {

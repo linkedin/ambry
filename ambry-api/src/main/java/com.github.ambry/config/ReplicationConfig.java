@@ -93,7 +93,7 @@ public class ReplicationConfig {
     replicationTokenFlushDelaySeconds =
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
-        verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 0, 2097152);
+        verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 0, 20971520);
     replicaWaitTimeBetweenReplicasMs =
         verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
     replicationMaxLagForWaitTimeInBytes =

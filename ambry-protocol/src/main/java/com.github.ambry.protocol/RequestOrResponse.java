@@ -18,8 +18,6 @@ public abstract class RequestOrResponse implements Send {
   protected ByteBuffer bufferToSend;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected static final short Request_Response_Version = 1;
-
   private static final int Request_Response_Size_In_Bytes = 8;
   private static final int Request_Response_Type_Size_In_Bytes = 2;
   private static final int Request_Response_Version_Size_In_Bytes = 2;

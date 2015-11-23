@@ -269,10 +269,10 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
   public Gauge<Integer> totalNumberOfConnections;
   // Represents the number of requests waiting to checkout a connection
   public Gauge<Integer> requestsWaitingToCheckoutConnection;
-  // Represents the number of sslSocketFactory Initializations
-  public Counter sslSocketFactoryInitializationCount;
-  // Represents the number of sslSocketFactory Initialization Error
-  public Counter sslSocketFactoryInitializationErrorCount;
+  // Represents the number of sslSocketFactory Initializations by client
+  public Counter sslSocketFactoryClientInitializationCount;
+  // Represents the number of sslSocketFactory Initialization Error by client
+  public Counter sslSocketFactoryClientInitializationErrorCount;
 
   public BlockingChannelConnectionPool(ConnectionPoolConfig config, SSLConfig sslConfig, MetricRegistry registry)
       throws Exception {
@@ -323,10 +323,10 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "requestsWaitingToCheckoutConnection"),
         requestsWaitingToCheckoutConnection);
-    sslSocketFactoryInitializationCount = registry
-        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryInitializationCount"));
-    sslSocketFactoryInitializationErrorCount = registry
-        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryInitializationErrorCount"));
+    sslSocketFactoryClientInitializationCount = registry
+        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryClientInitializationCount"));
+    sslSocketFactoryClientInitializationErrorCount = registry
+        .counter(MetricRegistry.name(BlockingChannelConnectionPool.class, "SslSocketFactoryClientInitializationErrorCount"));
 
     if (sslConfig.sslEnabledDatacenters.length() > 0) {
       initializeSSLSocketFactory();
@@ -354,10 +354,10 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
       SSLFactory sslFactory = new SSLFactory(sslConfig);
       SSLContext sslContext = sslFactory.getSSLContext();
       this.sslSocketFactory = sslContext.getSocketFactory();
-      this.sslSocketFactoryInitializationCount.inc();
+      this.sslSocketFactoryClientInitializationCount.inc();
     } catch (Exception e) {
-      this.sslSocketFactoryInitializationErrorCount.inc();
-      logger.error("SSLSocketFactory Initialization Error ", e);
+      this.sslSocketFactoryClientInitializationErrorCount.inc();
+      logger.error("SSLSocketFactory Client Initialization Error ", e);
       throw e;
     }
   }
