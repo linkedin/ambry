@@ -1,8 +1,8 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.InMemoryRouter;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -83,13 +83,32 @@ public class NettyServerTest {
 
   // helpers
   // general
-  private RestRequestHandlerController getRestRequestHandlerController(Properties properties)
+
+  /**
+   * Gets an instance of {@link RequestResponseHandlerController}.
+   * @param properties the in-memory {@link Properties} to use.
+   * @return an instance of {@link RequestResponseHandlerController}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  private RequestResponseHandlerController getRequestHandlerController(Properties properties)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
-    return new RequestHandlerController(1, restServerMetrics, blobStorageService);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    BlobStorageService blobStorageService =
+        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
+    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
+    controller.setBlobStorageService(blobStorageService);
+    return controller;
   }
 
+  /**
+   * Gets an instance of {@link NettyServer}.
+   * @param properties the in-memory {@link Properties} to use.
+   * @return an instance of {@link NettyServer}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   private NettyServer getNettyServer(Properties properties)
       throws InstantiationException, IOException {
     if (properties == null) {
@@ -99,7 +118,7 @@ public class NettyServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController(properties);
-    return new NettyServer(nettyConfig, nettyMetrics, requestHandlerController);
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController(properties);
+    return new NettyServer(nettyConfig, nettyMetrics, requestResponseHandlerController);
   }
 }

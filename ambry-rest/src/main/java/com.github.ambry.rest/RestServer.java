@@ -1,10 +1,13 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,12 +20,13 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * The RestServer is responsible for starting up (and shutting down) multiple services required to handle requests from
  * clients. Currently it starts/shuts down the following: -
- * 1. A {@link BlobStorageService} - A service that understands the operations supported by Ambry (including those
+ * 1. A {@link Router} - A service that is used to contact the Ambry storage backend.
+ * 2. A {@link BlobStorageService} - A service that understands the operations supported by Ambry (including those
  * through the storage backend) and can handle requests from clients for such operations.
- * 2. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
- * 3. A {@link RestRequestHandlerController} - To start the scaling units (instances of
- * {@link RestRequestHandler}) that are responsible for interfacing between the
- * {@link NioServer} and the {@link BlobStorageService}.
+ * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
+ * 4. A {@link RequestResponseHandlerController} - To start the scaling units (instances of
+ * {@link AsyncRequestResponseHandler}) that are responsible for interfacing between the {@link NioServer} and the
+ * {@link BlobStorageService}.
  * <p/>
  * Depending upon what is specified in the configuration file, the RestServer can start different implementations of
  * {@link NioServer} and {@link BlobStorageService} and behave accordingly.
@@ -31,49 +35,53 @@ import org.slf4j.LoggerFactory;
  * 1. To support ANY RESTful frontend service as long as it can provide an implementation of {@link BlobStorageService}.
  * 2. Make it easy to plug in any implementation of {@link NioServer} as long as it can provide implementations that
  * abstract framework specific objects and actions (like write/read from channel) into generic APIs through
- * {@link RestRequestMetadata}, {@link RestRequestContent},
- * {@link RestResponseChannel} etc.
- * 3. Provide scaling capabilities independent of any other component through implementations of
- * {@link RestRequestHandlerController} and {@link RestRequestHandler}.
+ * {@link RestRequest}, {@link RestResponseChannel} etc.
+ * 3. Provide scaling capabilities independent of any other component through {@link RequestResponseHandlerController}
+ * and {@link AsyncRequestResponseHandler}.
  */
 public class RestServer {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final RestServerConfig restServerConfig;
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
+  private final Router router;
   private final BlobStorageService blobStorageService;
-  private final RestRequestHandlerController requestHandlerController;
+  private final RequestResponseHandlerController requestResponseHandlerController;
   private final NioServer nioServer;
 
-  public RestServer(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+  public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem)
       throws InstantiationException {
-    if (verifiableProperties == null || metricRegistry == null || clusterMap == null) {
+    if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       StringBuilder errorMessage = new StringBuilder("Null arg(s) received during instantiation of RestServer -");
       if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
-      if (metricRegistry == null) {
-        errorMessage.append(" [MetricRegistry] ");
-      }
       if (clusterMap == null) {
         errorMessage.append(" [ClusterMap] ");
       }
+      if (notificationSystem == null) {
+        errorMessage.append(" [NotificationSystem] ");
+      }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-
-    restServerConfig = new RestServerConfig(verifiableProperties);
-    restServerMetrics = new RestServerMetrics(metricRegistry);
-    reporter = JmxReporter.forRegistry(metricRegistry).build();
+    RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
+    reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     try {
+      requestResponseHandlerController =
+          new RequestResponseHandlerController(restServerConfig.restServerScalingUnitCount, restServerMetrics);
+      RouterFactory routerFactory =
+          Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
+      router = routerFactory.getRouter();
       BlobStorageServiceFactory blobStorageServiceFactory = Utils
-          .getObj(restServerConfig.restBlobStorageServiceFactory, verifiableProperties, metricRegistry, clusterMap);
+          .getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
+              requestResponseHandlerController, router);
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
-      requestHandlerController =
-          new RequestHandlerController(restServerConfig.restRequestHandlerCount, restServerMetrics, blobStorageService);
+      requestResponseHandlerController.setBlobStorageService(blobStorageService);
       NioServerFactory nioServerFactory = Utils
-          .getObj(restServerConfig.restNioServerFactory, verifiableProperties, metricRegistry,
-              requestHandlerController);
+          .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
+              requestResponseHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
       logger.error("Exception during instantiation of RestServer", e);
@@ -81,8 +89,11 @@ public class RestServer {
       throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
 
-    if (blobStorageService == null || nioServer == null) {
+    if (router == null || blobStorageService == null || nioServer == null) {
       StringBuilder errorMessage = new StringBuilder("Failed to instantiate some components of RestServer -");
+      if (router == null) {
+        errorMessage.append(" [Router] ");
+      }
       if (blobStorageService == null) {
         errorMessage.append(" [BlobStorageService] ");
       }
@@ -107,7 +118,7 @@ public class RestServer {
       // ordering is important.
       reporter.start();
       blobStorageService.start();
-      requestHandlerController.start();
+      requestResponseHandlerController.start();
       nioServer.start();
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
@@ -125,9 +136,12 @@ public class RestServer {
     try {
       //ordering is important.
       nioServer.shutdown();
-      requestHandlerController.shutdown();
+      requestResponseHandlerController.shutdown();
       blobStorageService.shutdown();
+      router.close();
       reporter.stop();
+    } catch (IOException e) {
+      logger.error("Exception during shutdown", e);
     } finally {
       long shutdownTime = System.currentTimeMillis() - shutdownBeginTime;
       logger.info("RestServer shutdown took {} ms", shutdownTime);

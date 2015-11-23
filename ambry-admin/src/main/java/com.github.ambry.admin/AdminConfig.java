@@ -1,5 +1,7 @@
 package com.github.ambry.admin;
 
+import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 
@@ -11,7 +13,14 @@ import com.github.ambry.config.VerifiableProperties;
  */
 class AdminConfig {
 
-  public AdminConfig(VerifiableProperties verifiableProperties) {
+  /**
+   * Cache validity in seconds for non-private blobs for GET.
+   */
+  @Config("admin.cache.validity.seconds")
+  @Default("31536000")
+  public final long adminCacheValiditySeconds;
 
+  public AdminConfig(VerifiableProperties verifiableProperties) {
+    adminCacheValiditySeconds = verifiableProperties.getLong("admin.cache.validity.seconds", 31536000);
   }
 }

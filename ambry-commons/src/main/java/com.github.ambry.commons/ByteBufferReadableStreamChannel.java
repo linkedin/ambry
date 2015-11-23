@@ -1,5 +1,6 @@
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
+import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -11,7 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Represents a {@link ByteBuffer} as a {@link ReadableStreamChannel}.
  */
-class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
+public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;
@@ -32,13 +33,12 @@ class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
+    int bytesWritten = -1;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
     } else {
+      bufferReadLock.lock();
       try {
-        bufferReadLock.lock();
-        bytesWritten = -1;
         if (buffer.hasRemaining()) {
           bytesWritten = channel.write(buffer);
         }
