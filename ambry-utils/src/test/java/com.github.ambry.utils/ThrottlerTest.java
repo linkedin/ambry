@@ -29,7 +29,7 @@ public class ThrottlerTest {
     Assert.assertEquals(time.currentMilliseconds, 5011);
   }
 
-  class MockThrottlerTime extends MockTime{
+  class MockThrottlerTime extends MockTime {
     long sleepTimeExpected;
 
     @Override
