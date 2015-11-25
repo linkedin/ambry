@@ -482,10 +482,7 @@ public class PersistentIndex {
   }
 
   private boolean isExpired(IndexValue value){
-    if (value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs()) {
-      return true;
-    }
-    return false;
+    return value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs();
   }
 
   /**

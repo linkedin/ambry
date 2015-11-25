@@ -279,10 +279,7 @@ public class DumpData {
   }
 
   private boolean isExpired(IndexValue value){
-    if (value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
-      return true;
-    }
-    return false;
+    return value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs();
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
