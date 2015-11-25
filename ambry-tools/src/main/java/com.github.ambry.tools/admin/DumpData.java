@@ -15,6 +15,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -257,7 +258,7 @@ public class DumpData {
           numberOfKeysProcessed++;
 
           if (blobList == null || blobList.contains(key.toString())) {
-            blobIdToMessageMap.put(key.toString(), new IndexRecord(msg, isDeleted, blobValue.isExpired()));
+            blobIdToMessageMap.put(key.toString(), new IndexRecord(msg, isDeleted, isExpired(blobValue)));
           }
         }
         if (!excludeMiscLogging) {
@@ -275,6 +276,13 @@ public class DumpData {
       }
     }
     return numberOfKeysProcessed;
+  }
+
+  private boolean isExpired(IndexValue value){
+    if (value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs()) {
+      return true;
+    }
+    return false;
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,

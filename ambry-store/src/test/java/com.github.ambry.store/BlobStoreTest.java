@@ -501,8 +501,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(dataNodeId1);
       Store store = new BlobStore(config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-              replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-              new DummyMessageStoreHardDelete(), mockTime);
+          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(), mockTime);
       store.start();
       byte[] bufToWrite = new byte[1000];
       new Random().nextBytes(bufToWrite);
@@ -513,7 +513,7 @@ public class BlobStoreTest {
       listInfo.add(messageInfo);
       MessageWriteSet set = new MockMessageWriteSet(ByteBuffer.wrap(bufToWrite), listInfo);
       store.put(set);
-      mockTime.wait(store, 30L * Time.MsPerSec);
+      mockTime.sleep(30L * Time.MsPerSec);
 
       // verify existence
       ArrayList<StoreKey> keyList = new ArrayList<StoreKey>();
@@ -528,15 +528,14 @@ public class BlobStoreTest {
       for (int i = 0; i < 1000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i]);
       }
-      mockTime.wait(store, 60L * Time.MsPerSec);
+      mockTime.sleep(60L * Time.MsPerSec);
       try {
         storeInfo = store.get(keyList, storeGetOptions);
         Assert.fail("Blob already expired. Should throw exception here.");
       } catch (StoreException e) {
         Assert.assertEquals(e.getErrorCode(), StoreErrorCodes.TTL_Expired);
       }
-    }
-    finally {
+    } finally {
       if (map != null) {
         map.cleanup();
       }
