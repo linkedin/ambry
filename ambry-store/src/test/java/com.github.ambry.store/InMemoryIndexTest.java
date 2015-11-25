@@ -7,6 +7,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
 import com.github.ambry.utils.Scheduler;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -49,13 +50,13 @@ public class InMemoryIndexTest {
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory)
         throws StoreException {
       super(datadir, scheduler, log, new StoreConfig(new VerifiableProperties(new Properties())), factory,
-          new DummyMessageStoreRecovery(), new MetricRegistry());
+          new DummyMessageStoreRecovery(), new MetricRegistry(), SystemTime.getInstance());
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreKeyFactory factory, StoreConfig config,
         MessageStoreRecovery messageRecovery)
         throws StoreException {
-      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry());
+      super(datadir, scheduler, log, config, factory, messageRecovery, new MetricRegistry(), SystemTime.getInstance());
     }
 
     IndexValue getValue(StoreKey key) {
