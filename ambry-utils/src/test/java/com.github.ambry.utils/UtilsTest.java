@@ -164,6 +164,9 @@ public class UtilsTest {
       mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.threeArgConstructorInvoked);
+      mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
+      Assert.assertNotNull(mockObj);
+      Assert.assertTrue(mockObj.fourArgConstructorInvoked);
     } catch (Exception e) {
       Assert.assertTrue(false);
     }
@@ -187,6 +190,7 @@ class MockClassForTesting {
   public boolean oneArgConstructorInvoked = false;
   public boolean twoArgConstructorInvoked = false;
   public boolean threeArgConstructorInvoked = false;
+  public boolean fourArgConstructorInvoked = false;
 
   public MockClassForTesting() {
     noArgConstructorInvoked = true;
@@ -202,5 +206,9 @@ class MockClassForTesting {
 
   public MockClassForTesting(Object obj1, Object obj2, Object obj3) {
     threeArgConstructorInvoked = true;
+  }
+
+  public MockClassForTesting(Object obj1, Object obj2, Object obj3, Object obj4) {
+    fourArgConstructorInvoked = true;
   }
 }

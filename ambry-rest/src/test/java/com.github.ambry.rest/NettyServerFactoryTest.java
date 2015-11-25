@@ -1,14 +1,15 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.InMemoryRouter;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -27,10 +28,10 @@ public class NettyServerFactoryTest {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController();
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
 
     NioServerFactory nioServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), requestHandlerController);
+        new NettyServerFactory(verifiableProperties, new MetricRegistry(), requestResponseHandlerController);
     NioServer nioServer = nioServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
@@ -49,36 +50,50 @@ public class NettyServerFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
-    RestRequestHandlerController requestHandlerController = getRestRequestHandlerController();
+    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
 
     // VerifiableProperties null.
     try {
-      new NettyServerFactory(null, metricRegistry, requestHandlerController);
-    } catch (InstantiationException e) {
+      new NettyServerFactory(null, metricRegistry, requestResponseHandlerController);
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // MetricRegistry null.
     try {
-      new NettyServerFactory(verifiableProperties, null, requestHandlerController);
-    } catch (InstantiationException e) {
+      new NettyServerFactory(verifiableProperties, null, requestResponseHandlerController);
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // RestRequestHandlerController null.
+    // RequestResponseHandlerController null.
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, null);
-    } catch (InstantiationException e) {
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
   }
 
   // helpers
   // general
-  private RestRequestHandlerController getRestRequestHandlerController()
+
+  /**
+   * Gets an instance of {@link RequestResponseHandlerController}.
+   * @return an instance of {@link RequestResponseHandlerController}.
+   * @throws InstantiationException
+   * @throws IOException
+   */
+  private RequestResponseHandlerController getRequestHandlerController()
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    BlobStorageService blobStorageService = new MockBlobStorageService(new MockClusterMap());
-    return new RequestHandlerController(1, restServerMetrics, blobStorageService);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    BlobStorageService blobStorageService =
+        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
+    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
+    controller.setBlobStorageService(blobStorageService);
+    return controller;
   }
 }

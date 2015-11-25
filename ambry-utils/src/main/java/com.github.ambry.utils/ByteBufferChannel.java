@@ -48,8 +48,8 @@ public class ByteBufferChannel implements WritableByteChannel {
       throw new ClosedChannelException();
     }
     int bytesWritten = 0;
+    bufferLock.lock();
     try {
-      bufferLock.lock();
       int bytesToWrite = Math.min(src.remaining(), buffer.remaining());
       for (; bytesWritten < bytesToWrite; bytesWritten++) {
         buffer.put(src.get());

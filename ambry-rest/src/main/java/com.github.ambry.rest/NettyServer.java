@@ -11,7 +11,6 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -22,16 +21,15 @@ import org.slf4j.LoggerFactory;
 /**
  * Netty specific implementation of {@link NioServer}.
  * <p/>
- * Responsible for accepting connections from clients, decoding HTTP data, passing them on the underlying
- * {@link BlobStorageService} and providing a Netty specific implementation of
- * {@link RestResponseChannel} ({@link NettyResponseChannel}) for writing responses to
- * clients.
+ * Responsible for accepting connections from clients, decoding HTTP data and passing them on to services that can
+ * generate responses via {@link NettyMessageProcessor}.
+ * <p/>
+ * The accompanying framework also provides a Netty specific implementation of {@link RestResponseChannel}
+ * ({@link NettyResponseChannel}) for writing responses to clients.
  * <p/>
  * This implementation creates a pipeline of handlers for every connection that it accepts and the last inbound handler,
- * {@link NettyMessageProcessor}, is responsible for invoking a {@link RestRequestHandler}.
- * <p/>
- * Each {@link NettyMessageProcessor} instance makes use of the {@link RestRequestHandlerController} provided to request
- * a {@link RestRequestHandler}.
+ * {@link NettyMessageProcessor}, is responsible for processing the inbound requests and passing them to services that
+ * can generate a response.
  */
 class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
@@ -41,10 +39,10 @@ class NettyServer implements NioServer {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      RestRequestHandlerController requestHandlerController) {
+      RequestResponseHandlerController requestResponseHandlerController) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandlerController);
+    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestResponseHandlerController);
     nettyServerDeployerThread = new Thread(nettyServerDeployer);
     logger.trace("Instantiated NettyServer");
   }
@@ -96,14 +94,14 @@ class NettyServerDeployer implements Runnable {
   private final EventLoopGroup workerGroup;
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final RestRequestHandlerController requestHandlerController;
+  private final RequestResponseHandlerController requestResponseHandlerController;
   private Exception exception = null;
 
   public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      RestRequestHandlerController requestHandlerController) {
+      RequestResponseHandlerController requestResponseHandlerController) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    this.requestHandlerController = requestHandlerController;
+    this.requestResponseHandlerController = requestResponseHandlerController;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServerDeployer");
@@ -123,14 +121,14 @@ class NettyServerDeployer implements Runnable {
             public void initChannel(SocketChannel ch)
                 throws Exception {
               ch.pipeline()
-                  // for http encoding/decoding.
+                  // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+                  // to go here.
                   .addLast("codec", new HttpServerCodec())
-                      // for chunking.
-                  .addLast("chunker", new ChunkedWriteHandler())
                       // for detecting connections that have been idle too long - probably because of an error.
                   .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                       // custom processing class that interfaces with a BlobStorageService.
-                  .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandlerController));
+                  .addLast("processor",
+                      new NettyMessageProcessor(nettyMetrics, nettyConfig, requestResponseHandlerController));
             }
           });
       ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
@@ -175,7 +173,7 @@ class NettyServerDeployer implements Runnable {
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
       try {
-        if (!workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
+        if (!workerGroup.awaitTermination(30, TimeUnit.SECONDS) || !bossGroup.awaitTermination(30, TimeUnit.SECONDS)) {
           logger.error("NettyServer shutdown failed after waiting for 30 seconds");
           nettyMetrics.nettyServerShutdownError.inc();
         }

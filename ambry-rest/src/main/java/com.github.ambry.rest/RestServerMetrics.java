@@ -12,27 +12,27 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link RestServer} and Rest infrastructure ({@link RestRequestHandlerController},
- * {@link RestRequestHandler}) specific metrics tracking.
+ * {@link RestServer} and Rest infrastructure ({@link RequestResponseHandlerController}, {@link AsyncRequestResponseHandler})
+ * specific metrics tracking.
  * <p/>
  * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
-class RestServerMetrics {
+public class RestServerMetrics {
   private final MetricRegistry metricRegistry;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final Object asyncRequestHandlerRegisterLock = new Object();
+  private final Object asyncRequestResponseHandlerRegister = new Object();
 
   // Gauges
-  // AsyncRequestHandler
-  private final List<Gauge<Integer>> asyncRequestHandlerQueueOccupancyGauges;
-  private final List<Gauge<Integer>> asyncRequestHandlerRequestsInFlightGauges;
-  private Gauge<Integer> requestHandlersAlive;
+  // AsyncRequestResponseHandler
+  private final List<Gauge<Integer>> asyncRequestQueueOccupancyGauges;
+  private final List<Gauge<Integer>> asyncResponseListOccupancyGauges;
+  private Gauge<Integer> requestResponseHandlersAlive;
 
   // Rates
-  // AsyncRequestHandler
+  // AsyncRequestResponseHandler
   public final Meter asyncRequestHandlerQueueingRate;
   public final Meter asyncRequestHandlerRequestArrivalRate;
-  // DequeuedRequestHandler
+  // AsyncHandlerWorker
   public final Meter dequeuedRequestHandlerDequeuingRate;
   public final Meter dequeuedRequestHandlerRequestCompletionRate;
 
@@ -40,30 +40,29 @@ class RestServerMetrics {
 
   // Errors
   private final Counter metricAdditionError;
-  // RequestHandlerController
+  // RequestResponseHandlerController
   public final Counter requestHandlerControllerInstantiationError;
   public final Counter requestHandlerSelectionError;
-  // AsyncRequestHandler
-  public final Counter asyncRequestHandlerQueueOfferTooLongError;
-  public final Counter asyncRequestHandlerQueueOfferInterruptedError;
+  // AsyncRequestResponseHandler
+  public final Counter asyncRequestHandlerQueueAddError;
   public final Counter asyncRequestHandlerRestRequestInfoNullError;
   public final Counter asyncRequestHandlerRestResponseChannelNullError;
-  public final Counter asyncRequestHandlerRestRequestMetadataNullError;
+  public final Counter asyncRequestHandlerRestRequestNullError;
   public final Counter asyncRequestHandlerUnavailableError;
   public final Counter asyncRequestHandlerRequestAlreadyInFlightError;
   public final Counter asyncRequestHandlerShutdownError;
-  public final Counter asyncRequestHandlerResidualQueueSize;
-  // DequeuedRequestHandler
+  public final Counter asyncRequestHandlerResidualRequestQueueSize;
+  // AsyncHandlerWorker
   public final Counter dequeuedRequestHandlerUnknownRestMethodError;
-  public final Counter dequeuedRequestHandlerRestRequestInfoHandlingError;
-  public final Counter dequeuedRequestHandlerQueueTakeInterruptedError;
+  public final Counter dequeuedRequestHandlerRequestHandlingError;
+  public final Counter dequeuedRequestHandlerQueuePollInterruptedError;
   public final Counter dequeuedRequestHandlerUnexpectedExceptionError;
   public final Counter dequeuedRequestHandlerHandlingCompleteTasksError;
   // RestServer
   public final Counter restServerInstantiationError;
 
   // Others
-  // AsyncRequestHandler
+  // AsyncRequestResponseHandler
   public final Counter asyncRequestHandlerForcedShutdown;
   public final Histogram asyncRequestHandlerQueueTimeInMs;
   public final Histogram asyncRequestHandlerShutdownTimeInMs;
@@ -73,118 +72,117 @@ class RestServerMetrics {
 
   public RestServerMetrics(MetricRegistry metricRegistry) {
     this.metricRegistry = metricRegistry;
-    asyncRequestHandlerQueueOccupancyGauges = new ArrayList<Gauge<Integer>>();
-    asyncRequestHandlerRequestsInFlightGauges = new ArrayList<Gauge<Integer>>();
+    asyncRequestQueueOccupancyGauges = new ArrayList<Gauge<Integer>>();
+    asyncResponseListOccupancyGauges = new ArrayList<Gauge<Integer>>();
 
     asyncRequestHandlerQueueingRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncRequestHandler.class, "QueueingRate"));
+        metricRegistry.meter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueingRate"));
     asyncRequestHandlerRequestArrivalRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncRequestHandler.class, "RequestArrivalRate"));
+        metricRegistry.meter(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestArrivalRate"));
     dequeuedRequestHandlerDequeuingRate =
-        metricRegistry.meter(MetricRegistry.name(DequeuedRequestHandler.class, "DequeuingRate"));
+        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "DequeuingRate"));
     dequeuedRequestHandlerRequestCompletionRate =
-        metricRegistry.meter(MetricRegistry.name(DequeuedRequestHandler.class, "RequestCompletionRate"));
+        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestCompletionRate"));
 
     metricAdditionError = metricRegistry.counter(MetricRegistry.name(getClass(), "MetricAdditionError"));
     requestHandlerControllerInstantiationError =
-        metricRegistry.counter(MetricRegistry.name(RequestHandlerController.class, "InstantiationError"));
-    requestHandlerSelectionError =
-        metricRegistry.counter(MetricRegistry.name(RequestHandlerController.class, "RequestHandlerSelectionError"));
-    asyncRequestHandlerQueueOfferTooLongError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "QueueOfferTooLongError"));
-    asyncRequestHandlerQueueOfferInterruptedError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "QueueOfferInterruptedError"));
+        metricRegistry.counter(MetricRegistry.name(RequestResponseHandlerController.class, "InstantiationError"));
+    requestHandlerSelectionError = metricRegistry
+        .counter(MetricRegistry.name(RequestResponseHandlerController.class, "RequestHandlerSelectionError"));
+    asyncRequestHandlerQueueAddError =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueAddError"));
     asyncRequestHandlerRestRequestInfoNullError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RestRequestInfoNullError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "RestRequestInfoNullError"));
     asyncRequestHandlerRestResponseChannelNullError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ResponseChannelNullError"));
-    asyncRequestHandlerRestRequestMetadataNullError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RestRequestMetadataNullError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ResponseChannelNullError"));
+    asyncRequestHandlerRestRequestNullError =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "RestRequestNullError"));
     asyncRequestHandlerUnavailableError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "UnavailableError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "UnavailableError"));
     asyncRequestHandlerRequestAlreadyInFlightError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "RequestAlreadyInFlightError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestAlreadyInFlightError"));
     asyncRequestHandlerShutdownError =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ShutdownError"));
-    asyncRequestHandlerResidualQueueSize =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ResidualQueueSize"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownError"));
+    asyncRequestHandlerResidualRequestQueueSize =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ResidualQueueSize"));
     dequeuedRequestHandlerUnknownRestMethodError =
-        metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "UnknownRestMethodError"));
-    dequeuedRequestHandlerRestRequestInfoHandlingError =
-        metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "RestRequestInfoHandlingError"));
-    dequeuedRequestHandlerQueueTakeInterruptedError =
-        metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "QueueTakeInterruptedError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnknownRestMethodError"));
+    dequeuedRequestHandlerRequestHandlingError =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RestRequestInfoHandlingError"));
+    dequeuedRequestHandlerQueuePollInterruptedError =
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "QueueTakeInterruptedError"));
     dequeuedRequestHandlerUnexpectedExceptionError =
-        metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "UnexpectedExceptionError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnexpectedExceptionError"));
     dequeuedRequestHandlerHandlingCompleteTasksError =
-        metricRegistry.counter(MetricRegistry.name(DequeuedRequestHandler.class, "OnHandlingCompleteTasksError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "OnHandlingCompleteTasksError"));
     restServerInstantiationError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
 
     asyncRequestHandlerForcedShutdown =
-        metricRegistry.counter(MetricRegistry.name(AsyncRequestHandler.class, "ForcedShutdown"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ForcedShutdown"));
     asyncRequestHandlerQueueTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncRequestHandler.class, "QueueTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "QueueTimeInMs"));
     asyncRequestHandlerShutdownTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncRequestHandler.class, "ShutdownTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownTimeInMs"));
     restServerStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "StartTimeInMs"));
     restServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ShutdownTimeInMs"));
   }
 
   /**
-   * Registers an {@link AsyncRequestHandler} so that its metrics (queue occupancy, requests in flight) can be tracked.
-   * @param requestHandler the {@link AsyncRequestHandler} whose metrics need to be tracked.
+   * Registers an {@link AsyncRequestResponseHandler} so that its metrics (queue occupancy, requests in flight) can be tracked.
+   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} whose metrics need to be tracked.
    */
-  public void registerAsyncRequestHandler(final AsyncRequestHandler requestHandler) {
-    synchronized (asyncRequestHandlerRegisterLock) {
-      assert asyncRequestHandlerQueueOccupancyGauges.size() == asyncRequestHandlerRequestsInFlightGauges.size();
-      int pos = asyncRequestHandlerQueueOccupancyGauges.size();
+  public void registerAsyncRequestResponseHandler(final AsyncRequestResponseHandler requestResponseHandler) {
+    synchronized (asyncRequestResponseHandlerRegister) {
+      assert asyncRequestQueueOccupancyGauges.size() == asyncResponseListOccupancyGauges.size();
+      int pos = asyncRequestQueueOccupancyGauges.size();
       Gauge<Integer> gauge = new Gauge<Integer>() {
         @Override
         public Integer getValue() {
-          return requestHandler.getQueueSize();
+          return requestResponseHandler.getRequestQueueSize();
         }
       };
-      if (asyncRequestHandlerQueueOccupancyGauges.add(gauge)) {
-        metricRegistry.register(MetricRegistry.name(AsyncRequestHandler.class, pos + "-QueueOccupancy"), gauge);
+      if (asyncRequestQueueOccupancyGauges.add(gauge)) {
+        metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, pos + "-QueueOccupancy"), gauge);
       } else {
-        logger.warn("Failed to register AsyncRequestHandler to the queue occupancy tracker");
+        logger.warn("Failed to register AsyncRequestResponseHandler to the queue occupancy tracker");
         metricAdditionError.inc();
       }
 
       gauge = new Gauge<Integer>() {
         @Override
         public Integer getValue() {
-          return requestHandler.getRequestsInFlightCount();
+          return requestResponseHandler.getResponseSetSize();
         }
       };
-      if (asyncRequestHandlerRequestsInFlightGauges.add(gauge)) {
-        metricRegistry.register(MetricRegistry.name(AsyncRequestHandler.class, pos + "-RequestsInFlight"), gauge);
+      if (asyncResponseListOccupancyGauges.add(gauge)) {
+        metricRegistry
+            .register(MetricRegistry.name(AsyncRequestResponseHandler.class, pos + "-RequestsInFlight"), gauge);
       } else {
-        logger.warn("Failed to register AsyncRequestHandler to the requests in flight tracker");
+        logger.warn("Failed to register AsyncRequestResponseHandler to the requests in flight tracker");
         metricAdditionError.inc();
       }
     }
   }
 
   /**
-   * Tracks the state of the {@link RestRequestHandler}s provided as input and periodically reports how many of them are
-   * alive and well.
-   * @param requestHandlers the list of {@link RestRequestHandler}s whose state needs to be reported.
+   * Tracks the state of the {@link AsyncRequestResponseHandler}s provided as input and periodically reports how many of
+   * them are alive and well.
+   * @param requestResponseHandlers the list of {@link AsyncRequestResponseHandler}s whose state needs to be reported.
    */
-  public void trackRequestHandlerHealth(final List<RestRequestHandler> requestHandlers) {
-    requestHandlersAlive = new Gauge<Integer>() {
+  public void trackRequestHandlerHealth(final List<AsyncRequestResponseHandler> requestResponseHandlers) {
+    requestResponseHandlersAlive = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
         int count = 0;
-        for (RestRequestHandler requestHandler : requestHandlers) {
-          if (requestHandler.isRunning()) {
+        for (AsyncRequestResponseHandler requestResponseHandler : requestResponseHandlers) {
+          if (requestResponseHandler.isRunning()) {
             count++;
           }
         }
         return count;
       }
     };
-    metricRegistry
-        .register(MetricRegistry.name(RequestHandlerController.class, "RequestHandlersAlive"), requestHandlersAlive);
+    metricRegistry.register(MetricRegistry.name(RequestResponseHandlerController.class, "RequestResponseHandlersAlive"),
+        requestResponseHandlersAlive);
   }
 }

@@ -11,16 +11,15 @@ public class RouterConfig {
   /**
    * Number of background threads to perform coordinator operations in CoordinatorBackedRouter.
    */
-  @Config("router.coordinator.backed.router.operation.pool.size")
+  @Config("router.scaling.unit.count")
   @Default("200")
-  public final int routerCoordinatorBackedRouterOperationPoolSize;
+  public final int routerScalingUnitCount;
 
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
-    routerCoordinatorBackedRouterOperationPoolSize =
-        verifiableProperties.getInt("router.coordinator.backed.router.operation.pool.size", 200);
+    routerScalingUnitCount = verifiableProperties.getInt("router.scaling.unit.count", 1);
   }
 }

@@ -1,22 +1,24 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Router;
 
 
 /**
  * Implementation of {@link BlobStorageServiceFactory} that can be used in tests.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link MockBlobStorageService} and returns a new
- * instance on {@link MockBlobStorageServiceFactory#getBlobStorageService()}.
+ * instance on {@link #getBlobStorageService()}.
  */
 public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory {
-  private final ClusterMap clusterMap;
+  private final VerifiableProperties verifiableProperties;
+  private final Router router;
 
-  public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap) {
-    this.clusterMap = clusterMap;
+  public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      Object responseHandlerController, Router router) {
+    this.verifiableProperties = verifiableProperties;
+    this.router = router;
   }
 
   /**
@@ -26,6 +28,6 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new MockBlobStorageService(clusterMap);
+    return new MockBlobStorageService(verifiableProperties, router);
   }
 }
