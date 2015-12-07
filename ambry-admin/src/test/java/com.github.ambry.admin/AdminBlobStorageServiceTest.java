@@ -253,8 +253,6 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, null,
         new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
-    // resources should have been cleaned up.
-    assertFalse("RestRequest channel is not cleaned up", restRequest.isOpen());
 
     // there is no exception and exception thrown when the response is submitted.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
@@ -265,7 +263,6 @@ public class AdminBlobStorageServiceTest {
     adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, response, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
     // resources should have been cleaned up.
-    assertFalse("RestRequest channel is not cleaned up", restRequest.isOpen());
     assertFalse("Response channel is not cleaned up", response.isOpen());
   }
 
@@ -287,7 +284,6 @@ public class AdminBlobStorageServiceTest {
     assertTrue("RestRequest channel not open", restRequest.isOpen());
     assertTrue("ReadableStreamChannel not open", channel.isOpen());
     adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, channel, null);
-    assertFalse("RestRequest channel is still open", restRequest.isOpen());
     assertFalse("ReadableStreamChannel is still open", channel.isOpen());
 
     // null ReadableStreamChannel
@@ -295,7 +291,6 @@ public class AdminBlobStorageServiceTest {
     restResponseChannel = new MockRestResponseChannel();
     assertTrue("RestRequest channel not open", restRequest.isOpen());
     adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, null, null);
-    assertFalse("RestRequest channel is still open", restRequest.isOpen());
 
     // bad RestRequest (close() throws IOException)
     channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
@@ -311,7 +306,6 @@ public class AdminBlobStorageServiceTest {
     assertTrue("RestRequest channel not open", restRequest.isOpen());
     adminBlobStorageService
         .submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, new BadRSC(), null);
-    assertFalse("RestRequest channel is still open", restRequest.isOpen());
   }
 
   /**

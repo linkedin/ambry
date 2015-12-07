@@ -130,7 +130,7 @@ class AdminBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
     } finally {
       adminMetrics.getPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalTime(preProcessingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -158,7 +158,7 @@ class AdminBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
     } finally {
       adminMetrics.postPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalTime(preProcessingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -182,7 +182,7 @@ class AdminBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
     } finally {
       adminMetrics.deletePreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalTime(preProcessingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -205,7 +205,7 @@ class AdminBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
     } finally {
       adminMetrics.headPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalTime(preProcessingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -235,7 +235,15 @@ class AdminBlobStorageService implements BlobStorageService {
       }
       logger.error("Handling of request {} failed", restRequest.getUri(), exception);
       restResponseChannel.onResponseComplete(exception);
-      releaseResources(restRequest, response);
+
+      if (response != null) {
+        try {
+          response.close();
+        } catch (IOException ioe) {
+          adminMetrics.resourceReleaseError.inc();
+          logger.error("Error closing ReadableStreamChannel", e);
+        }
+      }
     }
   }
 
@@ -254,29 +262,6 @@ class AdminBlobStorageService implements BlobStorageService {
         errorMessage.append(" [RestResponseChannel] ");
       }
       throw new IllegalArgumentException(errorMessage.toString());
-    }
-  }
-
-  /**
-   * Cleans up resources.
-   * @param restRequest the {@link RestRequest} that needs to be cleaned up.
-   * @param readableStreamChannel the {@link ReadableStreamChannel} that needs to be cleaned up. Can be null.
-   */
-  private void releaseResources(RestRequest restRequest, ReadableStreamChannel readableStreamChannel) {
-    try {
-      restRequest.close();
-    } catch (IOException e) {
-      adminMetrics.resourceReleaseError.inc();
-      logger.error("Error closing RestRequest", e);
-    }
-
-    if (readableStreamChannel != null) {
-      try {
-        readableStreamChannel.close();
-      } catch (IOException e) {
-        adminMetrics.resourceReleaseError.inc();
-        logger.error("Error closing ReadableStreamChannel", e);
-      }
     }
   }
 
@@ -338,7 +323,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.headForGetTimeInMs.update(routerTime);
-      restRequest.getMetricsTracker().addToTotalTime(routerTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD before GET of {}", blobId);
@@ -362,7 +347,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
     } finally {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.headForGetCallbackProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
         adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
@@ -436,7 +421,7 @@ class GetCallback implements Callback<ReadableStreamChannel> {
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.getTimeInMs.update(routerTime);
-      restRequest.getMetricsTracker().addToTotalTime(routerTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for GET of {}", blobId);
@@ -456,7 +441,7 @@ class GetCallback implements Callback<ReadableStreamChannel> {
     } finally {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.getCallbackProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -509,7 +494,7 @@ class PostCallback implements Callback<String> {
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.postTimeInMs.update(routerTime);
-      restRequest.getMetricsTracker().addToTotalTime(routerTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       logger.trace("Callback received for POST");
       restResponseChannel.setDate(new GregorianCalendar().getTime());
@@ -529,7 +514,7 @@ class PostCallback implements Callback<String> {
     } finally {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.postCallbackProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -590,7 +575,7 @@ class DeleteCallback implements Callback<Void> {
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.deleteTimeInMs.update(routerTime);
-      restRequest.getMetricsTracker().addToTotalTime(routerTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for DELETE of {}", blobId);
@@ -610,7 +595,7 @@ class DeleteCallback implements Callback<Void> {
     } finally {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.deleteCallbackProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
@@ -659,7 +644,7 @@ class HeadCallback implements Callback<BlobInfo> {
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.headTimeInMs.update(routerTime);
-      restRequest.getMetricsTracker().addToTotalTime(routerTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD of {}", blobId);
@@ -680,7 +665,7 @@ class HeadCallback implements Callback<BlobInfo> {
     } finally {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       adminBlobStorageService.adminMetrics.headCallbackProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }

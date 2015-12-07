@@ -16,6 +16,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.concurrent.GenericFutureListener;
+import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -165,6 +166,14 @@ class NettyResponseChannel implements RestResponseChannel {
   public void close() {
     closeResponseChannel();
     maybeCloseNetworkChannel(true);
+    if (request != null) {
+      try {
+        request.close();
+      } catch (IOException e) {
+        nettyMetrics.resourceReleaseError.inc();
+        logger.error("Error closing request", e);
+      }
+    }
   }
 
   @Override
@@ -353,7 +362,7 @@ class NettyResponseChannel implements RestResponseChannel {
       // thread that has a direct reference to the ChannelHandlerContext can close the channel at any time and we
       // might not have got in our write when the channel was requested to be closed.
       ChannelPromise writePromise = ctx.newPromise();
-      writeResultListener = new ChannelWriteResultListener(request, nettyMetrics);
+      writeResultListener = new ChannelWriteResultListener(request, nettyMetrics, responseComplete);
       writePromise.addListener(writeResultListener);
       lastWriteFuture = ctx.write(httpObject, writePromise);
       return lastWriteFuture;
@@ -590,11 +599,14 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
   protected final long writeStartTime = System.currentTimeMillis();
   private final NettyRequest nettyRequest;
   private final NettyMetrics nettyMetrics;
+  private final AtomicBoolean responseComplete;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public ChannelWriteResultListener(NettyRequest nettyRequest, NettyMetrics nettyMetrics) {
+  public ChannelWriteResultListener(NettyRequest nettyRequest, NettyMetrics nettyMetrics,
+      AtomicBoolean responseComplete) {
     this.nettyRequest = nettyRequest;
     this.nettyMetrics = nettyMetrics;
+    this.responseComplete = responseComplete;
     logger.trace("ChannelWriteResultListener instantiated");
   }
 
@@ -616,6 +628,18 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
       } else {
         nettyMetrics.metricsTrackingError.inc();
         logger.warn("Request not set in response channel for {}", future.channel());
+      }
+    }
+
+    if (responseComplete.get() || !future.isSuccess()) {
+      if (nettyRequest != null) {
+        nettyRequest.getMetricsTracker().nioLayerMetrics.markRequestCompleted();
+        try {
+          nettyRequest.close();
+        } catch (IOException e) {
+          nettyMetrics.resourceReleaseError.inc();
+          logger.error("Error closing request", e);
+        }
       }
     }
   }

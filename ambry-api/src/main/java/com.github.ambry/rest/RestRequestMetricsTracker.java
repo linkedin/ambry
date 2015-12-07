@@ -24,7 +24,7 @@ public class RestRequestMetricsTracker {
    */
   public final ScalingLayerMetrics scalingLayerMetrics = new ScalingLayerMetrics();
 
-  private final AtomicLong totalTime = new AtomicLong(0);
+  private final AtomicLong totalCpuTimeInMs = new AtomicLong(0);
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
 
@@ -32,8 +32,11 @@ public class RestRequestMetricsTracker {
    * Metrics that are updated at the NIO layer.
    */
   public class NioLayerMetrics {
-    private final AtomicLong requestProcessingTime = new AtomicLong(0);
-    private final AtomicLong responseProcessingTime = new AtomicLong(0);
+    private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
+    private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
+
+    private long requestReceivedTime = 0;
+    private long roundTripTimeInMs = 0;
 
     /**
      * Adds to the time taken to process the request at the NIO layer. Also adds to the total time taken to service the
@@ -43,8 +46,8 @@ public class RestRequestMetricsTracker {
      *          moment.
      */
     public long addToRequestProcessingTime(long delta) {
-      addToTotalTime(delta);
-      return requestProcessingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return requestProcessingTimeInMs.addAndGet(delta);
     }
 
     /**
@@ -55,8 +58,25 @@ public class RestRequestMetricsTracker {
      *          moment.
      */
     public long addToResponseProcessingTime(long delta) {
-      addToTotalTime(delta);
-      return responseProcessingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return responseProcessingTimeInMs.addAndGet(delta);
+    }
+
+    /**
+     * Marks the time at which the request was received.
+     */
+    public void markRequestReceived() {
+      requestReceivedTime = System.currentTimeMillis();
+    }
+
+    /**
+     * Marks the time at which request was completed so that request RTT can be calculated.
+     */
+    public void markRequestCompleted() {
+      if (requestReceivedTime == 0) {
+        throw new IllegalStateException("Request was marked completed without being marked received");
+      }
+      roundTripTimeInMs = System.currentTimeMillis() - requestReceivedTime;
     }
   }
 
@@ -64,10 +84,13 @@ public class RestRequestMetricsTracker {
    * Metrics that are updated at the scaling layer.
    */
   public class ScalingLayerMetrics {
-    private final AtomicLong requestProcessingTime = new AtomicLong(0);
-    private final AtomicLong requestQueuingTime = new AtomicLong(0);
-    private final AtomicLong responseProcessingTime = new AtomicLong(0);
-    private final AtomicLong responseQueuingTime = new AtomicLong(0);
+    private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
+    private final AtomicLong requestQueuingTimeInMs = new AtomicLong(0);
+    private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
+    private final AtomicLong responseQueuingTimeInMs = new AtomicLong(0);
+
+    private long requestReceivedTime = 0;
+    private long roundTripTimeInMs = 0;
 
     /**
      * Adds to the time taken to process a request at the scaling layer. Also adds to the total time taken to service
@@ -77,8 +100,8 @@ public class RestRequestMetricsTracker {
      *          this moment.
      */
     public long addToRequestProcessingTime(long delta) {
-      addToTotalTime(delta);
-      return requestProcessingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return requestProcessingTimeInMs.addAndGet(delta);
     }
 
     /**
@@ -87,8 +110,8 @@ public class RestRequestMetricsTracker {
      * @return the total time in ms this request has spent being queued at the scaling layer at this moment.
      */
     public long addToRequestQueuingTime(long delta) {
-      addToTotalTime(delta);
-      return requestQueuingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return requestQueuingTimeInMs.addAndGet(delta);
     }
 
     /**
@@ -99,8 +122,8 @@ public class RestRequestMetricsTracker {
      *          this moment.
      */
     public long addToResponseProcessingTime(long delta) {
-      addToTotalTime(delta);
-      return responseProcessingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return responseProcessingTimeInMs.addAndGet(delta);
     }
 
     /**
@@ -109,19 +132,36 @@ public class RestRequestMetricsTracker {
      * @return the total time in ms this response has spent being queued at the scaling layer at this moment.
      */
     public long addToResponseQueuingTime(long delta) {
-      addToTotalTime(delta);
-      return responseQueuingTime.addAndGet(delta);
+      addToTotalCpuTime(delta);
+      return responseQueuingTimeInMs.addAndGet(delta);
+    }
+
+    /**
+     * Marks the time at which the request was received.
+     */
+    public void markRequestReceived() {
+      requestReceivedTime = System.currentTimeMillis();
+    }
+
+    /**
+     * Marks the time at which request was completed so that request RTT can be calculated.
+     */
+    public void markRequestCompleted() {
+      if (requestReceivedTime == 0) {
+        throw new IllegalStateException("Request was marked completed without being marked received");
+      }
+      roundTripTimeInMs = System.currentTimeMillis() - requestReceivedTime;
     }
   }
 
   /**
-   * Adds to the total time taken in ms to service the request.
+   * Adds to the total cpu time taken in ms to service the request.
    * @param delta the time taken in ms to do the current piece of processing for the request.
-   * @return the total time taken in ms to service the request across all layers, including the current piece,
+   * @return the total cpu time taken in ms to service the request across all layers, including the current piece,
    *          at this moment.
    */
-  public long addToTotalTime(long delta) {
-    return totalTime.addAndGet(delta);
+  public long addToTotalCpuTime(long delta) {
+    return totalCpuTimeInMs.addAndGet(delta);
   }
 
   /**
@@ -147,15 +187,17 @@ public class RestRequestMetricsTracker {
   public void recordMetrics() {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
-        metrics.nioRequestProcessingTime.update(nioLayerMetrics.requestProcessingTime.get());
-        metrics.nioResponseProcessingTime.update(nioLayerMetrics.responseProcessingTime.get());
+        metrics.nioRequestProcessingTimeInMs.update(nioLayerMetrics.requestProcessingTimeInMs.get());
+        metrics.nioResponseProcessingTimeInMs.update(nioLayerMetrics.responseProcessingTimeInMs.get());
+        metrics.nioRoundTripTimeInMs.update(nioLayerMetrics.roundTripTimeInMs);
 
-        metrics.scRequestProcessingTime.update(scalingLayerMetrics.requestProcessingTime.get());
-        metrics.scRequestQueuingTime.update(scalingLayerMetrics.requestQueuingTime.get());
-        metrics.scResponseProcessingTime.update(scalingLayerMetrics.responseProcessingTime.get());
-        metrics.scResponseQueuingTime.update(scalingLayerMetrics.responseQueuingTime.get());
+        metrics.scRequestProcessingTimeInMs.update(scalingLayerMetrics.requestProcessingTimeInMs.get());
+        metrics.scRequestQueuingTimeInMs.update(scalingLayerMetrics.requestQueuingTimeInMs.get());
+        metrics.scResponseProcessingTimeInMs.update(scalingLayerMetrics.responseProcessingTimeInMs.get());
+        metrics.scResponseQueuingTimeInMs.update(scalingLayerMetrics.responseQueuingTimeInMs.get());
+        metrics.scRoundTripTimeInMs.update(scalingLayerMetrics.roundTripTimeInMs);
 
-        metrics.totalTime.update(totalTime.get());
+        metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
       }
     } else {
       throw new IllegalStateException("Could not record metrics because there is no metrics tracker");

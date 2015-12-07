@@ -58,6 +58,7 @@ class NettyRequest implements RestRequest {
     if (request == null) {
       throw new IllegalArgumentException("Received null HttpRequest");
     }
+    restRequestMetricsTracker.nioLayerMetrics.markRequestReceived();
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;

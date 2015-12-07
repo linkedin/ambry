@@ -47,14 +47,14 @@ class NettyMetrics {
   public final Counter malformedRequestError;
   public final Counter missingResponseChannelError;
   public final Counter noRequestError;
-  public final Counter resourceReleaseError;
   public final Counter unknownHttpObjectError;
   // NettyRequest
   public final Counter unsupportedHttpMethodError;
   // NettyResponseChannel
   public final Counter deadResponseAccessError;
-  public final Counter responseCompleteTasksError;
   public final Counter errorResponseSendingError;
+  public final Counter responseCompleteTasksError;
+  public final Counter resourceReleaseError;
   // NettyServer
   public final Counter nettyServerShutdownError;
   public final Counter nettyServerStartError;
@@ -135,8 +135,6 @@ class NettyMetrics {
     missingResponseChannelError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "MissingResponseChannelError"));
     noRequestError = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "NoRequestError"));
-    resourceReleaseError =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ResourceReleaseError"));
     unknownHttpObjectError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownHttpObjectError"));
     // NettyRequest
@@ -145,10 +143,12 @@ class NettyMetrics {
     // NettyResponseChannel
     deadResponseAccessError =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DeadResponseAccessError"));
-    responseCompleteTasksError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseCompleteTasksError"));
     errorResponseSendingError =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseSendingError"));
+    responseCompleteTasksError =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseCompleteTasksError"));
+    resourceReleaseError =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResourceReleaseError"));
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));

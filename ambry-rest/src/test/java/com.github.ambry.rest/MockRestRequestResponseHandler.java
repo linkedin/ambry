@@ -107,7 +107,6 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
           }
         }
         restResponseChannel.onResponseComplete(exception);
-        restRequest.close();
         if (response != null) {
           response.close();
         }

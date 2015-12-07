@@ -292,6 +292,7 @@ class AsyncHandlerWorker implements Runnable {
       throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     handlePrechecks(restRequest, restResponseChannel);
+    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
     restServerMetrics.requestArrivalRate.mark();
     try {
       logger.trace("Queuing request {}", restRequest.getUri());
@@ -343,7 +344,9 @@ class AsyncHandlerWorker implements Runnable {
         restServerMetrics.responseCompletionRate.mark();
         logger.trace("There was no queuing required for response for request {}", restRequest.getUri());
         onResponseComplete(restRequest, restResponseChannel, exception, false);
-        releaseResources(restRequest, response);
+        if (response != null) {
+          releaseResources(response);
+        }
       } else {
         if (responses.putIfAbsent(restRequest, new AsyncResponseInfo(response, restResponseChannel)) != null) {
           restServerMetrics.responseAlreadyInFlightError.inc();
@@ -425,7 +428,6 @@ class AsyncHandlerWorker implements Runnable {
         restServerMetrics.requestProcessingError.inc();
         if (requestInfo != null) {
           onResponseComplete(requestInfo.getRestRequest(), requestInfo.getRestResponseChannel(), e, false);
-          releaseResources(requestInfo.getRestRequest(), null);
         } else {
           logger.error("Unexpected exception while processing requests", e);
         }
@@ -471,7 +473,7 @@ class AsyncHandlerWorker implements Runnable {
           long responseCompleteStartTime = System.currentTimeMillis();
           onResponseComplete(restRequest, restResponseChannel, exception, false);
           responseProcessingTime += (System.currentTimeMillis() - responseCompleteStartTime);
-          releaseResources(restRequest, response);
+          releaseResources(response);
           responseIterator.remove();
           queuedResponseCount.decrementAndGet();
           restServerMetrics.responseCompletionRate.mark();
@@ -520,7 +522,6 @@ class AsyncHandlerWorker implements Runnable {
           RestServiceException e = new RestServiceException("Unsupported REST method: " + restMethod,
               RestServiceErrorCode.UnsupportedRestMethod);
           onResponseComplete(restRequest, restResponseChannel, e, false);
-          releaseResources(restRequest, null);
       }
       blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
     } finally {
@@ -542,7 +543,6 @@ class AsyncHandlerWorker implements Runnable {
       while (residualRequestInfo != null) {
         onRequestDequeue(residualRequestInfo);
         onResponseComplete(residualRequestInfo.getRestRequest(), residualRequestInfo.getRestResponseChannel(), e, true);
-        releaseResources(residualRequestInfo.getRestRequest(), null);
         residualRequestInfo = requests.poll();
       }
     }
@@ -558,7 +558,7 @@ class AsyncHandlerWorker implements Runnable {
         ReadableStreamChannel response = asyncResponseInfo.getResponse();
         RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
         onResponseComplete(restRequest, restResponseChannel, e, true);
-        releaseResources(restRequest, response);
+        releaseResources(response);
         responseIterator.remove();
       }
     }
@@ -566,24 +566,14 @@ class AsyncHandlerWorker implements Runnable {
 
   /**
    * Cleans up resources.
-   * @param restRequest the {@link RestRequest} that needs to be cleaned up.
-   * @param readableStreamChannel the {@link ReadableStreamChannel} that needs to be cleaned up. Can be null.
+   * @param readableStreamChannel the {@link ReadableStreamChannel} that needs to be cleaned up.
    */
-  private void releaseResources(RestRequest restRequest, ReadableStreamChannel readableStreamChannel) {
+  private void releaseResources(ReadableStreamChannel readableStreamChannel) {
     try {
-      restRequest.close();
+      readableStreamChannel.close();
     } catch (IOException e) {
       restServerMetrics.resourceReleaseError.inc();
-      logger.error("Error closing request", e);
-    }
-
-    if (readableStreamChannel != null) {
-      try {
-        readableStreamChannel.close();
-      } catch (IOException e) {
-        restServerMetrics.resourceReleaseError.inc();
-        logger.error("Error closing response", e);
-      }
+      logger.error("Error closing response", e);
     }
   }
 
@@ -618,6 +608,7 @@ class AsyncHandlerWorker implements Runnable {
               restRequest.getRestMethod(), exception);
         }
       }
+      restRequest.getMetricsTracker().scalingLayerMetrics.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
       if (forceClose) {
         restResponseChannel.close();

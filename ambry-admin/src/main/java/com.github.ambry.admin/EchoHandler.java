@@ -48,7 +48,7 @@ class EchoHandler {
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
       adminMetrics.echoProcessingTimeInMs.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalTime(processingTime);
+      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
     }
     return channel;
   }

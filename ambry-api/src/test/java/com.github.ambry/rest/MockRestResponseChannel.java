@@ -92,6 +92,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   public static final String PRAGMA_KEY = "Pragma";
   public static final String DATE_KEY = "Date";
 
+  private final RestRequest restRequest;
   private AtomicBoolean channelOpen = new AtomicBoolean(true);
   private AtomicBoolean requestComplete = new AtomicBoolean(false);
   private AtomicBoolean responseMetadataFinalized = new AtomicBoolean(false);
@@ -105,7 +106,13 @@ public class MockRestResponseChannel implements RestResponseChannel {
 
   public MockRestResponseChannel()
       throws JSONException {
+    this(null);
+  }
+
+  public MockRestResponseChannel(RestRequest restRequest)
+      throws JSONException {
     responseMetadata.put(RESPONSE_STATUS_KEY, ResponseStatus.Ok);
+    this.restRequest = restRequest;
   }
 
   @Override
@@ -156,12 +163,13 @@ public class MockRestResponseChannel implements RestResponseChannel {
           responseMetadata.put(RESPONSE_STATUS_KEY, status);
           unflushedBodyBytes.write(cause.toString().getBytes());
           responseMetadataFinalized.set(true);
-        } else if (cause != null) {
-          throw new IllegalStateException("Discovered that a responseMetadata had already been sent to the client when"
-              + " attempting to send an error responseMetadata. The original cause of error follows: ", cause);
         }
         flush();
         close();
+        if (restRequest != null) {
+          restRequest.getMetricsTracker().nioLayerMetrics.markRequestCompleted();
+          restRequest.close();
+        }
         onEventComplete(Event.OnRequestComplete);
       } catch (Exception e) {
         // nothing to do

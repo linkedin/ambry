@@ -11,25 +11,29 @@ import com.codahale.metrics.MetricRegistry;
  * used to track all requests of that type.
  */
 public class RestRequestMetrics {
-  protected static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTime";
-  protected static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTime";
+  protected static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
+  protected static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTimeInMs";
+  protected static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
 
-  protected static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTime";
-  protected static final String SC_REQUEST_QUEUING_TIME_SUFFIX = "ScRequestQueuingTime";
-  protected static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTime";
-  protected static final String SC_RESPONSE_QUEUING_TIME_SUFFIX = "ScResponseQueuingTime";
+  protected static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
+  protected static final String SC_REQUEST_QUEUING_TIME_SUFFIX = "ScRequestQueuingTimeInMs";
+  protected static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTimeInMs";
+  protected static final String SC_RESPONSE_QUEUING_TIME_SUFFIX = "ScResponseQueuingTimeInMs";
+  protected static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
 
-  protected static final String TOTAL_TIME_SUFFIX = "TotalTime";
+  protected static final String TOTAL_CPU_TIME_SUFFIX = "TotalCpuTimeInMs";
 
-  protected final Histogram nioRequestProcessingTime;
-  protected final Histogram nioResponseProcessingTime;
+  protected final Histogram nioRequestProcessingTimeInMs;
+  protected final Histogram nioResponseProcessingTimeInMs;
+  protected final Histogram nioRoundTripTimeInMs;
 
-  protected final Histogram scRequestProcessingTime;
-  protected final Histogram scRequestQueuingTime;
-  protected final Histogram scResponseProcessingTime;
-  protected final Histogram scResponseQueuingTime;
+  protected final Histogram scRequestProcessingTimeInMs;
+  protected final Histogram scRequestQueuingTimeInMs;
+  protected final Histogram scResponseProcessingTimeInMs;
+  protected final Histogram scResponseQueuingTimeInMs;
+  protected final Histogram scRoundTripTimeInMs;
 
-  protected final Histogram totalTime;
+  protected final Histogram totalCpuTimeInMs;
 
   /**
    * Creates an instance of RestRequestMetrics for {@code requestType} and attaches all the metrics related to the
@@ -45,20 +49,24 @@ public class RestRequestMetrics {
               + "]. Metric registry - [" + metricRegistry + "]");
     }
 
-    nioRequestProcessingTime =
+    nioRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_REQUEST_PROCESSING_TIME_SUFFIX));
-    nioResponseProcessingTime =
+    nioResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_RESPONSE_PROCESSING_TIME_SUFFIX));
+    nioRoundTripTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_ROUND_TRIP_TIME_SUFFIX));
 
-    scRequestProcessingTime =
+    scRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_TIME_SUFFIX));
-    scRequestQueuingTime =
+    scRequestQueuingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_QUEUING_TIME_SUFFIX));
-    scResponseProcessingTime =
+    scResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_TIME_SUFFIX));
-    scResponseQueuingTime =
+    scResponseQueuingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_QUEUING_TIME_SUFFIX));
+    scRoundTripTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 
-    totalTime = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + TOTAL_TIME_SUFFIX));
+    totalCpuTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + TOTAL_CPU_TIME_SUFFIX));
   }
 }

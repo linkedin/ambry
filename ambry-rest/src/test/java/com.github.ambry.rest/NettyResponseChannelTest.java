@@ -29,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -195,12 +196,12 @@ public class NettyResponseChannelTest {
     assertTrue("Channel is not open", channel.isOpen());
     DefaultChannelPromise future = new DefaultChannelPromise(channel);
 
-    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics);
+    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics, new AtomicBoolean(false));
     // operationComplete() should not throw exceptions even though NettyRequest is null.
     future.setSuccess();
     listener.operationComplete(future);
 
-    listener = new ChannelWriteResultListener(nettyRequest, nettyMetrics);
+    listener = new ChannelWriteResultListener(nettyRequest, nettyMetrics, new AtomicBoolean(false));
     // successful operationComplete() and NettyRequest present.
     future = new DefaultChannelPromise(channel);
     future.setSuccess();
@@ -624,9 +625,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         case CopyHeaders:
           copyHeaders(httpRequest);
           restResponseChannel.onResponseComplete(null);
+          assertFalse("Request channel is not closed", request.isOpen());
           break;
         case ImmediateResponseComplete:
           restResponseChannel.onResponseComplete(null);
+          assertFalse("Request channel is not closed", request.isOpen());
           break;
         case FillWriteBuffer:
           ctx.channel().config().setWriteBufferLowWaterMark(1);
@@ -638,26 +641,31 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           break;
         case MultipleClose:
           restResponseChannel.onResponseComplete(null);
+          assertFalse("Request channel is not closed", request.isOpen());
           restResponseChannel.close();
           restResponseChannel.close();
           break;
         case MultipleOnResponseComplete:
           restResponseChannel.onResponseComplete(null);
+          assertFalse("Request channel is not closed", request.isOpen());
           restResponseChannel.onResponseComplete(null);
           break;
         case OnResponseCompleteWithBadRequest:
           restResponseChannel.onResponseComplete(
               new RestServiceException(TestingUri.OnResponseCompleteWithBadRequest.toString(),
                   RestServiceErrorCode.BadRequest));
+          assertFalse("Request channel is not closed", request.isOpen());
           break;
         case OnResponseCompleteWithInternalServerError:
           restResponseChannel.onResponseComplete(
               new RestServiceException(TestingUri.OnResponseCompleteWithInternalServerError.toString(),
                   RestServiceErrorCode.InternalServerError));
+          assertFalse("Request channel is not closed", request.isOpen());
           break;
         case OnResponseCompleteWithRuntimeException:
           restResponseChannel
               .onResponseComplete(new RuntimeException(TestingUri.OnResponseCompleteWithRuntimeException.toString()));
+          assertFalse("Request channel is not closed", request.isOpen());
           break;
         case SetNullHeader:
           setNullHeaders();
@@ -667,6 +675,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           break;
         case WriteAfterClose:
           restResponseChannel.close();
+          assertFalse("Request channel is not closed", request.isOpen());
           restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()));
           break;
         case WriteWithDirectBuffer:
@@ -695,6 +704,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       assertEquals("Bytes written not equal to content size", httpContent.content().array().length, bytesWritten);
       if (isLast) {
         restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
       }
     } else {
       throw new RestServiceException("Received data without a request", RestServiceErrorCode.InvalidRequestState);
@@ -759,6 +769,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     } finally {
       restResponseChannel.setStatus(status);
       restResponseChannel.onResponseComplete(null);
+      assertFalse("Request channel is not closed", request.isOpen());
     }
   }
 
@@ -790,6 +801,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     } finally {
       restResponseChannel.setStatus(status);
       restResponseChannel.onResponseComplete(null);
+      assertFalse("Request channel is not closed", request.isOpen());
     }
   }
 }

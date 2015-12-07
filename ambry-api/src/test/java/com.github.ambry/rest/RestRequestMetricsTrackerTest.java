@@ -39,6 +39,28 @@ public class RestRequestMetricsTrackerTest {
     }
   }
 
+  /**
+   * Tests reaction to bad calls to {@link RestRequestMetricsTracker.NioLayerMetrics#markRequestCompleted()} and
+   * {@link RestRequestMetricsTracker.ScalingLayerMetrics#markRequestCompleted()}
+   */
+  @Test
+  public void requestMarkingExceptionsTest() {
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    try {
+      requestMetrics.nioLayerMetrics.markRequestCompleted();
+      fail("Marking request as complete before marking it received should have thrown exception");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+
+    try {
+      requestMetrics.scalingLayerMetrics.markRequestCompleted();
+      fail("Marking request as complete before marking it received should have thrown exception");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+  }
+
   // commonCaseTest() helpers
 
   /**
@@ -50,7 +72,7 @@ public class RestRequestMetricsTrackerTest {
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     TestMetrics testMetrics = new TestMetrics(requestMetrics);
     long additionalTime = 20;
-    requestMetrics.addToTotalTime(additionalTime);
+    requestMetrics.addToTotalCpuTime(additionalTime);
     requestMetrics.recordMetrics();
     String metricPrefix =
         RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
@@ -68,7 +90,7 @@ public class RestRequestMetricsTrackerTest {
     RestRequestMetrics restRequestMetrics = new RestRequestMetrics(getClass(), testRequestType, metricRegistry);
     TestMetrics testMetrics = new TestMetrics(requestMetrics);
     long additionalTime = 20;
-    requestMetrics.addToTotalTime(additionalTime);
+    requestMetrics.addToTotalCpuTime(additionalTime);
     requestMetrics.injectMetrics(restRequestMetrics);
     requestMetrics.recordMetrics();
     String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
@@ -102,7 +124,7 @@ class TestMetrics {
    * @param metricPrefix the prefix of the metrics to look for.
    * @param metricRegistry the {@link MetricRegistry} where metrics were recorded.
    * @param additionalTime any additional time added to the total time via a call to
-   *                        {@link RestRequestMetricsTracker#addToTotalTime(long)}.
+   *                        {@link RestRequestMetricsTracker#addToTotalCpuTime(long)}.
    */
   protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry, long additionalTime) {
     long totalTime = getTotalTime() + additionalTime;
@@ -126,8 +148,8 @@ class TestMetrics {
     assertEquals("SC response queuing time unequal", scResponseQueuingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_QUEUING_TIME_SUFFIX).getSnapshot().getValues()[0]);
 
-    assertEquals("Request total service time unequal", totalTime,
-        histograms.get(metricPrefix + RestRequestMetrics.TOTAL_TIME_SUFFIX).getSnapshot().getValues()[0]);
+    assertEquals("Request total CPU time unequal", totalTime,
+        histograms.get(metricPrefix + RestRequestMetrics.TOTAL_CPU_TIME_SUFFIX).getSnapshot().getValues()[0]);
   }
 
   /**
