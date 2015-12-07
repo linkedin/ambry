@@ -5,11 +5,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -168,11 +165,11 @@ public class RestServerMetrics {
   public void registerAsyncRequestResponseHandler(final AsyncRequestResponseHandler requestResponseHandler) {
     int pos = asyncHandlerWorkerIndex.getAndIncrement();
     Gauge<Integer> gauge = new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return requestResponseHandler.getRequestQueueSize();
-        }
-      };
+      @Override
+      public Integer getValue() {
+        return requestResponseHandler.getRequestQueueSize();
+      }
+    };
     metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
     gauge = new Gauge<Integer>() {
       @Override

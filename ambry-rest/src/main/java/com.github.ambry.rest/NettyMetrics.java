@@ -25,8 +25,11 @@ class NettyMetrics {
   public final Meter requestCompletionRate;
 
   // Latencies
+  // NettyMessageProcessor
+  public final Histogram requestChunkProcessingTimeInMs;
   // NettyResponseChannel
   public final Histogram channelWriteProcessingTimeInMs;
+  public final Histogram chunkWriteTimeInMs;
   public final Histogram errorResponseProcessingTimeInMs;
   public final Histogram headerSetTimeInMs;
   public final Histogram responseMetadataProcessingTimeInMs;
@@ -96,9 +99,14 @@ class NettyMetrics {
         metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "RequestCompletionRate"));
 
     // Latencies
+    // NettyMessageProcessor
+    requestChunkProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "RequestChunkProcessingTimeInMs"));
     // NettyResponseChannel
     channelWriteProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteProcessingTimeInMs"));
+    chunkWriteTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChunkWriteTimeInMs"));
     errorResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseProcessingTimeInMs"));
     headerSetTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "HeaderSetTimeInMs"));

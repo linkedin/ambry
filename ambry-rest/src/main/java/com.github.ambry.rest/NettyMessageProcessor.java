@@ -289,8 +289,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
               RestServiceErrorCode.RequestChannelClosed);
         }
       } finally {
-        request.getMetricsTracker().nioLayerMetrics
-            .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+        long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
+        nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
+        request.getMetricsTracker().nioLayerMetrics.addToRequestProcessingTime(chunkProcessingTime);
       }
       if (!request.getRestMethod().equals(RestMethod.POST)) {
         requestHandler.handleRequest(request, responseChannel);

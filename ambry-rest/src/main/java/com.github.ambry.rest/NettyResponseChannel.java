@@ -610,8 +610,9 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
       nettyMetrics.channelWriteError.inc();
     } else {
       if (nettyRequest != null) {
-        nettyRequest.getMetricsTracker().nioLayerMetrics
-            .addToResponseProcessingTime(System.currentTimeMillis() - writeStartTime);
+        long chunkWriteTime = System.currentTimeMillis() - writeStartTime;
+        nettyMetrics.chunkWriteTimeInMs.update(chunkWriteTime);
+        nettyRequest.getMetricsTracker().nioLayerMetrics.addToResponseProcessingTime(chunkWriteTime);
       } else {
         nettyMetrics.metricsTrackingError.inc();
         logger.warn("Request not set in response channel for {}", future.channel());

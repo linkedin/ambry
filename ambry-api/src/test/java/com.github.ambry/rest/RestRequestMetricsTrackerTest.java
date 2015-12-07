@@ -52,7 +52,8 @@ public class RestRequestMetricsTrackerTest {
     long additionalTime = 20;
     requestMetrics.addToTotalTime(additionalTime);
     requestMetrics.recordMetrics();
-    String metricPrefix = RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
+    String metricPrefix =
+        RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
     testMetrics.compareMetrics(metricPrefix, metricRegistry, additionalTime);
   }
 

@@ -5,7 +5,6 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.rest.RestRequestMetrics;
-import com.github.ambry.rest.RestRequestMetricsTracker;
 
 
 /**
@@ -101,8 +100,8 @@ class AdminMetrics {
     // GET
     echoMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "Echo", metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetBlob", metricRegistry);
-    getReplicasForBlobIdMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetReplicasForBlobId",
-            metricRegistry);
+    getReplicasForBlobIdMetrics =
+        new RestRequestMetrics(AdminBlobStorageService.class, "GetReplicasForBlobId", metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob", metricRegistry);
 
