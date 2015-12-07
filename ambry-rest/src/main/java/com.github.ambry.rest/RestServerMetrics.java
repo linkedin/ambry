@@ -46,6 +46,8 @@ public class RestServerMetrics {
   // AsyncRequestResponseHandler
   public final Counter requestResponseHandlerShutdownError;
   public final Counter requestResponseHandlerUnavailableError;
+  // AsyncResponseInfo
+  public final Counter trackingError;
   // RestServer
   public final Counter restServerInstantiationError;
   // RestServerMetrics
@@ -118,6 +120,8 @@ public class RestServerMetrics {
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownError"));
     requestResponseHandlerUnavailableError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "UnavailableError"));
+    // AsyncResponseInfo
+    trackingError = metricRegistry.counter(MetricRegistry.name(AsyncResponseInfo.class, "TrackingError"));
     // RestServer
     restServerInstantiationError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
     // RestServerMetrics

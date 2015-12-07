@@ -476,6 +476,8 @@ class AsyncHandlerWorker implements Runnable {
           queuedResponseCount.decrementAndGet();
           restServerMetrics.responseCompletionRate.mark();
           logger.trace("Response complete for request {}", restRequest.getUri());
+        } else {
+          asyncResponseInfo.recordQueueStartTime();
         }
       } finally {
         restRequest.getMetricsTracker().scalingLayerMetrics
@@ -648,6 +650,9 @@ class AsyncHandlerWorker implements Runnable {
     Long queueTime = responseInfo.getQueueTime();
     if (queueTime != null) {
       restRequest.getMetricsTracker().scalingLayerMetrics.addToResponseQueuingTime(queueTime);
+    } else {
+      logger.error("Respone queuing time was not recorded");
+      restServerMetrics.trackingError.inc();
     }
   }
 }
@@ -733,5 +738,9 @@ class AsyncResponseInfo {
       queueStartTime = null;
     }
     return queueTime;
+  }
+
+  public void recordQueueStartTime() {
+    queueStartTime = System.currentTimeMillis();
   }
 }
