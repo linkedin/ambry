@@ -147,7 +147,7 @@ class NettyResponseChannel implements RestResponseChannel {
           System.currentTimeMillis() - writeProcessingStartTime - responseMetadataWriteTime - channelWriteTime;
       nettyMetrics.writeProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
-        request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
+        request.getMetricsTracker().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
     }
   }
@@ -322,7 +322,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long writeProcessingTime = currentTime - writeProcessingStartTime - channelWriteTime;
       nettyMetrics.responseMetadataProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
-        request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
+        request.getMetricsTracker().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
     }
   }
@@ -367,7 +367,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long writeProcessingTime = currentTime - channelWriteProcessingTime - channelWriteTime;
       nettyMetrics.channelWriteProcessingTimeInMs.update(writeProcessingTime);
       if (request != null) {
-        request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
+        request.getMetricsTracker().nioLayerMetrics.addToResponseProcessingTime(writeProcessingTime);
       }
     }
   }
@@ -478,7 +478,7 @@ class NettyResponseChannel implements RestResponseChannel {
           System.currentTimeMillis() - errorResponseProcessingStartTime - channelWriteTime;
       nettyMetrics.errorResponseProcessingTimeInMs.update(errorResponseProcessingTime);
       if (request != null) {
-        request.getMetrics().nioLayerMetrics.addToResponseProcessingTime(errorResponseProcessingTime);
+        request.getMetricsTracker().nioLayerMetrics.addToResponseProcessingTime(errorResponseProcessingTime);
       }
     }
   }
@@ -610,7 +610,7 @@ class ChannelWriteResultListener implements GenericFutureListener<ChannelFuture>
       nettyMetrics.channelWriteError.inc();
     } else {
       if (nettyRequest != null) {
-        nettyRequest.getMetrics().nioLayerMetrics
+        nettyRequest.getMetricsTracker().nioLayerMetrics
             .addToResponseProcessingTime(System.currentTimeMillis() - writeStartTime);
       } else {
         nettyMetrics.metricsTrackingError.inc();

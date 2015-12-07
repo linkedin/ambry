@@ -16,7 +16,7 @@ import com.github.ambry.rest.RequestResponseHandlerController;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestRequestMetricsTracker;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServerMetrics;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -77,7 +77,7 @@ public class AdminBlobStorageServiceTest {
    */
   public AdminBlobStorageServiceTest()
       throws InstantiationException, IOException {
-    RestRequestMetrics.setDefaults(new MetricRegistry());
+    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(new VerifiableProperties(new Properties()));
     adminResponseHandlerController = new AdminResponseHandlerController();
     adminBlobStorageService = getAdminBlobStorageService();
@@ -1421,8 +1421,8 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public RestRequestMetrics getMetrics() {
-    return new RestRequestMetrics();
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return new RestRequestMetricsTracker();
   }
 
   @Override

@@ -242,7 +242,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         responseChannel.setRequest(request);
         logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
       } finally {
-        request.getMetrics().nioLayerMetrics
+        request.getMetricsTracker().nioLayerMetrics
             .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
       }
       // We send POST for handling immediately since we expect valid content with it.
@@ -289,7 +289,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
               RestServiceErrorCode.RequestChannelClosed);
         }
       } finally {
-        request.getMetrics().nioLayerMetrics
+        request.getMetricsTracker().nioLayerMetrics
             .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
       }
       if (!request.getRestMethod().equals(RestMethod.POST)) {

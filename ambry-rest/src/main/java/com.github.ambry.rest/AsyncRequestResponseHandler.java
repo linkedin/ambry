@@ -319,7 +319,7 @@ class AsyncHandlerWorker implements Runnable {
     } finally {
       long preProcessingTime = System.currentTimeMillis() - processingStartTime;
       restServerMetrics.requestPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetrics().scalingLayerMetrics.addToRequestProcessingTime(preProcessingTime);
+      restRequest.getMetricsTracker().scalingLayerMetrics.addToRequestProcessingTime(preProcessingTime);
     }
   }
 
@@ -358,7 +358,7 @@ class AsyncHandlerWorker implements Runnable {
     } finally {
       long preProcessingTime = System.currentTimeMillis() - processingStartTime;
       restServerMetrics.responsePreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetrics().scalingLayerMetrics.addToResponseProcessingTime(preProcessingTime);
+      restRequest.getMetricsTracker().scalingLayerMetrics.addToResponseProcessingTime(preProcessingTime);
     }
   }
 
@@ -478,7 +478,7 @@ class AsyncHandlerWorker implements Runnable {
           logger.trace("Response complete for request {}", restRequest.getUri());
         }
       } finally {
-        restRequest.getMetrics().scalingLayerMetrics
+        restRequest.getMetricsTracker().scalingLayerMetrics
             .addToResponseProcessingTime(System.currentTimeMillis() - processingStartTime - responseProcessingTime);
       }
     }
@@ -522,7 +522,7 @@ class AsyncHandlerWorker implements Runnable {
       }
       blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
     } finally {
-      restRequest.getMetrics().scalingLayerMetrics
+      restRequest.getMetricsTracker().scalingLayerMetrics
           .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
     }
   }
@@ -635,7 +635,7 @@ class AsyncHandlerWorker implements Runnable {
     restServerMetrics.requestDequeuingRate.mark();
     Long queueTime = requestInfo.getQueueTime();
     if (queueTime != null) {
-      requestInfo.getRestRequest().getMetrics().scalingLayerMetrics.addToRequestQueuingTime(queueTime);
+      requestInfo.getRestRequest().getMetricsTracker().scalingLayerMetrics.addToRequestQueuingTime(queueTime);
     }
   }
 
@@ -647,7 +647,7 @@ class AsyncHandlerWorker implements Runnable {
   private void onResponseDequeue(RestRequest restRequest, AsyncResponseInfo responseInfo) {
     Long queueTime = responseInfo.getQueueTime();
     if (queueTime != null) {
-      restRequest.getMetrics().scalingLayerMetrics.addToResponseQueuingTime(queueTime);
+      restRequest.getMetricsTracker().scalingLayerMetrics.addToResponseQueuingTime(queueTime);
     }
   }
 }

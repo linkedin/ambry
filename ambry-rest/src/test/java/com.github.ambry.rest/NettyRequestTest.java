@@ -347,7 +347,7 @@ public class NettyRequestTest {
   private NettyRequest createNettyRequest(HttpMethod httpMethod, String uri, HttpHeaders headers)
       throws RestServiceException {
     MetricRegistry metricRegistry = new MetricRegistry();
-    RestRequestMetrics.setDefaults(metricRegistry);
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
     if (headers != null) {
       httpRequest.headers().set(headers);

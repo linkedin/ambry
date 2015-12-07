@@ -227,8 +227,8 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public RestRequestMetrics getMetrics() {
-    return new RestRequestMetrics();
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return new RestRequestMetricsTracker();
   }
 
   /**

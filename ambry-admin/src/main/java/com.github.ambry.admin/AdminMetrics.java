@@ -5,6 +5,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestRequestMetricsTracker;
 
 
 /**
@@ -14,17 +15,17 @@ import com.github.ambry.rest.RestRequestMetrics;
  */
 class AdminMetrics {
 
-  // RequestMetricsTracker instances
+  // RestRequestMetrics instances
   // DELETE
-  public final RestRequestMetrics.RequestMetricsTracker deleteBlobTracker;
+  public final RestRequestMetrics deleteBlobMetrics;
   // HEAD
-  public final RestRequestMetrics.RequestMetricsTracker headBlobTracker;
+  public final RestRequestMetrics headBlobMetrics;
   // GET
-  public final RestRequestMetrics.RequestMetricsTracker echoTracker;
-  public final RestRequestMetrics.RequestMetricsTracker getBlobTracker;
-  public final RestRequestMetrics.RequestMetricsTracker getReplicasForBlobIdTracker;
+  public final RestRequestMetrics echoMetrics;
+  public final RestRequestMetrics getBlobMetrics;
+  public final RestRequestMetrics getReplicasForBlobIdMetrics;
   // POST
-  public final RestRequestMetrics.RequestMetricsTracker postBlobTracker;
+  public final RestRequestMetrics postBlobMetrics;
 
   // Rates
   // AdminBlobStorageService
@@ -92,23 +93,18 @@ class AdminMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public AdminMetrics(MetricRegistry metricRegistry) {
-    // RequestMetricsTracker instances
+    // RestRequestMetrics instances
     // DELETE
-    deleteBlobTracker =
-        new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "DeleteBlob", metricRegistry);
+    deleteBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "DeleteBlob", metricRegistry);
     // HEAD
-    headBlobTracker =
-        new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "HeadBlob", metricRegistry);
+    headBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "HeadBlob", metricRegistry);
     // GET
-    echoTracker = new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "Echo", metricRegistry);
-    getBlobTracker =
-        new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "GetBlob", metricRegistry);
-    getReplicasForBlobIdTracker =
-        new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "GetReplicasForBlobId",
+    echoMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "Echo", metricRegistry);
+    getBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetBlob", metricRegistry);
+    getReplicasForBlobIdMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetReplicasForBlobId",
             metricRegistry);
     // POST
-    postBlobTracker =
-        new RestRequestMetrics.RequestMetricsTracker(AdminBlobStorageService.class, "PostBlob", metricRegistry);
+    postBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob", metricRegistry);
 
     // Rates
     // AdminBlobStorageService
