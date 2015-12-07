@@ -718,9 +718,9 @@ class AsyncResponseInfo {
   }
 
   /**
-   * Gets the time elapsed since the construction of this object. This function returns a non-null value only on the
-   * first call. All subsequent calls return null.
-   * @return On the first call, the time elapsed since the construction of the object. {@code null} on subsequent calls.
+   * Gets the time elapsed since the last time this object was queued. The last time this object was queued is either
+   * on construction or on a call to {@link #recordQueueStartTime()}.
+   * @return the time elapsed since the last time the object was queued.
    */
   public Long getQueueTime() {
     Long queueTime = null;
