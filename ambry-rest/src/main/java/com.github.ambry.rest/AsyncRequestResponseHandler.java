@@ -244,10 +244,9 @@ class AsyncHandlerWorker implements Runnable {
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
     if (blobStorageService == null) {
       throw new IllegalArgumentException("BlobStorageService cannot be null");
-    } else {
-      this.blobStorageService = blobStorageService;
-      logger.trace("BlobStorage service set to {}", blobStorageService.getClass());
     }
+    this.blobStorageService = blobStorageService;
+    logger.trace("BlobStorage service set to {}", blobStorageService.getClass());
   }
 
   /**
@@ -292,7 +291,7 @@ class AsyncHandlerWorker implements Runnable {
       throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restServerMetrics.requestArrivalRate.mark();
     try {
       logger.trace("Queuing request {}", restRequest.getUri());
@@ -320,7 +319,7 @@ class AsyncHandlerWorker implements Runnable {
     } finally {
       long preProcessingTime = System.currentTimeMillis() - processingStartTime;
       restServerMetrics.requestPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().scalingLayerMetrics.addToRequestProcessingTime(preProcessingTime);
+      restRequest.getMetricsTracker().scalingMetricsTracker.addToRequestProcessingTime(preProcessingTime);
     }
   }
 
@@ -361,7 +360,7 @@ class AsyncHandlerWorker implements Runnable {
     } finally {
       long preProcessingTime = System.currentTimeMillis() - processingStartTime;
       restServerMetrics.responsePreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().scalingLayerMetrics.addToResponseProcessingTime(preProcessingTime);
+      restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingTime(preProcessingTime);
     }
   }
 
@@ -482,7 +481,7 @@ class AsyncHandlerWorker implements Runnable {
           asyncResponseInfo.recordQueueStartTime();
         }
       } finally {
-        restRequest.getMetricsTracker().scalingLayerMetrics
+        restRequest.getMetricsTracker().scalingMetricsTracker
             .addToResponseProcessingTime(System.currentTimeMillis() - processingStartTime - responseProcessingTime);
       }
     }
@@ -525,7 +524,7 @@ class AsyncHandlerWorker implements Runnable {
       }
       blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
     } finally {
-      restRequest.getMetricsTracker().scalingLayerMetrics
+      restRequest.getMetricsTracker().scalingMetricsTracker
           .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
     }
   }
@@ -608,7 +607,7 @@ class AsyncHandlerWorker implements Runnable {
               restRequest.getRestMethod(), exception);
         }
       }
-      restRequest.getMetricsTracker().scalingLayerMetrics.markRequestCompleted();
+      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
       if (forceClose) {
         restResponseChannel.close();
@@ -628,7 +627,7 @@ class AsyncHandlerWorker implements Runnable {
     restServerMetrics.requestDequeuingRate.mark();
     Long queueTime = requestInfo.getQueueTime();
     if (queueTime != null) {
-      requestInfo.getRestRequest().getMetricsTracker().scalingLayerMetrics.addToRequestQueuingTime(queueTime);
+      requestInfo.getRestRequest().getMetricsTracker().scalingMetricsTracker.addToRequestQueuingTime(queueTime);
     }
   }
 
@@ -640,7 +639,7 @@ class AsyncHandlerWorker implements Runnable {
   private void onResponseDequeue(RestRequest restRequest, AsyncResponseInfo responseInfo) {
     Long queueTime = responseInfo.getQueueTime();
     if (queueTime != null) {
-      restRequest.getMetricsTracker().scalingLayerMetrics.addToResponseQueuingTime(queueTime);
+      restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseQueuingTime(queueTime);
     } else {
       logger.error("Respone queuing time was not recorded");
       restServerMetrics.trackingError.inc();

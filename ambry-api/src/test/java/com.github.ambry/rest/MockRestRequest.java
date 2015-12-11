@@ -96,7 +96,7 @@ public class MockRestRequest implements RestRequest {
    */
   public MockRestRequest(JSONObject data, List<ByteBuffer> requestContents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    restRequestMetricsTracker.nioLayerMetrics.markRequestReceived();
+    restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
     this.restMethod = RestMethod.valueOf(data.getString(REST_METHOD_KEY));
     this.uri = new URI(data.getString(URI_KEY));
     JSONObject headers = data.has(HEADERS_KEY) ? data.getJSONObject(HEADERS_KEY) : null;

@@ -9,6 +9,21 @@ import java.util.concurrent.atomic.AtomicLong;
  * Construct to support end-to-end metrics tracking based on request type. Usually accompanies a single
  * {@link RestRequest} i.e. there is a one-to-one mapping b/w a {@link RestRequest} and a RestRequestMetricsTracker
  * instance.
+ * <p/>
+ * A brief description of how the tracker works :-
+ * 1. When an object of type {@link RestRequest} (request) is instantiated, it is also expected to be associated with a
+ *    unique instance of RestRequestMetricsTracker (tracker). This unique instance is returned on every call to
+ *    {@link RestRequest#getMetricsTracker()}. Therefore there is one-to-one mapping between an instance of
+ *    {@link RestRequest} and an instance of RestRequestMetricsTracker.
+ * 2. When the tracker is instantiated, the type of the request is usually not available. Therefore, the
+ *    {@link RestRequestMetrics} (metrics) object associated with the tracker tracks "unknown" requests.
+ * 3. As the request passes through the NIO framework and the scaling framework, metrics associated with these layers
+ *    are tracked and stored but not updated in the metrics object.
+ * 4. When the request reaches the {@link BlobStorageService}, it is usually identified as a specific type and a custom
+ *    metrics object that tracks that specific type of request is "injected" into the tracker associated with the
+ *    request.
+ * 5. When the response for the request is complete and the request is "closed", the metrics that are stored are
+ *    updated in the metrics object (injected or default).
  */
 public class RestRequestMetricsTracker {
   protected static final String DEFAULT_REQUEST_TYPE = "Unknown";
@@ -16,22 +31,25 @@ public class RestRequestMetricsTracker {
   private static RestRequestMetrics defaultMetrics;
 
   /**
-   * Metrics that should be updated in the NIO layer.
+   * NIO related metrics tracker instance.
    */
-  public final NioLayerMetrics nioLayerMetrics = new NioLayerMetrics();
+  public final NioMetricsTracker nioMetricsTracker = new NioMetricsTracker();
   /**
-   * Metrics that should be updated in the scaling layer.
+   * Scaling related metrics tracker instance.
    */
-  public final ScalingLayerMetrics scalingLayerMetrics = new ScalingLayerMetrics();
+  public final ScalingMetricsTracker scalingMetricsTracker = new ScalingMetricsTracker();
 
   private final AtomicLong totalCpuTimeInMs = new AtomicLong(0);
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
 
   /**
-   * Metrics that are updated at the NIO layer.
+   * Tracker for updating NIO related metrics.
+   * </p>
+   * These are usually updated in classes implemented by the {@link NioServer} framework (e.g. Implementations of
+   * {@link RestRequest}, {@link RestResponseChannel} or any other classes that form a part of the framework).
    */
-  public class NioLayerMetrics {
+  public class NioMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
 
@@ -81,9 +99,10 @@ public class RestRequestMetricsTracker {
   }
 
   /**
-   * Metrics that are updated at the scaling layer.
+   * Helper for updating scaling related metrics. These metrics are updated in the classes that provide scaling
+   * capabilities when transferring control from {@link NioServer} to {@link BlobStorageService}.
    */
-  public class ScalingLayerMetrics {
+  public class ScalingMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong requestQueuingTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
@@ -187,15 +206,15 @@ public class RestRequestMetricsTracker {
   public void recordMetrics() {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
-        metrics.nioRequestProcessingTimeInMs.update(nioLayerMetrics.requestProcessingTimeInMs.get());
-        metrics.nioResponseProcessingTimeInMs.update(nioLayerMetrics.responseProcessingTimeInMs.get());
-        metrics.nioRoundTripTimeInMs.update(nioLayerMetrics.roundTripTimeInMs);
+        metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
+        metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
+        metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
 
-        metrics.scRequestProcessingTimeInMs.update(scalingLayerMetrics.requestProcessingTimeInMs.get());
-        metrics.scRequestQueuingTimeInMs.update(scalingLayerMetrics.requestQueuingTimeInMs.get());
-        metrics.scResponseProcessingTimeInMs.update(scalingLayerMetrics.responseProcessingTimeInMs.get());
-        metrics.scResponseQueuingTimeInMs.update(scalingLayerMetrics.responseQueuingTimeInMs.get());
-        metrics.scRoundTripTimeInMs.update(scalingLayerMetrics.roundTripTimeInMs);
+        metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
+        metrics.scRequestQueuingTimeInMs.update(scalingMetricsTracker.requestQueuingTimeInMs.get());
+        metrics.scResponseProcessingTimeInMs.update(scalingMetricsTracker.responseProcessingTimeInMs.get());
+        metrics.scResponseQueuingTimeInMs.update(scalingMetricsTracker.responseQueuingTimeInMs.get());
+        metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
 
         metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
       }

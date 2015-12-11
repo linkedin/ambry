@@ -40,21 +40,21 @@ public class RestRequestMetricsTrackerTest {
   }
 
   /**
-   * Tests reaction to bad calls to {@link RestRequestMetricsTracker.NioLayerMetrics#markRequestCompleted()} and
-   * {@link RestRequestMetricsTracker.ScalingLayerMetrics#markRequestCompleted()}
+   * Tests reaction to bad calls to {@link RestRequestMetricsTracker.NioMetricsTracker#markRequestCompleted()} and
+   * {@link RestRequestMetricsTracker.ScalingMetricsTracker#markRequestCompleted()}
    */
   @Test
   public void requestMarkingExceptionsTest() {
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     try {
-      requestMetrics.nioLayerMetrics.markRequestCompleted();
+      requestMetrics.nioMetricsTracker.markRequestCompleted();
       fail("Marking request as complete before marking it received should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
     }
 
     try {
-      requestMetrics.scalingLayerMetrics.markRequestCompleted();
+      requestMetrics.scalingMetricsTracker.markRequestCompleted();
       fail("Marking request as complete before marking it received should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
@@ -157,13 +157,13 @@ class TestMetrics {
    * @param restRequestMetricsTracker the instance of {@link RestRequestMetricsTracker} where metrics have to be updated.
    */
   private void updateMetrics(RestRequestMetricsTracker restRequestMetricsTracker) {
-    restRequestMetricsTracker.nioLayerMetrics.addToRequestProcessingTime(nioLayerRequestProcessingTime);
-    restRequestMetricsTracker.nioLayerMetrics.addToResponseProcessingTime(nioLayerResponseProcessingTime);
+    restRequestMetricsTracker.nioMetricsTracker.addToRequestProcessingTime(nioLayerRequestProcessingTime);
+    restRequestMetricsTracker.nioMetricsTracker.addToResponseProcessingTime(nioLayerResponseProcessingTime);
 
-    restRequestMetricsTracker.scalingLayerMetrics.addToRequestProcessingTime(scRequestProcessingTime);
-    restRequestMetricsTracker.scalingLayerMetrics.addToResponseProcessingTime(scResponseProcessingTime);
-    restRequestMetricsTracker.scalingLayerMetrics.addToRequestQueuingTime(scRequestQueuingTime);
-    restRequestMetricsTracker.scalingLayerMetrics.addToResponseQueuingTime(scResponseQueuingTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingTime(scRequestProcessingTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToRequestQueuingTime(scRequestQueuingTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToResponseQueuingTime(scResponseQueuingTime);
   }
 
   /**

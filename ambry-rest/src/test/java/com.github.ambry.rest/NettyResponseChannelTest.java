@@ -3,7 +3,6 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -29,7 +28,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.Date;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -187,31 +185,10 @@ public class NettyResponseChannelTest {
   @Test
   public void channelWriteResultListenerTest()
       throws RestServiceException {
-    HttpRequest httpRequest = createRequest(HttpMethod.GET, "/");
-    NettyRequest nettyRequest = new NettyRequest(httpRequest, new NettyMetrics(new MetricRegistry()));
-    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    Channel channel = new EmbeddedChannel(processor);
-    assertTrue("Channel is not open", channel.isOpen());
-    DefaultChannelPromise future = new DefaultChannelPromise(channel);
-
-    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics, new AtomicBoolean(false));
-    // operationComplete() should not throw exceptions even though NettyRequest is null.
-    future.setSuccess();
-    listener.operationComplete(future);
-
-    listener = new ChannelWriteResultListener(nettyRequest, nettyMetrics, new AtomicBoolean(false));
-    // successful operationComplete() and NettyRequest present.
-    future = new DefaultChannelPromise(channel);
-    future.setSuccess();
-    listener.operationComplete(future);
-
-    // mark future as failed and verify that channel is closed.
-    future = new DefaultChannelPromise(channel);
-    future.setFailure(new Exception("placeHolderException"));
-    listener.operationComplete(future);
-    assertFalse("Channel is still open after failed write", channel.isOpen());
+    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ChannelWriteListenerTest.toString()));
+    assertFalse("Channel not closed on the server", channel.isActive());
   }
 
   /**
@@ -482,6 +459,10 @@ public class NettyResponseChannelTest {
  */
 enum TestingUri {
   /**
+   * Tests behavior of {@link ChannelWriteResultListener}.
+   */
+  ChannelWriteListenerTest,
+  /**
    * When this request is received, headers from the request are copied into the response channel.
    */
   CopyHeaders,
@@ -576,10 +557,14 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private ChannelHandlerContext ctx;
   private NettyRequest request;
   private NettyResponseChannel restResponseChannel;
+  private NettyMetrics nettyMetrics;
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
     this.ctx = ctx;
+    MetricRegistry metricRegistry = new MetricRegistry();
+    nettyMetrics = new NettyMetrics(metricRegistry);
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
     restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
   }
 
@@ -617,11 +602,14 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleRequest(HttpRequest httpRequest)
       throws IOException, ParseException, RestServiceException {
     if (request == null) {
-      request = new NettyRequest(httpRequest, new NettyMetrics(new MetricRegistry()));
+      request = new NettyRequest(httpRequest, nettyMetrics);
       restResponseChannel.setRequest(request);
       restResponseChannel.setContentType("text/plain; charset=UTF-8");
       TestingUri uri = TestingUri.getTestingURI(request.getUri());
       switch (uri) {
+        case ChannelWriteListenerTest:
+          channelWriteResultListenerTest();
+          break;
         case CopyHeaders:
           copyHeaders(httpRequest);
           restResponseChannel.onResponseComplete(null);
@@ -709,6 +697,35 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     } else {
       throw new RestServiceException("Received data without a request", RestServiceErrorCode.InvalidRequestState);
     }
+  }
+
+  /**
+   * Tests the {@link ChannelWriteResultListener}. Currently tests for reactions to bad input, bad state transitions and
+   * write failures.
+   * @throws RestServiceException
+   */
+  private void channelWriteResultListenerTest()
+      throws RestServiceException {
+    DefaultChannelPromise future = new DefaultChannelPromise(ctx.channel());
+    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics, restResponseChannel);
+    // operationComplete() should not throw exceptions even though NettyRequest is null.
+    future.setSuccess();
+    listener.operationComplete(future);
+    assertTrue("Request channel not open", request.isOpen());
+
+    listener = new ChannelWriteResultListener(request, nettyMetrics, restResponseChannel);
+    // successful operationComplete() and NettyRequest present.
+    future = new DefaultChannelPromise(ctx.channel());
+    future.setSuccess();
+    listener.operationComplete(future);
+    assertTrue("Request channel not open", request.isOpen());
+
+    // mark future as failed and verify that channel is closed.
+    future = new DefaultChannelPromise(ctx.channel());
+    future.setFailure(new Exception("placeHolderException"));
+    listener.operationComplete(future);
+    assertFalse("Channel is still open after failed write", ctx.channel().isOpen());
+    assertFalse("Request channel not closed", request.isOpen());
   }
 
   /**

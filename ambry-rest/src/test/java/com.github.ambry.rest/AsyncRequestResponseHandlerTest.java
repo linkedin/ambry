@@ -237,7 +237,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // both response and exception null
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     EventMonitor<MockRestRequest.Event> requestCloseMonitor =
         new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
@@ -249,7 +249,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // response null but exception not null.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
     restResponseChannel = new MockRestResponseChannel();
@@ -261,7 +261,7 @@ public class AsyncRequestResponseHandlerTest {
     // response not null.
     // steady response - full response available.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
     restResponseChannel = new MockRestResponseChannel();
@@ -281,7 +281,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // halting response - response not available in one shot
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
     responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel,
@@ -304,7 +304,7 @@ public class AsyncRequestResponseHandlerTest {
       throws Exception {
     // Response is bad.
     MockRestRequest goodRestRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    goodRestRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    goodRestRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     EventMonitor<MockRestRequest.Event> requestCloseMonitor =
         new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     goodRestRequest.addListener(requestCloseMonitor);
@@ -315,7 +315,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // RestRequest is bad.
     BadRestRequest badRestRequest = new BadRestRequest();
-    badRestRequest.getMetricsTracker().scalingLayerMetrics.markRequestReceived();
+    badRestRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
     ByteBufferRSC goodResponse = new ByteBufferRSC(ByteBuffer.allocate(0));
     EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =

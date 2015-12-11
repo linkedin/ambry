@@ -167,7 +167,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
         flush();
         close();
         if (restRequest != null) {
-          restRequest.getMetricsTracker().nioLayerMetrics.markRequestCompleted();
+          restRequest.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
           restRequest.close();
         }
         onEventComplete(Event.OnRequestComplete);
