@@ -108,8 +108,8 @@ class TestMetrics {
   private final long nioLayerResponseProcessingTime = random.nextInt(Integer.MAX_VALUE);
   private final long scRequestProcessingTime = random.nextInt(Integer.MAX_VALUE);
   private final long scResponseProcessingTime = random.nextInt(Integer.MAX_VALUE);
-  private final long scRequestQueuingTime = random.nextInt(Integer.MAX_VALUE);
-  private final long scResponseQueuingTime = random.nextInt(Integer.MAX_VALUE);
+  private final long scRequestProcessingDelay = random.nextInt(Integer.MAX_VALUE);
+  private final long scResponseProcessingDelay = random.nextInt(Integer.MAX_VALUE);
 
   /**
    * Creates a new instance by generating new random metrics and updating it in the given {@code requestMetrics}.
@@ -140,13 +140,15 @@ class TestMetrics {
     assertEquals("SC request processing time unequal", scRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX).getSnapshot()
             .getValues()[0]);
-    assertEquals("SC request queuing time unequal", scRequestQueuingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_QUEUING_TIME_SUFFIX).getSnapshot().getValues()[0]);
+    assertEquals("SC request processing delay unequal", scRequestProcessingDelay,
+        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_DELAY_SUFFIX).getSnapshot()
+            .getValues()[0]);
     assertEquals("SC response processing time unequal", scResponseProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_TIME_SUFFIX).getSnapshot()
             .getValues()[0]);
-    assertEquals("SC response queuing time unequal", scResponseQueuingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_QUEUING_TIME_SUFFIX).getSnapshot().getValues()[0]);
+    assertEquals("SC response processing delay unequal", scResponseProcessingDelay,
+        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_DELAY_SUFFIX).getSnapshot()
+            .getValues()[0]);
 
     assertEquals("Request total CPU time unequal", totalTime,
         histograms.get(metricPrefix + RestRequestMetrics.TOTAL_CPU_TIME_SUFFIX).getSnapshot().getValues()[0]);
@@ -162,8 +164,8 @@ class TestMetrics {
 
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingTime(scRequestProcessingTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);
-    restRequestMetricsTracker.scalingMetricsTracker.addToRequestQueuingTime(scRequestQueuingTime);
-    restRequestMetricsTracker.scalingMetricsTracker.addToResponseQueuingTime(scResponseQueuingTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToProcessingDelay(scRequestProcessingDelay);
+    restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingDelay(scResponseProcessingDelay);
   }
 
   /**
@@ -172,6 +174,6 @@ class TestMetrics {
    */
   private long getTotalTime() {
     return nioLayerRequestProcessingTime + nioLayerResponseProcessingTime + scRequestProcessingTime +
-        scResponseProcessingTime + scRequestQueuingTime + scResponseQueuingTime;
+        scResponseProcessingTime + scRequestProcessingDelay + scResponseProcessingDelay;
   }
 }

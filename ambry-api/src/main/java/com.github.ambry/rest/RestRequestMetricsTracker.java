@@ -104,9 +104,9 @@ public class RestRequestMetricsTracker {
    */
   public class ScalingMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
-    private final AtomicLong requestQueuingTimeInMs = new AtomicLong(0);
+    private final AtomicLong requestProcessingDelayInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
-    private final AtomicLong responseQueuingTimeInMs = new AtomicLong(0);
+    private final AtomicLong responseProcessingDelayInMs = new AtomicLong(0);
 
     private long requestReceivedTime = 0;
     private long roundTripTimeInMs = 0;
@@ -124,13 +124,14 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the scaling layer queuing time of a request. Also adds to the total time taken to service the request.
-     * @param delta the time in ms a request has spent being queued at the scaling layer.
-     * @return the total time in ms this request has spent being queued at the scaling layer at this moment.
+     * Adds to the scaling layer processing delay for a request. Also adds to the total time taken to service the
+     * request.
+     * @param delta the time in ms a request has spent waiting to be processed at the scaling layer.
+     * @return the total time in ms this request has spent waiting to be processed at the scaling layer at this moment.
      */
-    public long addToRequestQueuingTime(long delta) {
+    public long addToProcessingDelay(long delta) {
       addToTotalCpuTime(delta);
-      return requestQueuingTimeInMs.addAndGet(delta);
+      return requestProcessingDelayInMs.addAndGet(delta);
     }
 
     /**
@@ -146,13 +147,14 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the scaling layer queuing time of a response. Also adds to the total time taken to service the request.
-     * @param delta the time in ms a response has spent being queued at the scaling layer.
-     * @return the total time in ms this response has spent being queued at the scaling layer at this moment.
+     * Adds to the scaling layer processing delay of a response. Also adds to the total time taken to service the
+     * request.
+     * @param delta the time in ms a response has spent waiting to be processed at the scaling layer.
+     * @return the total time in ms this response has spent waiting to be processed at the scaling layer at this moment.
      */
-    public long addToResponseQueuingTime(long delta) {
+    public long addToResponseProcessingDelay(long delta) {
       addToTotalCpuTime(delta);
-      return responseQueuingTimeInMs.addAndGet(delta);
+      return responseProcessingDelayInMs.addAndGet(delta);
     }
 
     /**
@@ -211,9 +213,9 @@ public class RestRequestMetricsTracker {
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
-        metrics.scRequestQueuingTimeInMs.update(scalingMetricsTracker.requestQueuingTimeInMs.get());
+        metrics.scRequestProcessingDelayInMs.update(scalingMetricsTracker.requestProcessingDelayInMs.get());
         metrics.scResponseProcessingTimeInMs.update(scalingMetricsTracker.responseProcessingTimeInMs.get());
-        metrics.scResponseQueuingTimeInMs.update(scalingMetricsTracker.responseQueuingTimeInMs.get());
+        metrics.scResponseProcessingDelayInMs.update(scalingMetricsTracker.responseProcessingDelayInMs.get());
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
 
         metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());

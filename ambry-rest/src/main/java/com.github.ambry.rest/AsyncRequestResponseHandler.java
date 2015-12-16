@@ -458,7 +458,8 @@ class AsyncHandlerWorker implements Runnable {
         int bytesWritten = 0;
         Exception exception = null;
         try {
-          onResponseDequeue(restRequest, asyncResponseInfo);
+          long processingDelay = asyncResponseInfo.getProcessingDelay();
+          restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingDelay(processingDelay);
           long responseWriteStartTime = System.currentTimeMillis();
           bytesWritten = response.read(restResponseChannel);
           responseProcessingTime = System.currentTimeMillis() - responseWriteStartTime;
@@ -474,11 +475,9 @@ class AsyncHandlerWorker implements Runnable {
           responseProcessingTime += (System.currentTimeMillis() - responseCompleteStartTime);
           releaseResources(response);
           responseIterator.remove();
-          queuedResponseCount.decrementAndGet();
-          restServerMetrics.responseCompletionRate.mark();
           logger.trace("Response complete for request {}", restRequest.getUri());
         } else {
-          asyncResponseInfo.recordQueueStartTime();
+          asyncResponseInfo.recordProcessingEndTime();
         }
       } finally {
         restRequest.getMetricsTracker().scalingMetricsTracker
@@ -553,7 +552,8 @@ class AsyncHandlerWorker implements Runnable {
         Map.Entry<RestRequest, AsyncResponseInfo> responseInfo = responseIterator.next();
         RestRequest restRequest = responseInfo.getKey();
         AsyncResponseInfo asyncResponseInfo = responseInfo.getValue();
-        onResponseDequeue(restRequest, asyncResponseInfo);
+        long processingDelay = asyncResponseInfo.getProcessingDelay();
+        restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingDelay(processingDelay);
         ReadableStreamChannel response = asyncResponseInfo.getResponse();
         RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
         onResponseComplete(restRequest, restResponseChannel, e, true);
@@ -607,6 +607,8 @@ class AsyncHandlerWorker implements Runnable {
               restRequest.getRestMethod(), exception);
         }
       }
+      queuedResponseCount.decrementAndGet();
+      restServerMetrics.responseCompletionRate.mark();
       restRequest.getMetricsTracker().scalingMetricsTracker.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
       if (forceClose) {
@@ -625,25 +627,8 @@ class AsyncHandlerWorker implements Runnable {
   private void onRequestDequeue(AsyncRequestInfo requestInfo) {
     queuedRequestCount.decrementAndGet();
     restServerMetrics.requestDequeuingRate.mark();
-    Long queueTime = requestInfo.getQueueTime();
-    if (queueTime != null) {
-      requestInfo.getRestRequest().getMetricsTracker().scalingMetricsTracker.addToRequestQueuingTime(queueTime);
-    }
-  }
-
-  /**
-   * Tracks required metrics once a {@link AsyncResponseInfo} is dequeued.
-   * @param restRequest the {@link RestRequest} for whose response was just dequeued.
-   * @param responseInfo the {@link AsyncResponseInfo} that was just dequeued.
-   */
-  private void onResponseDequeue(RestRequest restRequest, AsyncResponseInfo responseInfo) {
-    Long queueTime = responseInfo.getQueueTime();
-    if (queueTime != null) {
-      restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseQueuingTime(queueTime);
-    } else {
-      logger.error("Respone queuing time was not recorded");
-      restServerMetrics.trackingError.inc();
-    }
+    long processingDelay = requestInfo.getProcessingDelay();
+    requestInfo.getRestRequest().getMetricsTracker().scalingMetricsTracker.addToProcessingDelay(processingDelay);
   }
 }
 
@@ -653,7 +638,7 @@ class AsyncHandlerWorker implements Runnable {
 class AsyncRequestInfo {
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private Long queueStartTime = System.currentTimeMillis();
+  private long queueStartTime = System.currentTimeMillis();
 
   /**
    * A queued request represented by a {@link RestRequest} that encapsulates the request and a
@@ -675,17 +660,11 @@ class AsyncRequestInfo {
   }
 
   /**
-   * Gets the time elapsed since the construction of this object. This function returns a non-null value only on the
-   * first call. All subsequent calls return null.
-   * @return On the first call, the time elapsed since the construction of the object. {@code null} on subsequent calls.
+   * Gets the time elapsed since the construction of this object.
+   * @return the time elapsed since the construction of the object.
    */
-  public Long getQueueTime() {
-    Long queueTime = null;
-    if (queueStartTime != null) {
-      queueTime = System.currentTimeMillis() - queueStartTime;
-      queueStartTime = null;
-    }
-    return queueTime;
+  public long getProcessingDelay() {
+    return System.currentTimeMillis() - queueStartTime;
   }
 }
 
@@ -695,7 +674,7 @@ class AsyncRequestInfo {
 class AsyncResponseInfo {
   private final ReadableStreamChannel response;
   private final RestResponseChannel restResponseChannel;
-  private Long queueStartTime = System.currentTimeMillis();
+  private long delayStartTime = System.currentTimeMillis();
 
   /**
    * A queued response represented by a {@link ReadableStreamChannel} that encapsulates the response and a
@@ -717,20 +696,18 @@ class AsyncResponseInfo {
   }
 
   /**
-   * Gets the time elapsed since the last time this object was queued. The last time this object was queued is either
-   * on construction or on a call to {@link #recordQueueStartTime()}.
-   * @return the time elapsed since the last time the object was queued.
+   * Gets the time elapsed since the last time this object was last processed. The last time this object was processed
+   * is either on construction or on a call to {@link #recordProcessingEndTime()}.
+   * @return the time elapsed since the last time the object was processed.
    */
-  public Long getQueueTime() {
-    Long queueTime = null;
-    if (queueStartTime != null) {
-      queueTime = System.currentTimeMillis() - queueStartTime;
-      queueStartTime = null;
-    }
-    return queueTime;
+  public long getProcessingDelay() {
+    return System.currentTimeMillis() - delayStartTime;
   }
 
-  public void recordQueueStartTime() {
-    queueStartTime = System.currentTimeMillis();
+  /**
+   * Records the time at which the current round of processing ended.
+   */
+  public void recordProcessingEndTime() {
+    delayStartTime = System.currentTimeMillis();
   }
 }
