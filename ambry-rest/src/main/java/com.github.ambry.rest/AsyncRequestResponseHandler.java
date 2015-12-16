@@ -343,6 +343,7 @@ class AsyncHandlerWorker implements Runnable {
         restServerMetrics.responseCompletionRate.mark();
         logger.trace("There was no queuing required for response for request {}", restRequest.getUri());
         onResponseComplete(restRequest, restResponseChannel, exception, false);
+        restServerMetrics.responseCompletionRate.mark();
         if (response != null) {
           releaseResources(response);
         }
@@ -475,6 +476,8 @@ class AsyncHandlerWorker implements Runnable {
           responseProcessingTime += (System.currentTimeMillis() - responseCompleteStartTime);
           releaseResources(response);
           responseIterator.remove();
+          queuedResponseCount.decrementAndGet();
+          restServerMetrics.responseCompletionRate.mark();
           logger.trace("Response complete for request {}", restRequest.getUri());
         } else {
           asyncResponseInfo.recordProcessingEndTime();
@@ -557,6 +560,8 @@ class AsyncHandlerWorker implements Runnable {
         ReadableStreamChannel response = asyncResponseInfo.getResponse();
         RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
         onResponseComplete(restRequest, restResponseChannel, e, true);
+        queuedResponseCount.decrementAndGet();
+        restServerMetrics.responseCompletionRate.mark();
         releaseResources(response);
         responseIterator.remove();
       }
@@ -607,8 +612,6 @@ class AsyncHandlerWorker implements Runnable {
               restRequest.getRestMethod(), exception);
         }
       }
-      queuedResponseCount.decrementAndGet();
-      restServerMetrics.responseCompletionRate.mark();
       restRequest.getMetricsTracker().scalingMetricsTracker.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
       if (forceClose) {
