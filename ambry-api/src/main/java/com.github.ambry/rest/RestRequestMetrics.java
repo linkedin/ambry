@@ -16,9 +16,9 @@ public class RestRequestMetrics {
   protected static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
 
   protected static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
-  protected static final String SC_REQUEST_PROCESSING_DELAY_SUFFIX = "ScRequestProcessingDelayInMs";
+  protected static final String SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX = "ScRequestProcessingWaitTimeInMs";
   protected static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTimeInMs";
-  protected static final String SC_RESPONSE_PROCESSING_DELAY_SUFFIX = "ScResponseProcessingDelayInMs";
+  protected static final String SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ScResponseProcessingWaitTimeInMs";
   protected static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
 
   protected static final String TOTAL_CPU_TIME_SUFFIX = "TotalCpuTimeInMs";
@@ -28,9 +28,9 @@ public class RestRequestMetrics {
   protected final Histogram nioRoundTripTimeInMs;
 
   protected final Histogram scRequestProcessingTimeInMs;
-  protected final Histogram scRequestProcessingDelayInMs;
+  protected final Histogram scRequestProcessingWaitTimeInMs;
   protected final Histogram scResponseProcessingTimeInMs;
-  protected final Histogram scResponseProcessingDelayInMs;
+  protected final Histogram scResponseProcessingWaitTimeInMs;
   protected final Histogram scRoundTripTimeInMs;
 
   protected final Histogram totalCpuTimeInMs;
@@ -58,12 +58,12 @@ public class RestRequestMetrics {
 
     scRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_TIME_SUFFIX));
-    scRequestProcessingDelayInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_DELAY_SUFFIX));
+    scRequestProcessingWaitTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX));
     scResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_TIME_SUFFIX));
-    scResponseProcessingDelayInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_DELAY_SUFFIX));
+    scResponseProcessingWaitTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX));
     scRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 

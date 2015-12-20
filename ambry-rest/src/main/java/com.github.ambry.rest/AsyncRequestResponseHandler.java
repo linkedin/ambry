@@ -460,7 +460,7 @@ class AsyncHandlerWorker implements Runnable {
         Exception exception = null;
         try {
           long processingDelay = asyncResponseInfo.getProcessingDelay();
-          restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingDelay(processingDelay);
+          restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingWaitTime(processingDelay);
           long responseWriteStartTime = System.currentTimeMillis();
           bytesWritten = response.read(restResponseChannel);
           responseProcessingTime = System.currentTimeMillis() - responseWriteStartTime;
@@ -556,7 +556,7 @@ class AsyncHandlerWorker implements Runnable {
         RestRequest restRequest = responseInfo.getKey();
         AsyncResponseInfo asyncResponseInfo = responseInfo.getValue();
         long processingDelay = asyncResponseInfo.getProcessingDelay();
-        restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingDelay(processingDelay);
+        restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingWaitTime(processingDelay);
         ReadableStreamChannel response = asyncResponseInfo.getResponse();
         RestResponseChannel restResponseChannel = asyncResponseInfo.getRestResponseChannel();
         onResponseComplete(restRequest, restResponseChannel, e, true);
@@ -631,7 +631,7 @@ class AsyncHandlerWorker implements Runnable {
     queuedRequestCount.decrementAndGet();
     restServerMetrics.requestDequeuingRate.mark();
     long processingDelay = requestInfo.getProcessingDelay();
-    requestInfo.getRestRequest().getMetricsTracker().scalingMetricsTracker.addToProcessingDelay(processingDelay);
+    requestInfo.getRestRequest().getMetricsTracker().scalingMetricsTracker.addToProcessingWaitTime(processingDelay);
   }
 }
 
