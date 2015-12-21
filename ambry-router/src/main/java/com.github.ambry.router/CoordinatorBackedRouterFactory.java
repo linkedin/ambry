@@ -1,6 +1,5 @@
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -19,7 +18,7 @@ import org.slf4j.LoggerFactory;
  */
 public class CoordinatorBackedRouterFactory implements RouterFactory {
   private final RouterConfig routerConfig;
-  private final MetricRegistry metricRegistry;
+  private final CoordinatorBackedRouterMetrics coordinatorBackedRouterMetrics;
   private final Coordinator coordinator;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -35,7 +34,7 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
       NotificationSystem notificationSystem) {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
-      metricRegistry = clusterMap.getMetricRegistry();
+      coordinatorBackedRouterMetrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
       coordinator = new AmbryCoordinator(verifiableProperties, clusterMap, notificationSystem);
     } else {
       StringBuilder errorMessage =
@@ -56,6 +55,6 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
 
   @Override
   public Router getRouter() {
-    return new CoordinatorBackedRouter(routerConfig, metricRegistry, coordinator);
+    return new CoordinatorBackedRouter(routerConfig, coordinatorBackedRouterMetrics, coordinator);
   }
 }

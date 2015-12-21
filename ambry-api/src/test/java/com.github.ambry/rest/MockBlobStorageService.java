@@ -200,23 +200,13 @@ public class MockBlobStorageService implements BlobStorageService {
       throw new IllegalStateException(e);
     } finally {
       restResponseChannel.onResponseComplete(exception);
-      releaseResources(restRequest, response);
-    }
-  }
-
-  /**
-   * Cleans up resources.
-   * @param restRequest the {@link RestRequest} that needs to be cleaned up.
-   * @param response the {@link ReadableStreamChannel} that needs to be cleaned up. Can be null.
-   */
-  private static void releaseResources(RestRequest restRequest, ReadableStreamChannel response) {
-    try {
-      restRequest.close();
-      if (response != null) {
-        response.close();
+      try {
+        if (response != null) {
+          response.close();
+        }
+      } catch (IOException e) {
+        throw new IllegalStateException(e);
       }
-    } catch (IOException e) {
-      throw new IllegalStateException(e);
     }
   }
 }

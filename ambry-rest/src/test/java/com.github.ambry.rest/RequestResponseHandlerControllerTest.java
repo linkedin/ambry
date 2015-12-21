@@ -25,7 +25,7 @@ public class RequestResponseHandlerControllerTest {
   @Test
   public void startShutdownTest()
       throws InstantiationException, IOException {
-    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1);
+    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1, true);
     requestResponseHandlerController.start();
     requestResponseHandlerController.shutdown();
   }
@@ -58,7 +58,7 @@ public class RequestResponseHandlerControllerTest {
   @Test
   public void shutdownWithoutStartTest()
       throws InstantiationException, IOException {
-    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1);
+    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1, true);
     requestResponseHandlerController.shutdown();
   }
 
@@ -71,7 +71,7 @@ public class RequestResponseHandlerControllerTest {
   @Test
   public void useServiceWithoutStartTest()
       throws InstantiationException, IOException {
-    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1);
+    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(1, true);
     try {
       // fine to use without start.
       assertNotNull("Request handler is null", requestResponseHandlerController.getHandler());
@@ -109,7 +109,7 @@ public class RequestResponseHandlerControllerTest {
   @Test
   public void requestHandlerGetTest()
       throws InstantiationException, IOException {
-    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(5);
+    RequestResponseHandlerController requestResponseHandlerController = createHandlerController(5, true);
     requestResponseHandlerController.start();
     try {
       for (int i = 0; i < 1000; i++) {
@@ -125,19 +125,23 @@ public class RequestResponseHandlerControllerTest {
 
   /**
    * Creates and gets an instance of {@link RequestResponseHandlerController}.
+   *
    * @param handlerCount the number of scaling units required inside the {@link RequestResponseHandlerController}.
+   * @param setBlobStorageService whether to set the {@link BlobStorageService} or not.
    * @return an instance of {@link RequestResponseHandlerController}.
    * @throws InstantiationException
    * @throws IOException
    */
-  private RequestResponseHandlerController createHandlerController(int handlerCount)
+  private RequestResponseHandlerController createHandlerController(int handlerCount, boolean setBlobStorageService)
       throws InstantiationException, IOException {
     RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
-    BlobStorageService blobStorageService =
-        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
     RequestResponseHandlerController controller = new RequestResponseHandlerController(handlerCount, restServerMetrics);
-    controller.setBlobStorageService(blobStorageService);
+    if (setBlobStorageService) {
+      BlobStorageService blobStorageService =
+          new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
+      controller.setBlobStorageService(blobStorageService);
+    }
     return controller;
   }
 }

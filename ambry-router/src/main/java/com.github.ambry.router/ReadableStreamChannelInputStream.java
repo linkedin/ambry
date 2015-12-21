@@ -71,7 +71,7 @@ class ReadableStreamChannelInputStream extends InputStream {
    * {@link IOException} while reading from the {@code readableStreamChannel} or there is an
    * {@link InterruptedException} during the sleep awaiting data.
    * @param channel the {@link WritableByteChannel} to use.
-   * @return the number of bytes read from the {@code readableStreamChannel}.
+   * @return the number of bytes read from the {@code readableStreamChannel}. -1 if end of stream is reached.
    * @throws IOException if there is an exception while reading from the {@code readableStreamChannel} or if there is an
    *          {@link InterruptedException} during the sleep awaiting data.
    */
