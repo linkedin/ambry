@@ -1,10 +1,7 @@
 package com.github.ambry.store;
 
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-
 import java.nio.ByteBuffer;
-
 
 /**
  * Represents the blob value stored in the index for a key.
@@ -80,13 +77,6 @@ public class IndexValue {
 
   public long getOriginalMessageOffset() {
     return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes);
-  }
-
-  public boolean isExpired() {
-    if (getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > getTimeToLiveInMs()) {
-      return true;
-    }
-    return false;
   }
 
   public void setFlag(Flags flag) {
