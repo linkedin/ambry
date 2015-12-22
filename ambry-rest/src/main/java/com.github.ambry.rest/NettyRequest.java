@@ -39,7 +39,7 @@ class NettyRequest implements RestRequest {
 
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
-  private final RestRequestMetrics restRequestMetrics = new RestRequestMetrics();
+  private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -58,6 +58,7 @@ class NettyRequest implements RestRequest {
     if (request == null) {
       throw new IllegalArgumentException("Received null HttpRequest");
     }
+    restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;
@@ -127,14 +128,14 @@ class NettyRequest implements RestRequest {
         }
       } finally {
         contentLock.unlock();
-        restRequestMetrics.recordMetrics();
+        restRequestMetricsTracker.recordMetrics();
       }
     }
   }
 
   @Override
-  public RestRequestMetrics getMetrics() {
-    return restRequestMetrics;
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return restRequestMetricsTracker;
   }
 
   /**

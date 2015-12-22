@@ -14,7 +14,7 @@ import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestRequestMetricsTracker;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -75,7 +75,7 @@ public class AdminBlobStorageServiceTest {
    */
   public AdminBlobStorageServiceTest()
       throws InstantiationException, IOException {
-    RestRequestMetrics.setDefaults(new MetricRegistry());
+    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(new VerifiableProperties(new Properties()));
     responseHandler = new AdminTestResponseHandler();
     adminBlobStorageService = getAdminBlobStorageService();
@@ -234,8 +234,6 @@ public class AdminBlobStorageServiceTest {
       adminBlobStorageService
           .submitResponse(restRequest, restResponseChannel, null, new RuntimeException(exceptionMsg));
       assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
-      // resources should have been cleaned up.
-      assertFalse("RestRequest channel is not cleaned up", restRequest.isOpen());
 
       // there is no exception and exception thrown when the response is submitted.
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
@@ -246,7 +244,6 @@ public class AdminBlobStorageServiceTest {
       adminBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
       assertNotNull("There is no cause of failure", restResponseChannel.getCause());
       // resources should have been cleaned up.
-      assertFalse("RestRequest channel is not cleaned up", restRequest.isOpen());
       assertFalse("Response channel is not cleaned up", response.isOpen());
     } finally {
       responseHandler.start();
@@ -271,7 +268,6 @@ public class AdminBlobStorageServiceTest {
       assertTrue("RestRequest channel not open", restRequest.isOpen());
       assertTrue("ReadableStreamChannel not open", channel.isOpen());
       adminBlobStorageService.submitResponse(restRequest, restResponseChannel, channel, null);
-      assertFalse("RestRequest channel is still open", restRequest.isOpen());
       assertFalse("ReadableStreamChannel is still open", channel.isOpen());
 
       // null ReadableStreamChannel
@@ -279,21 +275,18 @@ public class AdminBlobStorageServiceTest {
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("RestRequest channel not open", restRequest.isOpen());
       adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
-      assertFalse("RestRequest channel is still open", restRequest.isOpen());
 
       // bad RestRequest (close() throws IOException)
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("ReadableStreamChannel not open", channel.isOpen());
       adminBlobStorageService.submitResponse(new BadRestRequest(), restResponseChannel, channel, null);
-      assertFalse("ReadableStreamChannel is still open", channel.isOpen());
 
       // bad ReadableStreamChannel (close() throws IOException)
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("RestRequest channel not open", restRequest.isOpen());
       adminBlobStorageService.submitResponse(restRequest, restResponseChannel, new BadRSC(), null);
-      assertFalse("RestRequest channel is still open", restRequest.isOpen());
     } finally {
       responseHandler.start();
     }
@@ -1306,8 +1299,8 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public RestRequestMetrics getMetrics() {
-    return new RestRequestMetrics();
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return new RestRequestMetricsTracker();
   }
 
   @Override

@@ -41,7 +41,7 @@ public class NettyMessageProcessorTest {
   public NettyMessageProcessorTest()
       throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
-    RestRequestMetrics.setDefaults(new MetricRegistry());
+    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties);
     blobStorageService = new MockBlobStorageService(verifiableProperties, router);
     requestHandler = new MockRequestResponseHandler();

@@ -8,7 +8,6 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
-import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -233,7 +232,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         responseChannel.setRequest(request);
         logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
       } finally {
-        request.getMetrics().nioLayerMetrics
+        request.getMetricsTracker().nioMetricsTracker
             .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
       }
       // We send POST for handling immediately since we expect valid content with it.
@@ -280,8 +279,9 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
               RestServiceErrorCode.RequestChannelClosed);
         }
       } finally {
-        request.getMetrics().nioLayerMetrics
-            .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+        long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
+        nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
       if (!request.getRestMethod().equals(RestMethod.POST)) {
         requestHandler.handleRequest(request, responseChannel);
@@ -301,12 +301,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     if (responseChannel != null) {
       if (request != null) {
         logger.trace("Request {} is aborted", request.getUri());
-        try {
-          request.close();
-        } catch (IOException e) {
-          logger.error("Error while closing request", e);
-          nettyMetrics.resourceReleaseError.inc();
-        }
       }
       responseChannel.onResponseComplete(cause);
     } else {

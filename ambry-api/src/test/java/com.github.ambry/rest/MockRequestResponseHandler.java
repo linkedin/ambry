@@ -99,7 +99,6 @@ public class MockRequestResponseHandler implements RestRequestHandler, RestRespo
           }
         }
         restResponseChannel.onResponseComplete(exception);
-        restRequest.close();
         if (response != null) {
           response.close();
         }

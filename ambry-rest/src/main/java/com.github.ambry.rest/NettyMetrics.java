@@ -25,8 +25,11 @@ class NettyMetrics {
   public final Meter requestCompletionRate;
 
   // Latencies
+  // NettyMessageProcessor
+  public final Histogram requestChunkProcessingTimeInMs;
   // NettyResponseChannel
   public final Histogram channelWriteProcessingTimeInMs;
+  public final Histogram chunkWriteTimeInMs;
   public final Histogram errorResponseProcessingTimeInMs;
   public final Histogram headerSetTimeInMs;
   public final Histogram responseMetadataProcessingTimeInMs;
@@ -43,14 +46,14 @@ class NettyMetrics {
   public final Counter malformedRequestError;
   public final Counter missingResponseChannelError;
   public final Counter noRequestError;
-  public final Counter resourceReleaseError;
   public final Counter unknownHttpObjectError;
   // NettyRequest
   public final Counter unsupportedHttpMethodError;
   // NettyResponseChannel
   public final Counter deadResponseAccessError;
-  public final Counter responseCompleteTasksError;
   public final Counter errorResponseSendingError;
+  public final Counter responseCompleteTasksError;
+  public final Counter resourceReleaseError;
   // NettyServer
   public final Counter nettyServerShutdownError;
   public final Counter nettyServerStartError;
@@ -95,9 +98,14 @@ class NettyMetrics {
         metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "RequestCompletionRate"));
 
     // Latencies
+    // NettyMessageProcessor
+    requestChunkProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "RequestChunkProcessingTimeInMs"));
     // NettyResponseChannel
     channelWriteProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteProcessingTimeInMs"));
+    chunkWriteTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChunkWriteTimeInMs"));
     errorResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseProcessingTimeInMs"));
     headerSetTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "HeaderSetTimeInMs"));
@@ -124,8 +132,6 @@ class NettyMetrics {
     missingResponseChannelError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "MissingResponseChannelError"));
     noRequestError = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "NoRequestError"));
-    resourceReleaseError =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ResourceReleaseError"));
     unknownHttpObjectError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownHttpObjectError"));
     // NettyRequest
@@ -134,10 +140,12 @@ class NettyMetrics {
     // NettyResponseChannel
     deadResponseAccessError =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DeadResponseAccessError"));
-    responseCompleteTasksError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseCompleteTasksError"));
     errorResponseSendingError =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ErrorResponseSendingError"));
+    responseCompleteTasksError =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseCompleteTasksError"));
+    resourceReleaseError =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResourceReleaseError"));
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));

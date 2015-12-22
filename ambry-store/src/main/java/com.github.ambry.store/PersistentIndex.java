@@ -475,10 +475,14 @@ public class PersistentIndex {
       } else {
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       }
-    } else if (value.isExpired() && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
+    } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     }
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
+  }
+
+  private boolean isExpired(IndexValue value){
+    return value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs();
   }
 
   /**
@@ -1317,6 +1321,29 @@ public class PersistentIndex {
 
     private void persistCleanupToken()
         throws IOException, StoreException {
+        /* The cleanup token format is as follows:
+           --
+           token_version
+           startTokenForRecovery
+           endTokenForRecovery
+           numBlobsInRange
+           --
+           blob1_blobReadOptions {version, offset, sz, ttl, key}
+           blob2_blobReadOptions
+           ....
+           blobN_blobReadOptions
+           --
+           length_of_blob1_messageStoreRecoveryInfo
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           length_of_blob2_messageStoreRecoveryInfo
+           blob2_messageStoreRecoveryInfo
+           ....
+           length_of_blobN_messageStoreRecoveryInfo
+           blobN_messageStoreRecoveryInfo
+           --
+           crc
+           ---
+         */
       if (endToken == null || ((StoreFindToken) endToken).isUninitialized()) {
         return;
       }

@@ -50,7 +50,10 @@ public interface RestRequest extends ReadableStreamChannel {
 
   /**
    * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
-   * the {@link RestRequestMetrics} instance attached to this RestRequest.
+   * the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
+   * <p/>
+   * Expected to be called once the request is "completed" i.e. either a response is completely sent out or an error
+   * state is reached from which a response cannot be sent.
    * <p/>
    * {@inheritDoc}
    * @throws IOException if there is an I/O error while closing the request channel.
@@ -60,8 +63,8 @@ public interface RestRequest extends ReadableStreamChannel {
       throws IOException;
 
   /**
-   * Gets the {@link RestRequestMetrics} instance attached to this RestRequest.
-   * @return the {@link RestRequestMetrics} instance attached to this RestRequest.
+   * Gets the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
+   * @return the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
    */
-  public RestRequestMetrics getMetrics();
+  public RestRequestMetricsTracker getMetricsTracker();
 }

@@ -74,7 +74,7 @@ public class RestServer {
     }
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
-    RestRequestMetrics.setDefaults(clusterMap.getMetricRegistry());
+    RestRequestMetricsTracker.setDefaults(clusterMap.getMetricRegistry());
     restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     try {
       RouterFactory routerFactory =
