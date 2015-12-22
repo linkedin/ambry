@@ -12,8 +12,34 @@ public class RouterConfig {
    * Number of background threads to perform coordinator operations in CoordinatorBackedRouter.
    */
   @Config("router.scaling.unit.count")
-  @Default("200")
+  @Default("1")
   public final int routerScalingUnitCount;
+
+  /**
+   * The hostname of the node upon which the router runs.
+   */
+  @Config("router.hostname")
+  public final String routerHostname;
+
+  /**
+   * The name of the datacenter in which the router is located.
+   */
+  @Config("router.datacenter.name")
+  public final String routerDatacenterName;
+
+  /**
+   * The max connections allowed per (datanode, port) for plain text
+   */
+  @Config("router.max.connections.per.port.plain.text")
+  @Default("5")
+  public final int routerMaxConnectionsPerPortPlainText;
+
+  /**
+   * The max connections allowed per (datanode, port) for ssl
+   */
+  @Config("router.max.connections.per.port.ssl")
+  @Default("2")
+  public final int routerMaxConnectionsPerPortSSL;
 
   /**
    * Create a RouterConfig instance.
@@ -21,5 +47,11 @@ public class RouterConfig {
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
     routerScalingUnitCount = verifiableProperties.getInt("router.scaling.unit.count", 1);
+    routerHostname = verifiableProperties.getString("router.hostname");
+    routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
+    routerMaxConnectionsPerPortPlainText =
+        verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
+    routerMaxConnectionsPerPortSSL =
+        verifiableProperties.getIntInRange("router.max.connections.per.port.ssl", 2, 1, 20);
   }
 }

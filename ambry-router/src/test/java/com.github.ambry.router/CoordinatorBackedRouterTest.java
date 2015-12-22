@@ -188,6 +188,8 @@ public class CoordinatorBackedRouterTest {
   private VerifiableProperties getVProps(Properties properties) {
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DC1");
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
     return new VerifiableProperties(properties);
