@@ -676,6 +676,7 @@ public final class ServerTestUtil {
     Properties props = new Properties();
     props.setProperty("coordinator.hostname", "localhost");
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);
+    props.setProperty("connectionpool.max.connections.per.port.ssl", "5");
     props.putAll(coordinatorProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
