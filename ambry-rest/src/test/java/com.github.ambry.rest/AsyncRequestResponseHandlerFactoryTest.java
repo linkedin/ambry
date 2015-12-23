@@ -29,7 +29,6 @@ public class AsyncRequestResponseHandlerFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     Router router = new InMemoryRouter(verifiableProperties);
-    BlobStorageService blobStorageService = new MockBlobStorageService(verifiableProperties, router);
 
     // Get response handler.
     AsyncRequestResponseHandlerFactory responseHandlerFactory =
@@ -39,6 +38,8 @@ public class AsyncRequestResponseHandlerFactoryTest {
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
         AsyncRequestResponseHandler.class.getCanonicalName(), restResponseHandler.getClass().getCanonicalName());
 
+    BlobStorageService blobStorageService =
+        new MockBlobStorageService(verifiableProperties, restResponseHandler, router);
     // Get request handler.
     AsyncRequestResponseHandlerFactory requestHandlerFactory =
         new AsyncRequestResponseHandlerFactory(1, restServerMetrics, blobStorageService);
@@ -62,7 +63,9 @@ public class AsyncRequestResponseHandlerFactoryTest {
   public void getFactoryTestWithBadInputTest() {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     Router router = new InMemoryRouter(verifiableProperties);
-    BlobStorageService blobStorageService = new MockBlobStorageService(verifiableProperties, router);
+    MockRestRequestResponseHandler restRequestResponseHandler = new MockRestRequestResponseHandler();
+    BlobStorageService blobStorageService =
+        new MockBlobStorageService(verifiableProperties, restRequestResponseHandler, router);
 
     // RestResponseHandlerFactory constructor.
     // handlerCount = 0

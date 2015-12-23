@@ -35,8 +35,8 @@ public class AdminBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AdminBlobStorageServiceFactory adminBlobStorageServiceFactory =
-        new AdminBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(), new MockRestRequestResponseHandler(),
-            new InMemoryRouter(verifiableProperties));
+        new AdminBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(),
+            new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties));
     BlobStorageService adminBlobStorageService = adminBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", adminBlobStorageService);
     assertEquals("Did not receive an AdminBlobStorageService instance",

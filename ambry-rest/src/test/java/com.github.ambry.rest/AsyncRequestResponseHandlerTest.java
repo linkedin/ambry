@@ -36,6 +36,7 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link AsyncRequestResponseHandler}.
  */
 public class AsyncRequestResponseHandlerTest {
+  private static VerifiableProperties verifiableProperties;
   private static Router router;
   private static BlobStorageService blobStorageService;
   private static AsyncRequestResponseHandler asyncRequestResponseHandler;
@@ -48,10 +49,9 @@ public class AsyncRequestResponseHandlerTest {
   @BeforeClass
   public static void startRequestResponseHandler()
       throws InstantiationException, IOException {
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    verifiableProperties = new VerifiableProperties(new Properties());
     router = new InMemoryRouter(verifiableProperties);
-    blobStorageService = new MockBlobStorageService(verifiableProperties, router);
-    asyncRequestResponseHandler = getAsyncRequestResponseHandler(blobStorageService, 5, 5);
+    asyncRequestResponseHandler = getAsyncRequestResponseHandler(5, 5);
     blobStorageService.start();
     asyncRequestResponseHandler.start();
   }
@@ -75,7 +75,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void startShutdownTest()
       throws IOException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService, 1, 1);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     assertFalse("IsRunning should be false", handler.isRunning());
     handler.start();
     try {
@@ -95,7 +95,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void shutdownWithoutStart()
       throws IOException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService, 1, 1);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     handler.shutdown();
   }
 
@@ -109,7 +109,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void useServiceWithoutStartTest()
       throws IOException, JSONException, URISyntaxException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService, 1, 1);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     try {
       handler.handleRequest(restRequest, new MockRestResponseChannel());
@@ -139,7 +139,10 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void useWithoutSettingBlobStorageServiceTest()
       throws Exception {
-    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(null, 1, 1);
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setRequestWorkersCount(1);
+    requestResponseHandler.setResponseWorkersCount(1);
     requestResponseHandler.start();
     try {
       // using for response is OK.
@@ -195,13 +198,13 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void zeroScalingUnitCountsTest()
       throws Exception {
-    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(blobStorageService, 1, 0);
+    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(1, 0);
     noResponseHandlersTest(requestResponseHandler);
 
-    requestResponseHandler = getAsyncRequestResponseHandler(blobStorageService, 0, 1);
+    requestResponseHandler = getAsyncRequestResponseHandler(0, 1);
     noRequestHandlersTest(requestResponseHandler);
 
-    requestResponseHandler = getAsyncRequestResponseHandler(blobStorageService, 0, 0);
+    requestResponseHandler = getAsyncRequestResponseHandler(0, 0);
     noRequestResponseHandlersTest(requestResponseHandler);
   }
 
@@ -442,7 +445,7 @@ public class AsyncRequestResponseHandlerTest {
   public void midOccupancyTest()
       throws Exception {
     final CountDownLatch releaseRead = new CountDownLatch(1);
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService, 1, 1);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     handler.start();
     List<AsyncRequestInfo> requests = new ArrayList<AsyncRequestInfo>();
     Map<RestRequest, AsyncResponseInfo> responses = new HashMap<RestRequest, AsyncResponseInfo>();
@@ -682,22 +685,21 @@ public class AsyncRequestResponseHandlerTest {
 
   /**
    * Gets a new instance of {@link AsyncRequestResponseHandler}.
-   * @param blobStorageService the {@link BlobStorageService} that will back the {@link AsyncRequestResponseHandler}.
    * @param requestWorkers the number of request workers.
    * @param responseWorkers the number of response workers.
    * @return a new instance of {@link AsyncRequestResponseHandler}.
    * @throws IOException
    */
-  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(BlobStorageService blobStorageService,
-      int requestWorkers, int responseWorkers)
+  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers, int responseWorkers)
       throws IOException {
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
+    if(blobStorageService == null) {
+      blobStorageService = new MockBlobStorageService(verifiableProperties, handler, router);
+    }
     handler.setRequestWorkersCount(requestWorkers);
     handler.setResponseWorkersCount(responseWorkers);
-    if (blobStorageService != null) {
-      handler.setBlobStorageService(blobStorageService);
-    }
+    handler.setBlobStorageService(blobStorageService);
     return handler;
   }
 

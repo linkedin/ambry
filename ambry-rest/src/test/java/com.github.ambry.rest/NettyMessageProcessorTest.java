@@ -43,8 +43,8 @@ public class NettyMessageProcessorTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties);
-    blobStorageService = new MockBlobStorageService(verifiableProperties, router);
     requestHandler = new MockRestRequestResponseHandler();
+    blobStorageService = new MockBlobStorageService(verifiableProperties, requestHandler, router);
     requestHandler.setBlobStorageService(blobStorageService);
     blobStorageService.start();
     requestHandler.start();

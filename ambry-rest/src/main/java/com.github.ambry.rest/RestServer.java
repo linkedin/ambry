@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * The RestServer is responsible for starting up (and shutting down) multiple services required to handle requests from
  * clients. Currently it starts/shuts down the following: -
- * 1. A {@link Router} - A service that is used to contact the beackend service.
+ * 1. A {@link Router} - A service that is used to contact the backend service.
  * 2. A {@link BlobStorageService} - A service that understands the operations supported by the backend service and can
  * handle requests from clients for such operations.
  * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
