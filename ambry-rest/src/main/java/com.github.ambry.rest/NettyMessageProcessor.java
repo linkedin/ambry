@@ -186,7 +186,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     }
     lastChannelReadTime = currentTime;
 
-    nettyMetrics.httpObjectArrivalRate.mark();
     if (request == null) {
       responseChannel = new NettyResponseChannel(ctx, nettyMetrics);
       logger.trace("Created RestResponseChannel for channel {}", ctx.channel());

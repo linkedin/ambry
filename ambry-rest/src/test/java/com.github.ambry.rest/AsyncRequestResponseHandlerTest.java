@@ -621,11 +621,26 @@ public class AsyncRequestResponseHandlerTest {
       throw (Exception) restResponseChannel.getCause();
     }
 
+    // both response and exception not null
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    restResponseChannel = new MockRestResponseChannel();
+    ByteBuffer responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    ByteBufferRSC response = new ByteBufferRSC(responseBuffer);
+    EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
+        new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
+    response.addListener(responseCloseMonitor);
+    Exception e = new Exception();
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, response, e);
+    // make sure exception was correctly sent to the RestResponseChannel.
+    assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
+    assertTrue("Response is not closed", responseCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
+
     // response null but exception not null.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    Exception e = new Exception();
+    e = new Exception();
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, e);
     // make sure exception was correctly sent to the RestResponseChannel.
     assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
@@ -635,10 +650,9 @@ public class AsyncRequestResponseHandlerTest {
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    ByteBuffer responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
-    ByteBufferRSC response = new ByteBufferRSC(responseBuffer);
-    EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
-        new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
+    responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    response = new ByteBufferRSC(responseBuffer);
+    responseCloseMonitor = new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
     response.addListener(responseCloseMonitor);
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, response, null);
     if (restResponseChannel.getCause() == null) {

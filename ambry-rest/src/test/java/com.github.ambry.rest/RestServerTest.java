@@ -113,11 +113,11 @@ public class RestServerTest {
   private VerifiableProperties getVProps(Properties properties) {
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.rest.response.handler.factory",
-        MockRequestResponseHandlerFactory.class.getCanonicalName());
+        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.blob.storage.service.factory",
         MockBlobStorageServiceFactory.class.getCanonicalName());
     properties.setProperty("rest.server.rest.request.handler.factory",
-        MockRequestResponseHandlerFactory.class.getCanonicalName());
+        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     return new VerifiableProperties(properties);
   }
@@ -174,11 +174,11 @@ public class RestServerTest {
     Properties properties = new Properties();
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.rest.response.handler.factory",
-        MockRequestResponseHandlerFactory.class.getCanonicalName());
+        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.blob.storage.service.factory",
         MockBlobStorageServiceFactory.class.getCanonicalName());
     properties.setProperty("rest.server.rest.request.handler.factory",
-        MockRequestResponseHandlerFactory.class.getCanonicalName());
+        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
 
     // Non existent class.

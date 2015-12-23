@@ -4,7 +4,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.MockRequestResponseHandler;
+import com.github.ambry.rest.MockRestRequestResponseHandler;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
@@ -35,7 +35,7 @@ public class AdminBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AdminBlobStorageServiceFactory adminBlobStorageServiceFactory =
-        new AdminBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(), new MockRequestResponseHandler(),
+        new AdminBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(), new MockRestRequestResponseHandler(),
             new InMemoryRouter(verifiableProperties));
     BlobStorageService adminBlobStorageService = adminBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", adminBlobStorageService);
@@ -54,7 +54,7 @@ public class AdminBlobStorageServiceFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ClusterMap clusterMap = new MockClusterMap();
-    RestResponseHandler restResponseHandler = new MockRequestResponseHandler();
+    RestResponseHandler restResponseHandler = new MockRestRequestResponseHandler();
     Router router = new InMemoryRouter(verifiableProperties);
 
     // VerifiableProperties null.

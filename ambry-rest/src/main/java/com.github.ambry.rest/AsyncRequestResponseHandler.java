@@ -379,12 +379,8 @@ class AsyncHandlerWorker implements Runnable {
   /**
    * Sets the {@link BlobStorageService} that will be used.
    * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
-   * @throws IllegalArgumentException if {@code blobStorageService} is null.
    */
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
-    if (blobStorageService == null) {
-      throw new IllegalArgumentException("BlobStorageService cannot be null");
-    }
     this.blobStorageService = blobStorageService;
     logger.trace("BlobStorage service set to {}", blobStorageService.getClass());
   }

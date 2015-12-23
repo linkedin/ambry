@@ -18,7 +18,7 @@ import java.io.IOException;
  * Be advised that this may not work if your test code *needs* the {@link RestRequestHandler} and
  * {@link RestResponseHandler} to be non-blocking. Test code with such assumptions may run into infinite loops.
  */
-public class MockRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+public class MockRestRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   public static String RUNTIME_EXCEPTION_ON_HANDLE = "runtime.exception.on.handle";
   public static String REST_EXCEPTION_ON_HANDLE = "rest.exception.on.handle";
   public static String CLOSE_REQUEST_ON_HANDLE = "close.request.on.handle";
@@ -109,7 +109,7 @@ public class MockRequestResponseHandler implements RestRequestHandler, RestRespo
   }
 
   /**
-   * Makes the MockRequestResponseHandler faulty.
+   * Makes the MockRestRequestResponseHandler faulty.
    * @param props failure properties. Defines the faulty behaviour. If null, there is no breakdown.
    */
   public void breakdown(VerifiableProperties props) {
@@ -117,7 +117,7 @@ public class MockRequestResponseHandler implements RestRequestHandler, RestRespo
   }
 
   /**
-   * Fixes the MockRequestResponseHandler (not faulty anymore).
+   * Fixes the MockRestRequestResponseHandler (not faulty anymore).
    */
   public void fix() {
     failureProperties = null;
@@ -132,7 +132,7 @@ public class MockRequestResponseHandler implements RestRequestHandler, RestRespo
   }
 
   /**
-   * If the MockRequestResponseHandler is supposed to be breakdown, throws the right exception.
+   * If the MockRestRequestResponseHandler is supposed to be breakdown, throws the right exception.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} on which a response to the request may be sent.
    * @return {@code true} if the the caller can proceed. {@code false} otherwise.
@@ -145,7 +145,7 @@ public class MockRequestResponseHandler implements RestRequestHandler, RestRespo
     } else if (restResponseChannel == null) {
       throw new IllegalArgumentException("RestResponseChannel is null");
     } else if (!isRunning) {
-      throw new RestServiceException("MockRequestResponseHandler is not running",
+      throw new RestServiceException("MockRestRequestResponseHandler is not running",
           RestServiceErrorCode.ServiceUnavailable);
     } else if (failureProperties != null) {
       if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE) && failureProperties

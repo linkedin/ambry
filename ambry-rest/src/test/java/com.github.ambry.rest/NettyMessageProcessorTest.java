@@ -31,7 +31,7 @@ import static org.junit.Assert.assertFalse;
 public class NettyMessageProcessorTest {
   private final Router router;
   private final BlobStorageService blobStorageService;
-  private final MockRequestResponseHandler requestHandler;
+  private final MockRestRequestResponseHandler requestHandler;
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -44,7 +44,7 @@ public class NettyMessageProcessorTest {
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties);
     blobStorageService = new MockBlobStorageService(verifiableProperties, router);
-    requestHandler = new MockRequestResponseHandler();
+    requestHandler = new MockRestRequestResponseHandler();
     requestHandler.setBlobStorageService(blobStorageService);
     blobStorageService.start();
     requestHandler.start();
@@ -108,20 +108,20 @@ public class NettyMessageProcessorTest {
     try {
       // RuntimeException
       Properties properties = new Properties();
-      properties.setProperty(MockRequestResponseHandler.RUNTIME_EXCEPTION_ON_HANDLE, "true");
+      properties.setProperty(MockRestRequestResponseHandler.RUNTIME_EXCEPTION_ON_HANDLE, "true");
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
       // RestServiceException
       properties.clear();
-      properties.setProperty(MockRequestResponseHandler.REST_EXCEPTION_ON_HANDLE,
+      properties.setProperty(MockRestRequestResponseHandler.REST_EXCEPTION_ON_HANDLE,
           RestServiceErrorCode.InternalServerError.toString());
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
       // ClosedChannelException
       properties.clear();
-      properties.setProperty(MockRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
+      properties.setProperty(MockRestRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.POST, HttpResponseStatus.INTERNAL_SERVER_ERROR);
     } finally {

@@ -18,7 +18,6 @@ class NettyMetrics {
   public final Meter bytesReadRate;
   public final Meter channelCreationRate;
   public final Meter channelDestructionRate;
-  public final Meter httpObjectArrivalRate;
   public final Meter requestArrivalRate;
   // NettyResponseChannel
   public final Meter bytesWriteRate;
@@ -89,8 +88,6 @@ class NettyMetrics {
     channelCreationRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelCreationRate"));
     channelDestructionRate =
         metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelDestructionRate"));
-    httpObjectArrivalRate =
-        metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "HttpObjectArrivalRate"));
     requestArrivalRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "RequestArrivalRate"));
     // NettyResponseChannel
     bytesWriteRate = metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "BytesWriteRate"));

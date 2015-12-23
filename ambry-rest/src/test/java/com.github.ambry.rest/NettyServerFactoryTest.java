@@ -23,7 +23,7 @@ public class NettyServerFactoryTest {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    RestRequestHandler restRequestHandler = new MockRequestResponseHandler();
+    RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
 
     NettyServerFactory nioServerFactory =
         new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler);
@@ -42,7 +42,7 @@ public class NettyServerFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
-    RestRequestHandler restRequestHandler = new MockRequestResponseHandler();
+    RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
 
     // VerifiableProperties null.
     try {

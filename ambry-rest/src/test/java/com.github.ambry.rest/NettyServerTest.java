@@ -99,7 +99,7 @@ public class NettyServerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    RestRequestHandler requestHandler = new MockRequestResponseHandler();
+    RestRequestHandler requestHandler = new MockRestRequestResponseHandler();
     return new NettyServer(nettyConfig, nettyMetrics, requestHandler);
   }
 }
