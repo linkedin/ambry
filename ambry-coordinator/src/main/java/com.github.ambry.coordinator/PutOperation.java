@@ -37,7 +37,7 @@ final public class PutOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
-  public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+  private PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, PutParallelOperationPolicy putParallelOperationPolicy)
       throws CoordinatorException {
@@ -57,7 +57,7 @@ final public class PutOperation extends Operation {
 
   public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream, short requestParallelism, short successTarget)
+      ByteBuffer userMetadata, InputStream blobStream, int requestParallelism, int successTarget)
       throws CoordinatorException {
     this(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties, userMetadata,
         blobStream,

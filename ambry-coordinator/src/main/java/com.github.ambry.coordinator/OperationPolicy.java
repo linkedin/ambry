@@ -515,7 +515,7 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
   }
 
   public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
-      short successTarget, short requestParallelism)
+      int successTarget, int requestParallelism)
       throws CoordinatorException {
     super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
     super.successTarget = successTarget;

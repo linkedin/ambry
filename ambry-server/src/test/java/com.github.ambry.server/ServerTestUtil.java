@@ -77,7 +77,7 @@ class HelperCoordinator extends AmbryCoordinator {
     OperationContext oc = getOperationContext();
     PutOperation putOperation =
         new PutOperation(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties,
-            userMetadata, blobStream, (short) 1, (short) 1);
+            userMetadata, blobStream, 1, 1);
     putOperation.execute();
 
     notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
