@@ -15,6 +15,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
+import com.github.ambry.coordinator.OperationContext;
+import com.github.ambry.coordinator.PutOperation;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -62,10 +64,32 @@ import javax.net.ssl.SSLSocketFactory;
 import org.junit.Assert;
 
 
+class HelperCoordinator extends AmbryCoordinator {
+  public HelperCoordinator(VerifiableProperties properties, MockClusterMap clusterMap) {
+    super(properties, clusterMap);
+  }
+
+  @Override
+  public String putBlob(BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream)
+      throws CoordinatorException {
+    PartitionId partitionId = getPartitionForPut();
+    BlobId blobId = new BlobId(partitionId);
+    OperationContext oc = getOperationContext();
+    PutOperation putOperation =
+        new PutOperation(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties,
+            userMetadata, blobStream, (short) 1, (short) 1);
+    putOperation.execute();
+
+    notificationSystem.onBlobCreated(blobId.getID(), blobProperties, userMetadata.array());
+    return blobId.getID();
+  }
+}
+
 /**
  *
  */
 public final class ServerTestUtil {
+
   protected static void endToEndTest(Port targetPort, String coordinatorDatacenter, String sslEnabledDatacenters,
       MockCluster cluster, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
       Properties coordinatorProps)
@@ -216,7 +240,7 @@ public final class ServerTestUtil {
         // Use coordinator to get the blob
         Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters);
         coordinatorProperties.putAll(coordinatorProps);
-        Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
+        Coordinator coordinator = new HelperCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
         BlobOutput output = coordinator.getBlob(blobId1.getID());
         Assert.assertEquals(output.getSize(), 31870);
         byte[] dataOutputStream = new byte[(int) output.getSize()];
@@ -678,7 +702,7 @@ public final class ServerTestUtil {
     props.setProperty("coordinator.datacenter.name", sourceDatacenter);
     props.putAll(coordinatorProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    Coordinator coordinator = new AmbryCoordinator(verifiableProperties, cluster.getClusterMap());
+    Coordinator coordinator = new HelperCoordinator(verifiableProperties, cluster.getClusterMap());
     Thread[] senderThreads = new Thread[3];
     LinkedBlockingQueue<Payload> payloadQueue = new LinkedBlockingQueue<Payload>();
     int numberOfSenderThreads = 3;
@@ -874,7 +898,7 @@ public final class ServerTestUtil {
         // Use coordinator to get the blob
         Properties coordinatorProperties = getCoordinatorProperties(coordinatorDatacenter, sslEnabledDatacenters);
         coordinatorProperties.putAll(coordinatorProps);
-        Coordinator coordinator = new AmbryCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
+        Coordinator coordinator = new HelperCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
         checkBlobId(coordinator, blobId1, data);
         checkBlobId(coordinator, blobId2, data);
         checkBlobId(coordinator, blobId3, data);
