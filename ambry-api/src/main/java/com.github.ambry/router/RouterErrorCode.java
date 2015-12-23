@@ -65,7 +65,15 @@ public enum RouterErrorCode {
   /**
    * TTL of Blob has expired and so Blob cannot be retrieved.
    */
-  BlobExpired;
+  BlobExpired,
+  /**
+   * Buffer pool does not have enough memory for a reqeust after timeout.
+   */
+  BufferPoolNotEnoughMemory,
+  /**
+   * Requested buffer size is larger than buffer pool capacity.
+   */
+  ExceedPoolCapacity;
 
   /**
    * Converts a given {@link CoordinatorError} into a RouterErrorCode.
