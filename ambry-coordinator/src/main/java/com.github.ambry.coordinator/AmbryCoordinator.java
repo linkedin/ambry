@@ -37,26 +37,23 @@ import static com.github.ambry.utils.Utils.getRandomLong;
  * Ambry Coordinator performs put, delete, and get(Blob/BlobUserMetadata/BlobProperties) operations.
  */
 public class AmbryCoordinator implements Coordinator {
-
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
-  protected final NotificationSystem notificationSystem;
-
-  protected int operationTimeoutMs;
+  private final Random randomForPartitionSelection;
   private int connectionPoolCheckoutTimeout;
-
   private JmxReporter reporter = null;
   private String clientId;
+  private AtomicBoolean crossDCProxyCallsEnabled;
+  private ArrayList<String> sslEnabledDatacenters;
+  private Logger logger = LoggerFactory.getLogger(getClass());
+
+  protected final NotificationSystem notificationSystem;
+  protected int operationTimeoutMs;
   protected String datacenterName;
   protected ExecutorService requesterPool;
   protected ConnectionPool connectionPool;
-  private final Random randomForPartitionSelection;
-  private AtomicBoolean crossDCProxyCallsEnabled;
-  private ArrayList<String> sslEnabledDatacenters;
-
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap) {
     this(properties, clusterMap, new LoggingNotificationSystem());
