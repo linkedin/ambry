@@ -66,8 +66,9 @@ public class RestServer {
       throw new IllegalArgumentException(errorMessage.toString());
     }
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
-    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
+    RestRequestMetricsTracker.setDefaults(clusterMap.getMetricRegistry());
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
     try {
       requestResponseHandlerController =
           new RequestResponseHandlerController(restServerConfig.restServerScalingUnitCount, restServerMetrics);
@@ -84,8 +85,8 @@ public class RestServer {
               requestResponseHandlerController);
       nioServer = nioServerFactory.getNioServer();
     } catch (Exception e) {
-      logger.error("Exception during instantiation of RestServer", e);
       restServerMetrics.restServerInstantiationError.inc();
+      logger.error("Exception during instantiation of RestServer", e);
       throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
     }
 
@@ -117,9 +118,27 @@ public class RestServer {
     try {
       // ordering is important.
       reporter.start();
+      long reporterStartTime = System.currentTimeMillis();
+      long elapsedTime = reporterStartTime - startupBeginTime;
+      logger.info("JMX reporter start took {} ms", elapsedTime);
+      restServerMetrics.jmxReporterStartTimeInMs.update(elapsedTime);
+
       blobStorageService.start();
+      long blobStorageServiceStartTime = System.currentTimeMillis();
+      elapsedTime = blobStorageServiceStartTime - reporterStartTime;
+      logger.info("Blob storage service start took {} ms", elapsedTime);
+      restServerMetrics.blobStorageServiceStartTimeInMs.update(elapsedTime);
+
       requestResponseHandlerController.start();
+      long requestResponseHandlerStartTime = System.currentTimeMillis();
+      elapsedTime = requestResponseHandlerStartTime - blobStorageServiceStartTime;
+      logger.info("Request response handler controller start took {} ms", elapsedTime);
+      restServerMetrics.controllerStartTimeInMs.update(elapsedTime);
+
       nioServer.start();
+      elapsedTime = System.currentTimeMillis() - requestResponseHandlerStartTime;
+      logger.info("NIO server start took {} ms", elapsedTime);
+      restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -136,10 +155,33 @@ public class RestServer {
     try {
       //ordering is important.
       nioServer.shutdown();
+      long nioServerShutdownTime = System.currentTimeMillis();
+      long elapsedTime = nioServerShutdownTime - shutdownBeginTime;
+      logger.info("NIO server shutdown took {} ms", elapsedTime);
+      restServerMetrics.nioServerShutdownTimeInMs.update(elapsedTime);
+
       requestResponseHandlerController.shutdown();
+      long requestResponseHandlerShutdownTime = System.currentTimeMillis();
+      elapsedTime = requestResponseHandlerShutdownTime - nioServerShutdownTime;
+      logger.info("Request response handler controller shutdown took {} ms", elapsedTime);
+      restServerMetrics.requestResponseHandlerShutdownTimeInMs.update(elapsedTime);
+
       blobStorageService.shutdown();
+      long blobStorageServiceShutdownTime = System.currentTimeMillis();
+      elapsedTime = blobStorageServiceShutdownTime - requestResponseHandlerShutdownTime;
+      logger.info("Blob storage service shutdown took {} ms", elapsedTime);
+      restServerMetrics.blobStorageServiceShutdownTimeInMs.update(elapsedTime);
+
       router.close();
+      long routerCloseTime = System.currentTimeMillis();
+      elapsedTime = routerCloseTime - blobStorageServiceShutdownTime;
+      logger.info("Router close took {} ms", elapsedTime);
+      restServerMetrics.routerCloseTime.update(elapsedTime);
+
       reporter.stop();
+      elapsedTime = System.currentTimeMillis() - routerCloseTime;
+      logger.info("JMX reporter shutdown took {} ms", elapsedTime);
+      restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
     } catch (IOException e) {
       logger.error("Exception during shutdown", e);
     } finally {

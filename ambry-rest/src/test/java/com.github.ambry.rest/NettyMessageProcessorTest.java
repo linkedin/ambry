@@ -43,6 +43,7 @@ public class NettyMessageProcessorTest {
   public NettyMessageProcessorTest()
       throws InstantiationException, IOException, RestServiceException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties);
     blobStorageService = new MockBlobStorageService(verifiableProperties, router);
     requestHandlerController = new MockRequestResponseHandlerController(1);
@@ -148,16 +149,24 @@ public class NettyMessageProcessorTest {
   public void requestHandlerExceptionTest()
       throws RestServiceException {
     try {
+      // RuntimeException
       Properties properties = new Properties();
       properties.setProperty(MockRestRequestResponseHandler.RUNTIME_EXCEPTION_ON_HANDLE, "true");
       requestHandler.breakdown(new VerifiableProperties(properties));
-      doRequestHandlerExceptionTest(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
+      // RestServiceException
       properties.clear();
       properties.setProperty(MockRestRequestResponseHandler.REST_EXCEPTION_ON_HANDLE,
           RestServiceErrorCode.InternalServerError.toString());
       requestHandler.breakdown(new VerifiableProperties(properties));
-      doRequestHandlerExceptionTest(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+
+      // ClosedChannelException
+      properties.clear();
+      properties.setProperty(MockRestRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
+      requestHandler.breakdown(new VerifiableProperties(properties));
+      doRequestHandlerExceptionTest(HttpMethod.POST, HttpResponseStatus.INTERNAL_SERVER_ERROR);
     } finally {
       requestHandler.fix();
     }
@@ -234,13 +243,14 @@ public class NettyMessageProcessorTest {
   /**
    * Does a test where the request handler inside {@link NettyMessageProcessor} fails. Checks for the right error code
    * in the response.
+   * @param httpMethod the {@link HttpMethod} to use for the request.
    * @param expectedStatus the excepted {@link HttpResponseStatus} in the response.
    * @throws RestServiceException
    */
-  private void doRequestHandlerExceptionTest(HttpResponseStatus expectedStatus)
+  private void doRequestHandlerExceptionTest(HttpMethod httpMethod, HttpResponseStatus expectedStatus)
       throws RestServiceException {
     EmbeddedChannel channel = createChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, "/"));
+    channel.writeInbound(createRequest(httpMethod, "/"));
     channel.writeInbound(new DefaultLastHttpContent());
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
