@@ -283,9 +283,9 @@ public class ByteBufferPoolTest {
 
   ByteBufferPool getBufferPool(String bufferPoolType, long size) {
     if (bufferPoolType.equals("Simple")) {
-      return new ByteBufferPoolSimple(size);
+      return new SimpleByteBufferPool(size);
     } else if (bufferPoolType.equals("Fifo")) {
-      return new ByteBufferPoolFifo(size);
+      return new FifoByteBufferPool(size);
     } else {
       fail("Invalid pool type.");
       return null;

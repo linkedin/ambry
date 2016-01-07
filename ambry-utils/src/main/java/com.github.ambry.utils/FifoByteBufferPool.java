@@ -36,22 +36,24 @@ public class FifoByteBufferPool implements ByteBufferPool {
   }
 
   @Override
-  public ByteBuffer allocate(int size, long timeToBlockMs)
+  public ByteBuffer allocate(int size, long timeToBlockInMs)
       throws IOException, TimeoutException, InterruptedException {
     if (size > capacity) {
       throw new IOException("Requested size cannot exceed pool capacity.");
     }
+    ThreadLocal<Long> startTimeInMs = new ThreadLocal<Long>();
+    startTimeInMs.set((System.currentTimeMillis()));
     lock.lock();
     try {
       if (availableMemory >= size) {
         availableMemory -= size;
         return ByteBuffer.allocate(size);
       } else {
-        ByteBuffer buffer = null;
         Condition enoughMemory = lock.newCondition();
         waiters.addLast(enoughMemory);
         while (size > availableMemory) {
-          if (!enoughMemory.await(timeToBlockMs, TimeUnit.MILLISECONDS)) {
+          if (!enoughMemory
+              .await(timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs.get()), TimeUnit.MILLISECONDS)) {
             waiters.removeFirst();
             throw new TimeoutException("Memory not Enough. Request timeout.");
           }
@@ -66,12 +68,7 @@ public class FifoByteBufferPool implements ByteBufferPool {
             waiters.peekFirst().signal();
           }
         }
-        lock.unlock();
-        if (buffer == null) {
-          return ByteBuffer.allocate(size);
-        } else {
-          return buffer;
-        }
+        return ByteBuffer.allocate(size);
       }
     } finally {
       if (lock.isHeldByCurrentThread()) {
@@ -81,10 +78,11 @@ public class FifoByteBufferPool implements ByteBufferPool {
   }
 
   @Override
-  public void deallocate(ByteBuffer buffer) throws IOException {
+  public void deallocate(ByteBuffer buffer)
+      throws IOException {
     lock.lock();
     try {
-      if(availableMemory+buffer.capacity()>capacity){
+      if (availableMemory + buffer.capacity() > capacity) {
         throw new IOException("Total buffer size cannot exceed pool capacity");
       }
       availableMemory += buffer.capacity();

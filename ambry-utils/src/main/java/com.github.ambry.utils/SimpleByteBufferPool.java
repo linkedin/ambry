@@ -3,7 +3,6 @@ package com.github.ambry.utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -14,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SimpleByteBufferPool implements ByteBufferPool {
   private final long capacity;
   private final Object lock;
-  private AtomicLong availableMemory;
+  private long availableMemory;
 
   /**
    * Create a new buffer pool
@@ -24,40 +23,29 @@ public class SimpleByteBufferPool implements ByteBufferPool {
   public SimpleByteBufferPool(long capacity) {
     this.lock = new Object();
     this.capacity = capacity;
-    this.availableMemory = new AtomicLong(capacity);
+    this.availableMemory = capacity;
   }
 
   @Override
-  public ByteBuffer allocate(int size, long timeToBlockMs)
+  public ByteBuffer allocate(int size, long timeToBlockInMs)
       throws IOException, TimeoutException, InterruptedException {
-    ThreadLocal<Long> startTimeMs = new ThreadLocal<Long>();
-    startTimeMs.set((System.currentTimeMillis()));
     if (size > capacity) {
       throw new IOException("Requested size cannot exceed pool capacity.");
     }
-    long oldVal;
-    long newVal;
-    while (true) {
-      oldVal = availableMemory.get();
-      if (oldVal >= size) {
-        newVal = oldVal - size;
-        if (availableMemory.compareAndSet(oldVal, newVal)) {
-          if (System.currentTimeMillis() >= startTimeMs.get() + timeToBlockMs) {
-            throw new TimeoutException("Memory not Enough. Request timeout.");
-          }
-          break;
-        }
-      } else {
-        synchronized (lock) {
-          lock.wait(timeToBlockMs);
-        }
-        if (System.currentTimeMillis() >= startTimeMs.get() + timeToBlockMs) {
+    ThreadLocal<Long> startTimeInMs = new ThreadLocal<Long>();
+    startTimeInMs.set((System.currentTimeMillis()));
+    ThreadLocal<Long> timeout = new ThreadLocal<Long>();
+    timeout.set(timeToBlockInMs);
+    synchronized (lock) {
+      while (size > availableMemory) {
+        timeout.set(timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs.get()));
+        if (timeout.get() <= 0) {
           throw new TimeoutException("Memory not Enough. Request timeout.");
         }
+        lock.wait(timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs.get()));
       }
-    }
-    if (availableMemory.get() > 0) {
-      synchronized (lock) {
+      availableMemory -= size;
+      if (availableMemory > 0) {
         lock.notifyAll();
       }
     }
@@ -65,27 +53,20 @@ public class SimpleByteBufferPool implements ByteBufferPool {
   }
 
   @Override
-  public void deallocate(ByteBuffer buffer) throws IOException {
-    long oldVal;
-    long newVal;
-    while (true) {
-      oldVal = availableMemory.get();
-      newVal = oldVal + buffer.capacity();
-      if(newVal>capacity){
+  public void deallocate(ByteBuffer buffer)
+      throws IOException {
+    synchronized (lock) {
+      if (availableMemory + buffer.capacity() > capacity) {
         throw new IOException("Total buffer size cannot exceed pool capacity");
       }
-      if (availableMemory.compareAndSet(oldVal, newVal)) {
-        break;
-      }
-    }
-    synchronized (lock) {
+      availableMemory += buffer.capacity();
       lock.notifyAll();
     }
   }
 
   @Override
   public long availableMemory() {
-    return availableMemory.get();
+    return availableMemory;
   }
 
   @Override
