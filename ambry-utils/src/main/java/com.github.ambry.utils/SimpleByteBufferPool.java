@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * available memory in the pool never goes above the initially-set pool
  * capacity or below zero. It does not actually "pool" deallocated buffers.
  */
-public class ByteBufferPoolSimple implements ByteBufferPool {
+public class SimpleByteBufferPool implements ByteBufferPool {
   private final long capacity;
   private final Object lock;
   private AtomicLong availableMemory;
@@ -21,7 +21,7 @@ public class ByteBufferPoolSimple implements ByteBufferPool {
    * @param capacity the maximum amount of memory that this buffer pool can
    *                 allocate
    */
-  public ByteBufferPoolSimple(long capacity) {
+  public SimpleByteBufferPool(long capacity) {
     this.lock = new Object();
     this.capacity = capacity;
     this.availableMemory = new AtomicLong(capacity);

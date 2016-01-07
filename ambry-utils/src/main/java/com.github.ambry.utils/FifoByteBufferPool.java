@@ -17,7 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * only ensures that the available memory in the pool never goes above the initially-set
  * pool capacity or below zero. It does not actually "pool" deallocated buffers.
  */
-public class ByteBufferPoolFifo implements ByteBufferPool {
+public class FifoByteBufferPool implements ByteBufferPool {
   private final long capacity;
   private final ReentrantLock lock;
   private final Deque<Condition> waiters;
@@ -28,7 +28,7 @@ public class ByteBufferPoolFifo implements ByteBufferPool {
    * @param capacity the maximum amount of memory that this buffer pool can
    *                 allocate
    */
-  public ByteBufferPoolFifo(long capacity) {
+  public FifoByteBufferPool(long capacity) {
     this.lock = new ReentrantLock();
     this.waiters = new ArrayDeque<Condition>();
     this.capacity = capacity;
