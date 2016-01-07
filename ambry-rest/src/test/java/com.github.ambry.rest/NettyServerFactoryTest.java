@@ -25,9 +25,9 @@ public class NettyServerFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
 
-    NettyServerFactory nioServerFactory =
+    NettyServerFactory nettyServerFactory =
         new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler);
-    NioServer nioServer = nioServerFactory.getNioServer();
+    NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());

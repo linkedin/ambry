@@ -694,7 +694,7 @@ public class AsyncRequestResponseHandlerTest {
       throws IOException {
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
-    if(blobStorageService == null) {
+    if (blobStorageService == null) {
       blobStorageService = new MockBlobStorageService(verifiableProperties, handler, router);
     }
     handler.setRequestWorkersCount(requestWorkers);

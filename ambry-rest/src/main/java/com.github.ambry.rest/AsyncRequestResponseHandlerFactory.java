@@ -1,6 +1,6 @@
 package com.github.ambry.rest;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFactory, RestResponseHandlerFactory {
 
-  private static final AtomicBoolean instantiated = new AtomicBoolean(false);
+  private static final ReentrantLock lock = new ReentrantLock();
   private static AsyncRequestResponseHandler instance;
   private static RestServerMetrics restServerMetrics;
 
@@ -86,14 +86,19 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
    * @return an instance of {@link AsyncRequestResponseHandler}.
    */
   private static AsyncRequestResponseHandler getInstance(RestServerMetrics restServerMetrics) {
-    if (instantiated.compareAndSet(false, true)) {
-      AsyncRequestResponseHandlerFactory.restServerMetrics = restServerMetrics;
-      instance = new AsyncRequestResponseHandler(restServerMetrics);
-    }
-    // check if same instance of RestServerMetrics - otherwise it is a problem.
-    if (AsyncRequestResponseHandlerFactory.restServerMetrics != restServerMetrics) {
-      throw new IllegalStateException("RestServerMetrics instance provided during construction of "
-          + "AsyncRequestResponseHandler differs from the one currently received");
+    lock.lock();
+    try {
+      if (instance == null) {
+        AsyncRequestResponseHandlerFactory.restServerMetrics = restServerMetrics;
+        instance = new AsyncRequestResponseHandler(restServerMetrics);
+      }
+      // check if same instance of RestServerMetrics - otherwise it is a problem.
+      if (AsyncRequestResponseHandlerFactory.restServerMetrics != restServerMetrics) {
+        throw new IllegalStateException("RestServerMetrics instance provided during construction of "
+            + "AsyncRequestResponseHandler differs from the one currently received");
+      }
+    } finally {
+      lock.unlock();
     }
     return instance;
   }

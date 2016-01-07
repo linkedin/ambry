@@ -39,9 +39,9 @@ class RestServerConfig {
    * The {@link RestRequestHandlerFactory} that needs to be used by the {@link RestServer}
    * for bootstrapping the {@link RestRequestHandler}.
    */
-  @Config("rest.server.rest.request.handler.factory")
+  @Config("rest.server.request.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
-  public final String restServerRestRequestHandlerFactory;
+  public final String restServerRequestHandlerFactory;
 
   /**
    * The number of scaling units in {@link RestResponseHandler} handle responses.
@@ -54,9 +54,9 @@ class RestServerConfig {
    * The {@link RestResponseHandlerFactory} that needs to be used by the {@link RestServer}
    * for bootstrapping the {@link RestResponseHandler}.
    */
-  @Config("rest.server.rest.response.handler.factory")
+  @Config("rest.server.response.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
-  public final String restServerRestResponseHandlerFactory;
+  public final String restServerResponseHandlerFactory;
 
   /**
    * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
@@ -72,12 +72,12 @@ class RestServerConfig {
         verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
-    restServerRestRequestHandlerFactory = verifiableProperties.getString("rest.server.rest.request.handler.factory",
-        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
+    restServerRequestHandlerFactory = verifiableProperties
+        .getString("rest.server.request.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerResponseHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
-    restServerRestResponseHandlerFactory = verifiableProperties.getString("rest.server.rest.response.handler.factory",
-        "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
+    restServerResponseHandlerFactory = verifiableProperties
+        .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
   }

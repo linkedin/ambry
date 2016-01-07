@@ -82,7 +82,7 @@ public class RestServer {
       router = routerFactory.getRouter();
 
       RestResponseHandlerFactory restResponseHandlerFactory = Utils
-          .getObj(restServerConfig.restServerRestResponseHandlerFactory,
+          .getObj(restServerConfig.restServerResponseHandlerFactory,
               restServerConfig.restServerResponseHandlerScalingUnitCount, restServerMetrics);
       restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
 
@@ -92,7 +92,7 @@ public class RestServer {
       blobStorageService = blobStorageServiceFactory.getBlobStorageService();
 
       RestRequestHandlerFactory restRequestHandlerFactory = Utils
-          .getObj(restServerConfig.restServerRestRequestHandlerFactory,
+          .getObj(restServerConfig.restServerRequestHandlerFactory,
               restServerConfig.restServerRequestHandlerScalingUnitCount, restServerMetrics, blobStorageService);
       restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
 

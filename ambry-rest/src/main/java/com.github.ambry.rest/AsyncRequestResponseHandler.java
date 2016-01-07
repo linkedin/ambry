@@ -212,6 +212,7 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
   /**
    * Sets the {@link BlobStorageService} that will be used in {@link AsyncHandlerWorker}.
    * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   * @throws IllegalArgumentException if {@code blobStorageService} is null.
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
@@ -521,8 +522,7 @@ class AsyncHandlerWorker implements Runnable {
    * @param restRequest the {@link RestRequest} to use. Cannot be null.
    * @param restResponseChannel the {@link RestResponseChannel} to use. Cannot be null.
    */
-  private void handlePrechecks(RestRequest restRequest, RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+  private void handlePrechecks(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (restRequest == null || restResponseChannel == null) {
       StringBuilder errorMessage = new StringBuilder("Null arg(s) received -");
       if (restRequest == null) {

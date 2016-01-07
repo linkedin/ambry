@@ -112,11 +112,11 @@ public class RestServerTest {
    */
   private VerifiableProperties getVProps(Properties properties) {
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.rest.response.handler.factory",
+    properties.setProperty("rest.server.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.blob.storage.service.factory",
         MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.rest.request.handler.factory",
+    properties.setProperty("rest.server.request.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     return new VerifiableProperties(properties);
@@ -167,17 +167,19 @@ public class RestServerTest {
     doBadFactoryClassTest("rest.server.nio.server.factory");
     doBadFactoryClassTest("rest.server.blob.storage.service.factory");
     doBadFactoryClassTest("rest.server.router.factory");
+    doBadFactoryClassTest("rest.server.response.handler.factory");
+    doBadFactoryClassTest("rest.server.request.handler.factory");
   }
 
   private void doBadFactoryClassTest(String configKey)
       throws IOException {
     Properties properties = new Properties();
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.rest.response.handler.factory",
+    properties.setProperty("rest.server.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.blob.storage.service.factory",
         MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.rest.request.handler.factory",
+    properties.setProperty("rest.server.request.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
 

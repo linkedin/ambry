@@ -73,7 +73,7 @@ public class AdminBlobStorageServiceFactoryTest {
       // expected. Nothing to do.
     }
 
-    // RestRequestHandler null.
+    // RestResponseHandler null.
     try {
       new AdminBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router);
       fail("Instantiation should have failed because one of the arguments was null");

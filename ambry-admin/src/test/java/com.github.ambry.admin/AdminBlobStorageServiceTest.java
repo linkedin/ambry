@@ -91,6 +91,7 @@ public class AdminBlobStorageServiceTest {
   public void shutdownAdminBlobStorageService()
       throws IOException {
     adminBlobStorageService.shutdown();
+    responseHandler.shutdown();
     router.close();
   }
 
