@@ -1,9 +1,8 @@
 package com.github.ambry.utils;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
@@ -11,11 +10,15 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * An implementation of {@link ByteBufferPool}. When the memory in the pool is not enough,
- * further requests will be blocked before respectively goes timeout. The blocked requests
- * are queued and served in the manner of "first come, first serve". This implementation
- * only ensures that the available memory in the pool never goes above the initially-set
- * pool capacity or below zero. It does not actually "pool" deallocated buffers.
+ * <p>
+ * An implementation of <B>bounded</B> {@link ByteBufferPool}. A pool
+ * is bounded by non-varying {@code capacity}, and it ensures that the
+ * available memory in the pool never goes above this capacity, or goes
+ * below zero. It does not actually "pool" deallocated buffers.
+ * <p>
+ * This implementation maintains an explicit FIFO queue for all the
+ * blocked requests. However, a new arriving request (i.e., not in the
+ * queue) may preempt over the blocked requests.
  */
 public class FifoByteBufferPool implements ByteBufferPool {
   private final long capacity;
@@ -30,19 +33,28 @@ public class FifoByteBufferPool implements ByteBufferPool {
    */
   public FifoByteBufferPool(long capacity) {
     this.lock = new ReentrantLock();
-    this.waiters = new ArrayDeque<Condition>();
+    this.waiters = new LinkedList<Condition>();
     this.capacity = capacity;
     this.availableMemory = capacity;
   }
 
+  /**
+   * Allocate a byte buffer at the requested size
+   * @param size the buffer size to allocate in bytes
+   * @param timeToBlockInMs the maximum time in milliseconds to block a request
+   *                      until the requested size of memory becomes available
+   * @return A {@link ByteBuffer} at the requested size
+   * @throws TimeoutException if request cannot be served within {@code timeToBlockMs}
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   * @throws IllegalArgumentException if {@code size} is larger than the pool capacity
+   */
   @Override
   public ByteBuffer allocate(int size, long timeToBlockInMs)
-      throws IOException, TimeoutException, InterruptedException {
+      throws TimeoutException, InterruptedException {
     if (size > capacity) {
-      throw new IOException("Requested size cannot exceed pool capacity.");
+      throw new IllegalArgumentException("Requested size cannot exceed pool capacity.");
     }
-    ThreadLocal<Long> startTimeInMs = new ThreadLocal<Long>();
-    startTimeInMs.set((System.currentTimeMillis()));
+    final long startTimeInMs = System.currentTimeMillis();
     lock.lock();
     try {
       if (availableMemory >= size) {
@@ -53,39 +65,38 @@ public class FifoByteBufferPool implements ByteBufferPool {
         waiters.addLast(enoughMemory);
         while (size > availableMemory) {
           if (!enoughMemory
-              .await(timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs.get()), TimeUnit.MILLISECONDS)) {
+              .await(timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs), TimeUnit.MILLISECONDS)) {
             waiters.removeFirst();
             throw new TimeoutException("Memory not Enough. Request timeout.");
           }
         }
         Condition removed = waiters.removeFirst();
-        if (removed != enoughMemory) {
-          throw new IllegalStateException("Wrong condition: this shouldn't happen.");
-        }
         availableMemory -= size;
-        if (availableMemory > 0) {
-          if (!waiters.isEmpty()) {
-            waiters.peekFirst().signal();
-          }
+        if (availableMemory > 0 && !waiters.isEmpty()) {
+          waiters.peekFirst().signal();
         }
         return ByteBuffer.allocate(size);
       }
     } finally {
-      if (lock.isHeldByCurrentThread()) {
-        lock.unlock();
-      }
+      lock.unlock();
     }
   }
 
+  /**
+   * This method claims back the capacity of {@code buffer}. It does not
+   * check if the buffer was originally allocated from the pool. If a
+   * deallocation will exceed the pool's capacity, the method simply sets
+   * the pool's available memory to its {@code capacity}.
+   * @param buffer the byte buffer to be deallocated back to the pool
+   */
   @Override
-  public void deallocate(ByteBuffer buffer)
-      throws IOException {
+  public void deallocate(ByteBuffer buffer) {
     lock.lock();
     try {
-      if (availableMemory + buffer.capacity() > capacity) {
-        throw new IOException("Total buffer size cannot exceed pool capacity");
-      }
       availableMemory += buffer.capacity();
+      if (availableMemory > capacity) {
+        availableMemory = capacity;
+      }
       if (!waiters.isEmpty()) {
         waiters.peekFirst().signal();
       }
@@ -94,17 +105,16 @@ public class FifoByteBufferPool implements ByteBufferPool {
     }
   }
 
-  @Override
+  /**
+   * @return the amount of memory currently available
+   */
   public long availableMemory() {
-    lock.lock();
-    try {
-      return availableMemory;
-    } finally {
-      lock.unlock();
-    }
+    return availableMemory;
   }
 
-  @Override
+  /**
+   * @return the capacity of the pool
+   */
   public long capacity() {
     return capacity;
   }
