@@ -6,6 +6,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -19,7 +20,7 @@ public class ByteBufferRSC implements ReadableStreamChannel {
    */
   public static enum Event {
     GetSize,
-    Read,
+    ReadInto,
     IsOpen,
     Close
   }
@@ -42,6 +43,7 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   }
 
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
   private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;
   private final List<EventListener> listeners = new ArrayList<EventListener>();
@@ -61,8 +63,10 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
+    // NOTE: This function is deprecated and will be removed soon. Therefore no changes have been made here.
     int bytesWritten = -1;
     if (!channelOpen.get()) {
       throw new ClosedChannelException();
@@ -76,8 +80,28 @@ public class ByteBufferRSC implements ReadableStreamChannel {
         bufferReadLock.unlock();
       }
     }
-    onEventComplete(Event.Read);
+    onEventComplete(Event.ReadInto);
     return bytesWritten;
+  }
+
+  @Override
+  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+    Future<Long> future;
+    if (!channelOpen.get()) {
+      ClosedChannelException cce = new ClosedChannelException();
+      FutureResult<Long> futureResult = new FutureResult<Long>();
+      futureResult.done(0L, new IllegalStateException(cce));
+      future = futureResult;
+      if(callback != null) {
+        callback.onCompletion(0L, cce);
+      }
+    } else if(!channelEmptied.compareAndSet(false, true)) {
+      throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
+    } else {
+      future = scheduledWriteChannel.write(buffer, callback);
+    }
+    onEventComplete(Event.ReadInto);
+    return future;
   }
 
   @Override
