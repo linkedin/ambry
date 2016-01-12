@@ -2,8 +2,13 @@ package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 
 /**
@@ -45,6 +50,14 @@ public class RestUtils {
      * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
     public final static String Creation_Time = "x-ambry-creation-time";
+    /**
+     * prefix for any header to be set as user metadata for the given blob
+     */
+    public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
+    /**
+     * prefix for old style user metadata that will be served as headers
+     */
+    public final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
   }
 
   /**
@@ -112,8 +125,89 @@ public class RestUtils {
    * @return the user metadata extracted from {@code restRequest}.
    */
   public static byte[] buildUsermetadata(RestRequest restRequest) {
-    // TODO: after discussion.
-    return new byte[0];
+    Map<String, List<String>> args = restRequest.getArgs();
+    Map<String, List<String>> userMetadataMap = new HashMap<String, List<String>>();
+    int size = 0;
+    size += 4; // total number of entries
+    for (Map.Entry<String, List<String>> entry : args.entrySet()) {
+      String key = entry.getKey();
+      if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
+        userMetadataMap.put(key, args.get(key));
+        size += 4; // key size
+        size += key.getBytes().length;
+        size += 4; // size of value list
+        for (String value : entry.getValue()) {
+          size += 4; // size of each value
+          size += value.getBytes().length;
+        }
+      }
+    }
+    ByteBuffer userMetadata = ByteBuffer.allocate(size);
+    userMetadata.putInt(userMetadataMap.size());
+    for (Map.Entry<String, List<String>> entry : userMetadataMap.entrySet()) {
+      String key = entry.getKey();
+      Utils.serializeNullableASCIIEncodedString(userMetadata, key);
+      userMetadata.putInt(entry.getValue().size());
+      for (String value : entry.getValue()) {
+        Utils.serializeNullableASCIIEncodedString(userMetadata, value);
+      }
+    }
+    return userMetadata.array();
+  }
+
+  /**
+   * Fetches User metadata from the {@link ByteBuffer}
+   * @param userMetadata the {@link ByteBuffer} which has the user metadata
+   * @return Map<String,List<String>> the User Metadata that is read from the byte buffer
+   */
+  public static Map<String, List<String>> getUserMetadataFromByteBuffer(ByteBuffer userMetadata) {
+    int size = userMetadata.getInt();
+    Map<String, List<String>> toReturn = new HashMap<String, List<String>>();
+    int counter = 0;
+    while (counter++ < size) {
+      String key = Utils.deserializeNullableASCIIString(userMetadata);
+      int valueSize = userMetadata.getInt();
+      int valueCounter = 0;
+      ArrayList<String> values = new ArrayList<String>();
+      while (valueCounter++ < valueSize) {
+        String value = Utils.deserializeNullableASCIIString(userMetadata);
+        values = getListFromHeaderValue(value);
+      }
+      toReturn.put(key, values);
+    }
+    return toReturn;
+  }
+
+  /**
+   * Returns the header value as list of strings
+   * @param value Header value to be parsed
+   * @return ArrayList<String> list of string obtained from header value
+   */
+  public static ArrayList<String> getListFromHeaderValue(String value) {
+    ArrayList<String> values = new ArrayList<String>();
+    value = value.substring(1, value.length() - 1);
+    String[] valueArray = value.split("\"");
+    for (int i = 1; i < valueArray.length; i += 2) {
+      values.add(valueArray[i]);
+    }
+    return values;
+  }
+
+  /**
+   * Returns the header value combining a list of strings
+   * @param input List<String> from which header value has to be constructed
+   * @return String header value obtained from the list of strings
+   */
+  public static String getHeaderValueFromList(List<String> input) {
+    String toReturn = "[";
+    if (input.size() > 0) {
+      for (String str : input) {
+        toReturn += "\"" + str + "\",";
+      }
+      toReturn = toReturn.substring(0, toReturn.length() - 1);
+    }
+    toReturn += "]";
+    return toReturn;
   }
 
   /**
@@ -148,5 +242,18 @@ public class RestUtils {
           RestServiceErrorCode.MissingArgs);
     }
     return value;
+  }
+
+  /**
+   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
+   * @param headers  @{link JSONObject} to which the new headers are to be added
+   * @param userMetadata @{@Map} which has the new entries that has to be added
+   * @throws org.json.JSONException
+   */
+  public static void setAmbryHeaders(JSONObject headers, Map<String, List<String>> userMetadata)
+      throws JSONException {
+    for (String key : userMetadata.keySet()) {
+      headers.put(key, userMetadata.get(key));
+    }
   }
 }

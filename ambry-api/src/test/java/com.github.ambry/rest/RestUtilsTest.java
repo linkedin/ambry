@@ -4,14 +4,18 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -143,7 +147,74 @@ public class RestUtilsTest {
   public void getUserMetadataTest()
       throws Exception {
     byte[] usermetadata = RestUtils.buildUsermetadata(createRestRequest(RestMethod.POST, "/", null));
-    assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
+    assertArrayEquals("Unexpected user metadata", new byte[4], usermetadata);
+  }
+
+  /**
+   * Tests building of User Metadata with good input
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataGoodInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
+        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2",
+        new ArrayList<String>(Arrays.asList("value2_1", "value2_2")));
+    RestUtils.setAmbryHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+    verifyUserMetadataConstructionSuccess(headers, userMetadata);
+  }
+
+  /**
+   * Tests building of User Metadata with bad input
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataBadInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
+        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
+    userMetadata.put("key2", new ArrayList<String>(Arrays.asList("value2_1", "value2_2"))); // no valid prefix
+    userMetadata.put("key3" + RestUtils.Headers.UserMetaData_Header_Prefix,
+        new ArrayList<String>(Arrays.asList("value1_1", "value1_2"))); // valid prefix as suffix
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key4", new ArrayList<String>()); // empty list
+    RestUtils.setAmbryHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+
+    // key1, output should be same as input
+    String key = RestUtils.Headers.UserMetaData_Header_Prefix + "key1";
+    assertTrue("key1 not found in user metadata map ", userMetadataMap.containsKey(key));
+    assertTrue("Value for key1 didnt match, input value " + userMetadata.get(key) + ", output value " + userMetadataMap
+        .get(key), Utils.verifyListsForEquality(userMetadata.get(key), userMetadataMap.get(key)));
+
+    // key2, should not be found in output
+    assertFalse(
+        "key2 found in user metadata map " + userMetadataMap.get(RestUtils.Headers.UserMetaData_Header_Prefix + "key2"),
+        userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_Header_Prefix + "key2"));
+
+    // key3, should not be found in output
+    assertFalse(
+        "key3 found in user metadata map " + userMetadataMap.get(RestUtils.Headers.UserMetaData_Header_Prefix + "key3"),
+        userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_Header_Prefix + "key3"));
+
+    key = RestUtils.Headers.UserMetaData_Header_Prefix + "key4";
+    assertTrue("key4 not found in user metadata map ", userMetadataMap.containsKey(key));
+    assertTrue("Value for key4 didnt match, input value " + userMetadata.get(key) + ", output value " + userMetadataMap
+        .get(key), Utils.verifyListsForEquality(userMetadata.get(key), userMetadataMap.get(key)));
   }
 
   // helpers.
@@ -235,6 +306,31 @@ public class RestUtilsTest {
     if (headers.has(RestUtils.Headers.Owner_Id) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.Owner_Id))) {
       assertEquals("Blob owner ID does not match", headers.getString(RestUtils.Headers.Owner_Id),
           blobProperties.getOwnerId());
+    }
+  }
+
+  /**
+   * Verifies that a request with headers defined by {@code headers} builds UserMetadata successfully and
+   * matches the values with those in {@code headers}.
+   * @param headers the headers that need to go with the request that is used to construct the User Metadata
+   * @throws Exception
+   */
+  private void verifyUserMetadataConstructionSuccess(JSONObject headers, Map<String, List<String>> inputUserMetadata)
+      throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadata = RestUtils.buildUsermetadata(restRequest);
+    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+    assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
+    for (String key : userMetadataMap.keySet()) {
+      boolean keyFromInputMap = inputUserMetadata.containsKey(key);
+      assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
+      List<String> outPutMapValue = userMetadataMap.get(key);
+      List<String> inputMapValue = inputUserMetadata.get(key);
+      boolean valueMatch = Utils.verifyListsForEquality(inputMapValue, outPutMapValue);
+      assertTrue("Values didn't match for key " + key + ", value from input map value " + Arrays
+          .toString(inputMapValue.toArray()) + ", and output map value " + Arrays.toString(outPutMapValue.toArray()),
+          valueMatch);
     }
   }
 

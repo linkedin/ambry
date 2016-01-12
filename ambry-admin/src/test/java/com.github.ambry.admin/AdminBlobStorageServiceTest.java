@@ -36,6 +36,10 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -339,7 +343,67 @@ public class AdminBlobStorageServiceTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers);
+    getHeadAndVerify(blobId, headers, new ArrayList<String>());
+    deleteBlobAndVerify(blobId);
+  }
+
+  /**
+   * Tests blob POST, GET, HEAD and DELETE operations with user metadata
+   * @throws Exception
+   */
+  @Test
+  public void postGetHeadDeleteWithUserMetadataTest()
+      throws Exception {
+    final int CONTENT_LENGTH = 1024;
+    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
+    String serviceId = "postGetHeadDeleteServiceID";
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
+    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
+        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2",
+        new ArrayList<String>(Arrays.asList("value2_1", "value2_2")));
+    RestUtils.setAmbryHeaders(headers, userMetadata);
+
+    String blobId = postBlobAndVerify(headers, content);
+    getBlobAndVerify(blobId, headers, content);
+    getHeadAndVerify(blobId, headers, new ArrayList<String>());
+    deleteBlobAndVerify(blobId);
+  }
+
+  /**
+   * Tests blob POST, GET, HEAD and DELETE operations with bad input for user metadata
+   * @throws Exception
+   */
+  @Test
+  public void postGetHeadDeleteWithBadUserMetadataTest()
+      throws Exception {
+    final int CONTENT_LENGTH = 1024;
+    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
+    String serviceId = "postGetHeadDeleteServiceID";
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
+    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
+        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
+    userMetadata.put("key2" + RestUtils.Headers.UserMetaData_Header_Prefix,
+        new ArrayList<String>(Arrays.asList("value2_1", "value2_2"))); // prefix as suffix
+    userMetadata.put("key3", new ArrayList<String>(Arrays.asList("value3_1", "value3_2"))); // no prefix
+    userMetadata.put("key4", new ArrayList<String>()); // no prefix with empty list
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key5", new ArrayList<String>());
+    RestUtils.setAmbryHeaders(headers, userMetadata);
+    String blobId = postBlobAndVerify(headers, content);
+    getBlobAndVerify(blobId, headers, content);
+    List<String> nonExpectedHeaders = new ArrayList<String>();
+    nonExpectedHeaders.add("key2" + RestUtils.Headers.UserMetaData_Header_Prefix);
+    nonExpectedHeaders.add("key3");
+    nonExpectedHeaders.add("key4");
+    getHeadAndVerify(blobId, headers, nonExpectedHeaders);
     deleteBlobAndVerify(blobId);
   }
 
@@ -1157,9 +1221,10 @@ public class AdminBlobStorageServiceTest {
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param expectedHeaders the expected headers in the response.
+   * @param unExpectedHeaders headers that are not expected to be part of output
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, JSONObject expectedHeaders)
+  private void getHeadAndVerify(String blobId, JSONObject expectedHeaders, List<String> unExpectedHeaders)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -1189,6 +1254,42 @@ public class AdminBlobStorageServiceTest {
           expectedHeaders.getString(RestUtils.Headers.Owner_Id),
           restResponseChannel.getHeader(RestUtils.Headers.Owner_Id, MockRestResponseChannel.DataStatus.Flushed));
     }
+    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
+    for (String key : unExpectedHeaders) {
+      verifyNonAvailabilityOfHeader(key, restResponseChannel);
+    }
+  }
+
+  /**
+   * Verifies User metadata headers from output, to that sent in during input
+   * @param expectedHeaders the expected headers in the response.
+   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
+   * @throws JSONException
+   */
+  private void verifyUserMetadataHeaders(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
+      throws JSONException {
+    Iterator itr = expectedHeaders.keys();
+    while (itr.hasNext()) {
+      String key = (String) itr.next();
+      if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
+        String outValue = restResponseChannel.getHeader(key, MockRestResponseChannel.DataStatus.Flushed);
+        assertTrue("Key " + key + "value does not match in user metadata, input " + expectedHeaders.getString(key)
+            + ", output " +
+            outValue, expectedHeaders.getString(key).equals(outValue));
+      }
+    }
+  }
+
+  /**
+   * Verifies that the passed in header is not present in the output
+   * @param key the non expected header in the response
+   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
+   * @throws JSONException
+   */
+  private void verifyNonAvailabilityOfHeader(String key, MockRestResponseChannel restResponseChannel)
+      throws JSONException {
+    String outValue = restResponseChannel.getHeader(key, MockRestResponseChannel.DataStatus.Flushed);
+    assertNull("Key " + key + " is not expected to be part of output, value obtained " + outValue, outValue);
   }
 
   /**

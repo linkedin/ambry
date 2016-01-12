@@ -19,9 +19,12 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -700,6 +703,11 @@ class HeadCallback implements Callback<BlobInfo> {
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
-    // TODO: send user metadata also as header after discussion with team.
+    byte[] userMetadataArray = blobInfo.getUserMetadata();
+    Map<String, List<String>> userMetadata =
+        RestUtils.getUserMetadataFromByteBuffer(ByteBuffer.wrap(userMetadataArray));
+    for (String key : userMetadata.keySet()) {
+      restResponseChannel.setHeader(key, RestUtils.getHeaderValueFromList(userMetadata.get(key)));
+    }
   }
 }

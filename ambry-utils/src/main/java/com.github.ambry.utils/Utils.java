@@ -1,7 +1,9 @@
 package com.github.ambry.utils;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -323,15 +325,15 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if(ctor.getParameterTypes().length == objects.length){
+      if (ctor.getParameterTypes().length == objects.length) {
         int i = 0;
-        for(; i < objects.length; i++) {
-          if(!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
+        for (; i < objects.length; i++) {
+          if (!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
             break;
           }
         }
-        if(i == objects.length) {
-          return (T)ctor.newInstance(objects);
+        if (i == objects.length) {
+          return (T) ctor.newInstance(objects);
         }
       }
     }
@@ -408,6 +410,56 @@ public class Utils {
       outputBuffer.putInt(value.length());
       outputBuffer.put(value.getBytes());
     }
+  }
+
+  /**
+   * Serializes a nullable ascii encoded string into byte buffer
+   *
+   * @param outputBuffer The output buffer to serialize the value to
+   * @param value The value to serialize
+   */
+  public static void serializeNullableASCIIEncodedString(ByteBuffer outputBuffer, String value) {
+    if (value == null) {
+      outputBuffer.putInt(0);
+    } else {
+      outputBuffer.putInt(value.length());
+      try {
+        outputBuffer.put(value.getBytes("US-ASCII"));
+      } catch (UnsupportedEncodingException e) {
+        throw new IllegalArgumentException("UnSupportedEncodingException " + e);
+      }
+    }
+  }
+
+  /**
+   * Deserializes a nullable ascii string from byte buffer
+   *
+   * @param inputBuffer The input buffer to serialize the value to
+   */
+  public static String deserializeNullableASCIIString(ByteBuffer inputBuffer) {
+    int size = inputBuffer.getInt();
+    if (size < 0) {
+      return null;
+    }
+    byte[] value = new byte[size];
+    inputBuffer.get(value);
+    String valueStr = null;
+    try {
+      valueStr = new String(value, "US-ASCII");
+    } catch (UnsupportedEncodingException e) {
+      throw new IllegalArgumentException("UnsupportedEncodingException thrown " + e);
+    }
+    return valueStr;
+  }
+
+  /**
+   * Verifies the contents of two lists for equality
+   * @param inputList1 List1 to be compared
+   * @param inputList2 List2 to be compared
+   */
+  public static boolean verifyListsForEquality(List<String> inputList1, List<String> inputList2) {
+    return inputList1.size() == inputList2.size() ? (inputList1.containsAll(inputList2) && inputList2
+        .containsAll(inputList1)) : false;
   }
 
   /**
