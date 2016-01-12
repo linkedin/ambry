@@ -4,7 +4,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -192,8 +191,7 @@ public class RestUtilsTest {
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
-    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadataByteArray);
-    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
 
     // key1, output should be same as input
     String key = RestUtils.Headers.UserMetaData_Header_Prefix + "key1";
@@ -233,8 +231,7 @@ public class RestUtilsTest {
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
-    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadataByteArray);
-    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
     assertTrue("UserMetadata should have been empty " + userMetadataMap, userMetadataMap.size() == 0);
   }
 
@@ -359,8 +356,7 @@ public class RestUtilsTest {
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadata = RestUtils.buildUsermetadata(restRequest);
-    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
-    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadata);
     assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
     for (String key : userMetadataMap.keySet()) {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);

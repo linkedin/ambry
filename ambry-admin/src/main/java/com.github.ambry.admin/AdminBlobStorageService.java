@@ -19,7 +19,6 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
@@ -705,7 +704,7 @@ class HeadCallback implements Callback<BlobInfo> {
     }
     byte[] userMetadataArray = blobInfo.getUserMetadata();
     Map<String, List<String>> userMetadata =
-        RestUtils.getUserMetadataFromByteBuffer(ByteBuffer.wrap(userMetadataArray));
+        RestUtils.getUserMetadataFromByteArray(userMetadataArray);
     for (String key : userMetadata.keySet()) {
       restResponseChannel.setHeader(key, RestUtils.getHeaderValueFromList(userMetadata.get(key)));
     }

@@ -343,7 +343,7 @@ public class AdminBlobStorageServiceTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers, new ArrayList<String>());
+    getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
   }
 
@@ -370,7 +370,7 @@ public class AdminBlobStorageServiceTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers, new ArrayList<String>());
+    getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
   }
 
@@ -1188,10 +1188,9 @@ public class AdminBlobStorageServiceTest {
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param expectedHeaders the expected headers in the response.
-   * @param unExpectedHeaders headers that are not expected to be part of output
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, JSONObject expectedHeaders, List<String> unExpectedHeaders)
+  private void getHeadAndVerify(String blobId, JSONObject expectedHeaders)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -1222,9 +1221,6 @@ public class AdminBlobStorageServiceTest {
           restResponseChannel.getHeader(RestUtils.Headers.Owner_Id, MockRestResponseChannel.DataStatus.Flushed));
     }
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
-    for (String key : unExpectedHeaders) {
-      verifyNonAvailabilityOfHeader(key, restResponseChannel);
-    }
   }
 
   /**
@@ -1245,18 +1241,6 @@ public class AdminBlobStorageServiceTest {
             outValue, expectedHeaders.getString(key).equals(outValue));
       }
     }
-  }
-
-  /**
-   * Verifies that the passed in header is not present in the output
-   * @param key the non expected header in the response
-   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
-   * @throws JSONException
-   */
-  private void verifyNonAvailabilityOfHeader(String key, MockRestResponseChannel restResponseChannel)
-      throws JSONException {
-    String outValue = restResponseChannel.getHeader(key, MockRestResponseChannel.DataStatus.Flushed);
-    assertNull("Key " + key + " is not expected to be part of output, value obtained " + outValue, outValue);
   }
 
   /**

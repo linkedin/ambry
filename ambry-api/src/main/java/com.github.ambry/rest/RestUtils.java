@@ -161,11 +161,12 @@ public class RestUtils {
   }
 
   /**
-   * Fetches User metadata from the {@link ByteBuffer}
-   * @param userMetadata the {@link ByteBuffer} which has the user metadata
-   * @return Map<String,List<String>> the User Metadata that is read from the byte buffer
+   * Fetches User metadata from the byte array
+   * @param userMetadataArray the byte array which has the user metadata
+   * @return Map<String,List<String>> the User Metadata that is read from the byte array
    */
-  public static Map<String, List<String>> getUserMetadataFromByteBuffer(ByteBuffer userMetadata) {
+  public static Map<String, List<String>> getUserMetadataFromByteArray(byte[] userMetadataArray) {
+    ByteBuffer userMetadata = ByteBuffer.wrap(userMetadataArray);
     Map<String, List<String>> toReturn = new HashMap<String, List<String>>();
     if (userMetadata.remaining() != 0) {
       int size = userMetadata.getInt();
