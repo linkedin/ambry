@@ -22,11 +22,13 @@ import com.github.ambry.rest.RestServerMetrics;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.Callback;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.router.ScheduledWriteChannel;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -42,6 +44,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -1425,9 +1428,15 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 }
 
@@ -1442,9 +1451,15 @@ class BadRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

@@ -5,6 +5,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.UUID;
@@ -69,7 +70,6 @@ public class InMemoryRouter implements Router {
       try {
         if (deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-          ;
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
@@ -267,14 +267,27 @@ class InMemoryBlobPoster implements Runnable {
    * Reads blob data and returns the content as a {@link ByteBuffer}.
    * @param postContent the blob data.
    * @return the blob data in a {@link ByteBuffer}.
-   * @throws IOException
+   * @throws BufferOverflowException
    */
-  private ByteBuffer readBlob(ReadableStreamChannel postContent)
-      throws IOException {
+  private ByteBuffer readBlob(ReadableStreamChannel postContent) {
     ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
-    WritableByteChannel channel = new ByteBufferChannel(blobData);
-    while (blobData.hasRemaining() && (postContent.read(channel) != -1)) {
-      ;
+    ByteBufferSWC channel = new ByteBufferSWC();
+    postContent.readInto(channel, new CloseWriteChannelCallback(channel));
+    ByteBuffer chunk = channel.getNextChunk();
+    BufferOverflowException exception = null;
+    while(chunk != null) {
+      if(chunk.remaining() > blobData.remaining()) {
+        exception = new BufferOverflowException();
+      } else {
+        blobData.put(chunk);
+      }
+      channel.resolveChunk(chunk, exception);
+      if(exception != null) {
+        channel.close();
+        throw exception;
+      } else {
+        chunk = channel.getNextChunk();
+      }
     }
     blobData.flip();
     return blobData;
@@ -346,5 +359,25 @@ class InMemoryBlob {
 
   public ByteBuffer getBlob() {
     return ByteBuffer.wrap(blob.array());
+  }
+}
+
+/**
+ * Callback for {@link ByteBufferSWC} that closes the channel on {@link #onCompletion(Long, Exception)}.
+ */
+class CloseWriteChannelCallback implements Callback<Long> {
+  private final ByteBufferSWC channel;
+
+  /**
+   * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
+   * @param channel the {@link ByteBufferSWC} that needs to be closed.
+   */
+  public CloseWriteChannelCallback(ByteBufferSWC channel) {
+    this.channel = channel;
+  }
+
+  @Override
+  public void onCompletion(Long result, Exception exception) {
+    channel.close();
   }
 }

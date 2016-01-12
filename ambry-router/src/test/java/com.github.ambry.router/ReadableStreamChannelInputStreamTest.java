@@ -8,6 +8,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
@@ -67,20 +68,6 @@ public class ReadableStreamChannelInputStreamTest {
   }
 
   @Test
-  public void nonBlockingToBlockingTest()
-      throws IOException {
-    byte[] in = new byte[1024];
-    new Random().nextBytes(in);
-    ReadableStreamChannel channel = new HaltingReadableStreamChannel(ByteBuffer.wrap(in), 5);
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
-    byte[] out = new byte[in.length];
-    // The HaltingReadableStreamChannel returns 0 bytes read 5 times but that should not change anything for us.
-    assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
-    assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
-    assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
-  }
-
-  @Test
   public void availableTest()
       throws IOException {
     byte[] in = new byte[1024];
@@ -137,51 +124,5 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
     assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
     assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
-  }
-}
-
-/**
- * Class that returns 0 bytes on read a fixed number of times.
- */
-class HaltingReadableStreamChannel implements ReadableStreamChannel {
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final AtomicInteger haltTimes;
-  private final ByteBuffer data;
-
-  public HaltingReadableStreamChannel(ByteBuffer data, int haltTimes) {
-    this.data = data;
-    this.haltTimes = new AtomicInteger(haltTimes);
-  }
-
-  @Override
-  public long getSize() {
-    return data.limit();
-  }
-
-  @Override
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    int bytesWritten;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else if (haltTimes.getAndDecrement() > 0) {
-      bytesWritten = 0;
-    } else if (!data.hasRemaining()) {
-      bytesWritten = -1;
-    } else {
-      bytesWritten = channel.write(data);
-    }
-    return bytesWritten;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return channelOpen.get();
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    channelOpen.set(false);
   }
 }
