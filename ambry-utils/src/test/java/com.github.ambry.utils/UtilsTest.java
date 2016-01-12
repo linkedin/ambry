@@ -227,7 +227,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testDeserializeNullableString() {
+  public void testDeserializeNullableASCIIString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeNullableString(outputBuffer, randomString);
@@ -254,10 +254,11 @@ public class UtilsTest {
   }
 
   @Test
-  public void testVerifyListsForEquality(){
+  public void testVerifyListsForEquality() {
     ArrayList<String> list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
     ArrayList<String> list2 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    assertTrue("List1 contents are different from list2. List1 " + list1+", list2 " + list2, Utils.verifyListsForEquality(list1, list2));
+    assertTrue("List1 contents are different from list2. List1 " + list1 + ", list2 " + list2,
+        Utils.verifyListsForEquality(list1, list2));
 
     list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
     list2 = new ArrayList<String>();
