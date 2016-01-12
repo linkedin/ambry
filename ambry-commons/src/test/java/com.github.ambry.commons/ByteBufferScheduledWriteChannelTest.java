@@ -107,12 +107,24 @@ public class ByteBufferScheduledWriteChannelTest {
   public void resolveChunkExceptionTest() {
     ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
     ByteBuffer bogusChunk = ByteBuffer.allocate(5);
+    // before any chunks are added.
     try {
       channel.resolveChunk(bogusChunk, null);
       fail("Resolving unknown chunks should throw exception");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
+
+    ByteBuffer validChunk = ByteBuffer.allocate(5);
+    channel.write(validChunk, null);
+    // resolving an unknown chunk.
+    try {
+      channel.resolveChunk(bogusChunk, null);
+      fail("Resolving unknown chunks should throw exception");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+    channel.close();
   }
 
   /**

@@ -1115,6 +1115,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     List<ByteBuffer> contents = new LinkedList<ByteBuffer>();
     contents.add(content);
+    contents.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doPost(restRequest, restResponseChannel);

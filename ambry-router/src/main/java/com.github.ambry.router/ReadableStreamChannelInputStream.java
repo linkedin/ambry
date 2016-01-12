@@ -4,8 +4,6 @@ import com.github.ambry.commons.ByteBufferScheduledWriteChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,13 +29,13 @@ class ReadableStreamChannelInputStream extends InputStream {
 
   @Override
   public int available() {
-    return bytesAvailable < Integer.MAX_VALUE ? (int)bytesAvailable : Integer.MAX_VALUE;
+    return bytesAvailable < Integer.MAX_VALUE ? (int) bytesAvailable : Integer.MAX_VALUE;
   }
 
   @Override
   public int read() {
     int data = -1;
-    if(loadData()) {
+    if (loadData()) {
       data = currentChunk.get() & 0xFF;
       bytesAvailable--;
     }
@@ -64,7 +62,7 @@ class ReadableStreamChannelInputStream extends InputStream {
     }
 
     int bytesRead = off - startOff;
-    if(bytesRead > 0) {
+    if (bytesRead > 0) {
       bytesAvailable -= bytesRead;
     } else {
       bytesRead = -1;
@@ -83,8 +81,8 @@ class ReadableStreamChannelInputStream extends InputStream {
    * @throws IllegalStateException if the wait for the next chunk is interrupted.
    */
   private boolean loadData() {
-    if(currentChunk == null || !currentChunk.hasRemaining()) {
-      if(currentChunk != null) {
+    if (currentChunk == null || !currentChunk.hasRemaining()) {
+      if (currentChunk != null) {
         scheduledWriteChannel.resolveChunk(currentChunk, null);
       }
       try {

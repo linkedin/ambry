@@ -21,6 +21,7 @@ public interface ScheduledWriteChannel extends Channel {
    * or failure. If the write failed, they will also contain the exception that caused the failure.
    * <p/>
    * Every single write is guaranteed to be acknowledged as either succeeded or failed even if the channel is closed.
+   * Further, writes will be acknowledged in the same order that they were received.
    * <p/>
    * {@code src} can be reused ony after the {@code callback} is invoked (or after {@code future.get()} returns).
    * <p/>

@@ -3,11 +3,9 @@ package com.github.ambry.router;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -268,21 +266,23 @@ class InMemoryBlobPoster implements Runnable {
    * @param postContent the blob data.
    * @return the blob data in a {@link ByteBuffer}.
    * @throws BufferOverflowException
+   * @throws InterruptedException
    */
-  private ByteBuffer readBlob(ReadableStreamChannel postContent) {
+  private ByteBuffer readBlob(ReadableStreamChannel postContent)
+      throws InterruptedException {
     ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
     ByteBufferSWC channel = new ByteBufferSWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));
     ByteBuffer chunk = channel.getNextChunk();
     BufferOverflowException exception = null;
-    while(chunk != null) {
-      if(chunk.remaining() > blobData.remaining()) {
+    while (chunk != null) {
+      if (chunk.remaining() > blobData.remaining()) {
         exception = new BufferOverflowException();
       } else {
         blobData.put(chunk);
       }
       channel.resolveChunk(chunk, exception);
-      if(exception != null) {
+      if (exception != null) {
         channel.close();
         throw exception;
       } else {

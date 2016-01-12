@@ -27,7 +27,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
@@ -179,7 +178,7 @@ class NettyRequest implements RestRequest {
   @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
-    throw new NotImplementedException();
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
