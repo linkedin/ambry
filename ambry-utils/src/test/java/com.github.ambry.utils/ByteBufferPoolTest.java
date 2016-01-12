@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * This class tests two bounded {@link ByteBufferPool} implementations
+ * This class tests bounded {@link ByteBufferPool} implementation.
  */
 @RunWith(Parameterized.class)
 public class ByteBufferPoolTest {
@@ -20,7 +20,7 @@ public class ByteBufferPoolTest {
 
   @Parameterized.Parameters
   public static java.util.Collection<Object[]> data() {
-    return Arrays.asList(new Object[][]{{"Simple"}, {"Fifo"}});
+    return Arrays.asList(new Object[][]{{"Simple"}});
   }
 
   public ByteBufferPoolTest(String bufferPoolType) {
@@ -87,6 +87,23 @@ public class ByteBufferPoolTest {
     ByteBuffer buffer1 = pool.allocate(size, maxBlockTimeInMs);
     try {
       ByteBuffer buffer2 = pool.allocate(size, maxBlockTimeInMs);
+      fail("should have thrown.");
+    } catch (TimeoutException e) {
+    }
+  }
+
+  /**
+   * Scenario: negative timeout.
+   */
+  @Test
+  public void testNegativeBlockTime()
+      throws InterruptedException {
+    final int size = 1024;
+    final long capacity = 1024;
+    final long maxBlockTimeInMs = 20;
+    ByteBufferPool pool = getBufferPool(capacity);
+    try {
+      ByteBuffer buffer = pool.allocate(size, -maxBlockTimeInMs);
       fail("should have thrown.");
     } catch (TimeoutException e) {
     }
@@ -163,6 +180,9 @@ public class ByteBufferPoolTest {
       smallConsumerThreads[i].join();
     }
     assertEquals(capacity, getAvailableMemory(pool));
+    if (largeConsumer.exception != null) {
+      throw largeConsumer.exception;
+    }
     for (int i = 0; i < n; i++) {
       if (smallConsumers[i].exception != null) {
         throw smallConsumers[i].exception;
@@ -205,8 +225,7 @@ public class ByteBufferPoolTest {
     consumerThreads[2].join();
     if (consumers[0].exception != null) {
       throw consumers[0].exception;
-    }
-    if (consumers[2].exception != null) {
+    } else if (consumers[2].exception != null) {
       throw consumers[2].exception;
     }
     assertEquals(capacity, getAvailableMemory(pool));
@@ -246,18 +265,13 @@ public class ByteBufferPoolTest {
   ByteBufferPool getBufferPool(long size) {
     if (bufferPoolType.equals("Simple")) {
       return new SimpleByteBufferPool(size);
-    } else if (bufferPoolType.equals("Fifo")) {
-      return new FifoByteBufferPool(size);
     } else {
-      fail("Invalid pool type.");
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException("Invalid pool type.");
     }
   }
 
   long getAvailableMemory(ByteBufferPool pool) {
-    if (pool instanceof FifoByteBufferPool) {
-      return ((FifoByteBufferPool) pool).availableMemory();
-    } else if (pool instanceof SimpleByteBufferPool) {
+    if (pool instanceof SimpleByteBufferPool) {
       return ((SimpleByteBufferPool) pool).availableMemory();
     } else {
       throw new IllegalArgumentException();
@@ -265,9 +279,7 @@ public class ByteBufferPoolTest {
   }
 
   long getCapacityMemory(ByteBufferPool pool) {
-    if (pool instanceof FifoByteBufferPool) {
-      return ((FifoByteBufferPool) pool).capacity();
-    } else if (pool instanceof SimpleByteBufferPool) {
+    if (pool instanceof SimpleByteBufferPool) {
       return ((SimpleByteBufferPool) pool).capacity();
     } else {
       throw new IllegalArgumentException();

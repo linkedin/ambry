@@ -19,7 +19,8 @@ public class SimpleByteBufferPool implements ByteBufferPool {
   /**
    * Create a new buffer pool
    * @param capacity the maximum amount of memory that this buffer pool can
-   *                 allocate
+   *                 allocate. The caller has the responsibility to assign
+   *                 a reasonable value for {@code capacity}.
    */
   public SimpleByteBufferPool(long capacity) {
     this.lock = new Object();
@@ -31,7 +32,8 @@ public class SimpleByteBufferPool implements ByteBufferPool {
    * Allocate a byte buffer at the requested size
    * @param size the buffer size to allocate in bytes
    * @param timeToBlockInMs the maximum time in milliseconds to block a request
-   *                      until the requested size of memory becomes available
+   *                      until the requested size of memory becomes available. A
+   *                      non-positive value will immediately timeout the request.
    * @return A {@link ByteBuffer} at the requested size
    * @throws TimeoutException if request cannot be served within {@code timeToBlockMs}
    * @throws InterruptedException if the current thread is interrupted while waiting
@@ -43,19 +45,22 @@ public class SimpleByteBufferPool implements ByteBufferPool {
     if (size > capacity) {
       throw new IllegalArgumentException("Requested size cannot exceed pool capacity.");
     }
+    if (timeToBlockInMs <= 0) {
+      throw new TimeoutException("Time out waiting for allocation.");
+    }
     final long startTimeInMs = System.currentTimeMillis();
     long timeout = timeToBlockInMs;
     synchronized (lock) {
       while (size > availableMemory) {
         timeout = timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs);
         if (timeout <= 0) {
-          throw new TimeoutException("Memory not Enough. Request timeout.");
+          throw new TimeoutException("Time out waiting for allocation.");
         }
         lock.wait(timeout);
       }
       availableMemory -= size;
       if (availableMemory > 0) {
-        lock.notifyAll();
+        lock.notify();
       }
     }
     return ByteBuffer.allocate(size);
