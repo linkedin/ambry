@@ -175,7 +175,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataBadInputTest()
+  public void getUserMetadataUnusualInputTest()
       throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),

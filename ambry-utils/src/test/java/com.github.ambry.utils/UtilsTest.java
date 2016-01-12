@@ -8,6 +8,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import java.util.Random;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 
@@ -150,6 +151,106 @@ public class UtilsTest {
   }
 
   @Test
+  public void testSerializeNullableString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    int length = outputBuffer.getInt();
+    assertTrue("Input string length " + randomString.getBytes().length + " didn't match output string length " + length,
+        (randomString.getBytes().length == length));
+    byte[] output = new byte[length];
+    outputBuffer.get(output);
+    assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), outputBuffer.remaining() == 0);
+    String outputString = new String(output);
+    assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
+        outputString, randomString);
+
+    randomString = null;
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertTrue("Input string length 0 didn't match output string length " + length, (0 == length));
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), outputBuffer.remaining() == 0);
+    outputString = new String(output);
+    assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+  }
+
+  @Test
+  public void testSerializeNullableASCIIEncodedString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    int length = outputBuffer.getInt();
+    assertTrue("Input string length " + randomString.getBytes().length + " didn't match output string length " + length,
+        (randomString.getBytes().length == length));
+    byte[] output = new byte[length];
+    outputBuffer.get(output);
+    assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), outputBuffer.remaining() == 0);
+    String outputString = new String(output);
+    assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
+        outputString, randomString);
+
+    randomString = getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertTrue("Input string length " + randomString.getBytes().length + " didn't match output string length " + length,
+        (randomString.getBytes().length - 1 == length));
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), outputBuffer.remaining() == 0);
+    outputString = new String(output);
+    randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
+        outputString, randomString);
+
+    randomString = null;
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertTrue("Input string length 0 didn't match output string length " + length, (0 == length));
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), outputBuffer.remaining() == 0);
+    outputString = new String(output);
+    assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+  }
+
+  @Test
+  public void testDeserializeNullableString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    String outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
+        outputString, randomString);
+
+    randomString = getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    outputBuffer.flip();
+    outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
+        outputString, randomString);
+
+    randomString = null;
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+  }
+
+  @Test
   public void testGetObj() {
     try {
       MockClassForTesting mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting");
@@ -164,7 +265,8 @@ public class UtilsTest {
       mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.threeArgConstructorInvoked);
-      mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
+      mockObj = Utils
+          .getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.fourArgConstructorInvoked);
     } catch (Exception e) {
