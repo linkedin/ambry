@@ -92,10 +92,10 @@ public class ByteBufferRSC implements ReadableStreamChannel {
       FutureResult<Long> futureResult = new FutureResult<Long>();
       futureResult.done(0L, new IllegalStateException(cce));
       future = futureResult;
-      if(callback != null) {
+      if (callback != null) {
         callback.onCompletion(0L, cce);
       }
-    } else if(!channelEmptied.compareAndSet(false, true)) {
+    } else if (!channelEmptied.compareAndSet(false, true)) {
       throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
     } else {
       future = scheduledWriteChannel.write(buffer, callback);

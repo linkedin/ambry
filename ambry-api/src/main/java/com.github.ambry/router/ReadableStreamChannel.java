@@ -57,5 +57,4 @@ public interface ReadableStreamChannel extends Channel {
   @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException;
-
 }

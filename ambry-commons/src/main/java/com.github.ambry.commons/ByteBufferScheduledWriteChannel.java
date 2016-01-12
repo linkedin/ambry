@@ -5,13 +5,12 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ScheduledWriteChannel;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -19,9 +18,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * retrieved and resolved by an external thread.
  */
 public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final LinkedBlockingQueue<ChunkData> chunks = new LinkedBlockingQueue<ChunkData>();
-  private final Map<ByteBuffer, ChunkData> chunksAwaitingResolution = new LinkedHashMap<ByteBuffer, ChunkData>();
+  private final Queue<ChunkData> chunksAwaitingResolution = new LinkedBlockingQueue<ChunkData>();
+  private final ReentrantLock lock = new ReentrantLock();
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
 
   /**
    * If the channel is open, simply queues the buffer to be handled later.
@@ -36,10 +36,15 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
     ChunkData chunkData = new ChunkData(src, callback);
-    if (!isOpen()) {
-      chunkData.resolveChunk(0, new ClosedChannelException());
-    } else {
-      chunks.add(chunkData);
+    lock.lock();
+    try {
+      if (!isOpen()) {
+        chunkData.resolveChunk(new ClosedChannelException());
+      } else {
+        chunks.add(chunkData);
+      }
+    } finally {
+      lock.unlock();
     }
     return chunkData.future;
   }
@@ -56,8 +61,13 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
   @Override
   public void close() {
     if (channelOpen.compareAndSet(true, false)) {
-      resolveAllRemainingChunks();
-      chunks.add(new ChunkData(null, null));
+      lock.lock();
+      try {
+        resolveAllRemainingChunks();
+        chunks.add(new ChunkData(null, null));
+      } finally {
+        lock.unlock();
+      }
     }
   }
 
@@ -98,8 +108,17 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
         chunkData = chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS);
       }
       if (chunkData != null && chunkData.buffer != null) {
-        chunk = chunkData.buffer;
-        chunksAwaitingResolution.put(chunk, chunkData);
+        lock.lock();
+        try {
+          if (isOpen()) {
+            chunk = chunkData.buffer;
+            chunksAwaitingResolution.add(chunkData);
+          } else {
+            chunkData.resolveChunk(new ClosedChannelException());
+          }
+        } finally {
+          lock.unlock();
+        }
       }
     }
     return chunk;
@@ -108,18 +127,23 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
   /**
    * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
    * resolved, the data inside it is considered void.
+   * <p/>
+   * This function assumes that chunks are resolved in the same order that they were obtained.
    * @param chunk the {@link ByteBuffer} that represents the chunk that was handled.
    * @param exception any {@link Exception} that occurred during the handling that needs to be notified.
    * @throws IllegalArgumentException if {@code chunk} is not a valid chunk that is eligible for resolution.
    */
   public void resolveChunk(ByteBuffer chunk, Exception exception) {
-    if (isOpen()) {
-      int bytesRead = chunk.position();
-      chunk.clear();
-      if (!chunksAwaitingResolution.containsKey(chunk)) {
-        throw new IllegalArgumentException("Unrecognized chunk");
+    lock.lock();
+    try {
+      if (isOpen()) {
+        if (chunksAwaitingResolution.peek() == null || chunksAwaitingResolution.peek().buffer != chunk) {
+          throw new IllegalArgumentException("Unrecognized chunk");
+        }
+        chunksAwaitingResolution.poll().resolveChunk(exception);
       }
-      chunksAwaitingResolution.remove(chunk).resolveChunk(bytesRead, exception);
+    } finally {
+      lock.unlock();
     }
   }
 
@@ -127,18 +151,11 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
    * Resolves all the remaining chunks with {@link ClosedChannelException}.
    */
   private void resolveAllRemainingChunks() {
-    Iterator<Map.Entry<ByteBuffer, ChunkData>> chunkIterator = chunksAwaitingResolution.entrySet().iterator();
-    while (chunkIterator.hasNext()) {
-      Map.Entry<ByteBuffer, ChunkData> chunkInfo = chunkIterator.next();
-      // best guess.
-      int bytesRead = chunkInfo.getKey().position();
-      chunkInfo.getValue().resolveChunk(bytesRead, new ClosedChannelException());
-      chunkIterator.remove();
+    while (chunksAwaitingResolution.peek() != null) {
+      chunksAwaitingResolution.poll().resolveChunk(new ClosedChannelException());
     }
-    ChunkData chunkData = chunks.poll();
-    while (chunkData != null) {
-      chunkData.resolveChunk(0, new ClosedChannelException());
-      chunkData = chunks.poll();
+    while (chunks.peek() != null) {
+      chunks.poll().resolveChunk(new ClosedChannelException());
     }
   }
 }
@@ -157,6 +174,7 @@ class ChunkData {
    */
   public final ByteBuffer buffer;
 
+  private final int startPos;
   private final Callback<Long> callback;
 
   /**
@@ -166,16 +184,21 @@ class ChunkData {
    */
   public ChunkData(ByteBuffer buffer, Callback<Long> callback) {
     this.buffer = buffer;
+    if (buffer != null) {
+      startPos = buffer.position();
+    } else {
+      startPos = 0;
+    }
     this.callback = callback;
   }
 
   /**
    * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
    * resolved, the data inside it is considered void.
-   * @param bytesWritten the number of bytes written.
    * @param exception the reason for chunk handling failure.
    */
-  public void resolveChunk(long bytesWritten, Exception exception) {
+  public void resolveChunk(Exception exception) {
+    long bytesWritten = buffer.position() - startPos;
     IllegalStateException ise = null;
     if (exception != null) {
       ise = new IllegalStateException(exception);

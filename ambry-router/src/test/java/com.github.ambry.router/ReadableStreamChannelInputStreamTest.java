@@ -4,13 +4,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;

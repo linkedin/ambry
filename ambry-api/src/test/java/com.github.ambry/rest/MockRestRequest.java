@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONException;
 import org.json.JSONObject;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
@@ -166,7 +165,7 @@ public class MockRestRequest implements RestRequest {
   @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
-    throw new NotImplementedException();
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
