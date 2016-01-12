@@ -254,8 +254,8 @@ public class RestUtils {
 
   /**
    * Sets entries from the passed in HashMap to the @{link JSONObject} headers
-   * @param headers  @{link JSONObject} to which the new headers are to be added
-   * @param userMetadata @{@Map} which has the new entries that has to be added
+   * @param headers  {@link JSONObject} to which the new headers are to be added
+   * @param userMetadata {@link Map} which has the new entries that has to be added
    * @throws org.json.JSONException
    */
   public static void setAmbryHeaders(JSONObject headers, Map<String, List<String>> userMetadata)

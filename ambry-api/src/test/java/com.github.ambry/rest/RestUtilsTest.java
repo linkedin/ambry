@@ -250,8 +250,7 @@ public class RestUtilsTest {
     ArrayList<String> expectedValue = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
     ArrayList<String> outputValue = RestUtils.getListFromHeaderValue(inputString);
     assertTrue("Output value " + outputValue + " is different from input value " + expectedValue,
-        (outputValue.size() == expectedValue.size() ? (outputValue.containsAll(expectedValue) && expectedValue
-            .containsAll(outputValue)) : false));
+        Utils.verifyListsForEquality(outputValue, expectedValue));
   }
 
   // helpers.

@@ -4,11 +4,14 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
 import org.junit.Assert;
 import org.junit.Test;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
@@ -248,6 +251,38 @@ public class UtilsTest {
     outputBuffer.flip();
     outputString = Utils.deserializeNullableASCIIString(outputBuffer);
     assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+  }
+
+  @Test
+  public void testVerifyListsForEquality(){
+    ArrayList<String> list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    ArrayList<String> list2 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    assertTrue("List1 contents are different from list2. List1 " + list1+", list2 " + list2, Utils.verifyListsForEquality(list1, list2));
+
+    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    list2 = new ArrayList<String>();
+    list2.addAll(list1);
+
+    list1 = new ArrayList<String>();
+    list2 = new ArrayList<String>();
+    assertTrue("List1 contents are different from list2. List1 " + list1 + ", list2 " + list2,
+        Utils.verifyListsForEquality(list1, list2));
+
+    // unequal cases
+    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    list2 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2_"));
+    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
+        Utils.verifyListsForEquality(list1, list2));
+
+    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    list2 = new ArrayList<String>(Arrays.asList("value1_1"));
+    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
+        Utils.verifyListsForEquality(list1, list2));
+
+    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    list2 = new ArrayList<String>();
+    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
+        Utils.verifyListsForEquality(list1, list2));
   }
 
   @Test

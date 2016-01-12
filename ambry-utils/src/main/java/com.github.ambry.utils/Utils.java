@@ -433,8 +433,8 @@ public class Utils {
 
   /**
    * Deserializes a nullable ascii string from byte buffer
-   *
    * @param inputBuffer The input buffer to serialize the value to
+   * @return the deserialized string
    */
   public static String deserializeNullableASCIIString(ByteBuffer inputBuffer) {
     int size = inputBuffer.getInt();
@@ -456,6 +456,7 @@ public class Utils {
    * Verifies the contents of two lists for equality
    * @param inputList1 List1 to be compared
    * @param inputList2 List2 to be compared
+   * @return boolean true if lists are equal, false otherwise
    */
   public static boolean verifyListsForEquality(List<String> inputList1, List<String> inputList2) {
     return inputList1.size() == inputList2.size() ? (inputList1.containsAll(inputList2) && inputList2
