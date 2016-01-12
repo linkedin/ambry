@@ -147,7 +147,7 @@ public class RestUtilsTest {
   public void getUserMetadataTest()
       throws Exception {
     byte[] usermetadata = RestUtils.buildUsermetadata(createRestRequest(RestMethod.POST, "/", null));
-    assertArrayEquals("Unexpected user metadata", new byte[4], usermetadata);
+    assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
 
   /**
@@ -171,7 +171,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests building of User Metadata with bad input
+   * Tests building of User Metadata with unusual input
    * @throws Exception
    */
   @Test
@@ -215,6 +215,46 @@ public class RestUtilsTest {
     assertTrue("key4 not found in user metadata map ", userMetadataMap.containsKey(key));
     assertTrue("Value for key4 didnt match, input value " + userMetadata.get(key) + ", output value " + userMetadataMap
         .get(key), Utils.verifyListsForEquality(userMetadata.get(key), userMetadataMap.get(key)));
+  }
+
+  /**
+   * Tests building of User Metadata with empty input
+   * @throws Exception
+   */
+  @Test
+  public void getEmptyUserMetadataInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
+    RestUtils.setAmbryHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    Map<String, List<String>> userMetadataMap = RestUtils.getUserMetadataFromByteBuffer(userMetadataBuffer);
+    assertTrue("UserMetadata should have been empty " + userMetadataMap, userMetadataMap.size() == 0);
+  }
+
+  @Test
+  public void getHeaderValueFromListTest() {
+    ArrayList<String> inputValue = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    String headerValue = RestUtils.getHeaderValueFromList(inputValue);
+    String expectedValue = "[\"value1_1\",\"value1_2\"]";
+    assertTrue("OutputValue \"" + headerValue + "\" is different from expected value \"" + expectedValue + "\"",
+        headerValue.equals(expectedValue));
+  }
+
+  @Test
+  public void getListFromHeaderValueTest() {
+    String inputString = "[\"value1_1\",\"value1_2\"]";
+    ArrayList<String> expectedValue = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
+    ArrayList<String> outputValue = RestUtils.getListFromHeaderValue(inputString);
+    assertTrue("Output value " + outputValue + " is different from input value " + expectedValue,
+        (outputValue.size() == expectedValue.size() ? (outputValue.containsAll(expectedValue) && expectedValue
+            .containsAll(outputValue)) : false));
   }
 
   // helpers.

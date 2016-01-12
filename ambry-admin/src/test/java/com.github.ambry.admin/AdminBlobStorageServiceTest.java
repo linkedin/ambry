@@ -375,39 +375,6 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations with bad input for user metadata
-   * @throws Exception
-   */
-  @Test
-  public void postGetHeadDeleteWithBadUserMetadataTest()
-      throws Exception {
-    final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
-    String serviceId = "postGetHeadDeleteServiceID";
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    JSONObject headers = new JSONObject();
-    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
-    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
-        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
-    userMetadata.put("key2" + RestUtils.Headers.UserMetaData_Header_Prefix,
-        new ArrayList<String>(Arrays.asList("value2_1", "value2_2"))); // prefix as suffix
-    userMetadata.put("key3", new ArrayList<String>(Arrays.asList("value3_1", "value3_2"))); // no prefix
-    userMetadata.put("key4", new ArrayList<String>()); // no prefix with empty list
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key5", new ArrayList<String>());
-    RestUtils.setAmbryHeaders(headers, userMetadata);
-    String blobId = postBlobAndVerify(headers, content);
-    getBlobAndVerify(blobId, headers, content);
-    List<String> nonExpectedHeaders = new ArrayList<String>();
-    nonExpectedHeaders.add("key2" + RestUtils.Headers.UserMetaData_Header_Prefix);
-    nonExpectedHeaders.add("key3");
-    nonExpectedHeaders.add("key4");
-    getHeadAndVerify(blobId, headers, nonExpectedHeaders);
-    deleteBlobAndVerify(blobId);
-  }
-
-  /**
    * Tests the {@link AdminBlobStorageService#ECHO} admin operation. Checks to see that the echo matches input text.
    * @throws Exception
    */

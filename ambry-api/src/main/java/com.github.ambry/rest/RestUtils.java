@@ -142,14 +142,19 @@ public class RestUtils {
         }
       }
     }
-    ByteBuffer userMetadata = ByteBuffer.allocate(size);
-    userMetadata.putInt(userMetadataMap.size());
-    for (Map.Entry<String, List<String>> entry : userMetadataMap.entrySet()) {
-      String key = entry.getKey();
-      Utils.serializeNullableASCIIEncodedString(userMetadata, key);
-      userMetadata.putInt(entry.getValue().size());
-      for (String value : entry.getValue()) {
-        Utils.serializeNullableASCIIEncodedString(userMetadata, value);
+    ByteBuffer userMetadata = null;
+    if (size == 4) {
+      userMetadata = ByteBuffer.allocate(0);
+    } else {
+      userMetadata = ByteBuffer.allocate(size);
+      userMetadata.putInt(userMetadataMap.size());
+      for (Map.Entry<String, List<String>> entry : userMetadataMap.entrySet()) {
+        String key = entry.getKey();
+        Utils.serializeNullableASCIIEncodedString(userMetadata, key);
+        userMetadata.putInt(entry.getValue().size());
+        for (String value : entry.getValue()) {
+          Utils.serializeNullableASCIIEncodedString(userMetadata, value);
+        }
       }
     }
     return userMetadata.array();
@@ -161,19 +166,21 @@ public class RestUtils {
    * @return Map<String,List<String>> the User Metadata that is read from the byte buffer
    */
   public static Map<String, List<String>> getUserMetadataFromByteBuffer(ByteBuffer userMetadata) {
-    int size = userMetadata.getInt();
     Map<String, List<String>> toReturn = new HashMap<String, List<String>>();
-    int counter = 0;
-    while (counter++ < size) {
-      String key = Utils.deserializeNullableASCIIString(userMetadata);
-      int valueSize = userMetadata.getInt();
-      int valueCounter = 0;
-      ArrayList<String> values = new ArrayList<String>();
-      while (valueCounter++ < valueSize) {
-        String value = Utils.deserializeNullableASCIIString(userMetadata);
-        values = getListFromHeaderValue(value);
+    if (userMetadata.remaining() != 0) {
+      int size = userMetadata.getInt();
+      int counter = 0;
+      while (counter++ < size) {
+        String key = Utils.deserializeNullableASCIIString(userMetadata);
+        int valueSize = userMetadata.getInt();
+        int valueCounter = 0;
+        ArrayList<String> values = new ArrayList<String>();
+        while (valueCounter++ < valueSize) {
+          String value = Utils.deserializeNullableASCIIString(userMetadata);
+          values = getListFromHeaderValue(value);
+        }
+        toReturn.put(key, values);
       }
-      toReturn.put(key, values);
     }
     return toReturn;
   }
