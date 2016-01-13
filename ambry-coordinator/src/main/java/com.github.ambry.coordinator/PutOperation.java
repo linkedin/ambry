@@ -37,12 +37,11 @@ final public class PutOperation extends Operation {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private static HashMap<CoordinatorError, Integer> precedenceLevels = new HashMap<CoordinatorError, Integer>();
 
-  public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+  private PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
       OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream)
+      ByteBuffer userMetadata, InputStream blobStream, PutParallelOperationPolicy putParallelOperationPolicy)
       throws CoordinatorException {
-    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs,
-        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
+    super(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, putParallelOperationPolicy);
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
 
@@ -54,6 +53,23 @@ final public class PutOperation extends Operation {
       logger.error("Could not materialize blob ", ce);
       throw ce;
     }
+  }
+
+  public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, int requestParallelism, int successTarget)
+      throws CoordinatorException {
+    this(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties, userMetadata,
+        blobStream,
+        new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc, requestParallelism, successTarget));
+  }
+
+  public PutOperation(String datacenterName, ConnectionPool connectionPool, ExecutorService requesterPool,
+      OperationContext oc, BlobId blobId, long operationTimeoutMs, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream)
+      throws CoordinatorException {
+    this(datacenterName, connectionPool, requesterPool, oc, blobId, operationTimeoutMs, blobProperties, userMetadata,
+        blobStream, new PutParallelOperationPolicy(datacenterName, blobId.getPartition(), oc));
   }
 
   static {

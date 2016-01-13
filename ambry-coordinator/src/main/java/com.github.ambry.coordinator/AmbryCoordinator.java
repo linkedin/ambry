@@ -37,26 +37,23 @@ import static com.github.ambry.utils.Utils.getRandomLong;
  * Ambry Coordinator performs put, delete, and get(Blob/BlobUserMetadata/BlobProperties) operations.
  */
 public class AmbryCoordinator implements Coordinator {
-
   private final AtomicBoolean shuttingDown;
   private final CoordinatorMetrics coordinatorMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
-  private final NotificationSystem notificationSystem;
-
-  private int operationTimeoutMs;
+  private final Random randomForPartitionSelection;
   private int connectionPoolCheckoutTimeout;
-
   private JmxReporter reporter = null;
   private String clientId;
-  private String datacenterName;
-  private ExecutorService requesterPool;
-  private ConnectionPool connectionPool;
-  private final Random randomForPartitionSelection;
   private AtomicBoolean crossDCProxyCallsEnabled;
   private ArrayList<String> sslEnabledDatacenters;
-
   private Logger logger = LoggerFactory.getLogger(getClass());
+
+  protected final NotificationSystem notificationSystem;
+  protected int operationTimeoutMs;
+  protected String datacenterName;
+  protected ExecutorService requesterPool;
+  protected ConnectionPool connectionPool;
 
   public AmbryCoordinator(VerifiableProperties properties, ClusterMap clusterMap) {
     this(properties, clusterMap, new LoggingNotificationSystem());
@@ -144,14 +141,14 @@ public class AmbryCoordinator implements Coordinator {
     logger.info("closing completed");
   }
 
-  private OperationContext getOperationContext() {
+  protected OperationContext getOperationContext() {
     OperationContext oc = new OperationContext(clientId, connectionPoolCheckoutTimeout, crossDCProxyCallsEnabled.get(),
         coordinatorMetrics, responseHandler, sslEnabledDatacenters);
     logger.trace("Operation context " + oc);
     return oc;
   }
 
-  private PartitionId getPartitionForPut()
+  protected PartitionId getPartitionForPut()
       throws CoordinatorException {
     List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
     if (partitions.isEmpty()) {
