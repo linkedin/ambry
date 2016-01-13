@@ -1,12 +1,9 @@
 package com.github.ambry.utils;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -14,18 +11,7 @@ import static org.junit.Assert.*;
 /**
  * This class tests bounded {@link ByteBufferPool} implementation.
  */
-@RunWith(Parameterized.class)
-public class ByteBufferPoolTest {
-  private String bufferPoolType;
-
-  @Parameterized.Parameters
-  public static java.util.Collection<Object[]> data() {
-    return Arrays.asList(new Object[][]{{"Simple"}});
-  }
-
-  public ByteBufferPoolTest(String bufferPoolType) {
-    this.bufferPoolType = bufferPoolType;
-  }
+public class SimpleByteBufferPoolTest {
 
   /**
    * Scenario: simple non-blocking allocation and deallocation.
@@ -36,13 +22,13 @@ public class ByteBufferPoolTest {
     final long capacity = 2 * 1024;
     final int size = 1024;
     long maxBlockTimeInMs = 200;
-    ByteBufferPool pool = getBufferPool(capacity);
-    assertEquals(capacity, getCapacityMemory(pool));
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
+    assertEquals(capacity, pool.availableMemory());
     ByteBuffer buffer = pool.allocate(size, maxBlockTimeInMs);
     assertEquals(size, buffer.capacity());
-    assertEquals(capacity - size, getAvailableMemory(pool));
+    assertEquals(capacity - size, pool.availableMemory());
     pool.deallocate(buffer);
-    assertEquals(capacity, getCapacityMemory(pool));
+    assertEquals(capacity, pool.availableMemory());
   }
 
   /**
@@ -53,7 +39,7 @@ public class ByteBufferPoolTest {
       throws TimeoutException, InterruptedException {
     final long capacity = 1024;
     final long maxBlockTimeInMs = 200;
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     try {
       ByteBuffer buffer = pool.allocate((int) capacity + 1, maxBlockTimeInMs);
       fail("Should have thrown!");
@@ -68,10 +54,10 @@ public class ByteBufferPoolTest {
   public void testDeallocateExceedPoolCapacity()
       throws TimeoutException, InterruptedException {
     final int capacity = 1024;
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     ByteBuffer singleBuffer = ByteBuffer.allocate(1);
     pool.deallocate(singleBuffer);
-    assertEquals(capacity, getAvailableMemory(pool));
+    assertEquals(capacity, pool.availableMemory());
   }
 
   /**
@@ -83,7 +69,7 @@ public class ByteBufferPoolTest {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 20;
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     ByteBuffer buffer1 = pool.allocate(size, maxBlockTimeInMs);
     try {
       ByteBuffer buffer2 = pool.allocate(size, maxBlockTimeInMs);
@@ -93,20 +79,23 @@ public class ByteBufferPoolTest {
   }
 
   /**
-   * Scenario: negative timeout.
+   * Scenario: zero and negative timeout.
    */
   @Test
   public void testNegativeBlockTime()
-      throws InterruptedException {
+      throws InterruptedException, TimeoutException {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 20;
-    ByteBufferPool pool = getBufferPool(capacity);
-    try {
-      ByteBuffer buffer = pool.allocate(size, -maxBlockTimeInMs);
-      fail("should have thrown.");
-    } catch (TimeoutException e) {
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
+    ByteBuffer buffer=pool.allocate(size, 0);
+    pool.deallocate(buffer);
+    try{
+      buffer=pool.allocate(size, -maxBlockTimeInMs);
+    }catch(IllegalArgumentException e){
     }
+    pool.deallocate(buffer);
+    assertEquals(size, pool.capacity());
   }
 
   /**
@@ -118,7 +107,7 @@ public class ByteBufferPoolTest {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 200;
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     CountDownLatch[] allocated = new CountDownLatch[2];
     CountDownLatch[] used = new CountDownLatch[2];
     BufferConsumer[] consumers = new BufferConsumer[2];
@@ -131,7 +120,7 @@ public class ByteBufferPoolTest {
       consumerThreads[i].start();
     }
     allocated[0].await();
-    assertEquals(0, getAvailableMemory(pool));
+    assertEquals(0, pool.availableMemory());
     for (int i = 0; i < 2; i++) {
       used[i].countDown();
       consumerThreads[i].join();
@@ -139,7 +128,7 @@ public class ByteBufferPoolTest {
         throw consumers[i].exception;
       }
     }
-    assertEquals(capacity, getAvailableMemory(pool));
+    assertEquals(capacity, pool.availableMemory());
   }
 
   /**
@@ -154,7 +143,7 @@ public class ByteBufferPoolTest {
     final int largeSize = n * smallSize;
     final long capacity = n * smallSize;
     final long maxBlockTimeInMs = 200;
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     CountDownLatch largeAllocated = new CountDownLatch(1);
     CountDownLatch largeUsed = new CountDownLatch(1);
     CountDownLatch smallAllocated = new CountDownLatch(n);
@@ -162,7 +151,7 @@ public class ByteBufferPoolTest {
     BufferConsumer largeConsumer = new BufferConsumer(largeSize, maxBlockTimeInMs, pool, largeAllocated, largeUsed);
     new Thread(largeConsumer).start();
     largeAllocated.await();
-    assertEquals(0, getAvailableMemory(pool));
+    assertEquals(0, pool.availableMemory());
     BufferConsumer[] smallConsumers = new BufferConsumer[n];
     Thread[] smallConsumerThreads = new Thread[n];
     for (int i = 0; i < n; i++) {
@@ -172,14 +161,14 @@ public class ByteBufferPoolTest {
     }
     largeUsed.countDown();
     smallAllocated.await();
-    assertEquals(0, getAvailableMemory(pool));
+    assertEquals(0, pool.availableMemory());
     for (int i = 0; i < n; i++) {
       smallUsed.countDown();
     }
     for (int i = 0; i < n; i++) {
       smallConsumerThreads[i].join();
     }
-    assertEquals(capacity, getAvailableMemory(pool));
+    assertEquals(capacity, pool.availableMemory());
     if (largeConsumer.exception != null) {
       throw largeConsumer.exception;
     }
@@ -203,7 +192,7 @@ public class ByteBufferPoolTest {
     final long capacity = 1024;
     final int numOfRequests = 3;
     final long[] blockTimeInMs = {10, 10, 1000};
-    ByteBufferPool pool = getBufferPool(capacity);
+    SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     CountDownLatch[] allocated = new CountDownLatch[numOfRequests];
     CountDownLatch[] used = new CountDownLatch[numOfRequests];
     BufferConsumer[] consumers = new BufferConsumer[numOfRequests];
@@ -228,7 +217,7 @@ public class ByteBufferPoolTest {
     } else if (consumers[2].exception != null) {
       throw consumers[2].exception;
     }
-    assertEquals(capacity, getAvailableMemory(pool));
+    assertEquals(capacity, pool.availableMemory());
   }
 
   private class BufferConsumer implements Runnable {
@@ -259,30 +248,6 @@ public class ByteBufferPoolTest {
       } catch (Exception e) {
         exception = e;
       }
-    }
-  }
-
-  ByteBufferPool getBufferPool(long size) {
-    if (bufferPoolType.equals("Simple")) {
-      return new SimpleByteBufferPool(size);
-    } else {
-      throw new IllegalArgumentException("Invalid pool type.");
-    }
-  }
-
-  long getAvailableMemory(ByteBufferPool pool) {
-    if (pool instanceof SimpleByteBufferPool) {
-      return ((SimpleByteBufferPool) pool).availableMemory();
-    } else {
-      throw new IllegalArgumentException();
-    }
-  }
-
-  long getCapacityMemory(ByteBufferPool pool) {
-    if (pool instanceof SimpleByteBufferPool) {
-      return ((SimpleByteBufferPool) pool).capacity();
-    } else {
-      throw new IllegalArgumentException();
     }
   }
 }

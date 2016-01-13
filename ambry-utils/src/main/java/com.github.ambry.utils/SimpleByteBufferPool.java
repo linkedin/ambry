@@ -31,28 +31,28 @@ public class SimpleByteBufferPool implements ByteBufferPool {
   /**
    * Allocate a byte buffer at the requested size
    * @param size the buffer size to allocate in bytes
-   * @param timeToBlockInMs the maximum time in milliseconds to block a request
-   *                      until the requested size of memory becomes available. A
-   *                      non-positive value will immediately timeout the request.
+   * @param timeToBlockInMs a non-negative maximum time in milliseconds to block a request
+   *                        until the requested size of memory becomes available. Zero value
+   *                        will make the pool to try a single time, either return a {@link
+   *                        ByteBuffer} if memory is available, or a {@code TimeoutException}
    * @return A {@link ByteBuffer} at the requested size
-   * @throws TimeoutException if request cannot be served within {@code timeToBlockMs}
+   * @throws TimeoutException if request cannot be served within {@code timeToBlockInMs}
    * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws IllegalArgumentException if {@code size} is larger than the pool capacity
+   * @throws IllegalArgumentException if {@code size} is larger than the pool capacity, or
+   *                                  if {@code timeToBlockInMs} is negative.
    */
   @Override
   public ByteBuffer allocate(int size, final long timeToBlockInMs)
       throws TimeoutException, InterruptedException {
     if (size > capacity) {
       throw new IllegalArgumentException("Requested size cannot exceed pool capacity.");
-    }
-    if (timeToBlockInMs <= 0) {
-      throw new TimeoutException("Time out waiting for allocation.");
+    } else if (timeToBlockInMs < 0) {
+      throw new IllegalArgumentException("timeToBlockInMs cannot be negative.");
     }
     final long startTimeInMs = System.currentTimeMillis();
-    long timeout = timeToBlockInMs;
     synchronized (lock) {
       while (size > availableMemory) {
-        timeout = timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs);
+        long timeout = timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs);
         if (timeout <= 0) {
           throw new TimeoutException("Time out waiting for allocation.");
         }
