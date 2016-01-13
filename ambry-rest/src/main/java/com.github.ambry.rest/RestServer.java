@@ -100,6 +100,10 @@ public class RestServer {
           .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               restRequestHandler);
       nioServer = nioServerFactory.getNioServer();
+      if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
+          || nioServer == null) {
+        throw new InstantiationException("Some of the server components were null");
+      }
     } catch (Exception e) {
       restServerMetrics.restServerInstantiationError.inc();
       logger.error("Exception during instantiation of RestServer", e);

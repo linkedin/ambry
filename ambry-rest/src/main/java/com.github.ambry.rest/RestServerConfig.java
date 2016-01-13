@@ -71,11 +71,11 @@ class RestServerConfig {
     restServerNioServerFactory =
         verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
     restServerRequestHandlerScalingUnitCount =
-        verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerRequestHandlerFactory = verifiableProperties
         .getString("rest.server.request.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerResponseHandlerScalingUnitCount =
-        verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerResponseHandlerFactory = verifiableProperties
         .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties

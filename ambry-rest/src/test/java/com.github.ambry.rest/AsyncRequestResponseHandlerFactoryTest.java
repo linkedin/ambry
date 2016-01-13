@@ -68,14 +68,6 @@ public class AsyncRequestResponseHandlerFactoryTest {
         new MockBlobStorageService(verifiableProperties, restRequestResponseHandler, router);
 
     // RestResponseHandlerFactory constructor.
-    // handlerCount = 0
-    try {
-      new AsyncRequestResponseHandlerFactory(0, restServerMetrics);
-      fail("Instantiation should have failed because response handler count is 0");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
     // handlerCount < 0
     try {
       new AsyncRequestResponseHandlerFactory(-1, restServerMetrics);
@@ -93,14 +85,6 @@ public class AsyncRequestResponseHandlerFactoryTest {
     }
 
     // RestRequestHandlerFactory constructor.
-    // handlerCount = 0
-    try {
-      new AsyncRequestResponseHandlerFactory(0, restServerMetrics, blobStorageService);
-      fail("Instantiation should have failed because request handler count is 0");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
     // handlerCount < 0
     try {
       new AsyncRequestResponseHandlerFactory(-1, restServerMetrics, blobStorageService);
