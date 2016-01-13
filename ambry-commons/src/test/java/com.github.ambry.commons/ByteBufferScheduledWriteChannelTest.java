@@ -24,6 +24,7 @@ public class ByteBufferScheduledWriteChannelTest {
       throws Exception {
     ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
     assertTrue("Channel is not open", channel.isOpen());
+    assertNull("There should have been no chunk returned", channel.getNextChunk(0));
     ChannelWriter channelWriter = new ChannelWriter(channel);
     channelWriter.writeToChannel(10);
 
@@ -46,6 +47,7 @@ public class ByteBufferScheduledWriteChannelTest {
     channel.close();
     assertFalse("Channel is still open", channel.isOpen());
     assertNull("There should have been no chunk returned", channel.getNextChunk());
+    assertNull("There should have been no chunk returned", channel.getNextChunk(0));
   }
 
   @Test
@@ -104,7 +106,8 @@ public class ByteBufferScheduledWriteChannelTest {
   }
 
   @Test
-  public void resolveChunkExceptionTest() {
+  public void resolveChunkExceptionTest()
+      throws InterruptedException {
     ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
     ByteBuffer bogusChunk = ByteBuffer.allocate(5);
     // before any chunks are added.
@@ -117,6 +120,7 @@ public class ByteBufferScheduledWriteChannelTest {
 
     ByteBuffer validChunk = ByteBuffer.allocate(5);
     channel.write(validChunk, null);
+    channel.getNextChunk();
     // resolving an unknown chunk.
     try {
       channel.resolveChunk(bogusChunk, null);
@@ -159,6 +163,7 @@ public class ByteBufferScheduledWriteChannelTest {
 
     // no chunks on getNextChunk()
     assertNull("There should have been no chunk returned", channel.getNextChunk());
+    assertNull("There should have been no chunk returned", channel.getNextChunk(0));
   }
 
   // helpers
