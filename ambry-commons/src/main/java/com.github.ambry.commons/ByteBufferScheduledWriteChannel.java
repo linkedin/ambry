@@ -82,7 +82,24 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
    */
   public ByteBuffer getNextChunk()
       throws InterruptedException {
-    return getNextChunk(-1);
+    ByteBuffer chunk = null;
+    if (isOpen()) {
+      ChunkData chunkData = chunks.take();
+      if (chunkData.buffer != null) {
+        lock.lock();
+        try {
+          if (isOpen()) {
+            chunk = chunkData.buffer;
+            chunksAwaitingResolution.add(chunkData);
+          } else {
+            chunkData.resolveChunk(new ClosedChannelException());
+          }
+        } finally {
+          lock.unlock();
+        }
+      }
+    }
+    return chunk;
   }
 
   /**
@@ -90,8 +107,7 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
    * <p/>
    * If the channel is not closed, this function waits for {@code timeoutInMs} ms for a chunk. If the channel is closed
    * or if {@code timeoutInMs} expires, this function returns {@code null}.
-   * @param timeoutInMs the time in ms to wait for a chunk. A value < 0 indicates infinite wait (block until chunk is
-   *                    available).
+   * @param timeoutInMs the time in ms to wait for a chunk.
    * @return a {@link ByteBuffer} representing the next chunk of data if the channel is not closed and a chunk becomes
    *          available within {@code timeoutInMs}. {@code null} if the channel is closed or if {@code timeoutInMs}
    *          expires.
@@ -101,12 +117,7 @@ public class ByteBufferScheduledWriteChannel implements ScheduledWriteChannel {
       throws InterruptedException {
     ByteBuffer chunk = null;
     if (isOpen()) {
-      ChunkData chunkData;
-      if (timeoutInMs < 0) {
-        chunkData = chunks.take();
-      } else {
-        chunkData = chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS);
-      }
+      ChunkData chunkData = chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS);
       if (chunkData != null && chunkData.buffer != null) {
         lock.lock();
         try {
