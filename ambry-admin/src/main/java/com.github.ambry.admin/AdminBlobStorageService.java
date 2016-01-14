@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -703,10 +702,9 @@ class HeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
     byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, List<String>> userMetadata =
-        RestUtils.getUserMetadataFromByteArray(userMetadataArray);
+    Map<String, String> userMetadata = RestUtils.getUserMetadataFromByteArray(userMetadataArray);
     for (String key : userMetadata.keySet()) {
-      restResponseChannel.setHeader(key, RestUtils.getHeaderValueFromList(userMetadata.get(key)));
+      restResponseChannel.setHeader(key, userMetadata.get(key));
     }
   }
 }

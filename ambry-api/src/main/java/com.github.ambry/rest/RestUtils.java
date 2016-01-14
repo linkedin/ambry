@@ -3,7 +3,6 @@ package com.github.ambry.rest;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,37 +123,33 @@ public class RestUtils {
    * @param restRequest the {@link RestRequest} to use.
    * @return the user metadata extracted from {@code restRequest}.
    */
-  public static byte[] buildUsermetadata(RestRequest restRequest) {
+  public static byte[] buildUsermetadata(RestRequest restRequest)
+      throws RestServiceException {
     Map<String, List<String>> args = restRequest.getArgs();
-    Map<String, List<String>> userMetadataMap = new HashMap<String, List<String>>();
-    int size = 0;
-    size += 4; // total number of entries
+    Map<String, String> userMetadataMap = new HashMap<String, String>();
+    int sizeToAllocate = 0;
     for (Map.Entry<String, List<String>> entry : args.entrySet()) {
       String key = entry.getKey();
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
-        userMetadataMap.put(key, args.get(key));
-        size += 4; // key size
-        size += key.getBytes().length;
-        size += 4; // size of value list
-        for (String value : entry.getValue()) {
-          size += 4; // size of each value
-          size += value.getBytes().length;
-        }
+        sizeToAllocate += 4; // key size
+        sizeToAllocate += key.getBytes().length;
+        String value = getHeader(args, key, true);
+        userMetadataMap.put(key, value);
+        sizeToAllocate += 4; // value size
+        sizeToAllocate += value.getBytes().length;
       }
     }
     ByteBuffer userMetadata = null;
-    if (size == 4) {
+    if (sizeToAllocate == 0) {
       userMetadata = ByteBuffer.allocate(0);
     } else {
-      userMetadata = ByteBuffer.allocate(size);
+      sizeToAllocate += 4; // total number of entries
+      userMetadata = ByteBuffer.allocate(sizeToAllocate);
       userMetadata.putInt(userMetadataMap.size());
-      for (Map.Entry<String, List<String>> entry : userMetadataMap.entrySet()) {
+      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
         String key = entry.getKey();
-        Utils.serializeNullableASCIIEncodedString(userMetadata, key);
-        userMetadata.putInt(entry.getValue().size());
-        for (String value : entry.getValue()) {
-          Utils.serializeNullableASCIIEncodedString(userMetadata, value);
-        }
+        Utils.serializeASCIIEncodedString(userMetadata, key);
+        Utils.serializeASCIIEncodedString(userMetadata, entry.getValue());
       }
     }
     return userMetadata.array();
@@ -162,59 +157,21 @@ public class RestUtils {
 
   /**
    * Fetches User metadata from the byte array
-   * @param userMetadataArray the byte array which has the user metadata
-   * @return Map<String,List<String>> the User Metadata that is read from the byte array
+   * @param userMetadata the byte array which has the user metadata
+   * @return Map<String,String> the User Metadata that is read from the byte array
    */
-  public static Map<String, List<String>> getUserMetadataFromByteArray(byte[] userMetadataArray) {
-    ByteBuffer userMetadata = ByteBuffer.wrap(userMetadataArray);
-    Map<String, List<String>> toReturn = new HashMap<String, List<String>>();
-    if (userMetadata.remaining() != 0) {
-      int size = userMetadata.getInt();
+  public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata) {
+    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+    Map<String, String> toReturn = new HashMap<String, String>();
+    if (userMetadataBuffer.remaining() != 0) {
+      int size = userMetadataBuffer.getInt();
       int counter = 0;
       while (counter++ < size) {
-        String key = Utils.deserializeNullableASCIIString(userMetadata);
-        int valueSize = userMetadata.getInt();
-        int valueCounter = 0;
-        ArrayList<String> values = new ArrayList<String>();
-        while (valueCounter++ < valueSize) {
-          String value = Utils.deserializeNullableASCIIString(userMetadata);
-          values = getListFromHeaderValue(value);
-        }
-        toReturn.put(key, values);
+        String key = Utils.deserializeASCIIString(userMetadataBuffer);
+        String value = Utils.deserializeASCIIString(userMetadataBuffer);
+        toReturn.put(key, value);
       }
     }
-    return toReturn;
-  }
-
-  /**
-   * Returns the header value as list of strings
-   * @param value Header value to be parsed
-   * @return ArrayList<String> list of string obtained from header value
-   */
-  public static ArrayList<String> getListFromHeaderValue(String value) {
-    ArrayList<String> values = new ArrayList<String>();
-    value = value.substring(1, value.length() - 1);
-    String[] valueArray = value.split("\"");
-    for (int i = 1; i < valueArray.length; i += 2) {
-      values.add(valueArray[i]);
-    }
-    return values;
-  }
-
-  /**
-   * Returns the header value combining a list of strings
-   * @param input List<String> from which header value has to be constructed
-   * @return String header value obtained from the list of strings
-   */
-  public static String getHeaderValueFromList(List<String> input) {
-    String toReturn = "[";
-    if (input.size() > 0) {
-      for (String str : input) {
-        toReturn += "\"" + str + "\",";
-      }
-      toReturn = toReturn.substring(0, toReturn.length() - 1);
-    }
-    toReturn += "]";
     return toReturn;
   }
 
@@ -258,7 +215,7 @@ public class RestUtils {
    * @param userMetadata {@link Map} which has the new entries that has to be added
    * @throws org.json.JSONException
    */
-  public static void setAmbryHeaders(JSONObject headers, Map<String, List<String>> userMetadata)
+  public static void setAmbryHeaders(JSONObject headers, Map<String, String> userMetadata)
       throws JSONException {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));

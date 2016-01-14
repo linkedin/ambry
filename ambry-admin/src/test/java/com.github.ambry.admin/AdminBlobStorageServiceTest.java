@@ -36,8 +36,6 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -340,34 +338,10 @@ public class AdminBlobStorageServiceTest {
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
-
-    String blobId = postBlobAndVerify(headers, content);
-    getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers);
-    deleteBlobAndVerify(blobId);
-  }
-
-  /**
-   * Tests blob POST, GET, HEAD and DELETE operations with user metadata
-   * @throws Exception
-   */
-  @Test
-  public void postGetHeadDeleteWithUserMetadataTest()
-      throws Exception {
-    final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
-    String serviceId = "postGetHeadDeleteServiceID";
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    JSONObject headers = new JSONObject();
-    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
-    Map<String, List<String>> userMetadata = new HashMap<String, List<String>>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1",
-        new ArrayList<String>(Arrays.asList("value1_1", "value1_2")));
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2",
-        new ArrayList<String>(Arrays.asList("value2_1", "value2_2")));
+    Map<String, String> userMetadata = new HashMap<String, String>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
     RestUtils.setAmbryHeaders(headers, userMetadata);
-
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
     getHeadAndVerify(blobId, headers);

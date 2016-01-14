@@ -4,14 +4,11 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
 import org.junit.Assert;
 import org.junit.Test;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
@@ -183,7 +180,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testSerializeNullableASCIIEncodedString() {
+  public void testSerializeASCIIEncodedString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeNullableString(outputBuffer, randomString);
@@ -200,7 +197,7 @@ public class UtilsTest {
 
     randomString = getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    Utils.serializeASCIIEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
     length = outputBuffer.getInt();
     assertTrue("Input string length " + randomString.getBytes().length + " didn't match output string length " + length,
@@ -213,9 +210,9 @@ public class UtilsTest {
     assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
         outputString, randomString);
 
-    randomString = null;
+    randomString = "";
     outputBuffer = ByteBuffer.allocate(4);
-    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    Utils.serializeASCIIEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
     length = outputBuffer.getInt();
     assertTrue("Input string length 0 didn't match output string length " + length, (0 == length));
@@ -227,63 +224,30 @@ public class UtilsTest {
   }
 
   @Test
-  public void testDeserializeNullableASCIIString() {
+  public void testDeserializeASCIIString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeNullableString(outputBuffer, randomString);
     outputBuffer.flip();
-    String outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    String outputString = Utils.deserializeASCIIString(outputBuffer);
     assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
         outputString, randomString);
 
     randomString = getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeNullableASCIIEncodedString(outputBuffer, randomString);
+    Utils.serializeASCIIEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
-    outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    outputString = Utils.deserializeASCIIString(outputBuffer);
     randomString = randomString.substring(0, randomString.length() - 1) + "?";
     assertEquals("Output string \"" + outputString + "\" didn't match input string \"" + randomString + "\"",
         outputString, randomString);
 
-    randomString = null;
+    randomString = "";
     outputBuffer = ByteBuffer.allocate(4);
     Utils.serializeNullableString(outputBuffer, randomString);
     outputBuffer.flip();
-    outputString = Utils.deserializeNullableASCIIString(outputBuffer);
+    outputString = Utils.deserializeASCIIString(outputBuffer);
     assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
-  }
-
-  @Test
-  public void testVerifyListsForEquality() {
-    ArrayList<String> list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    ArrayList<String> list2 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    assertTrue("List1 contents are different from list2. List1 " + list1 + ", list2 " + list2,
-        Utils.verifyListsForEquality(list1, list2));
-
-    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    list2 = new ArrayList<String>();
-    list2.addAll(list1);
-
-    list1 = new ArrayList<String>();
-    list2 = new ArrayList<String>();
-    assertTrue("List1 contents are different from list2. List1 " + list1 + ", list2 " + list2,
-        Utils.verifyListsForEquality(list1, list2));
-
-    // unequal cases
-    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    list2 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2_"));
-    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
-        Utils.verifyListsForEquality(list1, list2));
-
-    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    list2 = new ArrayList<String>(Arrays.asList("value1_1"));
-    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
-        Utils.verifyListsForEquality(list1, list2));
-
-    list1 = new ArrayList<String>(Arrays.asList("value1_1", "value1_2"));
-    list2 = new ArrayList<String>();
-    assertFalse("List1 contents are same as list2. List1 " + list1 + ", list2 " + list2,
-        Utils.verifyListsForEquality(list1, list2));
   }
 
   @Test
