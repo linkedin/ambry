@@ -407,7 +407,7 @@ class AsyncHandlerWorker implements Runnable {
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} on which a response to the request may be sent.
    * @throws IllegalArgumentException if either of {@code restRequest} or {@code restResponseChannel} is null.
-   * @throws RestServiceException if any of the arguments are null or if there is a problem queuing the request.
+   * @throws RestServiceException if the service is unavailable or if there is a problem queuing the request.
    */
   protected void submitRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws RestServiceException {

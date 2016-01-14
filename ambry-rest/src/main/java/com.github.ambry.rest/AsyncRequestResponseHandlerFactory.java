@@ -30,8 +30,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
   public AsyncRequestResponseHandlerFactory(Integer handlerCount, RestServerMetrics restServerMetrics) {
     if (restServerMetrics == null) {
       throw new IllegalArgumentException("RestServerMetrics instance provided is null");
-    } else if (handlerCount < 0) {
-      throw new IllegalArgumentException("Response handler scaling unit count has to be >= 0. Is " + handlerCount);
+    } else if (handlerCount <= 0) {
+      throw new IllegalArgumentException("Response handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
       AsyncRequestResponseHandler responseHandler = getInstance(restServerMetrics);
       responseHandler.setResponseWorkersCount(handlerCount);
@@ -51,8 +51,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
       BlobStorageService blobStorageService) {
     if (restServerMetrics == null || blobStorageService == null) {
       throw new IllegalArgumentException("One or more arguments received is null");
-    } else if (handlerCount < 0) {
-      throw new IllegalArgumentException("Request handler scaling unit count has to be >= 0. Is " + handlerCount);
+    } else if (handlerCount <= 0) {
+      throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
       AsyncRequestResponseHandler requestHandler = getInstance(restServerMetrics);
       requestHandler.setRequestWorkersCount(handlerCount);
