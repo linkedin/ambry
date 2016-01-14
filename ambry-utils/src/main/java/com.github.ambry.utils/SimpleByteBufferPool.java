@@ -2,6 +2,8 @@ package com.github.ambry.utils;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -12,6 +14,7 @@ import java.util.concurrent.TimeoutException;
  * below zero. It does not actually "pool" deallocated buffers.
  */
 public class SimpleByteBufferPool implements ByteBufferPool {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   private final long capacity;
   private final Object lock;
   private long availableMemory;
@@ -54,7 +57,7 @@ public class SimpleByteBufferPool implements ByteBufferPool {
       while (size > availableMemory) {
         long timeout = timeToBlockInMs - (System.currentTimeMillis() - startTimeInMs);
         if (timeout <= 0) {
-          throw new TimeoutException("Time out waiting for allocation.");
+          throw new TimeoutException("Timed out waiting for allocation.");
         }
         lock.wait(timeout);
       }
@@ -79,6 +82,7 @@ public class SimpleByteBufferPool implements ByteBufferPool {
       availableMemory += buffer.capacity();
       if (availableMemory > capacity) {
         availableMemory = capacity;
+        logger.warn("The total deallocated memory is more than that had been allocated from the buffer pool.");
       }
       lock.notify();
     }
