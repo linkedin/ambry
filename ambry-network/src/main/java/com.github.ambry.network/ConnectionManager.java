@@ -11,7 +11,92 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
- * The HostPortPoolManager manages all the connections to a specific (host, port) pair.
+ * The ConnectionManager keeps track of current connections to datanodes, and provides methods
+ * to checkout and checkin connections.
+ */
+
+public class ConnectionManager {
+  // hostportString to HostPortPoolManager.
+  private ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
+  // connectionId to HostPortPoolManager.
+  private ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
+  // The selector that is used for connecting and sending requests.
+  private Selector selector;
+  private NetworkMetrics metrics;
+
+  public ConnectionManager(Time time, SSLFactory sslFactory)
+      throws IOException {
+    //@todo:
+    // SelectorMetrics need to be separated out from NetworkMetrics class. There will not be any acceptors or processors
+    // at the client side, but the NetworkMetrics is tightly coupled with acceptors and processors. The Selector
+    // requires NetworkMetrics.
+    metrics = null;
+    hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
+    connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
+    selector = new Selector(metrics, time, sslFactory);
+  }
+
+  public static String getHostPortString(String host, int port) {
+    return host + ":" + Integer.toString(port);
+  }
+
+  /**
+   * Returns the {@link HostPortPoolManager} associated with the (host, port) pair. Creates one if one is not available
+   * already.
+   * @param host The hostname
+   * @param port The port
+   * @return a HostPortPoolManager for the associated (host, port) pair.
+   */
+  HostPortPoolManager getHostPortPoolManager(String host, int port) {
+    String lookupStr = getHostPortString(host, port);
+    HostPortPoolManager poolManager = hostPortToPoolManager.get(lookupStr);
+    if (poolManager == null) {
+      // @todo: maxConnections and port type to be obtained by looking up host and port.
+      HostPortPoolManager newPoolManager = new HostPortPoolManager(host, port, PortType.PLAINTEXT, selector);
+      poolManager = hostPortToPoolManager.putIfAbsent(lookupStr, newPoolManager);
+      if (poolManager == null) {
+        poolManager = newPoolManager;
+      }
+    }
+    return poolManager;
+  }
+
+  /**
+   * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
+   * latter case, initiates a connection to the host:port unless max connections to it has been reached.
+   * @param host The host to connect to.
+   * @param port The port on the host to connect to.
+   * @return connectionId, if there is one available to use, null otherwise.
+   */
+  public String checkOut(String host, int port)
+      throws IOException {
+    // if any available, give that
+    // else if max connections to hostport is reached, return null
+    // else initiate a new connection and return null
+    return getHostPortPoolManager(host, port).checkOut();
+  }
+
+  /**
+   * Adds a connectionId as an available connection that can be checked out in the future.
+   * @param connectionId The connection id to add to the list of available connections.
+   */
+  public void addToAvailablePool(String connectionId) {
+    connectionIdToPoolManager.get(connectionId).addToAvailablePool(connectionId);
+  }
+
+  /**
+   * Removes the given connectionId from the list of available connections.
+   * @param connectionId The connection id to remove from the list of available connections.
+   */
+  public void removeFromAvailablePool(String connectionId) {
+    connectionIdToPoolManager.get(connectionId).removeFromAvailablePool(connectionId);
+    connectionIdToPoolManager.remove(connectionId);
+  }
+}
+
+/**
+ * HostPortPoolManager manages all the connections to a specific (host, port) pair. The {@link ConnectionManager} will
+ * create one for every (host, port) pair it knows of.
  */
 class HostPortPoolManager {
   String host;
@@ -73,83 +158,3 @@ class HostPortPoolManager {
   }
 }
 
-/**
- * The ConnectionManager keeps track of current connections to datanodes, and provides methods
- * to checkout and checkin connections.
- */
-
-public class ConnectionManager {
-  // "host:port" to HostPortPoolManager.
-  private ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
-  // connectionId to HostPortPoolManager.
-  private ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
-  // The selector that is used for connecting and sending requests.
-  private Selector selector;
-  private NetworkMetrics metrics;
-
-  public ConnectionManager(Time time, SSLFactory sslFactory)
-      throws IOException {
-    //@todo NetworkMetrics class needs to be separated out. There will not be any acceptors
-    // or processors at the client side.
-    metrics = null;
-    hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
-    connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
-    selector = new Selector(metrics, time, sslFactory);
-  }
-
-  public static String getHostPortString(String host, int port) {
-    return host + ":" + Integer.toString(port);
-  }
-
-  /**
-   * Returns the HostPortPoolManager associated with the (host, port) pair. Creates one if one is not available already.
-   * @param host The hostname
-   * @param port The port
-   * @return a HostPortPoolManager for the associated (host, port) pair.
-   */
-  HostPortPoolManager getHostPortPoolManager(String host, int port) {
-    String lookupStr = getHostPortString(host, port);
-    HostPortPoolManager poolManager = hostPortToPoolManager.get(lookupStr);
-    if (poolManager == null) {
-      // @todo: maxConnections and port type to be obtained by looking up host and port.
-      HostPortPoolManager newPoolManager = new HostPortPoolManager(host, port, PortType.PLAINTEXT, selector);
-      poolManager = hostPortToPoolManager.putIfAbsent(lookupStr, newPoolManager);
-      if (poolManager == null) {
-        poolManager = newPoolManager;
-      }
-    }
-    return poolManager;
-  }
-
-  /**
-   * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
-   * latter case, initiates a connection to the host:port unless max connections to it has been reached.
-   * @param host The host to connect to.
-   * @param port The port on the host to connect to.
-   * @return connectionId, if there is one available to use, null otherwise.
-   */
-  public String checkOut(String host, int port)
-      throws IOException {
-    // if any available, give that
-    // else if max connections to hostport is reached, return null
-    // else initiate a new connection and return null
-    return getHostPortPoolManager(host, port).checkOut();
-  }
-
-  /**
-   * Adds a connectionId as an available connection that can be checked out in the future.
-   * @param connectionId The connection id to add to the list of available connections.
-   */
-  public void addToAvailablePool(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).addToAvailablePool(connectionId);
-  }
-
-  /**
-   * Removes the given connectionId from the list of available connections.
-   * @param connectionId The connection id to remove from the list of available connections.
-   */
-  public void removeFromAvailablePool(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).removeFromAvailablePool(connectionId);
-    connectionIdToPoolManager.remove(connectionId);
-  }
-}
