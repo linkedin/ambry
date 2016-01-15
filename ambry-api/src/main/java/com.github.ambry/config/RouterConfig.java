@@ -12,7 +12,7 @@ public class RouterConfig {
    * Number of background threads to perform coordinator operations in CoordinatorBackedRouter.
    */
   @Config("router.scaling.unit.count")
-  @Default("200")
+  @Default("1")
   public final int routerScalingUnitCount;
 
   /**

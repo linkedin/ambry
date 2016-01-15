@@ -15,4 +15,7 @@ public interface Requestor {
   //@todo
   public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
       List<NetworkReceive> completedReceives);
+
+  //@todo
+  public void onException(Exception e);
 }

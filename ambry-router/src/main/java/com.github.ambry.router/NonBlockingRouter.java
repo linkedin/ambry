@@ -14,13 +14,14 @@ import java.util.concurrent.Future;
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
-public class AmbryRouter implements Router {
+public class NonBlockingRouter implements Router {
   private final RouterConfig routerConfig;
   private final MetricRegistry metricRegistry;
   private final ArrayList<OperationController> ocList;
   private final Random randomForOCSelection;
 
-  public AmbryRouter(RouterConfig routerConfig, MetricRegistry metricRegistry) {
+  public NonBlockingRouter(RouterConfig routerConfig, MetricRegistry metricRegistry)
+      throws IOException {
     this.routerConfig = routerConfig;
     this.metricRegistry = metricRegistry;
     ocList = new ArrayList<OperationController>();

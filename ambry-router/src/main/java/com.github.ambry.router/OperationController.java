@@ -2,18 +2,24 @@ package com.github.ambry.router;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.BoundedByteBufferReceive;
+import com.github.ambry.network.ConnectionManager;
 import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.Requestor;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * Specifies the operation type.
+ * The various operation types supported by the Operation Controller.
  */
 enum OperationType {
   GetBlob,
@@ -23,6 +29,7 @@ enum OperationType {
 }
 
 public class OperationController implements Requestor {
+  private static final Logger logger = LoggerFactory.getLogger(OperationController.class);
   private final PutManager putManager;
   private final GetManager getManager;
   private final DeleteManager deleteManager;
@@ -35,12 +42,16 @@ public class OperationController implements Requestor {
   private static final AtomicLong putBlobOperationIdGenerator = new AtomicLong(OperationType.PutBlob.ordinal());
   private static final AtomicLong deleteBlobOperationIdGenerator = new AtomicLong(OperationType.DeleteBlob.ordinal());
   private static final int operationTypeCount = OperationType.values().length;
+  Time time;
 
-  public OperationController() {
-    // @todo
-    putManager = new PutManager(MAX_CHUNK_SIZE);
-    getManager = new GetManager();
-    deleteManager = new DeleteManager();
+  public OperationController()
+      throws IOException {
+    // @todo: network metrics, sslFactory...
+    Time time = SystemTime.getInstance();
+    connectionManager = new ConnectionManager(time, null);
+    putManager = new PutManager(MAX_CHUNK_SIZE, connectionManager);
+    getManager = new GetManager(connectionManager);
+    deleteManager = new DeleteManager(connectionManager);
   }
 
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
@@ -72,13 +83,21 @@ public class OperationController implements Requestor {
 
   @Override
   public List<NetworkSend> poll() {
-    // these are ids that were successfully put for an operation that eventually failed:
+    // these are ids that were successfully put for an operation that eventually failed
     List<String> idsToDelete = putManager.getIdsToDelete();
 
     // this is a best effort to delete ids for cleanup purposes (these may fail and we will
     // not do anything about it at this time).
-    deleteManager.submitDeleteBlob(idsToDelete, null);
-    return new ArrayList<NetworkSend>().addAll(putManager.poll(), getManager.poll(), deleteManager.poll());
+    for (String id : idsToDelete) {
+      // add batch api going forward.
+      deleteManager.submitDeleteBlobOperation(deleteBlobOperationIdGenerator.addAndGet(operationTypeCount), id, null);
+    }
+
+    List<NetworkSend> requests = new ArrayList<NetworkSend>();
+    putManager.poll(requests);
+    getManager.poll(requests);
+    deleteManager.poll(requests);
+    return requests;
   }
 
   // the poll for the respective managers simply iterates over the operations to give them
@@ -87,11 +106,11 @@ public class OperationController implements Requestor {
   public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
       List<NetworkReceive> completedReceives) {
     for (String conn : connected) {
-      connectionManager.checkIn(conn);
+      connectionManager.addToAvailablePool(conn);
     }
 
     for (String conn : disconnected) {
-      connectionManager.updateDisconnection(conn);
+      connectionManager.removeFromAvailablePool(conn);
     }
 
     // update operations in a clean way - benefit being the operation can immediately get
@@ -99,10 +118,21 @@ public class OperationController implements Requestor {
     // failed, etc.)
 
     // on receiving a response, call into the respective operation manager -> operation to
-    // handle the response
+    // handle the response. We get this from the correlation id.
     for (NetworkReceive recv : completedReceives) {
-      connectionManager.checkIn(recv.getConnectionId());
-      getOperationManagerFromRecv(recv).onResponse(recv);
+      connectionManager.addToAvailablePool(recv.getConnectionId());
+      deserializeResponse(recv.getReceivedBytes());
     }
+  }
+
+  @Override
+  public void onException(Exception e) {
+    logger.error("Exception received", e);
+    // @todo
+  }
+
+  private void deserializeResponse(BoundedByteBufferReceive recv) {
+    // @todo
+    // 1. Get the appropriate
   }
 }

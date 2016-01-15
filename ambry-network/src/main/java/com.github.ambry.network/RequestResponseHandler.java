@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 
 public class RequestResponseHandler implements Runnable {
-  private static final Logger logger = LoggerFactory.getLogger(Selector.class);
+  private static final Logger logger = LoggerFactory.getLogger(RequestResponseHandler.class);
   private final Requestor requestor;
   private final Selector selector;
   private final NetworkMetrics metrics;
@@ -48,7 +48,10 @@ public class RequestResponseHandler implements Runnable {
           requestor.onResponse(selector.connected(), selector.disconnected(), selector.completedSends(),
               selector.completedReceives());
         } catch (IOException e) {
-          logger.error("Encountered IO Exception during poll", e);
+          logger.error("Encountered IO Exception during poll, continuing.", e);
+        } catch (Exception e) {
+          requestor.onException(e);
+          break;
         }
       }
     } finally {
