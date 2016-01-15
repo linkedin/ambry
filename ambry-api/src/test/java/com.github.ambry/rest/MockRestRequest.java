@@ -81,6 +81,7 @@ public class MockRestRequest implements RestRequest {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
   private final List<EventListener> listeners = new ArrayList<EventListener>();
+  private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
 
   /**
    * Create a MockRestRequest.
@@ -95,6 +96,7 @@ public class MockRestRequest implements RestRequest {
    */
   public MockRestRequest(JSONObject data, List<ByteBuffer> requestContents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
     this.restMethod = RestMethod.valueOf(data.getString(REST_METHOD_KEY));
     this.uri = new URI(data.getString(URI_KEY));
     JSONObject headers = data.has(HEADERS_KEY) ? data.getJSONObject(HEADERS_KEY) : null;
@@ -224,6 +226,11 @@ public class MockRestRequest implements RestRequest {
       throws IOException {
     channelOpen.set(false);
     onEventComplete(Event.Close);
+  }
+
+  @Override
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return restRequestMetricsTracker;
   }
 
   /**

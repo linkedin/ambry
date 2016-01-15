@@ -92,7 +92,7 @@ public enum RestServiceErrorCode {
   /**
    * Indicates that the submitted request or response could not be queued in the AsyncRequestResponseHandler.
    */
-  RequestResponseQueueingFailure,
+  RequestResponseQueuingFailure,
   /**
    * Indicates that there was a problem building the response.
    */

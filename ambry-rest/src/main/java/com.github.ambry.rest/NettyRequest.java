@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 class NettyRequest implements RestRequest {
+  private final NettyMetrics nettyMetrics;
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
@@ -38,24 +39,26 @@ class NettyRequest implements RestRequest {
 
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
+  private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean streamEnded = new AtomicBoolean(false);
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
    * request.
    * @param request the {@link HttpRequest} that needs to be wrapped.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the HTTP method defined in {@code request} is not recognized as a
    *                                {@link RestMethod}.
    */
-  public NettyRequest(HttpRequest request)
+  public NettyRequest(HttpRequest request, NettyMetrics nettyMetrics)
       throws RestServiceException {
     if (request == null) {
       throw new IllegalArgumentException("Received null HttpRequest");
     }
-    this.request = request;
-    this.query = new QueryStringDecoder(request.getUri());
+    restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
     HttpMethod httpMethod = request.getMethod();
     if (httpMethod == HttpMethod.GET) {
       restMethod = RestMethod.GET;
@@ -66,9 +69,13 @@ class NettyRequest implements RestRequest {
     } else if (httpMethod == HttpMethod.HEAD) {
       restMethod = RestMethod.HEAD;
     } else {
+      nettyMetrics.unsupportedHttpMethodError.inc();
       throw new RestServiceException("http method not supported: " + httpMethod,
           RestServiceErrorCode.UnsupportedHttpMethod);
     }
+    this.request = request;
+    this.query = new QueryStringDecoder(request.getUri());
+    this.nettyMetrics = nettyMetrics;
 
     Map<String, List<String>> allArgs = new HashMap<String, List<String>>();
     allArgs.putAll(query.parameters());
@@ -112,6 +119,8 @@ class NettyRequest implements RestRequest {
     if (channelOpen.compareAndSet(true, false)) {
       contentLock.lock();
       try {
+        logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
+        // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
         Iterator<NettyContent> nettyContentIterator = requestContents.iterator();
         while (nettyContentIterator.hasNext()) {
           nettyContentIterator.next().release();
@@ -119,8 +128,14 @@ class NettyRequest implements RestRequest {
         }
       } finally {
         contentLock.unlock();
+        restRequestMetricsTracker.recordMetrics();
       }
     }
+  }
+
+  @Override
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return restRequestMetricsTracker;
   }
 
   /**
@@ -194,7 +209,10 @@ class NettyRequest implements RestRequest {
           if (currentBytesWritten == -1) {
             NettyContent nettyContent = requestContents.remove(0);
             nettyContent.release();
-            streamEnded.set(nettyContent.isLast());
+            if (nettyContent.isLast()) {
+              logger.trace("Content stream has ended in NettyRequest {}", getUri());
+              streamEnded.set(true);
+            }
           } else {
             bytesWritten += currentBytesWritten;
           }
@@ -224,7 +242,7 @@ class NettyRequest implements RestRequest {
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
-      NettyContent nettyContent = new NettyContent(httpContent);
+      NettyContent nettyContent = new NettyContent(httpContent, nettyMetrics);
       contentLock.lock();
       try {
         if (!isOpen()) {
@@ -253,9 +271,10 @@ class NettyContent {
   /**
    * Wraps the {@code httpContent} so that is easier to read.
    * @param httpContent the {@link HttpContent} that needs to be wrapped.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code httpContent} is null.
    */
-  public NettyContent(HttpContent httpContent) {
+  public NettyContent(HttpContent httpContent, NettyMetrics nettyMetrics) {
     if (httpContent == null) {
       throw new IllegalArgumentException("Received null HttpContent");
     } else if (httpContent.content().nioBufferCount() > 0) {
@@ -265,7 +284,8 @@ class NettyContent {
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
-      logger.warn("Http httpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
+      nettyMetrics.contentCopyCount.inc();
+      logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
       ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
       httpContent.content().readBytes(contentBuffer);
       contentChannel = new ByteBufferReadableStreamChannel(contentBuffer);

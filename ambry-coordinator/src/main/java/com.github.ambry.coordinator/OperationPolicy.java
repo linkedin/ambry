@@ -2,17 +2,16 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.HashMap;
-import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.lang.Math.min;
 
@@ -513,6 +512,14 @@ class PutParallelOperationPolicy extends ParallelOperationPolicy {
       super.successTarget = 2;
       super.requestParallelism = 3;
     }
+  }
+
+  public PutParallelOperationPolicy(String datacenterName, PartitionId partitionId, OperationContext oc,
+      int successTarget, int requestParallelism)
+      throws CoordinatorException {
+    super(datacenterName, partitionId, oc.isCrossDCProxyCallEnabled());
+    super.successTarget = successTarget;
+    super.requestParallelism = requestParallelism;
   }
 }
 

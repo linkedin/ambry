@@ -6,7 +6,6 @@ package com.github.ambry.utils;
 public class MockTime extends Time {
   public long currentMilliseconds;
   public long currentNanoSeconds;
-  public long sleepTimeExpected;
 
   public MockTime(long initialMilliseconds) {
     currentMilliseconds = initialMilliseconds;
@@ -36,15 +35,11 @@ public class MockTime extends Time {
   public void sleep(long ms)
       throws InterruptedException {
     currentMilliseconds += ms;
-    if (sleepTimeExpected != ms) {
-      throw new IllegalArgumentException();
-    }
   }
 
   @Override
   public void wait(Object o, long ms)
     throws InterruptedException {
-    sleepTimeExpected = ms;
     sleep(ms);
   }
 }

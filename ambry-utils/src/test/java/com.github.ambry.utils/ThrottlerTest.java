@@ -11,7 +11,7 @@ public class ThrottlerTest {
   @Test
   public void throttlerTest()
       throws InterruptedException {
-    MockTime time = new MockTime();
+    MockThrottlerTime time = new MockThrottlerTime();
     time.currentMilliseconds = 0;
     time.currentNanoSeconds = 0;
     time.sleepTimeExpected = 0;
@@ -27,5 +27,18 @@ public class ThrottlerTest {
     time.sleepTimeExpected = 4989;
     throttler.maybeThrottle(500);
     Assert.assertEquals(time.currentMilliseconds, 5011);
+  }
+
+  class MockThrottlerTime extends MockTime {
+    long sleepTimeExpected;
+
+    @Override
+    public void sleep(long ms)
+        throws InterruptedException {
+      currentMilliseconds += ms;
+      if (sleepTimeExpected != ms) {
+        throw new IllegalArgumentException();
+      }
+    }
   }
 }

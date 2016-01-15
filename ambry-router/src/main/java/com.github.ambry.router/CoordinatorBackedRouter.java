@@ -1,6 +1,6 @@
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Histogram;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.coordinator.Coordinator;
@@ -34,28 +34,31 @@ public class CoordinatorBackedRouter implements Router {
   private static RouterException ROUTER_CLOSED_EXCEPTION =
       new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
 
+  protected final CoordinatorBackedRouterMetrics metrics;
+  protected final Coordinator coordinator;
+
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
-  private final Coordinator coordinator;
   private final ExecutorService operationPool;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Create a CoordinatorBackedRouter instance.
    * @param routerConfig the {@link RouterConfig} to refer to.
-   * @param metricRegistry the {@link MetricRegistry} to use for metrics.
+   * @param metrics the {@link CoordinatorBackedRouterMetrics} instance to use for metrics.
    * @param coordinator the {@link Coordinator} that will back this router.
    * @throws IllegalArgumentException if any of the arguments received are null or if
    * {@link RouterConfig#routerScalingUnitCount} is less than or equal to 0.
    */
-  public CoordinatorBackedRouter(RouterConfig routerConfig, MetricRegistry metricRegistry, Coordinator coordinator) {
-    if (routerConfig == null || metricRegistry == null || coordinator == null) {
+  public CoordinatorBackedRouter(RouterConfig routerConfig, CoordinatorBackedRouterMetrics metrics,
+      Coordinator coordinator) {
+    if (routerConfig == null || metrics == null || coordinator == null) {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouter -");
       if (routerConfig == null) {
         errorMessage.append(" [RouterConfig] ");
       }
-      if (metricRegistry == null) {
-        errorMessage.append(" [MetricRegistry] ");
+      if (metrics == null) {
+        errorMessage.append(" [CoordinatorBackedRouterMetrics] ");
       }
       if (coordinator == null) {
         errorMessage.append(" [Coordinator] ");
@@ -68,7 +71,9 @@ public class CoordinatorBackedRouter implements Router {
       throw new IllegalArgumentException(
           "Router scaling unit count defined in config should be > 0 (is " + routerConfig.routerScalingUnitCount + ")");
     }
+    this.metrics = metrics;
     this.coordinator = coordinator;
+    logger.trace("Instantiated CoordinatorBackedRouter");
   }
 
   @Override
@@ -78,11 +83,18 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    CoordinatorOperation operation =
-        new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.GetBlobInfo);
-    submitOperation(operation, futureResult, callback);
-    return futureResult;
+    long preProcessingStartTime = System.currentTimeMillis();
+    try {
+      metrics.getBlobInfoRate.mark();
+      logger.trace("Beginning getBlobInfo for {}", blobId);
+      FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
+      CoordinatorOperation operation =
+          new CoordinatorOperation(this, futureResult, blobId, callback, CoordinatorOperationType.GetBlobInfo);
+      submitOperation(operation, futureResult, callback);
+      return futureResult;
+    } finally {
+      metrics.operationPreProcessingTimeInMs.update(System.currentTimeMillis() - preProcessingStartTime);
+    }
   }
 
   @Override
@@ -92,11 +104,18 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
-    CoordinatorOperation operation =
-        new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.GetBlob);
-    submitOperation(operation, futureResult, callback);
-    return futureResult;
+    long preProcessingStartTime = System.currentTimeMillis();
+    try {
+      metrics.getBlobRate.mark();
+      logger.trace("Beginning getBlob for {}", blobId);
+      FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+      CoordinatorOperation operation =
+          new CoordinatorOperation(this, futureResult, blobId, callback, CoordinatorOperationType.GetBlob);
+      submitOperation(operation, futureResult, callback);
+      return futureResult;
+    } finally {
+      metrics.operationPreProcessingTimeInMs.update(System.currentTimeMillis() - preProcessingStartTime);
+    }
   }
 
   @Override
@@ -107,11 +126,18 @@ public class CoordinatorBackedRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
-    FutureResult<String> futureResult = new FutureResult<String>();
-    CoordinatorOperation operation =
-        new CoordinatorOperation(coordinator, futureResult, blobProperties, usermetadata, channel, callback);
-    submitOperation(operation, futureResult, callback);
-    return futureResult;
+    long preProcessingStartTime = System.currentTimeMillis();
+    try {
+      metrics.putBlobRate.mark();
+      logger.trace("Beginning putBlob");
+      FutureResult<String> futureResult = new FutureResult<String>();
+      CoordinatorOperation operation =
+          new CoordinatorOperation(this, futureResult, blobProperties, usermetadata, channel, callback);
+      submitOperation(operation, futureResult, callback);
+      return futureResult;
+    } finally {
+      metrics.operationPreProcessingTimeInMs.update(System.currentTimeMillis() - preProcessingStartTime);
+    }
   }
 
   @Override
@@ -121,11 +147,18 @@ public class CoordinatorBackedRouter implements Router {
 
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
-    FutureResult<Void> futureResult = new FutureResult<Void>();
-    CoordinatorOperation operation =
-        new CoordinatorOperation(coordinator, futureResult, blobId, callback, CoordinatorOperationType.DeleteBlob);
-    submitOperation(operation, futureResult, callback);
-    return futureResult;
+    long preProcessingStartTime = System.currentTimeMillis();
+    try {
+      metrics.deleteBlobRate.mark();
+      logger.trace("Beginning deleteBlob for {}", blobId);
+      FutureResult<Void> futureResult = new FutureResult<Void>();
+      CoordinatorOperation operation =
+          new CoordinatorOperation(this, futureResult, blobId, callback, CoordinatorOperationType.DeleteBlob);
+      submitOperation(operation, futureResult, callback);
+      return futureResult;
+    } finally {
+      metrics.operationPreProcessingTimeInMs.update(System.currentTimeMillis() - preProcessingStartTime);
+    }
   }
 
   @Override
@@ -134,14 +167,17 @@ public class CoordinatorBackedRouter implements Router {
     try {
       if (routerOpen.compareAndSet(true, false)) {
         logger.info("CoordinatorBackedRouter closing");
+        long closeStartTime = System.currentTimeMillis();
         operationPool.shutdown();
         operationPool.awaitTermination(1, TimeUnit.MINUTES);
         coordinator.close();
+        metrics.closeTimeInMs.update(System.currentTimeMillis() - closeStartTime);
         logger.info("CoordinatorBackedRouter closed");
       } else {
         operationPool.awaitTermination(1, TimeUnit.MINUTES);
       }
     } catch (InterruptedException e) {
+      metrics.closeError.inc();
       logger.error("Error shutting down operationPool in CoordinatorBackedRouter", e);
     }
   }
@@ -157,11 +193,13 @@ public class CoordinatorBackedRouter implements Router {
       Callback callback) {
     if (routerOpen.get()) {
       try {
+        coordinatorOperation.onQueue();
         operationPool.submit(coordinatorOperation);
       } catch (Exception e) {
         completeOperation(futureResult, callback, null, e);
       }
     } else {
+      metrics.unavailableError.inc();
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     }
   }
@@ -174,15 +212,23 @@ public class CoordinatorBackedRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  protected static void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
+  protected void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
       Exception exception) {
-    RuntimeException runtimeException = null;
-    if (exception != null) {
-      runtimeException = new RuntimeException(exception);
-    }
-    futureResult.done(operationResult, runtimeException);
-    if (callback != null) {
-      callback.onCompletion(operationResult, exception);
+    long postProcessingStartTime = System.currentTimeMillis();
+    try {
+      RuntimeException runtimeException = null;
+      if (exception != null) {
+        runtimeException = new RuntimeException(exception);
+      }
+      futureResult.done(operationResult, runtimeException);
+      if (callback != null) {
+        callback.onCompletion(operationResult, exception);
+      }
+    } catch (Exception e) {
+      metrics.futureCallbackError.inc();
+      logger.error("Exception caught during future and callback completion", e);
+    } finally {
+      metrics.operationPostProcessingTimeInMs.update(System.currentTimeMillis() - postProcessingStartTime);
     }
   }
 }
@@ -201,8 +247,11 @@ enum CoordinatorOperationType {
  * Thread that performs the required {@link CoordinatorOperationType} using the blocking APIs of a {@link Coordinator}.
  */
 class CoordinatorOperation implements Runnable {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private Long operationQueueStartTime;
+
   // general
-  private final Coordinator coordinator;
+  private final CoordinatorBackedRouter router;
   private final FutureResult futureResult;
   private final Callback callback;
   private final CoordinatorOperationType opType;
@@ -218,7 +267,7 @@ class CoordinatorOperation implements Runnable {
   /**
    * Constructor used to invoke {@link Coordinator} equivalent operations for {@link Router#getBlob(String)},
    * {@link Router#getBlobInfo(String)} and {@link Router#deleteBlob(String)} (and their variants).
-   * @param coordinator the {@link Coordinator} to use to perform the operation.
+   * @param router the {@link CoordinatorBackedRouter} instance to use to submit operations.
    * @param futureResult the {@link FutureResult} where the final result has to be loaded.
    * @param blobId the blob id that the operation needs to be performed on.
    * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
@@ -227,9 +276,9 @@ class CoordinatorOperation implements Runnable {
    *                {@link CoordinatorOperationType#DeleteBlob}.
    * @throws IllegalArgumentException if {@code opType} is {@link CoordinatorOperationType#PutBlob}.
    */
-  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, String blobId, Callback callback,
-      CoordinatorOperationType opType) {
-    this(coordinator, futureResult, callback, opType);
+  public CoordinatorOperation(CoordinatorBackedRouter router, FutureResult futureResult, String blobId,
+      Callback callback, CoordinatorOperationType opType) {
+    this(router, futureResult, callback, opType);
     if (CoordinatorOperationType.PutBlob.equals(opType)) {
       throw new IllegalArgumentException("This constructor cannot be used for the putBlob operation");
     }
@@ -239,69 +288,127 @@ class CoordinatorOperation implements Runnable {
   /**
    * Constructor used to invoke {@link Coordinator} equivalent operations for
    * {@link Router#putBlob(BlobProperties, byte[], ReadableStreamChannel)} and its variant.
-   * @param coordinator the {@link Coordinator} to use to perform the operation.
+   * @param router the {@link CoordinatorBackedRouter} instance to use to submit operations.
    * @param futureResult the {@link FutureResult} where the final result has to be loaded.
    * @param blobProperties the properties of the blob.
    * @param usermetadata user specified metadata as a byte array.
    * @param channel the {@link ReadableStreamChannel} to read the blob data from.
    * @param callback the {@link Callback} to invoke once operation is complete (can be null if no callback required).
    */
-  public CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, BlobProperties blobProperties,
+  public CoordinatorOperation(CoordinatorBackedRouter router, FutureResult futureResult, BlobProperties blobProperties,
       byte[] usermetadata, ReadableStreamChannel channel, Callback callback) {
-    this(coordinator, futureResult, callback, CoordinatorOperationType.PutBlob);
+    this(router, futureResult, callback, CoordinatorOperationType.PutBlob);
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
     this.channel = channel;
   }
 
-  private CoordinatorOperation(Coordinator coordinator, FutureResult futureResult, Callback callback,
+  private CoordinatorOperation(CoordinatorBackedRouter router, FutureResult futureResult, Callback callback,
       CoordinatorOperationType opType) {
-    this.coordinator = coordinator;
+    this.router = router;
     this.futureResult = futureResult;
     this.callback = callback;
     this.opType = opType;
+    logger.trace("Instantiated CoordinatorOperation for {} operation", this.opType);
   }
 
   @Override
   public void run() {
+    long operationStartTime = System.currentTimeMillis();
+    onDequeue();
+    Histogram operationTotalTimeTracker = null;
     Object operationResult = null;
     Exception exception = null;
     try {
       switch (opType) {
         case GetBlob:
-          BlobOutput blobOutput = coordinator.getBlob(blobId);
+          logger.trace("Beginning coordinator getBlob");
+          BlobOutput blobOutput = router.coordinator.getBlob(blobId);
+          long getBlobEndTime = System.currentTimeMillis();
+          router.metrics.getBlobTimeInMs.update(getBlobEndTime - operationStartTime);
           // (int) blobOutput.getSize() will not work for blobs >2GB in size but that is not a concern right now.
           // CoordinatorBackedRouter will be long gone before (if) we support blobs with that size.
+          logger.trace("Finished coordinator getBlob");
+
           byte[] buf = Utils.readBytesFromStream(blobOutput.getStream(), (int) blobOutput.getSize());
+          logger.trace("Blob data has completely arrived");
           operationResult = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(buf));
+          router.metrics.getBlobResultConstructionTimeInMs.update(System.currentTimeMillis() - getBlobEndTime);
+          operationTotalTimeTracker = router.metrics.getBlobTotalTimeInMs;
           break;
         case GetBlobInfo:
-          blobProperties = coordinator.getBlobProperties(blobId);
-          ByteBuffer usermetadataBuffer = coordinator.getBlobUserMetadata(blobId);
+          logger.trace("Beginning coordinator getBlobProperties");
+          blobProperties = router.coordinator.getBlobProperties(blobId);
+          long getBlobPropsEndTime = System.currentTimeMillis();
+          router.metrics.getBlobPropertiesTimeInMs.update(getBlobPropsEndTime - operationStartTime);
+          logger.trace("Finished coordinator getBlobProperties. Beginning coordinator getBlobUserMetadata");
+
+          ByteBuffer usermetadataBuffer = router.coordinator.getBlobUserMetadata(blobId);
+          long getBlobUserMetadataEndTime = System.currentTimeMillis();
+          router.metrics.getUserMetadataTimeInMs.update(getBlobUserMetadataEndTime - getBlobPropsEndTime);
+          logger.trace("Finished coordinator getBlobUserMetadata.");
+
           if (usermetadataBuffer.hasArray()) {
             usermetadata = usermetadataBuffer.array();
           } else {
+            logger.trace("Usermetadata buffer was not backed by an array. Copying the data");
             usermetadata = new byte[usermetadataBuffer.capacity()];
             usermetadataBuffer.get(usermetadata);
           }
           operationResult = new BlobInfo(blobProperties, usermetadata);
+          router.metrics.getBlobInfoResultConstructionTimeInMs
+              .update(System.currentTimeMillis() - getBlobUserMetadataEndTime);
+          operationTotalTimeTracker = router.metrics.getBlobInfoTotalTimeInMs;
           break;
         case PutBlob:
-          operationResult = coordinator
+          logger.trace("Beginning coordinator putBlob");
+          operationResult = router.coordinator
               .putBlob(blobProperties, ByteBuffer.wrap(usermetadata), new ReadableStreamChannelInputStream(channel));
+          logger.trace("Finished coordinator putBlob");
+          operationTotalTimeTracker = router.metrics.putBlobTotalTimeInMs;
           break;
         case DeleteBlob:
-          coordinator.deleteBlob(blobId);
+          logger.trace("Beginning coordinator deleteBlob");
+          router.coordinator.deleteBlob(blobId);
+          logger.trace("Finished coordinator deleteBlob");
+          operationTotalTimeTracker = router.metrics.deleteBlobTotalTimeInMs;
           break;
         default:
           throw new IllegalStateException("Unsupported CoordinatorOperationType - " + opType);
       }
     } catch (CoordinatorException e) {
+      router.metrics.operationError.inc();
       exception = new RouterException(e, RouterErrorCode.convertCoordinatorErrorToRouterErrorCode(e.getErrorCode()));
     } catch (Exception e) {
+      router.metrics.operationError.inc();
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      CoordinatorBackedRouter.completeOperation(futureResult, callback, operationResult, exception);
+      if (operationTotalTimeTracker != null) {
+        operationTotalTimeTracker.update(System.currentTimeMillis() - operationStartTime);
+      }
+      router.completeOperation(futureResult, callback, operationResult, exception);
+    }
+  }
+
+  /**
+   * Tracks metrics on queuing of operation.
+   */
+  protected void onQueue() {
+    router.metrics.operationQueuingRate.mark();
+    operationQueueStartTime = System.currentTimeMillis();
+  }
+
+  /**
+   * Tracks metrics on dequeuing of operation.
+   */
+  private void onDequeue() {
+    if (operationQueueStartTime != null) {
+      long queueTime = System.currentTimeMillis() - operationQueueStartTime;
+      router.metrics.operationQueuingTimeInMs.update(queueTime);
+      logger.trace("Operation spent {} ms in execution queue", queueTime);
+      router.metrics.operationDequeuingRate.mark();
+    } else {
+      router.metrics.queueStartTimeNotRecordedError.inc();
     }
   }
 }

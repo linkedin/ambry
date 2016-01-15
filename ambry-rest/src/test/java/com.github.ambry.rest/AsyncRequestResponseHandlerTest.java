@@ -237,20 +237,19 @@ public class AsyncRequestResponseHandlerTest {
 
     // both response and exception null
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     EventMonitor<MockRestRequest.Event> requestCloseMonitor =
         new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, null);
-    if (restResponseChannel.getCause() == null) {
-      // don't care about response.
-      assertTrue("RestRequest channel not closed", requestCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
-    } else {
+    if (restResponseChannel.getCause() != null) {
       throw (Exception) restResponseChannel.getCause();
     }
 
     // response null but exception not null.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
     restResponseChannel = new MockRestResponseChannel();
@@ -258,12 +257,11 @@ public class AsyncRequestResponseHandlerTest {
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, e);
     // make sure exception was correctly sent to the RestResponseChannel.
     assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
-    // don't care about response.
-    assertTrue("RestRequest channel not closed", requestCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
 
     // response not null.
     // steady response - full response available.
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     restRequest.addListener(requestCloseMonitor);
     restResponseChannel = new MockRestResponseChannel();
@@ -276,7 +274,6 @@ public class AsyncRequestResponseHandlerTest {
     if (restResponseChannel.getCause() == null) {
       assertArrayEquals("Response does not match", responseBuffer.array(),
           restResponseChannel.getResponseBody(MockRestResponseChannel.DataStatus.Flushed));
-      assertTrue("RestRequest channel not closed", requestCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
       assertTrue("Response is not closed", responseCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
     } else {
       throw (Exception) restResponseChannel.getCause();
@@ -284,6 +281,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // halting response - response not available in one shot
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
     responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
     awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel,
@@ -306,6 +304,7 @@ public class AsyncRequestResponseHandlerTest {
       throws Exception {
     // Response is bad.
     MockRestRequest goodRestRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    goodRestRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     EventMonitor<MockRestRequest.Event> requestCloseMonitor =
         new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
     goodRestRequest.addListener(requestCloseMonitor);
@@ -313,10 +312,10 @@ public class AsyncRequestResponseHandlerTest {
     ReadableStreamChannel badResponse = new BadRSC();
     awaitResponse(asyncRequestResponseHandler, goodRestRequest, restResponseChannel, badResponse, null);
     assertNotNull("MockRestResponseChannel would have been passed an exception", restResponseChannel.getCause());
-    assertTrue("RestRequest channel not closed", requestCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
 
     // RestRequest is bad.
     BadRestRequest badRestRequest = new BadRestRequest();
+    badRestRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
     ByteBufferRSC goodResponse = new ByteBufferRSC(ByteBuffer.allocate(0));
     EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
@@ -376,13 +375,13 @@ public class AsyncRequestResponseHandlerTest {
         assertEquals("Requests queue size mismatch", requests.size(), handler.getRequestQueueSize());
         assertEquals("Responses queue size mismatch", responses.size(), handler.getResponseSetSize());
 
-        // try queueing a response for a request that is already queued
+        // try queuing a response for a request that is already queued
         try {
           handler.handleResponse(restRequest, restResponseChannel,
               new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), null);
-          fail("Response queueing should have thrown exception since the request is duplicate");
+          fail("Response queuing should have thrown exception since the request is duplicate");
         } catch (RestServiceException e) {
-          assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestResponseQueueingFailure,
+          assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestResponseQueuingFailure,
               e.getErrorCode());
         }
       } else {
@@ -393,12 +392,7 @@ public class AsyncRequestResponseHandlerTest {
       handler.shutdown();
 
       // since the shutdown is complete, all closes would have happened synchronously.
-      for (AsyncRequestInfo requestInfo : requests) {
-        assertFalse("RestRequest channel not closed", requestInfo.getRestRequest().isOpen());
-      }
-
       for (Map.Entry<RestRequest, AsyncResponseInfo> entry : responses.entrySet()) {
-        assertFalse("RestRequest channel not closed", entry.getKey().isOpen());
         assertFalse("Response channel not closed", entry.getValue().getResponse().isOpen());
       }
     }
@@ -768,7 +762,7 @@ class BadRSC implements ReadableStreamChannel {
 
   @Override
   public long getSize() {
-    throw new IllegalStateException("Not implemented");
+    return -1;
   }
 
   @Override
@@ -887,25 +881,26 @@ class BadResponseChannel implements RestResponseChannel {
  * A bad implementation of {@link RestRequest}. Just throws exceptions.
  */
 class BadRestRequest implements RestRequest {
+  private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
 
   @Override
   public RestMethod getRestMethod() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public String getPath() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public String getUri() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
   public Map<String, List<String>> getArgs() {
-    throw new IllegalStateException("Not implemented");
+    return null;
   }
 
   @Override
@@ -917,6 +912,11 @@ class BadRestRequest implements RestRequest {
   public void close()
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return restRequestMetricsTracker;
   }
 
   @Override
