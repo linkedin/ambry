@@ -161,9 +161,9 @@ public class RestUtilsTest {
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1","value1");
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2","value2");
-    RestUtils.setAmbryHeaders(headers, userMetadata);
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    setAmbryHeaders(headers, userMetadata);
     verifyBlobPropertiesConstructionSuccess(headers);
     verifyUserMetadataConstructionSuccess(headers, userMetadata);
   }
@@ -179,11 +179,11 @@ public class RestUtilsTest {
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1","value1");
-    userMetadata.put("key2","value2_1"); // no valid prefix
-    userMetadata.put("key3" + RestUtils.Headers.UserMetaData_Header_Prefix,"value3"); // valid prefix as suffix
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key4",""); // empty value
-    RestUtils.setAmbryHeaders(headers, userMetadata);
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
+    userMetadata.put("key2", "value2_1"); // no valid prefix
+    userMetadata.put("key3" + RestUtils.Headers.UserMetaData_Header_Prefix, "value3"); // valid prefix as suffix
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key4", ""); // empty value
+    setAmbryHeaders(headers, userMetadata);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
@@ -223,7 +223,7 @@ public class RestUtilsTest {
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
-    RestUtils.setAmbryHeaders(headers, userMetadata);
+    setAmbryHeaders(headers, userMetadata);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
@@ -340,7 +340,8 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-          + ", and output map value " + userMetadataMap.get(key), inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
+          + ", and output map value " + userMetadataMap.get(key),
+          inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }
 
@@ -382,6 +383,19 @@ public class RestUtilsTest {
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
+   * @param headers  {@link JSONObject} to which the new headers are to be added
+   * @param userMetadata {@link Map} which has the new entries that has to be added
+   * @throws org.json.JSONException
+   */
+  public static void setAmbryHeaders(JSONObject headers, Map<String, String> userMetadata)
+      throws JSONException {
+    for (String key : userMetadata.keySet()) {
+      headers.put(key, userMetadata.get(key));
     }
   }
 }

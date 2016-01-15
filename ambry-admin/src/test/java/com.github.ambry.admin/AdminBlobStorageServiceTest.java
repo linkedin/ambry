@@ -22,6 +22,7 @@ import com.github.ambry.rest.RestServerMetrics;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -29,6 +30,7 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -341,11 +343,13 @@ public class AdminBlobStorageServiceTest {
     Map<String, String> userMetadata = new HashMap<String, String>();
     userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
     userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
-    RestUtils.setAmbryHeaders(headers, userMetadata);
+    RestUtilsTest.setAmbryHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
     getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
+    //String testStr = "value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2value2va";
+    //System.out.println(testStr.getBytes().length);
   }
 
   /**
@@ -1210,9 +1214,7 @@ public class AdminBlobStorageServiceTest {
       String key = (String) itr.next();
       if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
         String outValue = restResponseChannel.getHeader(key, MockRestResponseChannel.DataStatus.Flushed);
-        assertTrue("Key " + key + "value does not match in user metadata, input " + expectedHeaders.getString(key)
-            + ", output " +
-            outValue, expectedHeaders.getString(key).equals(outValue));
+        assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
       }
     }
   }

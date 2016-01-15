@@ -412,34 +412,47 @@ public class Utils {
   }
 
   /**
-   * Serializes a ascii encoded string into byte buffer
+   * Serializes an ascii encoded string into byte buffer
    *
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
    */
-  public static void serializeASCIIEncodedString(ByteBuffer outputBuffer, String value) {
-      outputBuffer.putInt(value.length());
-      try {
-        outputBuffer.put(value.getBytes("US-ASCII"));
-      } catch (UnsupportedEncodingException e) {
-        throw new IllegalArgumentException("UnSupportedEncodingException " + e);
+  public static void serializeAsciiEncodedString(ByteBuffer outputBuffer, String value) {
+    if (outputBuffer.remaining() < 4) {
+      throw new IllegalStateException("No sufficient space to add data to output buffer");
+    }
+    outputBuffer.putInt(value.length());
+    try {
+      if (outputBuffer.remaining() < value.length()) {
+        throw new IllegalStateException("No sufficient data to add to output buffer");
       }
+      outputBuffer.put(value.getBytes("US-ASCII"));
+    } catch (UnsupportedEncodingException e) {
+      throw new IllegalArgumentException(e);
+    }
   }
 
   /**
-   * Deserializes a ascii string from byte buffer
+   * Deserializes an ascii encoded string from byte buffer
    * @param inputBuffer The input buffer to serialize the value to
    * @return the deserialized string
    */
-  public static String deserializeASCIIString(ByteBuffer inputBuffer) {
-    int size = inputBuffer.getInt();
-    byte[] value = new byte[size];
-    inputBuffer.get(value);
+  public static String deserializeAsciiEncodedString(ByteBuffer inputBuffer) {
     String valueStr = null;
-    try {
-      valueStr = new String(value, "US-ASCII");
-    } catch (UnsupportedEncodingException e) {
-      throw new IllegalArgumentException("UnsupportedEncodingException thrown " + e);
+    if (inputBuffer.remaining() >= 4) {
+      int size = inputBuffer.getInt();
+      if (inputBuffer.remaining() < size) {
+        throw new IllegalStateException("No sufficient data to read from input buffer");
+      }
+      byte[] value = new byte[size];
+      inputBuffer.get(value);
+      try {
+        valueStr = new String(value, "US-ASCII");
+      } catch (UnsupportedEncodingException e) {
+        throw new IllegalArgumentException(e);
+      }
+    } else {
+      throw new IllegalStateException("No sufficient data to read from input buffer");
     }
     return valueStr;
   }

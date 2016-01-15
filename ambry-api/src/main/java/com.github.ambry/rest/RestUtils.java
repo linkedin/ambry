@@ -6,8 +6,6 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 
 /**
@@ -131,11 +129,13 @@ public class RestUtils {
     for (Map.Entry<String, List<String>> entry : args.entrySet()) {
       String key = entry.getKey();
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
-        sizeToAllocate += 4; // key size
+        // key size
+        sizeToAllocate += 4;
         sizeToAllocate += key.getBytes().length;
         String value = getHeader(args, key, true);
         userMetadataMap.put(key, value);
-        sizeToAllocate += 4; // value size
+        // value size
+        sizeToAllocate += 4;
         sizeToAllocate += value.getBytes().length;
       }
     }
@@ -148,8 +148,8 @@ public class RestUtils {
       userMetadata.putInt(userMetadataMap.size());
       for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
         String key = entry.getKey();
-        Utils.serializeASCIIEncodedString(userMetadata, key);
-        Utils.serializeASCIIEncodedString(userMetadata, entry.getValue());
+        Utils.serializeAsciiEncodedString(userMetadata, key);
+        Utils.serializeAsciiEncodedString(userMetadata, entry.getValue());
       }
     }
     return userMetadata.array();
@@ -163,12 +163,12 @@ public class RestUtils {
   public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata) {
     ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
     Map<String, String> toReturn = new HashMap<String, String>();
-    if (userMetadataBuffer.remaining() != 0) {
+    if (userMetadataBuffer.hasRemaining()) {
       int size = userMetadataBuffer.getInt();
       int counter = 0;
       while (counter++ < size) {
-        String key = Utils.deserializeASCIIString(userMetadataBuffer);
-        String value = Utils.deserializeASCIIString(userMetadataBuffer);
+        String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
+        String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
         toReturn.put(key, value);
       }
     }
@@ -207,18 +207,5 @@ public class RestUtils {
           RestServiceErrorCode.MissingArgs);
     }
     return value;
-  }
-
-  /**
-   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
-   * @param headers  {@link JSONObject} to which the new headers are to be added
-   * @param userMetadata {@link Map} which has the new entries that has to be added
-   * @throws org.json.JSONException
-   */
-  public static void setAmbryHeaders(JSONObject headers, Map<String, String> userMetadata)
-      throws JSONException {
-    for (String key : userMetadata.keySet()) {
-      headers.put(key, userMetadata.get(key));
-    }
   }
 }
