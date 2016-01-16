@@ -13,11 +13,13 @@ import com.github.ambry.router.Router;
  */
 public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory {
   private final VerifiableProperties verifiableProperties;
+  private final RestResponseHandler restResponseHandler;
   private final Router router;
 
   public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Object responseHandlerController, Router router) {
+      RestResponseHandler restResponseHandler, Router router) {
     this.verifiableProperties = verifiableProperties;
+    this.restResponseHandler = restResponseHandler;
     this.router = router;
   }
 
@@ -28,6 +30,6 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new MockBlobStorageService(verifiableProperties, router);
+    return new MockBlobStorageService(verifiableProperties, restResponseHandler, router);
   }
 }

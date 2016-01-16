@@ -9,16 +9,14 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.AsyncRequestResponseHandler;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
-import com.github.ambry.rest.RequestResponseHandlerController;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetricsTracker;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestServerMetrics;
+import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
@@ -67,7 +65,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   private final InMemoryRouter router;
-  private final AdminResponseHandlerController adminResponseHandlerController;
+  private final AdminTestResponseHandler responseHandler;
   private final AdminBlobStorageService adminBlobStorageService;
 
   /**
@@ -79,10 +77,10 @@ public class AdminBlobStorageServiceTest {
       throws InstantiationException, IOException {
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(new VerifiableProperties(new Properties()));
-    adminResponseHandlerController = new AdminResponseHandlerController();
+    responseHandler = new AdminTestResponseHandler();
     adminBlobStorageService = getAdminBlobStorageService();
+    responseHandler.start();
     adminBlobStorageService.start();
-    adminResponseHandlerController.start();
   }
 
   /**
@@ -92,8 +90,8 @@ public class AdminBlobStorageServiceTest {
   @After
   public void shutdownAdminBlobStorageService()
       throws IOException {
-    adminResponseHandlerController.shutdown();
     adminBlobStorageService.shutdown();
+    responseHandler.shutdown();
     router.close();
   }
 
@@ -171,23 +169,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests reactions of various methods of {@link AdminBlobStorageService} to a {@link RequestResponseHandlerController}
-   * that throws {@link RuntimeException}.
-   * <p/>
-   * In reality, nothing can be done if this happens - the call will fail with an exception.
-   * @throws Exception
-   */
-  @Test
-  public void badControllerTest()
-      throws Exception {
-    doBadControllerTest("handleGet");
-    doBadControllerTest("handlePost");
-    doBadControllerTest("handleDelete");
-    doBadControllerTest("handleHead");
-  }
-
-  /**
-   * Checks reactions of all methods in {@link AdminBlobStorageService} to bad {@link AsyncRequestResponseHandler} and
+   * Checks reactions of all methods in {@link AdminBlobStorageService} to bad {@link RestResponseHandler} and
    * {@link RestRequest} implementations.
    * @throws Exception
    */
@@ -207,25 +189,25 @@ public class AdminBlobStorageServiceTest {
     //      is swallowed.
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
-    adminResponseHandlerController.getHandler().shutdown();
+    responseHandler.shutdown();
 
     adminBlobStorageService.handleGet(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
     assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
 
-    adminResponseHandlerController.getHandler().reset();
+    responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handlePost(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
     assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
 
-    adminResponseHandlerController.getHandler().reset();
+    responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handleDelete(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
     assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
 
-    adminResponseHandlerController.getHandler().reset();
+    responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handleHead(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
@@ -233,8 +215,8 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests {@link AdminBlobStorageService#submitResponse(RestRequest, RestResponseChannel, AsyncRequestResponseHandler,
-   * ReadableStreamChannel, Exception)}.
+   * Tests {@link AdminBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel,
+   * Exception)}.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
@@ -243,27 +225,30 @@ public class AdminBlobStorageServiceTest {
   public void submitResponseTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    // handleResponse of AdminTestResponseHandler throws exception because it has not been started.
+    responseHandler.shutdown();
+    // handleResponse of AdminTestResponseHandler throws exception because it has been shutdown.
+    try {
+      // there is an exception already.
+      RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      assertTrue("RestRequest channel is not open", restRequest.isOpen());
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      adminBlobStorageService
+          .submitResponse(restRequest, restResponseChannel, null, new RuntimeException(exceptionMsg));
+      assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
 
-    // there is an exception already.
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, null,
-        new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
-
-    // there is no exception and exception thrown when the response is submitted.
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restResponseChannel = new MockRestResponseChannel();
-    ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    assertTrue("Response channel is not open", response.isOpen());
-    adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, response, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getCause());
-    // resources should have been cleaned up.
-    assertFalse("Response channel is not cleaned up", response.isOpen());
+      // there is no exception and exception thrown when the response is submitted.
+      restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      assertTrue("RestRequest channel is not open", restRequest.isOpen());
+      restResponseChannel = new MockRestResponseChannel();
+      ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+      assertTrue("Response channel is not open", response.isOpen());
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
+      assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+      // resources should have been cleaned up.
+      assertFalse("Response channel is not cleaned up", response.isOpen());
+    } finally {
+      responseHandler.start();
+    }
   }
 
   /**
@@ -275,37 +260,37 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void releaseResourcesTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    // handleResponse of AdminTestResponseHandler throws exception because it has not been started.
+    responseHandler.shutdown();
+    // handleResponse of AdminTestResponseHandler throws exception because it has been shutdown.
+    try {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+      assertTrue("RestRequest channel not open", restRequest.isOpen());
+      assertTrue("ReadableStreamChannel not open", channel.isOpen());
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, channel, null);
+      assertFalse("ReadableStreamChannel is still open", channel.isOpen());
 
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    assertTrue("RestRequest channel not open", restRequest.isOpen());
-    assertTrue("ReadableStreamChannel not open", channel.isOpen());
-    adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, channel, null);
-    assertFalse("ReadableStreamChannel is still open", channel.isOpen());
+      // null ReadableStreamChannel
+      restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restResponseChannel = new MockRestResponseChannel();
+      assertTrue("RestRequest channel not open", restRequest.isOpen());
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
 
-    // null ReadableStreamChannel
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    assertTrue("RestRequest channel not open", restRequest.isOpen());
-    adminBlobStorageService.submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, null, null);
+      // bad RestRequest (close() throws IOException)
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+      restResponseChannel = new MockRestResponseChannel();
+      assertTrue("ReadableStreamChannel not open", channel.isOpen());
+      adminBlobStorageService.submitResponse(new BadRestRequest(), restResponseChannel, channel, null);
 
-    // bad RestRequest (close() throws IOException)
-    channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    restResponseChannel = new MockRestResponseChannel();
-    assertTrue("ReadableStreamChannel not open", channel.isOpen());
-    adminBlobStorageService
-        .submitResponse(new BadRestRequest(), restResponseChannel, adminTestResponseHandler, channel, null);
-    assertFalse("ReadableStreamChannel is still open", channel.isOpen());
-
-    // bad ReadableStreamChannel (close() throws IOException)
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    assertTrue("RestRequest channel not open", restRequest.isOpen());
-    adminBlobStorageService
-        .submitResponse(restRequest, restResponseChannel, adminTestResponseHandler, new BadRSC(), null);
+      // bad ReadableStreamChannel (close() throws IOException)
+      restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restResponseChannel = new MockRestResponseChannel();
+      assertTrue("RestRequest channel not open", restRequest.isOpen());
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, new BadRSC(), null);
+    } finally {
+      responseHandler.start();
+    }
   }
 
   /**
@@ -491,50 +476,44 @@ public class AdminBlobStorageServiceTest {
   public void headForGetCallbackTest()
       throws Exception {
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    adminTestResponseHandler.start();
+    responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     HeadForGetCallback callback =
-        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            router, 0);
+        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        adminTestResponseHandler.getException().getClass());
+        responseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is not null.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            router, 0);
+    callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, adminTestResponseHandler.getException().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is RouterException.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            router, 0);
+    callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        adminTestResponseHandler.getException().getClass());
-    if (!adminTestResponseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + adminTestResponseHandler.getException().getMessage()
-          + "] does contain expected substring [" + exceptionMsg + "]");
+        responseHandler.getException().getClass());
+    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
+      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
+          + exceptionMsg + "]");
     }
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -544,17 +523,13 @@ public class AdminBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            router, 0);
+    callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
 
     // there is no exception and the exception thrown in the callback is the primary exception.
     restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            router, 0);
+    callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     BlobInfo blobInfo = new BlobInfo(null, null);
     callback.onCompletion(blobInfo, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
@@ -568,45 +543,43 @@ public class AdminBlobStorageServiceTest {
   public void getCallbackTest()
       throws Exception {
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    adminTestResponseHandler.start();
+    responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    GetCallback callback =
-        new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    GetCallback callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        adminTestResponseHandler.getException().getClass());
+        responseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is not null.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, adminTestResponseHandler.getException().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is RouterException.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        adminTestResponseHandler.getException().getClass());
-    if (!adminTestResponseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + adminTestResponseHandler.getException().getMessage()
-          + "] does contain expected substring [" + exceptionMsg + "]");
+        responseHandler.getException().getClass());
+    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
+      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
+          + exceptionMsg + "]");
     }
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -616,13 +589,13 @@ public class AdminBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     assertTrue("Response channel is not open", response.isOpen());
     callback.onCompletion(response, null);
@@ -638,49 +611,44 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    adminTestResponseHandler.start();
+    responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    PostCallback callback =
-        new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-            blobProperties);
+    PostCallback callback = new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, blobProperties);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        adminTestResponseHandler.getException().getClass());
+        responseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is not null.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-        blobProperties);
+    callback = new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, blobProperties);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, adminTestResponseHandler.getException().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is RouterException.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler,
-        blobProperties);
+    callback = new PostCallback(adminBlobStorageService, restRequest, restResponseChannel, blobProperties);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        adminTestResponseHandler.getException().getClass());
-    if (!adminTestResponseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + adminTestResponseHandler.getException().getMessage()
-          + "] does contain expected substring [" + exceptionMsg + "]");
+        responseHandler.getException().getClass());
+    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
+      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
+          + exceptionMsg + "]");
     }
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -698,32 +666,29 @@ public class AdminBlobStorageServiceTest {
   public void deleteCallbackTest()
       throws Exception {
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    adminTestResponseHandler.start();
-
+    responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result null, exception null)
     // Exception is not null.
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    DeleteCallback callback =
-        new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    DeleteCallback callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, adminTestResponseHandler.getException().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is RouterException.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.DELETE, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        adminTestResponseHandler.getException().getClass());
-    if (!adminTestResponseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + adminTestResponseHandler.getException().getMessage()
-          + "] does contain expected substring [" + exceptionMsg + "]");
+        responseHandler.getException().getClass());
+    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
+      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
+          + exceptionMsg + "]");
     }
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -733,13 +698,13 @@ public class AdminBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
   }
@@ -752,45 +717,42 @@ public class AdminBlobStorageServiceTest {
   public void headCallbackTest()
       throws Exception {
     String exceptionMsg = new String(getRandomBytes(10));
-    AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-    adminTestResponseHandler.start();
-
+    responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    HeadCallback callback =
-        new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    HeadCallback callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        adminTestResponseHandler.getException().getClass());
+        responseHandler.getException().getClass());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is not null.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, adminTestResponseHandler.getException().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
     restRequest.close();
 
     // Exception is RouterException.
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        adminTestResponseHandler.getException().getClass());
-    if (!adminTestResponseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + adminTestResponseHandler.getException().getMessage()
-          + "] does contain expected substring [" + exceptionMsg + "]");
+        responseHandler.getException().getClass());
+    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
+      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
+          + exceptionMsg + "]");
     }
     // Nothing should be closed.
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -800,13 +762,13 @@ public class AdminBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel, adminTestResponseHandler);
+    callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
     callback.onCompletion(blobInfo, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getCause());
@@ -906,17 +868,16 @@ public class AdminBlobStorageServiceTest {
    */
   private ReadableStreamChannel doGet(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws Exception {
-    AdminTestResponseHandler adminTestResponseHandler = adminResponseHandlerController.getHandler();
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     adminBlobStorageService.handleGet(restRequest, restResponseChannel);
-    if (adminTestResponseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (adminTestResponseHandler.getException() != null) {
-        throw adminTestResponseHandler.getException();
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+      if (responseHandler.getException() != null) {
+        throw responseHandler.getException();
       }
     } else {
       throw new IllegalStateException("handleGet() timed out");
     }
-    return adminTestResponseHandler.getResponse();
+    return responseHandler.getResponse();
   }
 
   /**
@@ -928,12 +889,11 @@ public class AdminBlobStorageServiceTest {
    */
   private void doPost(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws Exception {
-    AdminTestResponseHandler adminTestResponseHandler = adminResponseHandlerController.getHandler();
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     adminBlobStorageService.handlePost(restRequest, restResponseChannel);
-    if (adminTestResponseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (adminTestResponseHandler.getException() != null) {
-        throw adminTestResponseHandler.getException();
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+      if (responseHandler.getException() != null) {
+        throw responseHandler.getException();
       }
     } else {
       throw new IllegalStateException("handlePost() timed out");
@@ -949,12 +909,11 @@ public class AdminBlobStorageServiceTest {
    */
   private void doDelete(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws Exception {
-    AdminTestResponseHandler adminTestResponseHandler = adminResponseHandlerController.getHandler();
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     adminBlobStorageService.handleDelete(restRequest, restResponseChannel);
-    if (adminTestResponseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (adminTestResponseHandler.getException() != null) {
-        throw adminTestResponseHandler.getException();
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+      if (responseHandler.getException() != null) {
+        throw responseHandler.getException();
       }
     } else {
       throw new IllegalStateException("handleDelete() timed out");
@@ -970,12 +929,11 @@ public class AdminBlobStorageServiceTest {
    */
   private void doHead(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws Exception {
-    AdminTestResponseHandler adminTestResponseHandler = adminResponseHandlerController.getHandler();
-    adminTestResponseHandler.reset();
+    responseHandler.reset();
     adminBlobStorageService.handleHead(restRequest, restResponseChannel);
-    if (adminTestResponseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (adminTestResponseHandler.getException() != null) {
-        throw adminTestResponseHandler.getException();
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+      if (responseHandler.getException() != null) {
+        throw responseHandler.getException();
       }
     } else {
       throw new IllegalStateException("handleHead() timed out");
@@ -994,7 +952,7 @@ public class AdminBlobStorageServiceTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     AdminConfig adminConfig = new AdminConfig(verifiableProperties);
     AdminMetrics adminMetrics = new AdminMetrics(new MetricRegistry());
-    return new AdminBlobStorageService(adminConfig, adminMetrics, CLUSTER_MAP, adminResponseHandlerController, router);
+    return new AdminBlobStorageService(adminConfig, adminMetrics, CLUSTER_MAP, responseHandler, router);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1011,7 +969,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
 
-    adminResponseHandlerController.getHandler().reset();
+    responseHandler.reset();
     try {
       method.invoke(adminBlobStorageService, null, restResponseChannel);
       fail("Method [" + methodName + "] should have failed because RestRequest is null");
@@ -1019,7 +977,7 @@ public class AdminBlobStorageServiceTest {
       assertEquals("Unexpected exception class", IllegalArgumentException.class, e.getTargetException().getClass());
     }
 
-    adminResponseHandlerController.getHandler().reset();
+    responseHandler.reset();
     try {
       method.invoke(adminBlobStorageService, restRequest, null);
       fail("Method [" + methodName + "] should have failed because RestResponseChannel is null");
@@ -1066,36 +1024,6 @@ public class AdminBlobStorageServiceTest {
       }
     } catch (RuntimeException e) {
       assertEquals("Unexpected error message", InMemoryRouter.OPERATION_THROW_EARLY_RUNTIME_EXCEPTION, e.getMessage());
-    }
-  }
-
-  // badControllerTest() helpers.
-
-  /**
-   * Tests reactions of various methods of {@link AdminBlobStorageService} to a {@link RequestResponseHandlerController}
-   * that throws {@link RuntimeException}.
-   * <p/>
-   * In reality, nothing can be done if this happens - the call will fail with an exception.
-   * @param methodName the name of the method to invoke.
-   * @throws Exception
-   */
-  private void doBadControllerTest(String methodName)
-      throws Exception {
-    Method method =
-        AdminBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
-    RestRequest restRequest = createEchoGetRestRequest("echoText");
-    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-
-    try {
-      adminResponseHandlerController.exceptionToThrow = new RuntimeException();
-      try {
-        method.invoke(adminBlobStorageService, restRequest, restResponseChannel);
-        fail("Method [" + methodName + "] should have failed because getHandler() would have thrown RuntimeException");
-      } catch (InvocationTargetException e) {
-        assertEquals("Unexpected exception class", RuntimeException.class, e.getTargetException().getClass());
-      }
-    } finally {
-      adminResponseHandlerController.exceptionToThrow = null;
     }
   }
 
@@ -1264,56 +1192,15 @@ public class AdminBlobStorageServiceTest {
 }
 
 /**
- * A controller for AdminTestResponseHandler that just returns the same started instance of
- * {@link AdminTestResponseHandler} on any call to {@link #getHandler()}.
- */
-class AdminResponseHandlerController extends RequestResponseHandlerController {
-  public RuntimeException exceptionToThrow = null;
-
-  private final AdminTestResponseHandler adminTestResponseHandler = new AdminTestResponseHandler();
-
-  public AdminResponseHandlerController()
-      throws InstantiationException {
-    super(1, new RestServerMetrics(new MetricRegistry()));
-  }
-
-  @Override
-  public void start()
-      throws InstantiationException {
-    adminTestResponseHandler.start();
-  }
-
-  @Override
-  public void shutdown() {
-    adminTestResponseHandler.shutdown();
-    // just in case
-    super.shutdown();
-  }
-
-  @Override
-  public AdminTestResponseHandler getHandler() {
-    if (exceptionToThrow != null) {
-      throw exceptionToThrow;
-    }
-    return adminTestResponseHandler;
-  }
-}
-
-/**
- * An extension of {@link AsyncRequestResponseHandler} that stores a submitted response/exception and signals the fact
+ * An implementation of {@link RestResponseHandler} that stores a submitted response/exception and signals the fact
  * that the response has been submitted. A single instance can handle only a single response at a time. To reuse, call
  * {@link #reset()}.
  */
-class AdminTestResponseHandler extends AsyncRequestResponseHandler {
+class AdminTestResponseHandler implements RestResponseHandler {
   private final CountDownLatch responseSubmitted = new CountDownLatch(1);
   private volatile ReadableStreamChannel response = null;
   private volatile Exception exception = null;
   private volatile boolean serviceRunning = false;
-
-  public AdminTestResponseHandler() {
-    // not starting at super, so it's ok.
-    super(new RestServerMetrics(new MetricRegistry()));
-  }
 
   @Override
   public void start() {
@@ -1323,8 +1210,6 @@ class AdminTestResponseHandler extends AsyncRequestResponseHandler {
   @Override
   public void shutdown() {
     serviceRunning = false;
-    // just in case.
-    super.shutdown();
   }
 
   @Override

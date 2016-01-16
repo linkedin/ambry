@@ -3,12 +3,11 @@ package com.github.ambry.admin;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.AsyncRequestResponseHandler;
 import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.RequestResponseHandlerController;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
@@ -46,7 +45,7 @@ class AdminBlobStorageService implements BlobStorageService {
   protected final AdminMetrics adminMetrics;
 
   private final ClusterMap clusterMap;
-  private final RequestResponseHandlerController requestResponseHandlerController;
+  private final RestResponseHandler responseHandler;
   private final Router router;
   private final long cacheValidityInSecs;
   private final Logger logger = LoggerFactory.getLogger(AdminBlobStorageService.class);
@@ -57,16 +56,15 @@ class AdminBlobStorageService implements BlobStorageService {
    * @param adminConfig the configuration to use in the form of {@link AdminConfig}.
    * @param adminMetrics the metrics instance to use in the form of {@link AdminMetrics}.
    * @param clusterMap the {@link ClusterMap} to be used for operations.
-   * @param requestResponseHandlerController the {@link RequestResponseHandlerController} that can be used to obtain
-   *                                         an instance of {@link AsyncRequestResponseHandler}. This will send out
-   *                                         responses async.
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
+   *                        out.
    * @param router the {@link Router} instance to use to perform blob operations.
    */
   public AdminBlobStorageService(AdminConfig adminConfig, AdminMetrics adminMetrics, ClusterMap clusterMap,
-      RequestResponseHandlerController requestResponseHandlerController, Router router) {
+      RestResponseHandler responseHandler, Router router) {
     this.adminMetrics = adminMetrics;
     this.clusterMap = clusterMap;
-    this.requestResponseHandlerController = requestResponseHandlerController;
+    this.responseHandler = responseHandler;
     this.router = router;
     cacheValidityInSecs = adminConfig.adminCacheValiditySeconds;
     logger.trace("Instantiated AdminBlobStorageService");
@@ -88,7 +86,6 @@ class AdminBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
@@ -100,20 +97,20 @@ class AdminBlobStorageService implements BlobStorageService {
           restRequest.getMetricsTracker().injectMetrics(adminMetrics.echoMetrics);
           preProcessingTime = System.currentTimeMillis() - processingStartTime;
           response = EchoHandler.handleGetRequest(restRequest, restResponseChannel, adminMetrics);
-          submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
+          submitResponse(restRequest, restResponseChannel, response, null);
         } else if (operationOrBlobId.equals(GET_REPLICAS_FOR_BLOB_ID)) {
           adminMetrics.getReplicasForBlobIdRate.mark();
           restRequest.getMetricsTracker().injectMetrics(adminMetrics.getReplicasForBlobIdMetrics);
           preProcessingTime = System.currentTimeMillis() - processingStartTime;
           response =
               GetReplicasForBlobIdHandler.handleGetRequest(restRequest, restResponseChannel, clusterMap, adminMetrics);
-          submitResponse(restRequest, restResponseChannel, responseHandler, response, null);
+          submitResponse(restRequest, restResponseChannel, response, null);
         } else {
           adminMetrics.missingOperationHandlerError.inc();
           RestServiceException exception =
               new RestServiceException("No handler available for valid admin operation - " + operationOrBlobId,
                   RestServiceErrorCode.ServiceUnavailable);
-          submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+          submitResponse(restRequest, restResponseChannel, null, exception);
         }
       } else {
         adminMetrics.getBlobRate.mark();
@@ -121,13 +118,12 @@ class AdminBlobStorageService implements BlobStorageService {
         logger.trace("Forwarding GET of {} to the router", operationOrBlobId);
         preProcessingTime = System.currentTimeMillis() - processingStartTime;
         HeadForGetCallback callback =
-            new HeadForGetCallback(this, restRequest, restResponseChannel, responseHandler, router,
-                cacheValidityInSecs);
+            new HeadForGetCallback(this, restRequest, restResponseChannel, router, cacheValidityInSecs);
         router.getBlobInfo(operationOrBlobId, callback);
       }
     } catch (Exception e) {
       adminMetrics.operationError.inc();
-      submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
+      submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       adminMetrics.getPreProcessingTimeInMs.update(preProcessingTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
@@ -141,7 +137,6 @@ class AdminBlobStorageService implements BlobStorageService {
     handlePrechecks(restRequest, restResponseChannel);
     adminMetrics.postBlobRate.mark();
     restRequest.getMetricsTracker().injectMetrics(adminMetrics.postBlobMetrics);
-    AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       long propsBuildStartTime = System.currentTimeMillis();
@@ -151,11 +146,11 @@ class AdminBlobStorageService implements BlobStorageService {
       logger.trace("Blob properties of blob being POSTed - {}", blobProperties);
       logger.trace("Forwarding POST to the router");
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, responseHandler, blobProperties);
+      PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, blobProperties);
       router.putBlob(blobProperties, usermetadata, restRequest, callback);
     } catch (Exception e) {
       adminMetrics.operationError.inc();
-      submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
+      submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       adminMetrics.postPreProcessingTimeInMs.update(preProcessingTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
@@ -169,17 +164,16 @@ class AdminBlobStorageService implements BlobStorageService {
     handlePrechecks(restRequest, restResponseChannel);
     adminMetrics.deleteBlobRate.mark();
     restRequest.getMetricsTracker().injectMetrics(adminMetrics.deleteBlobMetrics);
-    AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
       String blobId = getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Forwarding DELETE of {} to the router", blobId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      DeleteCallback callback = new DeleteCallback(this, restRequest, restResponseChannel, responseHandler);
+      DeleteCallback callback = new DeleteCallback(this, restRequest, restResponseChannel);
       router.deleteBlob(blobId, callback);
     } catch (Exception e) {
       adminMetrics.operationError.inc();
-      submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
+      submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       adminMetrics.deletePreProcessingTimeInMs.update(preProcessingTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
@@ -192,17 +186,16 @@ class AdminBlobStorageService implements BlobStorageService {
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
     restRequest.getMetricsTracker().injectMetrics(adminMetrics.headBlobMetrics);
-    AsyncRequestResponseHandler responseHandler = requestResponseHandlerController.getHandler();
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       String blobId = getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Forwarding HEAD of {} to the router", blobId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      HeadCallback callback = new HeadCallback(this, restRequest, restResponseChannel, responseHandler);
+      HeadCallback callback = new HeadCallback(this, restRequest, restResponseChannel);
       router.getBlobInfo(blobId, callback);
     } catch (Exception e) {
       adminMetrics.operationError.inc();
-      submitResponse(restRequest, restResponseChannel, responseHandler, null, e);
+      submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       adminMetrics.headPreProcessingTimeInMs.update(preProcessingTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
@@ -214,12 +207,11 @@ class AdminBlobStorageService implements BlobStorageService {
    * {@code responseHandler}.
    * @param restRequest the {@link RestRequest} for which a a {@code response} is ready.
    * @param restResponseChannel the {@link RestResponseChannel} over which the response can be sent.
-   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to use to send the response.
    * @param response the response in the form of a {@link ReadableStreamChannel}.
    * @param exception any {@link Exception} that occurred during the handling of {@code restRequest}.
    */
   protected void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      AsyncRequestResponseHandler responseHandler, ReadableStreamChannel response, Exception exception) {
+      ReadableStreamChannel response, Exception exception) {
     try {
       if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
@@ -284,7 +276,6 @@ class HeadForGetCallback implements Callback<BlobInfo> {
   private final AdminBlobStorageService adminBlobStorageService;
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private final AsyncRequestResponseHandler responseHandler;
   private final Router router;
   private final long cacheValidityInSecs;
   private final long operationStartTime = System.currentTimeMillis();
@@ -295,18 +286,15 @@ class HeadForGetCallback implements Callback<BlobInfo> {
    * @param adminBlobStorageService the {@link AdminBlobStorageService} instance to submit responses to.
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
-   * @param responseHandler the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    * @param router the {@link Router} instance to use to make the GET call.
    * @param cacheValidityInSecs the period of validity of cache that needs to be sent to the client (in case of non
    *                            private blobs).
    */
   public HeadForGetCallback(AdminBlobStorageService adminBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, AsyncRequestResponseHandler responseHandler, Router router,
-      long cacheValidityInSecs) {
+      RestResponseChannel restResponseChannel, Router router, long cacheValidityInSecs) {
     this.adminBlobStorageService = adminBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.responseHandler = responseHandler;
     this.router = router;
     this.cacheValidityInSecs = cacheValidityInSecs;
   }
@@ -332,8 +320,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
         logger.trace("Setting response headers for {}", blobId);
         setResponseHeaders(result);
         logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-        router.getBlob(blobId,
-            new GetCallback(adminBlobStorageService, restRequest, restResponseChannel, responseHandler));
+        router.getBlob(blobId, new GetCallback(adminBlobStorageService, restRequest, restResponseChannel));
       } else if (exception == null) {
         exception = new IllegalStateException("Both response and exception are null for HeadForGetCallback");
       }
@@ -350,7 +337,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
-        adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+        adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
       }
     }
   }
@@ -384,13 +371,12 @@ class HeadForGetCallback implements Callback<BlobInfo> {
 }
 
 /**
- * Callback for GET operations. Submits the response received to an instance of {@link AsyncRequestResponseHandler}.
+ * Callback for GET operations. Submits the response received to an instance of {@link RestResponseHandler}.
  */
 class GetCallback implements Callback<ReadableStreamChannel> {
   private final AdminBlobStorageService adminBlobStorageService;
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private final AsyncRequestResponseHandler responseHandler;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -399,18 +385,16 @@ class GetCallback implements Callback<ReadableStreamChannel> {
    * @param adminBlobStorageService the {@link AdminBlobStorageService} instance to submit responses to.
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to submit the response to.
    */
   public GetCallback(AdminBlobStorageService adminBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, AsyncRequestResponseHandler responseHandler) {
+      RestResponseChannel restResponseChannel) {
     this.adminBlobStorageService = adminBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.responseHandler = responseHandler;
   }
 
   /**
-   * Submits the GET response to {@link AsyncRequestResponseHandler} so that it can be sent (or the exception handled).
+   * Submits the GET response to {@link RestResponseHandler} so that it can be sent (or the exception handled).
    * @param result The result of the request. This is the actual blob data as a {@link ReadableStreamChannel}.
    *               This is non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
@@ -445,7 +429,7 @@ class GetCallback implements Callback<ReadableStreamChannel> {
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
-      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, result, exception);
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, result, exception);
     }
   }
 }
@@ -458,7 +442,6 @@ class PostCallback implements Callback<String> {
   private final AdminBlobStorageService adminBlobStorageService;
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private final AsyncRequestResponseHandler responseHandler;
   private final BlobProperties blobProperties;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -468,16 +451,13 @@ class PostCallback implements Callback<String> {
    * @param adminBlobStorageService the {@link AdminBlobStorageService} instance to submit responses to.
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to submit the response to.
    * @param createdBlobProperties the {@link BlobProperties} of the blob that was asked to be POSTed.
    */
   public PostCallback(AdminBlobStorageService adminBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, AsyncRequestResponseHandler responseHandler,
-      BlobProperties createdBlobProperties) {
+      RestResponseChannel restResponseChannel, BlobProperties createdBlobProperties) {
     this.adminBlobStorageService = adminBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.responseHandler = responseHandler;
     this.blobProperties = createdBlobProperties;
   }
 
@@ -518,7 +498,7 @@ class PostCallback implements Callback<String> {
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
-      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 
@@ -544,7 +524,6 @@ class DeleteCallback implements Callback<Void> {
   private final AdminBlobStorageService adminBlobStorageService;
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private final AsyncRequestResponseHandler responseHandler;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -553,14 +532,12 @@ class DeleteCallback implements Callback<Void> {
    * @param adminBlobStorageService the {@link AdminBlobStorageService} instance to submit responses to.
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to submit the response to.
    */
   public DeleteCallback(AdminBlobStorageService adminBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, AsyncRequestResponseHandler responseHandler) {
+      RestResponseChannel restResponseChannel) {
     this.adminBlobStorageService = adminBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.responseHandler = responseHandler;
   }
 
   /**
@@ -599,7 +576,7 @@ class DeleteCallback implements Callback<Void> {
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
-      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 }
@@ -612,7 +589,6 @@ class HeadCallback implements Callback<BlobInfo> {
   private final AdminBlobStorageService adminBlobStorageService;
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
-  private final AsyncRequestResponseHandler responseHandler;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -621,14 +597,12 @@ class HeadCallback implements Callback<BlobInfo> {
    * @param adminBlobStorageService the {@link AdminBlobStorageService} instance to submit responses to.
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param responseHandler the {@link AsyncRequestResponseHandler} instance to submit the response to.
    */
   public HeadCallback(AdminBlobStorageService adminBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, AsyncRequestResponseHandler responseHandler) {
+      RestResponseChannel restResponseChannel) {
     this.adminBlobStorageService = adminBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
-    this.responseHandler = responseHandler;
   }
 
   /**
@@ -669,7 +643,7 @@ class HeadCallback implements Callback<BlobInfo> {
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
-      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, responseHandler, null, exception);
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
     }
   }
 

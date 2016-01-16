@@ -1,13 +1,12 @@
 package com.github.ambry.rest;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 
 
 /**
- * Mock of {@link AsyncRequestResponseHandler} that can be used in tests.
+ * Implementation of {@link RestRequestHandler} and {@link RestResponseHandler} that can be used in tests.
  * <p/>
  * This implementation simply calls the appropriate method (based on the {@link RestMethod} in the request) in the
  * underlying {@link BlobStorageService} on being asked to handle a request. If the implementation of
@@ -16,10 +15,10 @@ import java.io.IOException;
  * Submitted responses also will be sent out immediately so response handling will block until the response has been
  * sent out completely.
  * <p/>
- * Be advised that this may not work if your test code *needs* the AsyncRequestResponseHandler to be non blocking. Test
- * code with such assumptions may run into infinite loops.
+ * Be advised that this may not work if your test code *needs* the {@link RestRequestHandler} and
+ * {@link RestResponseHandler} to be non-blocking. Test code with such assumptions may run into infinite loops.
  */
-public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler {
+public class MockRestRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   public static String RUNTIME_EXCEPTION_ON_HANDLE = "runtime.exception.on.handle";
   public static String REST_EXCEPTION_ON_HANDLE = "rest.exception.on.handle";
   public static String CLOSE_REQUEST_ON_HANDLE = "close.request.on.handle";
@@ -28,11 +27,6 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
   private VerifiableProperties failureProperties = null;
 
   private BlobStorageService blobStorageService = null;
-
-  public MockRestRequestResponseHandler() {
-    // dud call to super. Not going to start it.
-    super(new RestServerMetrics(new MetricRegistry()));
-  }
 
   @Override
   public void start()
@@ -46,8 +40,6 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
   @Override
   public void shutdown() {
     isRunning = false;
-    // just in case.
-    super.shutdown();
   }
 
   /**
@@ -131,16 +123,10 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
     failureProperties = null;
   }
 
-  @Override
-  protected boolean isRunning() {
-    return isRunning;
-  }
-
   /**
    * Sets the {@link BlobStorageService} that will be used.
    * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
    */
-  @Override
   protected void setBlobStorageService(BlobStorageService blobStorageService) {
     this.blobStorageService = blobStorageService;
   }
@@ -158,6 +144,9 @@ public class MockRestRequestResponseHandler extends AsyncRequestResponseHandler 
       throw new IllegalArgumentException("RestRequest is null");
     } else if (restResponseChannel == null) {
       throw new IllegalArgumentException("RestResponseChannel is null");
+    } else if (!isRunning) {
+      throw new RestServiceException("MockRestRequestResponseHandler is not running",
+          RestServiceErrorCode.ServiceUnavailable);
     } else if (failureProperties != null) {
       if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE) && failureProperties
           .getBoolean(RUNTIME_EXCEPTION_ON_HANDLE)) {

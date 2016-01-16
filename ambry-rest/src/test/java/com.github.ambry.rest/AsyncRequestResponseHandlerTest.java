@@ -36,6 +36,7 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link AsyncRequestResponseHandler}.
  */
 public class AsyncRequestResponseHandlerTest {
+  private static VerifiableProperties verifiableProperties;
   private static Router router;
   private static BlobStorageService blobStorageService;
   private static AsyncRequestResponseHandler asyncRequestResponseHandler;
@@ -48,10 +49,9 @@ public class AsyncRequestResponseHandlerTest {
   @BeforeClass
   public static void startRequestResponseHandler()
       throws InstantiationException, IOException {
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    verifiableProperties = new VerifiableProperties(new Properties());
     router = new InMemoryRouter(verifiableProperties);
-    blobStorageService = new MockBlobStorageService(verifiableProperties, router);
-    asyncRequestResponseHandler = getAsyncRequestResponseHandler(blobStorageService);
+    asyncRequestResponseHandler = getAsyncRequestResponseHandler(5, 5);
     blobStorageService.start();
     asyncRequestResponseHandler.start();
   }
@@ -70,17 +70,19 @@ public class AsyncRequestResponseHandlerTest {
 
   /**
    * Tests {@link AsyncRequestResponseHandler#start()} and {@link AsyncRequestResponseHandler#shutdown()}.
-   * @throws InstantiationException
    * @throws IOException
    */
   @Test
   public void startShutdownTest()
-      throws InstantiationException, IOException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+      throws IOException {
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     assertFalse("IsRunning should be false", handler.isRunning());
     handler.start();
-    assertTrue("IsRunning should be true", handler.isRunning());
-    handler.shutdown();
+    try {
+      assertTrue("IsRunning should be true", handler.isRunning());
+    } finally {
+      handler.shutdown();
+    }
     assertFalse("IsRunning should be false", handler.isRunning());
   }
 
@@ -93,22 +95,21 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void shutdownWithoutStart()
       throws IOException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     handler.shutdown();
   }
 
   /**
    * This tests for exceptions thrown when a {@link AsyncRequestResponseHandler} is used without calling
    * {@link AsyncRequestResponseHandler#start()}first.
-   * @throws InstantiationException
    * @throws IOException
    * @throws JSONException
    * @throws URISyntaxException
    */
   @Test
   public void useServiceWithoutStartTest()
-      throws InstantiationException, IOException, JSONException, URISyntaxException {
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+      throws IOException, JSONException, URISyntaxException {
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     try {
       handler.handleRequest(restRequest, new MockRestResponseChannel());
@@ -119,6 +120,7 @@ public class AsyncRequestResponseHandlerTest {
     }
 
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     try {
       handler.handleResponse(restRequest, new MockRestResponseChannel(),
           new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), null);
@@ -132,20 +134,181 @@ public class AsyncRequestResponseHandlerTest {
   /**
    * This tests for exceptions thrown when a {@link AsyncRequestResponseHandler} is started without setting a
    * {@link BlobStorageService}.
-   * @throws InstantiationException
+   * @throws Exception
+   */
+  @Test
+  public void useWithoutSettingBlobStorageServiceTest()
+      throws Exception {
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setRequestWorkersCount(1);
+    requestResponseHandler.setResponseWorkersCount(1);
+    requestResponseHandler.start();
+    try {
+      // using for response is OK.
+      MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      awaitResponse(requestResponseHandler, restRequest, restResponseChannel, null, null);
+      if (restResponseChannel.getCause() != null) {
+        throw (Exception) restResponseChannel.getCause();
+      }
+
+      // using for request is not OK.
+      try {
+        doHandleRequestSuccessTest(RestMethod.GET, requestResponseHandler);
+        fail("Handling request should have failed because no BlobStorageService was set.");
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+      }
+    } finally {
+      requestResponseHandler.shutdown();
+    }
+  }
+
+  /**
+   * Tests the behavior of {@link AsyncRequestResponseHandler} when request and/or response worker counts are not set.
+   * @throws Exception
+   */
+  @Test
+  public void useWithoutSettingWorkerCountsTest()
+      throws Exception {
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setRequestWorkersCount(1);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    noResponseHandlersTest(requestResponseHandler);
+
+    serverMetrics = new RestServerMetrics(new MetricRegistry());
+    requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setResponseWorkersCount(1);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    noRequestHandlersTest(requestResponseHandler);
+
+    serverMetrics = new RestServerMetrics(new MetricRegistry());
+    requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    noRequestResponseHandlersTest(requestResponseHandler);
+  }
+
+  /**
+   * Tests the behavior of {@link AsyncRequestResponseHandler} when request and/or response worker counts are zero.
+   * @throws Exception
+   */
+  @Test
+  public void zeroScalingUnitCountsTest()
+      throws Exception {
+    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(1, 0);
+    noResponseHandlersTest(requestResponseHandler);
+
+    requestResponseHandler = getAsyncRequestResponseHandler(0, 1);
+    noRequestHandlersTest(requestResponseHandler);
+
+    requestResponseHandler = getAsyncRequestResponseHandler(0, 0);
+    noRequestResponseHandlersTest(requestResponseHandler);
+  }
+
+  /**
+   * Tests the number of {@link AsyncHandlerWorker} instances in {@link AsyncRequestResponseHandler} when request and
+   * response worker numbers differ.
    * @throws IOException
    */
   @Test
-  public void startWithoutBlobStorageServiceTest()
-      throws InstantiationException, IOException {
-    AsyncRequestResponseHandler requestResponseHandler = getAsyncRequestResponseHandler(null);
+  public void differentScalingUnitCountsTest()
+      throws IOException {
+    // request workers > response workers
+    // set request workers first
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setRequestWorkersCount(5);
+    requestResponseHandler.setResponseWorkersCount(2);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    verifyWorkers(requestResponseHandler, 5);
+    // set request workers second
+    serverMetrics = new RestServerMetrics(new MetricRegistry());
+    requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setResponseWorkersCount(2);
+    requestResponseHandler.setRequestWorkersCount(5);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    verifyWorkers(requestResponseHandler, 5);
+
+    // response workers > request workers
+    // set response workers first
+    serverMetrics = new RestServerMetrics(new MetricRegistry());
+    requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setResponseWorkersCount(5);
+    requestResponseHandler.setRequestWorkersCount(2);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    verifyWorkers(requestResponseHandler, 5);
+    // set response workers second
+    serverMetrics = new RestServerMetrics(new MetricRegistry());
+    requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+    requestResponseHandler.setRequestWorkersCount(2);
+    requestResponseHandler.setResponseWorkersCount(5);
+    requestResponseHandler.setBlobStorageService(blobStorageService);
+    verifyWorkers(requestResponseHandler, 5);
+  }
+
+  @Test
+  public void setFunctionsBadArgumentsTest() {
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
+
+    // set request workers < 0
     try {
-      requestResponseHandler.start();
-      fail("Start should have failed because no BlobStorageService was set.");
+      requestResponseHandler.setRequestWorkersCount(-1);
+      fail("Setting request workers < 0 should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
+    // set response workers < 0
+    try {
+      requestResponseHandler.setResponseWorkersCount(-1);
+      fail("Setting response workers < 0 should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+
+    // set null BlobStorageService
+    try {
+      requestResponseHandler.setBlobStorageService(null);
+      fail("Setting BlobStorageService to null should have thrown exception");
+    } catch (IllegalArgumentException e) {
+      // expected. nothing to do.
+    }
+  }
+
+  /**
+   * Tests behavior of {@link AsyncRequestResponseHandler#setRequestWorkersCount(int)},
+   * {@link AsyncRequestResponseHandler#setResponseWorkersCount(int)} and
+   * {@link AsyncRequestResponseHandler#setBlobStorageService(BlobStorageService)} after the
+   * {@link AsyncRequestResponseHandler} has been started.
+   */
+  @Test
+  public void setFunctionsAfterStartTest() {
+    // set request workers.
+    try {
+      asyncRequestResponseHandler.setRequestWorkersCount(5);
+      fail("Setting request workers after start should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
-    } finally {
-      requestResponseHandler.shutdown();
+    }
+
+    // set response workers.
+    try {
+      asyncRequestResponseHandler.setResponseWorkersCount(5);
+      fail("Setting request workers after start should have thrown exception");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+
+    // set BlobStorageService
+    try {
+      asyncRequestResponseHandler.setBlobStorageService(blobStorageService);
+      fail("Setting request workers after start should have thrown exception");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
     }
   }
 
@@ -157,9 +320,11 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void allRestMethodsSuccessTest()
       throws Exception {
-    for (RestMethod restMethod : RestMethod.values()) {
-      if (restMethod != RestMethod.UNKNOWN) {
-        doHandleRequestSuccessTest(restMethod, asyncRequestResponseHandler);
+    for (int i = 0; i < 25; i++) {
+      for (RestMethod restMethod : RestMethod.values()) {
+        if (restMethod != RestMethod.UNKNOWN) {
+          doHandleRequestSuccessTest(restMethod, asyncRequestResponseHandler);
+        }
       }
     }
   }
@@ -214,83 +379,8 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void handleResponseSuccessTest()
       throws Exception {
-    ByteBufferRSC response = new ByteBufferRSC(ByteBuffer.allocate(0));
-    // RestRequest null.
-    try {
-      asyncRequestResponseHandler.handleResponse(null, new MockRestResponseChannel(), response, null);
-      fail("Test should have thrown exception, but did not");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // RestResponseChannel null.
-    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject(), null);
-    try {
-      asyncRequestResponseHandler.handleResponse(restRequest, null, response, null);
-      fail("Test should have thrown exception, but did not");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // AsyncRequestResponseHandler should still be alive and serving requests
-    assertTrue("AsyncRequestResponseHandler is dead", asyncRequestResponseHandler.isRunning());
-
-    // both response and exception null
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-    EventMonitor<MockRestRequest.Event> requestCloseMonitor =
-        new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
-    restRequest.addListener(requestCloseMonitor);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, null);
-    if (restResponseChannel.getCause() != null) {
-      throw (Exception) restResponseChannel.getCause();
-    }
-
-    // response null but exception not null.
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-    requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
-    restRequest.addListener(requestCloseMonitor);
-    restResponseChannel = new MockRestResponseChannel();
-    Exception e = new Exception();
-    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, e);
-    // make sure exception was correctly sent to the RestResponseChannel.
-    assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
-
-    // response not null.
-    // steady response - full response available.
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-    requestCloseMonitor = new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
-    restRequest.addListener(requestCloseMonitor);
-    restResponseChannel = new MockRestResponseChannel();
-    ByteBuffer responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
-    response = new ByteBufferRSC(responseBuffer);
-    EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
-        new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
-    response.addListener(responseCloseMonitor);
-    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, response, null);
-    if (restResponseChannel.getCause() == null) {
-      assertArrayEquals("Response does not match", responseBuffer.array(),
-          restResponseChannel.getResponseBody(MockRestResponseChannel.DataStatus.Flushed));
-      assertTrue("Response is not closed", responseCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
-    } else {
-      throw (Exception) restResponseChannel.getCause();
-    }
-
-    // halting response - response not available in one shot
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-    restResponseChannel = new MockRestResponseChannel();
-    responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
-    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel,
-        new IntermittentRSC(responseBuffer, 128), null);
-    if (restResponseChannel.getCause() == null) {
-      assertArrayEquals("Response does not match", responseBuffer.array(),
-          restResponseChannel.getResponseBody(MockRestResponseChannel.DataStatus.Flushed));
-    } else {
-      throw (Exception) restResponseChannel.getCause();
+    for (int i = 0; i < 100; i++) {
+      doHandleResponseSuccessTest(asyncRequestResponseHandler);
     }
   }
 
@@ -302,12 +392,28 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void handleResponseExceptionTest()
       throws Exception {
+    ByteBufferRSC response = new ByteBufferRSC(ByteBuffer.allocate(0));
+    // RestRequest null.
+    try {
+      asyncRequestResponseHandler.handleResponse(null, new MockRestResponseChannel(), response, null);
+      fail("Test should have thrown exception, but did not");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // RestResponseChannel null.
+    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", new JSONObject(), null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    try {
+      asyncRequestResponseHandler.handleResponse(restRequest, null, response, null);
+      fail("Test should have thrown exception, but did not");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
     // Response is bad.
     MockRestRequest goodRestRequest = createRestRequest(RestMethod.GET, "/", null, null);
     goodRestRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-    EventMonitor<MockRestRequest.Event> requestCloseMonitor =
-        new EventMonitor<MockRestRequest.Event>(MockRestRequest.Event.Close);
-    goodRestRequest.addListener(requestCloseMonitor);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel badResponse = new BadRSC();
     awaitResponse(asyncRequestResponseHandler, goodRestRequest, restResponseChannel, badResponse, null);
@@ -339,7 +445,7 @@ public class AsyncRequestResponseHandlerTest {
   public void midOccupancyTest()
       throws Exception {
     final CountDownLatch releaseRead = new CountDownLatch(1);
-    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(blobStorageService);
+    AsyncRequestResponseHandler handler = getAsyncRequestResponseHandler(1, 1);
     handler.start();
     List<AsyncRequestInfo> requests = new ArrayList<AsyncRequestInfo>();
     Map<RestRequest, AsyncResponseInfo> responses = new HashMap<RestRequest, AsyncResponseInfo>();
@@ -347,6 +453,7 @@ public class AsyncRequestResponseHandlerTest {
     try {
       // queue a response that will halt AsyncHandlerWorker
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       HaltingRSC haltingRSC = new HaltingRSC(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), releaseRead);
       responses.put(restRequest, new AsyncResponseInfo(haltingRSC, restResponseChannel));
@@ -365,6 +472,7 @@ public class AsyncRequestResponseHandlerTest {
         // queue a few more responses
         for (int i = 0; i < 5; i++) {
           restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+          restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
           restResponseChannel = new MockRestResponseChannel();
           ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
           responses.put(restRequest, new AsyncResponseInfo(response, restResponseChannel));
@@ -479,26 +587,6 @@ public class AsyncRequestResponseHandlerTest {
     }
   }
 
-  // BeforeClass helpers
-
-  /**
-   * Gets a new instance of {@link AsyncRequestResponseHandler}.
-   * @param blobStorageService the {@link BlobStorageService} that will back the {@link AsyncRequestResponseHandler}.
-   * @return a new instance of {@link AsyncRequestResponseHandler}.
-   * @throws IOException
-   */
-  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(BlobStorageService blobStorageService)
-      throws IOException {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
-    AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
-    if (blobStorageService != null) {
-      handler.setBlobStorageService(blobStorageService);
-    }
-    return handler;
-  }
-
-  // handleRequestTest() helpers
-
   /**
    * Sends a {@link RestRequest} to the {@code requestHandler} with the specified {@code restMethod} and checks the
    * response to see that the {@code restMethod} has been echoed.
@@ -517,6 +605,205 @@ public class AsyncRequestResponseHandlerTest {
     } else {
       // don't care if the conversion to Exception fails. The test has failed anyway.
       throw (Exception) restResponseChannel.getCause();
+    }
+  }
+
+  /**
+   * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel,
+   * Exception)} with good input.
+   * @throws Exception
+   */
+  private void doHandleResponseSuccessTest(AsyncRequestResponseHandler asyncRequestResponseHandler)
+      throws Exception {
+    // both response and exception null
+    MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, null);
+    if (restResponseChannel.getCause() != null) {
+      throw (Exception) restResponseChannel.getCause();
+    }
+
+    // both response and exception not null
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    restResponseChannel = new MockRestResponseChannel();
+    ByteBuffer responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    ByteBufferRSC response = new ByteBufferRSC(responseBuffer);
+    EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
+        new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
+    response.addListener(responseCloseMonitor);
+    Exception e = new Exception();
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, response, e);
+    // make sure exception was correctly sent to the RestResponseChannel.
+    assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
+    assertTrue("Response is not closed", responseCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
+
+    // response null but exception not null.
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    restResponseChannel = new MockRestResponseChannel();
+    e = new Exception();
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, null, e);
+    // make sure exception was correctly sent to the RestResponseChannel.
+    assertEquals("Exception was not piped correctly", e, restResponseChannel.getCause());
+
+    // response not null.
+    // steady response - full response available.
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    restResponseChannel = new MockRestResponseChannel();
+    responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    response = new ByteBufferRSC(responseBuffer);
+    responseCloseMonitor = new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
+    response.addListener(responseCloseMonitor);
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel, response, null);
+    if (restResponseChannel.getCause() == null) {
+      assertArrayEquals("Response does not match", responseBuffer.array(),
+          restResponseChannel.getResponseBody(MockRestResponseChannel.DataStatus.Flushed));
+      assertTrue("Response is not closed", responseCloseMonitor.awaitEvent(1, TimeUnit.SECONDS));
+    } else {
+      throw (Exception) restResponseChannel.getCause();
+    }
+
+    // halting response - response not available in one shot
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+    restResponseChannel = new MockRestResponseChannel();
+    responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    awaitResponse(asyncRequestResponseHandler, restRequest, restResponseChannel,
+        new IntermittentRSC(responseBuffer, 128), null);
+    if (restResponseChannel.getCause() == null) {
+      assertArrayEquals("Response does not match", responseBuffer.array(),
+          restResponseChannel.getResponseBody(MockRestResponseChannel.DataStatus.Flushed));
+    } else {
+      throw (Exception) restResponseChannel.getCause();
+    }
+  }
+
+  // BeforeClass helpers
+
+  /**
+   * Gets a new instance of {@link AsyncRequestResponseHandler}.
+   * @param requestWorkers the number of request workers.
+   * @param responseWorkers the number of response workers.
+   * @return a new instance of {@link AsyncRequestResponseHandler}.
+   * @throws IOException
+   */
+  private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers, int responseWorkers)
+      throws IOException {
+    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
+    if (blobStorageService == null) {
+      blobStorageService = new MockBlobStorageService(verifiableProperties, handler, router);
+    }
+    handler.setRequestWorkersCount(requestWorkers);
+    handler.setResponseWorkersCount(responseWorkers);
+    handler.setBlobStorageService(blobStorageService);
+    return handler;
+  }
+
+  // useWithoutSettingWorkerCountsTest() and zeroScalingUnitsTest() helpers
+
+  /**
+   * Uses the {@code requestResponseHandler} with zero response workers and one request worker and verifies that
+   * requests are served, but responses are not sent.
+   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} instance to use. Must have more than zero
+   *                               request workers and zero response workers.
+   * @throws Exception
+   */
+  private void noResponseHandlersTest(AsyncRequestResponseHandler requestResponseHandler)
+      throws Exception {
+    // ok for start
+    requestResponseHandler.start();
+    try {
+      // using for responses not OK.
+      MockRestRequest restRequest = createRestRequest(RestMethod.DELETE, "/", null, null);
+      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      try {
+        awaitResponse(requestResponseHandler, restRequest, restResponseChannel, null, null);
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+      }
+
+      // using for request is OK.
+      doHandleRequestSuccessTest(RestMethod.GET, requestResponseHandler);
+    } finally {
+      requestResponseHandler.shutdown();
+    }
+  }
+
+  /**
+   * Uses the {@code requestResponseHandler} with zero request workers and one response worker and verifies that
+   * responses are sent, but requests are not served.
+   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} instance to use. Must have zero request
+   *                               workers and more then zero response workers.
+   * @throws Exception
+   */
+  private void noRequestHandlersTest(AsyncRequestResponseHandler requestResponseHandler)
+      throws Exception {
+    // ok for start
+    requestResponseHandler.start();
+    try {
+      // using for responses OK.
+      MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      awaitResponse(requestResponseHandler, restRequest, restResponseChannel, null, null);
+      if (restResponseChannel.getCause() != null) {
+        throw (Exception) restResponseChannel.getCause();
+      }
+
+      // using for request is not OK.
+      try {
+        doHandleRequestSuccessTest(RestMethod.GET, requestResponseHandler);
+        fail("Handling request should have failed because no BlobStorageService was set.");
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+      }
+    } finally {
+      requestResponseHandler.shutdown();
+    }
+  }
+
+  /**
+   * Uses the {@code requestResponseHandler} with zero request workers and zero response workers and verifies that
+   * {@link AsyncRequestResponseHandler#start()} fails.
+   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} instance to use. Must have zero request
+   *                               workers and zero response workers.
+   * @throws IOException
+   */
+  private void noRequestResponseHandlersTest(AsyncRequestResponseHandler requestResponseHandler)
+      throws IOException {
+    // not ok to start
+    try {
+      requestResponseHandler.start();
+      fail("AsyncRequestResponseHandler should have failed to start because there are both request and response workers"
+          + " are zero");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    } finally {
+      requestResponseHandler.shutdown();
+    }
+  }
+
+  // differentScalingUnitCountsTest() helpers
+
+  /**
+   * Verifies that there are {@code expectedWorkers} number of {@link AsyncHandlerWorker} instances in the
+   * {@code requestResponseHandler}.
+   * @param requestResponseHandler the {@link AsyncRequestResponseHandler} instance whose workers need to be verified.
+   * @param expectedWorkers the expected number of {@link AsyncHandlerWorker} instances in the
+   *                        {@code requestResponseHandler}.
+   */
+  private void verifyWorkers(AsyncRequestResponseHandler requestResponseHandler, int expectedWorkers) {
+    requestResponseHandler.start();
+    try {
+      assertEquals("Number of AsyncHandlerWorker instances differs from expected", expectedWorkers,
+          requestResponseHandler.getWorkersAlive());
+    } finally {
+      requestResponseHandler.shutdown();
     }
   }
 

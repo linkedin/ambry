@@ -18,7 +18,6 @@ class NettyMetrics {
   public final Meter bytesReadRate;
   public final Meter channelCreationRate;
   public final Meter channelDestructionRate;
-  public final Meter httpObjectArrivalRate;
   public final Meter requestArrivalRate;
   // NettyResponseChannel
   public final Meter bytesWriteRate;
@@ -40,7 +39,6 @@ class NettyMetrics {
   public final Counter channelWriteError;
   public final Counter metricsTrackingError;
   // NettyMessageProcessor
-  public final Counter channelCreationTasksError;
   public final Counter contentAdditionError;
   public final Counter duplicateRequestError;
   public final Counter exceptionCaughtTasksError;
@@ -90,8 +88,6 @@ class NettyMetrics {
     channelCreationRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelCreationRate"));
     channelDestructionRate =
         metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelDestructionRate"));
-    httpObjectArrivalRate =
-        metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "HttpObjectArrivalRate"));
     requestArrivalRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "RequestArrivalRate"));
     // NettyResponseChannel
     bytesWriteRate = metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "BytesWriteRate"));
@@ -122,8 +118,6 @@ class NettyMetrics {
     metricsTrackingError =
         metricRegistry.counter(MetricRegistry.name(ChannelWriteResultListener.class, "MetricsTrackingError"));
     // NettyMessageProcessor
-    channelCreationTasksError =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelCreationTasksError"));
     contentAdditionError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ContentAdditionError"));
     duplicateRequestError =

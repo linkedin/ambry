@@ -2,8 +2,6 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.InMemoryRouter;
-import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -19,20 +17,17 @@ public class NettyServerFactoryTest {
 
   /**
    * Checks to see that getting the default {@link NioServer} (currently {@link NettyServer}) works.
-   * @throws InstantiationException
-   * @throws IOException
    */
   @Test
-  public void getNettyServerTest()
-      throws InstantiationException, IOException {
+  public void getNettyServerTest() {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
+    RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
 
-    NioServerFactory nioServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), requestResponseHandlerController);
-    NioServer nioServer = nioServerFactory.getNioServer();
+    NettyServerFactory nettyServerFactory =
+        new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler);
+    NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
@@ -40,21 +35,18 @@ public class NettyServerFactoryTest {
 
   /**
    * Tests instantiation of {@link NettyServerFactory} with bad input.
-   * @throws InstantiationException
-   * @throws IOException
    */
   @Test
-  public void getNettyServerFactoryWithBadInputTest()
-      throws InstantiationException, IOException {
+  public void getNettyServerFactoryWithBadInputTest() {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
-    RequestResponseHandlerController requestResponseHandlerController = getRequestHandlerController();
+    RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
 
     // VerifiableProperties null.
     try {
-      new NettyServerFactory(null, metricRegistry, requestResponseHandlerController);
+      new NettyServerFactory(null, metricRegistry, restRequestHandler);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -62,38 +54,18 @@ public class NettyServerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new NettyServerFactory(verifiableProperties, null, requestResponseHandlerController);
+      new NettyServerFactory(verifiableProperties, null, restRequestHandler);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // RequestResponseHandlerController null.
+    // RestRequestHandler null.
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, null);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
-  }
-
-  // helpers
-  // general
-
-  /**
-   * Gets an instance of {@link RequestResponseHandlerController}.
-   * @return an instance of {@link RequestResponseHandlerController}.
-   * @throws InstantiationException
-   * @throws IOException
-   */
-  private RequestResponseHandlerController getRequestHandlerController()
-      throws InstantiationException, IOException {
-    RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
-    BlobStorageService blobStorageService =
-        new MockBlobStorageService(verifiableProperties, new InMemoryRouter(verifiableProperties));
-    RequestResponseHandlerController controller = new RequestResponseHandlerController(1, restServerMetrics);
-    controller.setBlobStorageService(blobStorageService);
-    return controller;
   }
 }
