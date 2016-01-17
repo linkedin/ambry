@@ -1,11 +1,20 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -56,6 +65,13 @@ public class RestUtils {
      */
     public final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
   }
+
+  public static final int Crc_Size = 8;
+  public static final short UserMetadata_Version_V1 = 1;
+  // Max size of a value for user metadata as key value pairs
+  public static final int Max_UserMetadata_Value_Size = 1024 * 1024 * 8;
+
+  private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
    * Builds {@link BlobProperties} given a {@link RestRequest}.
@@ -117,6 +133,39 @@ public class RestUtils {
   }
 
   /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |   size    |  total   |           |          |             |            |            |            |            |
+   * | version | excluding |  no of   | key1 size |   key1   | value1 size |  value 1   |  key2 size |     ...    |     Crc    |
+   * |(2 bytes)| ver & crc | entries  | (4 bytes) |(key1 size| (4 bytes)   |(value1 size|  (4 bytes) |     ...    |  (8 bytes) |
+   * |         | (4 bytes) | (4 bytes)|           |   bytes) |             |   bytes)   |            |            |            |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  version        - The version of the user metadata record
+   *
+   *  size exluding
+   *  ver & CRC      - The size of the user metadata content excluding the version and the CRC
+   *
+   *  total no of
+   *  entries        - Total number of entries in user metadata
+   *
+   *  key1 size      - Size of 1st key
+   *
+   *  key1           - Content of key1
+   *
+   *  value1 size    - Size of 1st value
+   *
+   *  value1         - Content of value1
+   *
+   *  key2 size      - Size of 2nd key
+   *
+   *  key2           - Content of key2
+   *
+   *  value2 size    - Size of 2nd value
+   *
+   *  crc        - The crc of the user metadata record
+   *
+   */
+
+  /**
    * Builds user metadata given a {@link RestRequest}.
    * @param restRequest the {@link RestRequest} to use.
    * @return the user metadata extracted from {@code restRequest}.
@@ -143,34 +192,115 @@ public class RestUtils {
     if (sizeToAllocate == 0) {
       userMetadata = ByteBuffer.allocate(0);
     } else {
-      sizeToAllocate += 4; // total number of entries
+      // version
+      sizeToAllocate += 2;
+      // size excluding version and crc
+      sizeToAllocate += 4;
+      // total number of entries
+      sizeToAllocate += 4;
+      // crc size
+      sizeToAllocate += Crc_Size;
       userMetadata = ByteBuffer.allocate(sizeToAllocate);
+      userMetadata.putShort(UserMetadata_Version_V1);
+      userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
       userMetadata.putInt(userMetadataMap.size());
       for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
         String key = entry.getKey();
         Utils.serializeAsciiEncodedString(userMetadata, key);
         Utils.serializeAsciiEncodedString(userMetadata, entry.getValue());
       }
+      Crc32 crc = new Crc32();
+      crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
+      userMetadata.putLong(crc.getValue());
     }
     return userMetadata.array();
   }
 
   /**
-   * Fetches User metadata from the byte array
+   * Fetches user metadata from the byte array
    * @param userMetadata the byte array which has the user metadata
-   * @return Map<String,String> the User Metadata that is read from the byte array
+   * @return Map<String,String> the user metadata that is read from the byte array
    */
-  public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata) {
-    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+  public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata)
+      throws RestServiceException {
     Map<String, String> toReturn = new HashMap<String, String>();
-    if (userMetadataBuffer.hasRemaining()) {
-      int size = userMetadataBuffer.getInt();
-      int counter = 0;
-      while (counter++ < size) {
-        String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-        String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-        toReturn.put(key, value);
+    try {
+      if (userMetadata.length > 0) {
+        try {
+          CrcInputStream crcstream = new CrcInputStream(new ByteArrayInputStream(userMetadata));
+          DataInputStream streamData = new DataInputStream(crcstream);
+          short version = streamData.readShort();
+          switch (version) {
+            case UserMetadata_Version_V1:
+              ByteBuffer userMetadataBuffer = deserializeUserMetadata(crcstream);
+              if (userMetadataBuffer.hasRemaining()) {
+                int size = userMetadataBuffer.getInt();
+                int counter = 0;
+                while (counter++ < size) {
+                  String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
+                  String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
+                  toReturn.put(key, value);
+                }
+              }
+              break;
+            default:
+              logger.trace("Failed to parse user metadata in new format. Returning as old format");
+              toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+          }
+        } catch (IOException e) {
+          logger.trace("Failed to parse user metadata in new format. Returning as old format");
+          toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+        } catch (RuntimeException e) {
+          logger.trace("Failed to parse user metadata in new format. Returning as old format");
+          toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+        }
       }
+    } catch (UnsupportedEncodingException e) {
+      throw new IllegalStateException(e);
+    }
+    return toReturn;
+  }
+
+  /**
+   * Deserialize User Metadata to a {@link ByteBuffer}
+   * @param crcStream Stream from which User metadata has to be deserialized
+   * @return ByteBuffer which contains the user metadata
+   * @throws IOException
+   */
+  private static ByteBuffer deserializeUserMetadata(CrcInputStream crcStream)
+      throws IOException {
+    DataInputStream dataStream = new DataInputStream(crcStream);
+    int usermetadataSize = dataStream.readInt();
+    byte[] userMetadaBuffer = Utils.readBytesFromStream(dataStream, usermetadataSize);
+    long actualCRC = crcStream.getValue();
+    long expectedCRC = dataStream.readLong();
+    if (actualCRC != expectedCRC) {
+      logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+      throw new IllegalStateException("User metadata is corrupt");
+    }
+    return ByteBuffer.wrap(userMetadaBuffer);
+  }
+
+  /**
+   * Returns old style user metadata as a HashMap<String, String> to be sent in as headers
+   * @param userMetadata byte[] which contains the user metadata in old style
+   * @return Map<String, String> user metadata in the form of Map<String, String>
+   */
+  private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata)
+      throws UnsupportedEncodingException {
+    int totalSize = userMetadata.length;
+    Map<String, String> toReturn = new HashMap<String, String>();
+    int sizeRead = 0;
+    int counter = 0;
+    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+    while (sizeRead < totalSize) {
+      String key = Headers.UserMetaData_OldStyle_Prefix + counter++;
+      int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
+      byte[] userMetadataPart = new byte[sizeToRead];
+      userMetadataBuffer.get(userMetadataPart);
+      String value = new String(userMetadataPart, "US-ASCII");
+      toReturn.put(key, value);
+      sizeRead += sizeToRead;
     }
     return toReturn;
   }

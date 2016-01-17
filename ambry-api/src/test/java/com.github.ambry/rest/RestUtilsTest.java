@@ -4,6 +4,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -232,6 +233,93 @@ public class RestUtilsTest {
     assertTrue("UserMetadata should have been empty " + userMetadataMap, userMetadataMap.size() == 0);
   }
 
+  /**
+   * Tests getting back user metadata (old style) from byte array
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataFromByteArrayComplexTest()
+      throws Exception {
+
+    Map<String, String> userMetadataMap = null;
+    byte[] userMetadataByteArray = new byte[1];
+    try {
+      userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
+      assertEquals("User metadata size don't match ", userMetadataMap.size(), 1);
+      assertTrue("User metadata key1 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      assertEquals("User metadata key 1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+    } catch (Exception e) {
+      fail("Deserializing user metadata should not have failed " + userMetadataMap);
+    }
+
+    userMetadataByteArray = new byte[4];
+    ByteBuffer byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putInt(1);
+    try {
+      userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
+      assertEquals("User metadata size don't match ", userMetadataMap.size(), 1);
+      assertTrue("User metadata key1 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      assertEquals("User metadata key 1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+    } catch (Exception e) {
+      fail("Deserializing user metadata should not have failed " + userMetadataMap);
+    }
+
+    userMetadataByteArray = new byte[6];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putInt(3);
+    byteBuffer.putShort((short) 1);
+    try {
+      userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
+      assertEquals("User metadata size don't match ", userMetadataMap.size(), 1);
+      assertTrue("User metadata key1 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      assertEquals("User metadata key 1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+    } catch (Exception e) {
+      fail("Deserializing user metadata should not have failed " + userMetadataMap);
+    }
+
+    userMetadataByteArray = new byte[8];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(5);
+    try {
+      userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
+      assertEquals("User metadata size don't match ", userMetadataMap.size(), 1);
+      assertTrue("User metadata key1 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      assertEquals("User metadata key 1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+    } catch (Exception e) {
+      fail("Deserializing user metadata should not have failed " + userMetadataMap);
+    }
+
+    userMetadataByteArray = getRandomString(RestUtils.Max_UserMetadata_Value_Size + 2).getBytes();
+    try {
+      userMetadataMap = RestUtils.getUserMetadataFromByteArray(userMetadataByteArray);
+      assertEquals("User metadata size don't match ", userMetadataMap.size(), 2);
+      assertTrue("User metadata key1 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      assertTrue("User metadata key2 not found in user metadata ",
+          userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "1"));
+      byte[] value1 = new byte[RestUtils.Max_UserMetadata_Value_Size];
+      ByteBuffer byteBufferPart = ByteBuffer.wrap(userMetadataByteArray);
+      byteBufferPart.get(value1);
+      assertEquals("User metadata key 1 value don't match ", new String(value1, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
+      byte[] value2 = new byte[2];
+      byteBufferPart.get(value2);
+      assertEquals("User metadata key 1 value don't match ", new String(value2, "US-ASCII"),
+          userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "1"));
+    } catch (Exception e) {
+      fail("Deserializing user metadata should not have failed " + userMetadataMap);
+    }
+  }
+
   // helpers.
   // general.
 
@@ -397,5 +485,16 @@ public class RestUtilsTest {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
     }
+  }
+
+  private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  static Random random = new Random();
+
+  public static String getRandomString(int length) {
+    StringBuilder sb = new StringBuilder(length);
+    for (int i = 0; i < length; i++) {
+      sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
+    }
+    return sb.toString();
   }
 }

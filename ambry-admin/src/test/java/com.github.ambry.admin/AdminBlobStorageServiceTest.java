@@ -30,7 +30,6 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
