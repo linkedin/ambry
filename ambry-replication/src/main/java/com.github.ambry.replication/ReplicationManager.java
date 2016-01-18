@@ -477,8 +477,7 @@ public final class ReplicationManager {
   /**
    * Updates the replicasToReplicateMap with the remoteReplicaInfo.
    * @param datacenter remote datacenter name
-   * @param replicasToReplicateMap The map that contains mapping between datacenter to another map,
-   *                               which has a mapping from data nodes and the remote replicas
+   * @param replicasToReplicateMap Mapping of data nodes to remote replicas for each remote datacenter
    * @param remoteReplicaInfo The remote replica that needs to be added to the map
    */
   private void updateReplicasToReplicate(String datacenter,
@@ -500,8 +499,7 @@ public final class ReplicationManager {
 
   /**
    * Assigns replicas to thread pools for replication. One thread pool will be created per remote colo
-   * @param replicasToReplicate Map of datacenter to another map which has a mapping of datanode to list of remote
-   *                            replicas
+   * @param replicasToReplicate Mapping of data nodes to remote replicas for each remote datacenter
    * @param numberOfReplicaThreads total number of replica thread count
    */
   private void assignReplicasToThreadPools(Map<String, Map<DataNodeId, List<RemoteReplicaInfo>>> replicasToReplicate,
@@ -528,7 +526,7 @@ public final class ReplicationManager {
   /**
    * Partitions the list of data nodes to remote replica list mapping between given set of replica threads
    * @param datacenter datacenter to which assignment of replicas to ReplicaThread has to be done
-   * @param replicasToReplicate Map of data nodes to remote replicas located in datacenter in context
+   * @param replicasToReplicate Mapping of data nodes to remote replicas for the datacenter in context
    * @param numberOfReplicaThreads The total number of replica threads
    * @param threadIdentity The identity that uniquely identifies the group of threads
    */
