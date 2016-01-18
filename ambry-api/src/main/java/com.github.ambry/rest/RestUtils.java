@@ -224,6 +224,7 @@ public class RestUtils {
   public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata)
       throws RestServiceException {
     Map<String, String> toReturn = new HashMap<String, String>();
+    boolean oldStyle = false;
     try {
       if (userMetadata.length > 0) {
         try {
@@ -244,16 +245,19 @@ public class RestUtils {
               }
               break;
             default:
-              logger.trace("Failed to parse user metadata in new format. Returning as old format");
-              toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+              logger.trace("Failed to parse version in new format. Returning as old format");
+              oldStyle = true;
           }
         } catch (IOException e) {
-          logger.trace("Failed to parse user metadata in new format. Returning as old format");
-          toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+          logger.trace("IOException on parsing user metadata. Returning as old format");
+          oldStyle = true;
         } catch (RuntimeException e) {
-          logger.trace("Failed to parse user metadata in new format. Returning as old format");
-          toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+          logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
+          oldStyle = true;
         }
+      }
+      if (oldStyle) {
+        toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
       }
     } catch (UnsupportedEncodingException e) {
       throw new IllegalStateException(e);
